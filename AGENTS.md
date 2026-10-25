@@ -10,6 +10,8 @@ In stage 3, the components that have been merged into EarthSciModels will be imp
 
 All model logic should be contained in .esm files. Tests and examples should be in the "tests" and "analysis" sections of .esm files, respectively. All local tests should be conducted using the EarthSciAST rust CLI binary, a copy of which should be kept untracked in the root directory of this repo.
 
+Time stepping for the fully coupled model will be done using github.com/earthsciml/earthsciintegrator.
+
 The .esm files should be authored compositionally, with separate components, subcomponents, and expression templates used liberally and imported by reference into other components to keep the .esm code succint, simple, and human-interpretable. Avoid repeating logic or calculations, instead factor reused pieces into their own files/components/expression templates and import them by reference. Avoid the use of scripts to mechanically generate .esm files, as they often end up producing expressios that are not properly factored or succinct. (Scripts MAY be used to extract numeric test tuples from C++ dumps into an existing hand-authored `tests` block, and to translate tabular data such as KPP `.eqn` reaction lists or lookup tables into `reaction_systems`, `function_tables`, or `data_sources` entries; the equations, structure, and factoring of a component are always authored by hand.)
 
 Always, the equations in the .esm files should like like math rather than einsum operations whenever possible. For example, if a component includes a aggregate operation that is a numerical representation of a mathematical integral, the .esm equivalent should be written as an integral instead of a aggregate operation. Likewise, PDEs that are discretized in the C++ could should be written as PDEs, with discretization templates either used from or submitted as pull requests to https://github.com/EarthSciML/EarthSciDiscretizations.
@@ -27,3 +29,7 @@ Do not put files directly in /projects/.../ctessum, that is a shared directory w
 Keep track of progress in PROGRESS.md
 
 Perform work in a manager-worker arrangment, with the manager dispatching up to three subagents at a time to perform tasks (working on worktrees), then checking, merging, and cleaning up the subagents' work as they complete.
+
+For examples of other work using a similar workflow, see:
+	* github.com/earthsciml/eqwefic
+	* github.com/earthsciml/eqice
