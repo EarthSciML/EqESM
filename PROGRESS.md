@@ -119,19 +119,32 @@ In progress. See PLAN.md §4.1 for the playbook.
   (36 tasks, 1 node, STOP nhours/6, wallclock 2 h). Operational note:
   `--extra-machines-dir` only applies at create time — `case.setup` etc.
   need the config in `$HOME/.cime/` (installed; README updated).
-- **ESMF gap** ⏳ (2026-10-26) — CMEPS needs ESMF (`find_package(ESMF
-  REQUIRED)`; cmeps buildnml reads `$ESMFMKFILE`), there is no ESMF module
-  on the cluster and it is **not bundled** in the checkout (the machine
-  README's earlier "bundled source" claim was wrong). Building **ESMF
-  8.9.1** (derecho's pin) from source via `stage1/build/build-esmf.sh`
-  into `stage1/build/esmf`; machine config now sets `ESMFMKFILE`/`ESMF_DIR`.
-- **Inputdata**: `check_input_data --download` needs the build-generated
-  `.input_data_list` files; expected files already known (fv1.9x2.5 +
-  gx1v7 ESMF meshes, MOSART r05 routing file, …) — download after ESMF
-  build completes.
-- **Next:** finish first `case.build`; download inputdata; run the F-class
-  smoke run; then I-class (MOSART-coupled) run and remaining smoke runs
-  per COMPSET_SURVEY.md §8.
+- **ESMF 8.9.1 built** ✅ (2026-10-26) — CMEPS needs ESMF
+  (`find_package(ESMF REQUIRED)`; cmeps buildnml reads `$ESMFMKFILE`); no
+  ESMF module on the cluster and not bundled in the checkout. Built from
+  source via `stage1/build/build-esmf.sh` into `stage1/build/esmf`
+  (gcc 13.3 + openmpi 5.0.1, netcdf split, no pnetcdf — must be *unset*,
+  not "OFF": `ifdef ESMF_PNETCDF` in common.mk). Machine config sets
+  `ESMFMKFILE` (note: real path is `lib/libO/.../esmf.mk`) + `ESMF_DIR`.
+- **LAPACK** ✅ (2026-10-26) — link failed on LAPACK driver routines
+  (`dgesv_` etc. from CLM/CICE); cluster `/sw/apps/lapack/3.12.1/lib64`
+  has `liblapack.a` + `librefblas.a` but no `libblas` → symlinked
+  `libblas.a`/`liblapack.a` into `stage1/build/local/lib` and set
+  `LAPACK_LIBDIR` in the machine config.
+- **First build** ✅ (2026-10-26) — `case.build` finished successfully
+  (33 s incremental; total with ESMF ~1 h). `bld/cesm.exe` (50 MB ELF)
+  built: CAM6 + CLM5 + CICE6 + DOCN + MOSART + CMEPS + CDEPS on gcc
+  13.3/openmpi 5.0.1.
+- **Inputdata** ✅ (2026-10-26) — all F2000climo/f19 files downloaded via
+  wget (`check_input_data --download`): ESMF meshes (fv1.9x2.5, gx1v7),
+  MOSART r05 routing, CLM surfdata/initdata/ndep, CAM physprops/ozone/
+  solar/sst, etc.
+- **First smoke run** 🏃 (2026-10-26) — `case.submit` submitted:
+  case.run job `11825726` (+ st_archive `11825727`) on partition
+  `ctessum`, 36 tasks, 6 simulated hours.
+- **Next:** confirm run completes + check CESM logs; then I-class
+  (`I2000Clm60Sp` — MOSART-coupled), D-class (CICE), C-class (MOM6 +
+  tx10deg), SCAM, and X-class runs per COMPSET_SURVEY.md §8.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
