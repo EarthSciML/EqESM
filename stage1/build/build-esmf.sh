@@ -37,7 +37,10 @@ export ESMF_SHARED_LIBRARIES="OFF"
 export ESMF_NETCDF="split"
 export ESMF_NETCDF_INCLUDE="$REPO_ROOT/stage1/build/local/include"
 export ESMF_NETCDF_LIBPATH="$REPO_ROOT/stage1/build/local/lib"
-export ESMF_PNETCDF="OFF"
+# ESMF_PNETCDF must be UNSET, not "OFF": common.mk does `ifdef ESMF_PNETCDF`
+# to add -DESMF_PNETCDF=1, so any defined value (even "OFF") enables it and
+# the IO code then #includes <pnetcdf.h>. No pnetcdf on the cluster.
+unset ESMF_PNETCDF || true
 export ESMF_MPIRUN="mpirun"
 export ESMF_MPIMPMDRUN="mpirun"
 
