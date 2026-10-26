@@ -163,11 +163,15 @@ Status is tracked in `PROGRESS.md`; this section is the playbook.
    (`create_newcase`/`create_test`): the compsets actually used at stage 1
    are chosen and verified here (exact names/options recorded in
    `stage1/runs/*.json`). Candidates:
-   - F-class compset (e.g. `F2000climo`) at a coarse grid (e.g. `ne4_ne4`
-     or `f19_f19`) for a few months — the atmosphere+land reference.
+   - F-class compset (e.g. `F2000climo`) at a coarse grid (e.g. `f19_f19`
+     or the smallest SE alias `ne3_ne3_mg37`; there is **no `ne4_ne4`**
+     alias on `cesm3.0-alphabranch` — see `stage1/runs/COMPSET_SURVEY.md`
+     §4.1) for a few months — the atmosphere+land reference.
    - An all-data "X"-class compset with `rof = mosart` — the standalone
      MOSART reference (plus any CIME component-test route that drives
-     MOSART alone).
+     MOSART alone). Note: the shipped `R2000MOSART` compset is broken
+     (`DLND%LCPL` invalid; see `bugs.md` #1) — use the `DLND%RCPL` fix or
+     an F/I-class coupled route.
    - I-class compset (active CICE, data atm/ocean) for sea ice.
    - C-class compset (active MOM, data ice/atm/land) for the ocean.
    - B/G-class fully coupled compsets for the coupler and stage 3.
