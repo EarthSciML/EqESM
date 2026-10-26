@@ -115,7 +115,7 @@
            pin) into stage1/build/esmf. CMEPS's buildnml requires
            $ESMFMKFILE (components/cmeps/cime_config/buildnml:735) and the
            CMake build does find_package(ESMF REQUIRED). -->
-      <env name="ESMFMKFILE">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf/lib/esmf.mk</env>
+      <env name="ESMFMKFILE">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk</env>
       <env name="ESMF_DIR">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf</env>
     </environment_variables>
   </machine>

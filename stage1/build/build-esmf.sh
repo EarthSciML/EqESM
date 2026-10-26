@@ -61,4 +61,5 @@ fi
 
 echo "==> ESMF installed under $PREFIX"
 ls "$PREFIX/lib" | head -5
-echo "ESMFMKFILE=$PREFIX/lib/esmf.mk"
+ESMFMKFILE_PATH="$(find "$PREFIX/lib" -name esmf.mk | head -1)"
+echo "ESMFMKFILE=$ESMFMKFILE_PATH"
