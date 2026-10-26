@@ -167,9 +167,23 @@ In progress. See PLAN.md §4.1 for the playbook.
   built + submitted (11827277).
 - **C-class run** ⏳ (2026-10-26) — `C_JRA_tx10` (MOM6 active + tx10deg
   testmod, T62_t232) built successfully (mom 116 s); input data download
-  (large MOM6 ICs/forcing) still in progress.
-- **Next:** finish C-class + X-class; then M2 (instrumentation scaffolding
-  + MOSART boundaries).
+  (large MOM6 ICs/forcing) still in progress. First background download
+  died silently (343/619 JRA55 files) — restarted via nohup retry loop
+  (pid 3782524, log `inputdata-download.log` in case dir).
+- **X-class run — SUCCESS** ✅ (2026-10-26) — `X_f19g17` (all-stub coupler
+  testbed, 1 day) completed clean (44 s).
+- **M1 → M2 transition** (2026-10-26): all M1 deliverables merged and
+  pushed (origin/main == main). M2 kicked off: CESM fork worktree
+  `stage1/EqESM-cesm-mosart` (branch `instrument/mosart-dumps`) created
+  from `cesm3.0-alphabranch` @ `e59f251`; mosart submodule at
+  `mosart1.1.13` (detached — fork branch to be created in submodule).
+  Instrumentation targets confirmed in source: `mosart_run`
+  (mosart_driver.F90:375), `Euler` (mosart_physics.F90:51), pointwise
+  laws `CRVRMAN_nosqrt` (F90:406), `CREHT_nosqrt` (F90:426), `GR*`
+  family, hillslope/subnetwork routing, `Routing_KW` (F90:290).
+- **Next:** C-class download + run; M2 workers (3 dispatched):
+  instrumentation (fork branch), stage2 skeleton, EarthSciModels/
+  discretizations survey.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
