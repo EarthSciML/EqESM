@@ -34,11 +34,16 @@ pinned to the tags below (recorded from `git-fleximod status`,
 | tuv-x | `v0.14.3` |
 | FTorch | optional, not checked out |
 
-Notes for the component inventory (PLAN.md §3): CAM 6.4 radiation is
-**RTE-RRTMGP** (`rte-rrtmgp` v1.9.2, with `rrtmgp-data` v1.8) — the classic
-RRTMG is gone; photolysis is **tuv-x** v0.14.3 (and Fast-JX lives in the
-CAM-chem stack via the geoschem/hemco path). The CESM `tuv-x` submodule is
-the photolysis library CAM uses.
+Notes for the component inventory (PLAN.md §3): radiation selection is per
+physics package in `cam/bld/configure` — **cam5/cam6 → RRTMG**, **cam7 →
+RTE-RRTMGP** (`rte-rrtmgp` v1.9.2, with `rrtmgp-data` v1.8; always checked
+out because CESM3's default CAM7 physics needs it). So the F-class CAM6
+reference runs (F2000climo/FHIST) use classic **RRTMG**; the CESM3 CAM7
+compsets (FHISTC*/B1850C*) use **RTE-RRTMGP**. Photolysis is **tuv-x**
+v0.14.3 (the CESM tuv-x submodule is the photolysis library CAM uses;
+Fast-JX lives in the CAM-chem stack via the geoschem/hemco path).
+Verified 2026-10-26 in `components/cam/bld/configure` (`$rad_pkg = 'rrtmg'`
+for cam5|cam6, `'rrtmgp'` for cam7).
 
 ## Reference runs (candidates; finalized per compset survey)
 

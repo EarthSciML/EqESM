@@ -335,7 +335,7 @@ config. All F/I/D/B-class runs need `--run-unsupported` off the science grid.
 | 3 | Sea ice (CICE) | `D` (2000_DATM%JRA-RYF9091_SLND_CICE_DOCN%SOM_DROF%JRA-RYF9091_SGLC_SWAV); also `DTEST` | `f19_g17`/`f09_g17` (tested: `TL319_t232`) | ndays,1 | DOCN%SOM slab ocean; CICE on gx1v7 |
 | 4 | Ocean (MOM6) | `C_JRA` (2000_DATM%JRA-1p5-2023_SLND_DICE%SSMI_MOM6_DROF%JRA-1p5-2023_SGLC_SWAV) or `C` (DATM%NYF) | `T62_t232` (+ `mom/tx10deg` testmod ⇒ 36×32 ocean) or `TL319_t201` | ndays,1 | coarsest MOM6 tripole = tx2_0v1 (2°) |
 | 5 | Fully coupled (stage 3) | `B1850C_LTso` (1850_CAM70%LT_CLM60%BGC-CROP_CICE_MOM6_MOSART_DGLC%NOEVOLVE_WW3); also `B1850C_MTso`, `BHISTC_LTso` | `ne30pg3_t232` (tested CESM3 grid); coarse: `ne3pg3_t232` (+ `mom/tx10deg`) | ndays,1 | full CESM3 coupled: CAM7+CLM6+CICE+MOM6+MOSART+WW3 |
-| 6 | CAM single column | `FSCAMARM97` (or any `FSCAM*`, `FCSCAM`) | any F grid (e.g. `f19_f19_mg17`) | auto (nhours, e.g. 695) | PTS_MODE/lat/lon auto-set by compset; STOP_N per IOP |
+| 6 | CAM single column | `FSCAMARM97` (or any `FSCAM*`, `FCSCAM`) | **`ne3_ne3_mg37` (required — SCAM only works with the SE dycore**; `cam/bld/configure` dies otherwise; IOP ic files keyed to `hgrid="ne3np4"`; CAM's own tests use `SCT_D_Ln7` + `cam/scm_prep` on `ne3_ne3_mg37`; `scam_mandatory` usermods: `NTASKS=1`, `REST_OPTION=never`, `CLM_FORCE_COLDSTART=on`) | auto (nhours, e.g. 695) | PTS_MODE/lat/lon auto-set by compset; STOP_N per IOP |
 | — | Coupler testbed | `X` (2000_XATM_XLND_XICE_XOCN_XROF_XGLC_XWAV) | `f19_g17` | ndays,1 | all-stub; tested `SMS_D`/`ERS_Ln9` |
 | — | Land single point | `I1PtClm60SpRsGs` | `1x1_brazil` / `CLM_USRDAT` | auto (ndays) | CLM60 single-point |
 
@@ -359,6 +359,9 @@ MOSART's `r05` rof grid is the same across F and I compsets.
    a valid dlnd mode; modes are SCPL/GCPL/RCPL) — compset comment says "NOT yet functional".
 2. **No `ne4_ne4`, no `T62_g17`** grid aliases (PLAN.md references ne4_ne4 — needs update
    to `ne3_ne3_mg37`/`ne3pg3_ne3pg3_mt232`).
+2a. **SCAM requires the SE dycore** — FSCAM cases must use an SE grid
+   (`ne3_ne3_mg37`), not FV (`f19_f19` etc.). Verified in `cam/bld/configure`
+   (`if ($scam eq 'ON' and !($dyn_pkg eq 'se'))` → die).
 3. **Compset files restructured** into per-component files; `-list` output differs from CESM2.
 4. I-class renamed: sea-ice runs are `D` compsets; CLM I-class compsets moved to CLM's file.
 5. B-class is MOM6-based only (`B1850C_*`); classic SOM-ocean B1850 survives only as `ETEST`/`E1850TEST`.
