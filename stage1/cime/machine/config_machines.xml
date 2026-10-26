@@ -68,7 +68,7 @@
     <mpirun mpilib="default">
       <executable>srun</executable>
       <arguments>
-        <arg name="ntasks"> -n {{ total_tasks }} </arg>
+        <arg name="ntasks"> --mpi=pmix -n {{ total_tasks }} </arg>
       </arguments>
     </mpirun>
     <module_system type="module">
