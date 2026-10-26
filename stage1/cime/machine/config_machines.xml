@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+
+<!--
+  CIME machine definition for the Illinois Campus Cluster (ICC) ("illinois").
+
+  Cluster facts (probed 2026-10-25, see stage1/runs/TOOLCHAIN.md):
+    - RHEL 9.8, SLURM 26.05.5, Lmod 9.4.2 at /usr/share/lmod
+    - Nodes: 40 cores, ~188 GB RAM; ctessum partition = nodes ccc0232-ccc0236
+    - Toolchain: gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0 modules (/sw/user/modulefiles)
+    - No netCDF/HDF5 modules, hand-built stack at
+      REPO/stage1/build/local (see stage1/runs/env.sh)
+    - Account/partition: ctessum; default QOS scav_high
+
+  How to use (see README.md in this directory):
+    create_newcase -extra-machines-dir REPO/stage1/cime/machine ...
+  or copy config_machines.xml + config_batch.xml into $HOME/.cime/.
+-->
+
+<config_machines version="3.0">
+
+  <!--
+    NODENAME_REGEX maps hostnames to machines.  In the ccs_config 3.0 layout
+    this mapping lives at the top level of the (merged) config_machines
+    document, not inside the machine element; CIME's machine probe
+    (CIME/XML/machines.py, _probe_machine_name_one_guess_v3) only reads
+    top-level NODENAME_REGEX nodes.  This file is appended into the merged
+    document (via -extra-machines-dir or $HOME/.cime), so putting the entry
+    here is what makes hostname auto-detection work.
+
+    ccc02* matches the ctessum-partition compute nodes ccc0232-ccc0236
+    (short and FQDN form, e.g. ccc0233.campuscluster.illinois.edu).
+    Login-node hostnames are unverified (TBD); if they do not match, set
+    CIME_MACHINE=illinois or pass -machine illinois to create_newcase.
+
+    NOTE: this top-level placement is not expressible in config_machines.xsd
+    (which only admits NODENAME_REGEX inside the machine element); the
+    upstream ccs_config/machines/config_machines.xml has the same deviation,
+    and CIME does not schema-validate config_machines.xml at runtime (no
+    schema entries are registered in CIME/data/config/*/config_files.xml),
+    so this is fine in practice.  An XSD-legal machine-level NODENAME_REGEX
+    is not read by the v3 probe, so it would not help auto-detection.
+  -->
+  <NODENAME_REGEX>
+    <value MACH="illinois">^ccc02.*</value>
+  </NODENAME_REGEX>
+
+  <machine MACH="illinois">
+    <DESC>Illinois Campus Cluster (ICC): RHEL 9.8, 40 cores / ~188 GB RAM per node, SLURM; gcc 13.3.0 + openmpi 5.0.1; ctessum partition (nodes ccc0232-ccc0236)</DESC>
+    <OS>LINUX</OS>
+    <COMPILERS>gnu</COMPILERS>
+    <MPILIBS>openmpi</MPILIBS>
+    <PROJECT>ctessum</PROJECT>
+    <CIME_OUTPUT_ROOT>/scratch.local/ctessum/eqesm-cime</CIME_OUTPUT_ROOT>
+    <DIN_LOC_ROOT>/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata</DIN_LOC_ROOT>
+    <DIN_LOC_ROOT_CLMFORC>$DIN_LOC_ROOT/atm/datm7</DIN_LOC_ROOT_CLMFORC>
+    <DOUT_S_ROOT>$CIME_OUTPUT_ROOT/archive/$CASE</DOUT_S_ROOT>
+    <BASELINE_ROOT>$CIME_OUTPUT_ROOT/cesm_baselines</BASELINE_ROOT>
+    <GMAKE_J>8</GMAKE_J>
+    <BATCH_SYSTEM>slurm</BATCH_SYSTEM>
+    <SUPPORTED_BY>EqESM project (ctessum group, University of Illinois)</SUPPORTED_BY>
+    <MAX_TASKS_PER_NODE>40</MAX_TASKS_PER_NODE>
+    <MAX_MEM_PER_NODE>188</MAX_MEM_PER_NODE>
+    <MAX_MPITASKS_PER_NODE>40</MAX_MPITASKS_PER_NODE>
+    <PROJECT_REQUIRED>TRUE</PROJECT_REQUIRED>
+    <mpirun mpilib="default">
+      <executable>mpirun</executable>
+      <arguments>
+        <arg name="ntasks"> -np {{ total_tasks }} </arg>
+      </arguments>
+    </mpirun>
+    <module_system type="module">
+      <init_path lang="perl">/usr/share/lmod/lmod/init/perl</init_path>
+      <init_path lang="python">/usr/share/lmod/lmod/init/env_modules_python.py</init_path>
+      <init_path lang="sh">/usr/share/lmod/lmod/init/sh</init_path>
+      <init_path lang="csh">/usr/share/lmod/lmod/init/csh</init_path>
+      <cmd_path lang="perl">/usr/share/lmod/lmod/libexec/lmod perl</cmd_path>
+      <cmd_path lang="python">/usr/share/lmod/lmod/libexec/lmod python</cmd_path>
+      <cmd_path lang="sh">module</cmd_path>
+      <cmd_path lang="csh">module</cmd_path>
+      <modules>
+        <command name="purge"></command>
+        <command name="load">gcc/13.3.0</command>
+      </modules>
+      <!-- openmpi 5.0.1 module is built against gcc 13.3.0; keep the ABI
+           consistent by loading both (TOOLCHAIN.md section 3.1).  mpi-serial
+           builds only need the compiler. -->
+      <modules mpilib="!mpi-serial">
+        <command name="load">openmpi/5.0.1-gcc-13.3.0</command>
+      </modules>
+    </module_system>
+    <environment_variables>
+      <!-- ESMF_RUNTIME_PROFILE=ON is required on all NUOPC systems for
+           CMEPS/ESMF timing output (derecho: "required on all systems").
+           CESM 3.0 is NUOPC-only, so this applies to every build. -->
+      <env name="ESMF_RUNTIME_PROFILE">ON</env>
+      <env name="ESMF_RUNTIME_PROFILE_OUTPUT">SUMMARY</env>
+      <env name="OMP_STACKSIZE">256M</env>
+      <!-- netCDF-C/Fortran + HDF5 are hand-built (no cluster modules exist;
+           TOOLCHAIN.md section 2.3): REPO/stage1/build/local, the same
+           prefix env.sh exports as NETCDF_PATH.
+           - NETCDF_PATH: legacy Makefile path (cime/CIME/Tools/Makefile)
+           - NETCDF_ROOT / CMAKE_PREFIX_PATH: find_package(NetCDF COMPONENTS
+             C Fortran) in cime/CMakeLists.txt
+           - HDF5_PATH / HDF5_ROOT: PIO / FindHDF5 -->
+      <env name="NETCDF_PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+      <env name="NETCDF_ROOT">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+      <env name="HDF5_PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+      <env name="HDF5_ROOT">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+      <env name="CMAKE_PREFIX_PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+    </environment_variables>
+  </machine>
+
+</config_machines>

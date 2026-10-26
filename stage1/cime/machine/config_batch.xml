@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<config_batch version="2.1">
+  <!--
+    Machine-specific SLURM settings for the Illinois Campus Cluster
+    (MACH="illinois").
+
+    CIME merges this with the generic slurm entry in
+    ccs_config/machines/config_batch.xml: the generic SBATCH directives
+    (-job-name, -nodes, -ntasks-per-node, -output, -exclusive) still apply;
+    this file adds batch_submit (the generic slurm entry has none) and the
+    submit arguments for partition / account / QOS / walltime.
+
+    Effective submission line with the defaults (PROJECT=ctessum,
+    JOB_QUEUE=ctessum, i.e. the sbatch-equivalent directives required by the
+    cluster):
+      sbatch -time $JOB_WALLCLOCK_TIME -p ctessum -account ctessum -qos scav_high
+
+    Queue/partition notes (TOOLCHAIN.md sections 1 and 2.5):
+      - ctessum   : our group partition, 5 nodes (ccc0232-ccc0236), 3-day limit
+      - scavenger : large shared partition, 1-day limit
+      - secondary : shared partition, 4-hour limit
+    Switch partition with: ./xmlchange JOB_QUEUE=secondary
+    JOB_WALLCLOCK_TIME defaults to the queue's walltimemax; shorten with
+    ./xmlchange JOB_WALLCLOCK_TIME=HH:MM:SS.  -qos is fixed to scav_high
+    (the ctessum account's default QOS); revisit if other partitions need a
+    different QOS (TBD until tested).
+  -->
+  <batch_system MACH="illinois" type="slurm">
+    <batch_submit>sbatch</batch_submit>
+    <submit_args>
+      <argument> --time $JOB_WALLCLOCK_TIME </argument>
+      <argument> -p $JOB_QUEUE </argument>
+      <argument> --account $PROJECT </argument>
+      <argument> --qos scav_high </argument>
+    </submit_args>
+    <queues>
+      <queue default="true" walltimemax="72:00:00">ctessum</queue>
+      <queue walltimemax="24:00:00">scavenger</queue>
+      <queue walltimemax="04:00:00">secondary</queue>
+    </queues>
+  </batch_system>
+</config_batch>
