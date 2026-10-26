@@ -237,10 +237,22 @@ In progress. See PLAN.md §4.1 for the playbook.
   (5672), mosart_euler (768), mosart_run_imports/exports (256 each),
   mosart_budget (2). No C++ bugs found in MOSART (the stale
   `11835528 DependencyNeverSatisfied` queue entry is a CIME artifact).
-- **Tests filling** ⏳ (2026-10-26) — worker dispatched to fill stage-2
-  tests blocks from dumps (wt/mosart-tests): pointwise D-law tests
-  (instantaneous, tight tolerance) + one-step I-boundary traces
-  (continuous-ODE form, measured scheme gap per EqIce pattern).
+- **Tests filling — DONE** ✅ (2026-10-26, merged `9317d34`) — stage-2
+  tests blocks filled from dumps: **20 tests / 115 assertions, all green**
+  (`esm test stage2/mosart_*.esm`: 0 fail / 0 err). Pointwise law pins at
+  rel 1e-12 (CREHT_nosqrt, CRVRMAN_nosqrt, GR* geometry chains incl. the
+  TINYVALUE zero guards), one-step traces in continuous-ODE form with
+  measured scheme gaps (~2–5× assertion bounds; assembly volr/wh agree
+  to 2.4e-16/1.0e-6 rel while wt/wr split differs 0.59×/3.3× — documented,
+  not asserted), cap conversions, and one full coupling-period assembly
+  test. Findings: fthresh is the spval sentinel 1e36 in the Fortran (the
+  .esm 0.0 placeholder would fire the flood rule on the first period —
+  assembly test overrides); numDT_r=numDT_t=4 reproduced from the CFL
+  equations at the defaults; channel stays dry in all 8 dumped steps →
+  GRHR/GRPR wet branches untested (coverage note in README). **This closes
+  the M2 loop: stub → physics → tests green under `./esm test`.**
+  **M2 remaining:** EarthSciModels PR prep (esm 1.3.0 CI acceptance check
+  per survey risk) + CICE instrumentation (M3).
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
