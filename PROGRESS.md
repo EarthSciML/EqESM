@@ -139,12 +139,19 @@ In progress. See PLAN.md §4.1 for the playbook.
   wget (`check_input_data --download`): ESMF meshes (fv1.9x2.5, gx1v7),
   MOSART r05 routing, CLM surfdata/initdata/ndep, CAM physprops/ozone/
   solar/sst, etc.
-- **First smoke run** 🏃 (2026-10-26) — `case.submit` submitted:
-  case.run job `11825726` (+ st_archive `11825727`) on partition
-  `ctessum`, 36 tasks, 6 simulated hours.
-- **Next:** confirm run completes + check CESM logs; then I-class
-  (`I2000Clm60Sp` — MOSART-coupled), D-class (CICE), C-class (MOM6 +
-  tx10deg), SCAM, and X-class runs per COMPSET_SURVEY.md §8.
+- **First smoke run — SUCCESS** ✅ (2026-10-26) — `F2000climo_f19`
+  (F2000climo/f19_f19_mg17, 36 tasks, 6 sim. hours) ran in 8 min wall
+  on ccc0232: **"SUCCESSFUL TERMINATION OF CESM"**, exit 0. All components
+  wrote restarts + history (cam.r 520 MB, clm2.r 198 MB, cpl.r, cice.r,
+  **mosart.r + rh0a/rh0i**, docn.r). Run 1 failed at exec time
+  (`libnetcdff.so.7` not found — CIME env vars *overwrite*
+  LD_LIBRARY_PATH, so the machine config now lists every lib dir:
+  netCDF/ESMF/gcc/openmpi; commit `1f952ac`). ESMF_Profile.summary shows
+  expected coupling (12 LND run phases = 6 h @ ATM_NCPL 48; ctsm_run
+  dominated by restart I/O).
+- **Next:** I-class (`I2000Clm60Sp` — CLM+MOSART coupled), D-class (CICE),
+  C-class (MOM6 + tx10deg), SCAM, X-class runs per COMPSET_SURVEY.md §8;
+  then M2 (instrumentation scaffolding + MOSART boundaries).
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
