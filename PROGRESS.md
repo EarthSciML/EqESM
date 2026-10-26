@@ -71,6 +71,28 @@ In progress. See PLAN.md §4.1 for the playbook.
   `git submodule status` (the vendored ChangeLog top tag `0_07_000` is just
   its first entry).
 - **Boundary catalog** ✅ (2026-10-26) — merged (`6677181`):
+  `stage1/boundaries.md` (398 lines): §0 CMEPS mediator phases/runseq/
+  coupling intervals + esmFldsExchange field tables (~370 fields); §1
+  per-component import/export caps (CAM, CTSM, CICE, MOM, MOSART, CISM,
+  CDEPS) with D/I classification; §2 MOSART internals in detail
+  (`mosart_run` orchestration, `Euler` hillslope→subnetwork→channel
+  cascade, pointwise laws `CRVRMAN_nosqrt`/`CREHT_nosqrt`/`GR*` = first
+  test targets, ID/dnID network handling; **no lakes/reservoirs/
+  groundwater module in mosart1.1.13** — only `qgwl`; PLAN.md §3 row
+  corrected); §3 grids/precision (real64 everywhere; CICE single-precision
+  TBD); §4 instrumentation hooks. Caveat: cmeps is UFS-style
+  (field-by-field API; coupling times from cime buildnml, no MED_NCPL
+  symbol).
+- **CIME machine config** ✅ (2026-10-26) — merged (`6ecaa1e`):
+  `stage1/cime/machine/{config_machines.xml,config_batch.xml,README.md}` —
+  machine `illinois` (gnu/openmpi, slurm, `ctessum` partition/account,
+  QOS `scav_high`, 40 cores/node, NETCDF_PATH→stage1/build/local,
+  ESMF_RUNTIME_PROFILE=ON, NODENAME_REGEX `^ccc02.*`); validated via
+  CIME's Machines/Batch classes; `stage1/inputdata/` mirror dir created.
+  TBDs: /scratch.local is node-local (CIME_OUTPUT_ROOT moved to
+  `stage1/cime/cases` on /projects), login-node hostnames unverified,
+  OMPI-5 mpirun slot discovery untested, first build compiles ESMF from
+  source (long).
   `stage1/boundaries.md` (398 lines). §0 CMEPS mediator (run phases,
   runseq ordering, coupling intervals, esmFldsExchange tables ~370 fields);
   §1 per-component import/export caps (CAM/CTSM/CICE/MOM/MOSART/CISM/CDEPS)
