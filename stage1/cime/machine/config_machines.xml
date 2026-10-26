@@ -50,7 +50,10 @@
     <COMPILERS>gnu</COMPILERS>
     <MPILIBS>openmpi</MPILIBS>
     <PROJECT>ctessum</PROJECT>
-    <CIME_OUTPUT_ROOT>/scratch.local/ctessum/eqesm-cime</CIME_OUTPUT_ROOT>
+    <!-- /scratch.local is node-local (verified by the machine-config
+         worker); cases/builds must survive across the 5 ctessum-partition
+         nodes, so use the shared /projects Lustre filesystem instead. -->
+    <CIME_OUTPUT_ROOT>/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/cime/cases</CIME_OUTPUT_ROOT>
     <DIN_LOC_ROOT>/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata</DIN_LOC_ROOT>
     <DIN_LOC_ROOT_CLMFORC>$DIN_LOC_ROOT/atm/datm7</DIN_LOC_ROOT_CLMFORC>
     <DOUT_S_ROOT>$CIME_OUTPUT_ROOT/archive/$CASE</DOUT_S_ROOT>

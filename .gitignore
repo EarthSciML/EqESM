@@ -8,6 +8,8 @@ stage1/build/*
 stage1/dumps/
 stage1/cesm/
 stage1/instrument/build/
+stage1/cime/cases/
+stage1/inputdata/
 
 # Logs and scratch
 *.log
