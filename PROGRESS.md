@@ -38,15 +38,28 @@ In progress. See PLAN.md §4.1 for the playbook.
 - **Rust CLI** ✅ (2026-10-25) — `esm` 0.4.0 binary built from the
   fast-forwarded `../EarthSciAST` checkout, copied to the repo root
   (untracked); validates an esm 1.3.0 document (`./esm validate` clean).
-- **Toolchain probe** ⏳ — worker dispatched (worktree `wt/toolchain`):
-  modules/compilers/netCDF/apptainer availability, scheduler/account,
-  NCAR inputdata reachability → `stage1/runs/TOOLCHAIN.md`.
+- **Toolchain probe** ✅ (2026-10-25) — merged (`ee29816`):
+  `stage1/runs/TOOLCHAIN.md`. Environment: SLURM, account/partition
+  `ctessum` (5-node, 3-day limit), gcc 13.3.0 + openmpi 5.0.1 (sibling
+  projects' pair), cmake 3.31.8/perl/python all present, apptainer 1.5.4
+  (unprivileged). **No netCDF anywhere** — hand-built. `data.cesm.ucar.edu`
+  does not resolve; no svn client (use `--protocol=https`); NCAR SVN +
+  LCRC E3SM mirror + GitHub reachable.
+- **netCDF stack** ✅ (2026-10-25) — hdf5 1.14.6 (serial) + netcdf-c 4.9.3 +
+  netcdf-fortran 4.6.1 built into `stage1/build/local` via tracked
+  `stage1/build/build-netcdf.sh` (gitignored prefix); Fortran write +
+  ncdump round-trip verified. Note: `support.hdfgroup.org` 404s the classic
+  release path — use the GitHub release asset (script updated).
+  `stage1/runs/env.sh` provides the toolchain env (`NETCDF_PATH`).
 - **Compset survey** ⏳ — worker dispatched (worktree `wt/compsets`):
   F/X/I/C/B/G-class and FSCAM compsets, coarse grids, MOSART standalone
   route, machine-entry requirements → `stage1/runs/COMPSET_SURVEY.md`.
+- **Boundary catalog** ⏳ — worker dispatched (worktree `wt/boundaries`):
+  CMEPS mediator phases/field bundles, per-component import/export caps,
+  MOSART internals → `stage1/boundaries.md`.
 - **Next:** CIME machine config for this cluster; smoke runs (F-class,
   X-class w/ MOSART, I-class, C-class, SCAM / Icepack / clm1pt harnesses);
-  minimal inputdata; `stage1/boundaries.md`.
+  minimal inputdata.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
