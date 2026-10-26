@@ -6,7 +6,7 @@ In the first stage, the original C++ or FORTRAN model code will be instrumented 
 
 In stage 2, The stub .esm files will be filled in with the actual physics of each process so that the tests pass, then each PR will be reviewed by a human and merged. Then, the indvidual .esm components will be imported by reference into the subassembly .esm files and coupled together so that the subassembly .esm tests pass.
 
-In stage 3, the components that have been merged into EarthSciModels will be imported by reference and coupled into top-level eqice.esm model and tested against simulations of the full C++ model.
+In stage 3, the components that have been merged into EarthSciModels will be imported by reference and coupled into top-level eqesm.esm model and tested against simulations of the full C++ model.
 
 All model logic should be contained in .esm files. Tests and examples should be in the "tests" and "analysis" sections of .esm files, respectively. All local tests should be conducted using the EarthSciAST rust CLI binary, a copy of which should be kept untracked in the root directory of this repo.
 
