@@ -195,9 +195,32 @@ In progress. See PLAN.md §4.1 for the playbook.
   as storage ODEs with `apply_expression_template` laws; Manning n declared
   `s/m^(1/3)` (unit checker); eroutUp/direct SMM gathers are placeholders
   until the frivinp data source (stage 2.5).
-- **Next:** C-class download + run; M2 workers (3 dispatched):
-  instrumentation (fork branch), stage2 skeleton, EarthSciModels/
-  discretizations survey.
+- **Reuse survey** ✅ (2026-10-26) — merged (`7596df4`):
+  `stage1/EARTHSCIMODELS_SURVEY.md` (335 lines) + PLAN.md §5.1 +
+  boundaries.md §4.1. Headline: **no river-routing physics exists anywhere**
+  (surface_runoff is 1-D Saint-Venant, related-but-distinct); reuse the
+  EqIce stage-2 pattern (templates + continuous ODE + measured scheme
+  gap), `faq`/ragged gathers for ID/dnID topology, `data_sources
+  kind: "static"` for frivinp. New code uses `faq` (`aggregate`
+  deprecated). ESD has no network grid / no CFL-substep template.
+- **Stage-2 skeleton** ✅ (2026-10-26) — merged (`85b0ad4`):
+  `stage2/{mosart_templates,hillslope,subnetwork,channel,coupling,
+  routing}.esm` (2806 lines) + README. All 6 files validate under esm
+  1.3.0. Laws transcribed exactly (manning_velocity=CRVRMAN_nosqrt,
+  overland_discharge=CREHT_nosqrt, GR* geometry incl. 1/sin(atan(0.1))
+  flood-plain constant); routing steps as storage ODEs with
+  `apply_expression_template`; 29 variable_map entries; 8 documented
+  divergences (rate-rule irrigation/flood, continuous-ODE limit,
+  eroutUp/direct gathers pending network data source). Tests blocks
+  empty pending dumps.
+- **C-class runs** (2026-10-26): `C_JRA_tx10` (tx10deg testmod) — built,
+  but **5 files missing on ALL inputdata servers** → `bugs.md` #2
+  (tx10deg/tx3deg testmods reference unpublished files, dated 2026-02-19;
+  no generator in checkout; `check_input_data` fails). Workaround:
+  `C_JRA_t62` case at full tx2_3v2 (no testmod) built (408 s), inputdata
+  complete, **submitted** (11835525).
+- **Next:** confirm C_JRA_t62 run; merge instrumentation worker (fork
+  branch) when done; then fill tests blocks from dumps.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
