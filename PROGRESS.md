@@ -114,9 +114,24 @@ In progress. See PLAN.md §4.1 for the playbook.
   TBDs: /scratch.local is node-local (CIME_OUTPUT_ROOT may need /projects),
   login-node hostnames unverified, OMPI5 mpirun slot discovery in sbatch
   untested, first build compiles ESMF from source (long).
-- **Next:** CIME machine config for this cluster; smoke runs (F-class,
-  X-class w/ MOSART, I-class, C-class, SCAM / Icepack / clm1pt harnesses);
-  minimal inputdata.
+- **First case created** ✅ (2026-10-26) — `F2000climo_f19`
+  (F2000climo/f19_f19_mg17) created + set up on machine `illinois`
+  (36 tasks, 1 node, STOP nhours/6, wallclock 2 h). Operational note:
+  `--extra-machines-dir` only applies at create time — `case.setup` etc.
+  need the config in `$HOME/.cime/` (installed; README updated).
+- **ESMF gap** ⏳ (2026-10-26) — CMEPS needs ESMF (`find_package(ESMF
+  REQUIRED)`; cmeps buildnml reads `$ESMFMKFILE`), there is no ESMF module
+  on the cluster and it is **not bundled** in the checkout (the machine
+  README's earlier "bundled source" claim was wrong). Building **ESMF
+  8.9.1** (derecho's pin) from source via `stage1/build/build-esmf.sh`
+  into `stage1/build/esmf`; machine config now sets `ESMFMKFILE`/`ESMF_DIR`.
+- **Inputdata**: `check_input_data --download` needs the build-generated
+  `.input_data_list` files; expected files already known (fv1.9x2.5 +
+  gx1v7 ESMF meshes, MOSART r05 routing file, …) — download after ESMF
+  build completes.
+- **Next:** finish first `case.build`; download inputdata; run the F-class
+  smoke run; then I-class (MOSART-coupled) run and remaining smoke runs
+  per COMPSET_SURVEY.md §8.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 

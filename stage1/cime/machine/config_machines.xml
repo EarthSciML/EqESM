@@ -110,6 +110,13 @@
       <env name="HDF5_PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
       <env name="HDF5_ROOT">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
       <env name="CMAKE_PREFIX_PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local</env>
+      <!-- ESMF is not available as a module on this cluster; it is built
+           from source by stage1/build/build-esmf.sh (v8.9.1, derecho's
+           pin) into stage1/build/esmf. CMEPS's buildnml requires
+           $ESMFMKFILE (components/cmeps/cime_config/buildnml:735) and the
+           CMake build does find_package(ESMF REQUIRED). -->
+      <env name="ESMFMKFILE">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf/lib/esmf.mk</env>
+      <env name="ESMF_DIR">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf</env>
     </environment_variables>
   </machine>
 

@@ -54,6 +54,15 @@ resolve to MACH=`illinois`. If a login node does not match (login hostnames
 are unverified — TBD), force it with `CIME_MACHINE=illinois` or
 `create_newcase --machine illinois`.
 
+**Operational note (2026-10-26):** `--extra-machines-dir` is only honored
+by `create_newcase`/`create_test`. The subsequent case commands
+(`case.setup`, `case.build`, `check_input_data`, …) re-discover machines
+from the persistent paths and will fail with "No machine illinois found"
+unless the config is also in `$HOME/.cime/` (option 2). **Use option 2
+(`$HOME/.cime/config_machines.xml` + `config_batch.xml`) on every machine
+where cases are created**; keep the canonical copies in this directory
+(repo) and `cp` them to `$HOME/.cime/` after editing.
+
 ## Compiler macros (CMake)
 
 Compiler settings are CMake macros, not `config_compilers.xml`:
@@ -116,11 +125,19 @@ placement follows the SLURM allocation (`--ntasks-per-node` +
 
 ## First build
 
-The first `case.build` compiles **ESMF from CIME's bundled source** (no
-ESMF module exists on the cluster; derecho loads prebuilt `esmf-mpi` modules,
-we cannot) — expect a long initial build. Nothing in this config is ESMF-
-specific beyond `ESMF_RUNTIME_PROFILE=ON` (required on all NUOPC systems for
-CMEPS/ESMF timing output; CESM 3.0 is NUOPC-only) and
+CMEPS requires ESMF: the CMake build does `find_package(ESMF REQUIRED)`
+(`components/cmeps/CMakeLists.txt:30`) and the cmeps buildnml reads
+`$ESMFMKFILE` (`components/cmeps/cime_config/buildnml:735`). NCAR machines
+load a prebuilt `esmf-mpi/8.9.1` module (derecho); the cluster has **no ESMF
+module, and ESMF is NOT bundled in the CESM checkout** (the earlier draft
+claim that CIME builds it from bundled source was wrong — verified
+2026-10-26). We build **ESMF 8.9.1** (derecho's pin) from source with
+`stage1/build/build-esmf.sh` (gcc 13.3 + openmpi 5.0.1, netcdf split mode,
+static libs) into `stage1/build/esmf`, and the machine entry sets
+`ESMFMKFILE=$REPO/stage1/build/esmf/lib/esmf.mk` and `ESMF_DIR`. Expect a
+long initial build. Nothing else in this config is ESMF-specific beyond
+`ESMF_RUNTIME_PROFILE=ON` (required on all NUOPC systems for CMEPS/ESMF
+timing output; CESM 3.0 is NUOPC-only) and
 `ESMF_RUNTIME_PROFILE_OUTPUT=SUMMARY` (derecho convention).
 
 ## Inputdata
