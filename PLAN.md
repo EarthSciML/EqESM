@@ -271,6 +271,45 @@ component:
    merged into EarthSciModels, or (b) adds CISM-derived tests to them in
    the same PR wave. Do not duplicate.
 
+### 5.1 MOSART implementation notes (survey 2026-10-26 → `stage1/EARTHSCIMODELS_SURVEY.md`)
+
+Reuse survey findings folded in (full detail in the survey file):
+
+- **Nothing computes river routing / kinematic wave / network routing in
+  EarthSciModels or EarthSciDiscretizations.** `surface_runoff/` is a 1-D
+  Saint-Venant PDE (Wang 2020) — related Manning friction concept, different
+  model class; verdict "related but NOT river routing" confirmed. The MOSART
+  physics is authored new; the *structure* transfers.
+- **Pattern to follow: the EqIce stage-2 factoring** — pointwise laws as
+  `expression_templates` (params/match/body) in a `*_templates.esm` library
+  imported by reference; continuous-ODE form with the Fortran's per-substep
+  Euler documented as a measured "scheme gap" in test tolerances
+  (MOSART's `numDT_*`/`DLevelH2R` subcycling cannot be declared in-document:
+  solver block is advisory-only, esm-spec §2.2.3). Per-cell assertions via
+  `coords` at 1-based index positions; instantaneous D tests with
+  `time_span {start:0,end:0}`, `time: 0`.
+- **Network topology via `faq` gathers + ragged index sets** (esm-spec §4.3),
+  not a new grid: `eroutUp[i] = index(erout, index(dnID, i))`; basin
+  membership for direct transfer via ragged sets (MPAS `edgesOnCell` idiom).
+  A `grids/network` ESD family is a candidate future PR but not required now.
+  New code uses `faq` (`aggregate` is deprecated since 1.1.0).
+- **`frivinp` routing network → `data_sources` `kind: "static"`** with
+  per-variable `file_variable` bindings (netCDF supported; era5/landfire
+  corpus precedent). GR*/Manning laws are closed-form → expression templates,
+  NOT `function_tables` (nothing tabulated in mosart1.1.13).
+  `reaction_systems`: confirmed irrelevant (CAM chemistry only).
+- **Planned file layout (stage 2):** `mosart_physics_templates.esm` (laws +
+  dry-cell/negative-storage `ifelse` clamps + irrigation/flood rules),
+  `mosart_routing.esm` (index_sets `{cell}`, unknowns `wh/wt/wr` shape
+  `[cell]`, data-fed shaped parameters, `faq` gathers, solver block, tests),
+  `mosart_coupling.esm` (Flrl_* → qsur/qsub/qgwl/qirrig; Forr_*/Flrr_*
+  exports; bypass logic).
+- **Risks:** local `./esm test` needs the network file (ship a toy fixture
+  or URL override); tests dropped at mount edges (subassembly declares its
+  own assertions); TINYVALUE clamps need branch-tested `ifelse`; version
+  drift (corpus 1.0.0/1.1.0, ESD 1.2.0 vs our 1.3.0 — confirm CI accepts
+  1.3.0 before the MOSART PR).
+
 ## 6. Stage 3 — Top-level `eqesm.esm`
 
 ### 6.1 Design: CESM-matching operator splitting, EarthSciIntegrator stepping

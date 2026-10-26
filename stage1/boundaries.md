@@ -396,3 +396,16 @@ coupling interval, namelist, precision) with every instrumented run.
   and the mediator accumulation phases (`prep_ocn_accum`, `prep_rof_accum`).
 - **Budget check:** `mosart_budget_type.F90` already computes a water
   budget per coupling step — reuse it as an instrumented conservation test.
+
+### 4.1 Reuse survey (2026-10-26) — pointer
+
+The EarthSciModels/ESD/EqIce/EarthSciAST reuse survey for MOSART lives in
+`stage1/EARTHSCIMODELS_SURVEY.md` (folded into PLAN.md §5.1). Headline:
+no river-routing physics exists anywhere (MOSART authored new); reuse the
+EqIce stage-2 pattern (templates + continuous ODE + measured scheme gap),
+the `faq`/ragged-set gather machinery for the ID/dnID topology, and
+`data_sources kind: "static"` for the `frivinp` network file. Dump
+requirements this implies: dumps must be usable both as instantaneous
+pointwise D tuples (laws) and as per-cell one-step storage traces with
+1-based cell indices pinned to the dump order (for `coords: {cell: k}`
+assertions).
