@@ -115,4 +115,14 @@ module load openmpi/5.0.1-gcc-13.3.0
 8. **Version pinning:** gcc 13.3.0 + openmpi 5.0.1 are the sibling-projects' pinned pair; intel 2025.0.4 + intel/mpi 2021.14 exist as an alternative if a Fortran-compiler-specific CESM bug appears (not recommended to start there). Note: `openmpi/5.0.8` exists under `/sw/apps` but has **no module** — stick with 5.0.1.
 9. **hdf5 download URL:** `support.hdfgroup.org` 404s the classic release path (site reorganized) — use the GitHub release asset (`https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz`).
 10. **OSDF inputdata endpoint has an expired TLS cert** (verified 2026-10-26: wget fails with "The certificate has expired" on `osdf-data.gdex.ucar.edu`). CIME's `check_input_data` still succeeded because it falls through the server list to `svn-ccsm-inputdata.cgd.ucar.edu` (wget protocol). Manual wgets should use `--no-check-certificate` or the svn-ccsm URL directly.
-11. **CICE cold-start `ice_ic` is not in the input_data_list** (CIME quirk, verified 2026-10-26): `cice/cime_config/buildnml` only appends `ice_ic` to the data list for `run_type=branch|hybrid`; a cold-start D-class case gets the default `ice_ic` (`$DIN_LOC_ROOT/ice/cice/b.e15.B1850G.f09_g16.pi_control.25.cice.r.0041-01-01-00000.nc`, per `namelist_definition_cice.xml` gx1v7 entry) which `check_input_data` never fetches → run fails at `ice_pio_init` with "invalid file". Workaround: wget the file manually (240 MB) before the first D-class run.
+11. **Multi-node runs must use `srun`, not `mpirun`** (verified 2026-10-26): OpenMPI
+    `mpirun` (prterun) launches cross-node daemons over ssh, which this cluster's
+    `pam_slurm_adopt` blocks ("Access denied ... you have no active jobs on this
+    node") → the run dies silently ~15 s in, right after prterun's node
+    allocation. All single-node (36-PE) runs work with either launcher. The
+    `illinois` machine config (`stage1/cime/machine/config_machines.xml`, synced
+    to `~/.cime/`) now uses `srun -n {{ total_tasks }}`. Note: an existing case
+    bakes the launcher into its `env_mach_specific.xml` — after editing the
+    machine config, either re-create the case or `./xmlchange MPI_RUN_COMMAND`
+    (or `case.setup --reset`, which invalidates the build and forces a rebuild).
+12. **CICE cold-start `ice_ic` is not in the input_data_list** (CIME quirk, verified 2026-10-26): `cice/cime_config/buildnml` only appends `ice_ic` to the data list for `run_type=branch|hybrid`; a cold-start D-class case gets the default `ice_ic` (`$DIN_LOC_ROOT/ice/cice/b.e15.B1850G.f09_g16.pi_control.25.cice.r.0041-01-01-00000.nc`, per `namelist_definition_cice.xml` gx1v7 entry) which `check_input_data` never fetches → run fails at `ice_pio_init` with "invalid file". Workaround: wget the file manually (240 MB) before the first D-class run.

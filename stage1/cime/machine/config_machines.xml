@@ -66,9 +66,9 @@
     <MAX_MPITASKS_PER_NODE>40</MAX_MPITASKS_PER_NODE>
     <PROJECT_REQUIRED>TRUE</PROJECT_REQUIRED>
     <mpirun mpilib="default">
-      <executable>mpirun</executable>
+      <executable>srun</executable>
       <arguments>
-        <arg name="ntasks"> -np {{ total_tasks }} </arg>
+        <arg name="ntasks"> -n {{ total_tasks }} </arg>
       </arguments>
     </mpirun>
     <module_system type="module">
