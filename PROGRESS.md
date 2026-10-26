@@ -218,9 +218,31 @@ In progress. See PLAN.md §4.1 for the playbook.
   (tx10deg/tx3deg testmods reference unpublished files, dated 2026-02-19;
   no generator in checkout; `check_input_data` fails). Workaround:
   `C_JRA_t62` case at full tx2_3v2 (no testmod) built (408 s), inputdata
-  complete, **submitted** (11835525).
-- **Next:** confirm C_JRA_t62 run; merge instrumentation worker (fork
-  branch) when done; then fill tests blocks from dumps.
+  complete. First two submits FAILED at launch: `mpirun -np 72` (2 nodes)
+  dies ~15 s in — OpenMPI prterun ssh-launches cross-node daemons, blocked
+  by `pam_slurm_adopt` (single-node 36-PE runs never hit this). Fixed:
+  machine config now uses `srun -n {{ total_tasks }}` (committed `957c01c`,
+  TOOLCHAIN.md quirk #11); `case.setup --reset` invalidated the build, so
+  rebuilt (22 s) and resubmitted with srun (11839272, PENDING — queue busy).
+- **MOSART instrumentation** ✅ (2026-10-26) — fork branch
+  `instrument/mosart-dumps` complete: mosart submodule @ `f9a19d1`
+  (mosart_dump_mod.F90, 380 lines, namelist-gated `dump_mosart=.false.`,
+  PET-0 only, 16 cells × 12 steps) + superproject @ `7a9db4a` (submodule
+  pointer + `stage1/runs/mosart_instrument.json`). Run
+  `I2000Clm60Sp_mosart_inst` (job 11837196, exit 0:0, 8:22 wall):
+  **bit-identical to reference** I-class run (rh0a/rh0i) → solution-neutral;
+  `decomp_option='basin'` ≡ roundrobin numerically; budget closes
+  (net ≈ −lag). 9 CSVs in `stage1/dumps/mosart/`: creht_nosqrt (216 rows),
+  crvrman_trib (4320), crvrman_chan (5640), gr_subnet (4352), gr_chan
+  (5672), mosart_euler (768), mosart_run_imports/exports (256 each),
+  mosart_budget (2). No C++ bugs found in MOSART (the stale
+  `11835528 DependencyNeverSatisfied` queue entry is a CIME artifact).
+- **Tests filling** ⏳ (2026-10-26) — worker dispatched to fill stage-2
+  tests blocks from dumps (wt/mosart-tests): pointwise D-law tests
+  (instantaneous, tight tolerance) + one-step I-boundary traces
+  (continuous-ODE form, measured scheme gap per EqIce pattern).
+- **Next:** C_JRA_t62 srun run result; review/merge tests worker; then M3
+  kickoff (MOSART PR prep + CICE instrumentation).
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
