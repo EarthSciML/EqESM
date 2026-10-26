@@ -149,9 +149,27 @@ In progress. See PLAN.md §4.1 for the playbook.
   netCDF/ESMF/gcc/openmpi; commit `1f952ac`). ESMF_Profile.summary shows
   expected coupling (12 LND run phases = 6 h @ ATM_NCPL 48; ctsm_run
   dominated by restart I/O).
-- **Next:** I-class (`I2000Clm60Sp` — CLM+MOSART coupled), D-class (CICE),
-  C-class (MOM6 + tx10deg), SCAM, X-class runs per COMPSET_SURVEY.md §8;
-  then M2 (instrumentation scaffolding + MOSART boundaries).
+- **I-class run — SUCCESS** ✅ (2026-10-26) — `I2000Clm60Sp_f19`
+  (DATM%GSWP3v1 + CLM6 + MOSART coupled, 1 day, 36 tasks): GSWP3 forcing
+  (~150 GB, 215 files) downloaded; **MOSART ran 8 routing steps**
+  (ROF_NCPL=8), restarts + rh0a/rh0i archived. st_archive initially
+  failed (`ncdump not found` — fixed by adding PATH to machine config).
+- **D-class run — SUCCESS** ✅ (2026-10-26) — `D_f19g17` (active CICE,
+  data atm/ocn/rof, 1 day, 18 tasks): CICE advanced 24 steps, restart at
+  0001-01-02. First attempt failed at `ice_pio_init`: cold-start `ice_ic`
+  file not in input_data_list (CIME quirk — see TOOLCHAIN.md §2.6 #11);
+  fetched manually from svn-ccsm (240 MB).
+- **SCAM run — SUCCESS** ✅ (2026-10-26) — `FSCAMARM97_ne3`
+  (CAM60 SCAMARM97 IOP, ne3_ne3_mg37, **1 PE required** — first attempt
+  failed with "single column mode must be run on 1 pe" after NTASKS was
+  overridden to 18; fixed with NTASKS=1). 6 sim. hours, clean finalize.
+- **X-class run** 🏃 (2026-10-26) — `X_f19g17` (all-stub coupler testbed)
+  built + submitted (11827277).
+- **C-class run** ⏳ (2026-10-26) — `C_JRA_tx10` (MOM6 active + tx10deg
+  testmod, T62_t232) built successfully (mom 116 s); input data download
+  (large MOM6 ICs/forcing) still in progress.
+- **Next:** finish C-class + X-class; then M2 (instrumentation scaffolding
+  + MOSART boundaries).
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
