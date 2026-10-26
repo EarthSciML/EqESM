@@ -123,7 +123,7 @@ for instrumentation.
 | Sea ice | `components/cice` (cesm3_cice6_6_3_22) | Icepack column thermodynamics (Bitz–Lipscomb, mushy), EVP dynamics, transport (incremental remapping/advection), fluxes, coupling | `cice_thermodynamics.esm` (icepack), `cice_dynamics.esm` (evp), `cice_transport.esm`, `cice_fluxes.esm` | none (new `sea_ice` domain) |
 | Ocean | `components/mom` (mi_260909) | MOM6: layered isopycnal/z\* dynamics on Arakawa C-grid (FMS framework), mixed-layer physics (KPP), isopycnal/neutral diffusion, mesoscale parameterizations, tides; coupling via FMS cap | `mom6_dynamics.esm`, `mom6_kpp.esm`, `mom6_mixing.esm`, `mom6_coupling.esm` | none substantial (check `environmental_transport/` for mixing pieces) |
 | Ice sheets | `components/cism` (cismwrap_3_00_002) | SIA, SSA/higher-order stress balance, enthalpy/energy, calving, basal resistance, coupling | `cism_sia.esm`, `cism_ssa.esm`, `cism_energy.esm`, `cism_calving.esm`, `cism_coupling.esm` | **EqIce reuse path:** SIA/SSA/energy/hydrology/calving exist in the EqIce repo (`stage2/`, 3443+ tests) pending merge into EarthSciModels; add CISM-derived tests, don't re-derive |
-| River routing | `components/mosart` (mosart1.1.13) | Network river routing (kinematic wave), lakes/reservoirs, groundwater, coupling with land | `mosart_routing.esm`, `mosart_lakes.esm`, `mosart_coupling.esm` | `environmental_transport/surface_runoff` is Saint-Venant overland flow — related but NOT river routing; treat as new |
+| River routing | `components/mosart` (mosart1.1.13) | Network river routing: hillslope (overland) → subnetwork (tributary) → main channel, kinematic wave/variable storage with CFL substepping; irrigation + flood terms; direct transfer (glc/frozen/negative runoff to outlet); **no separate lakes/reservoirs/groundwater module in 1.1.13** (the `qgwl` stream from CTSM is routed directly per `qgwl_runoff_option`; see `stage1/boundaries.md` §2.5) | `mosart_routing.esm`, `mosart_coupling.esm` | `environmental_transport/surface_runoff` is Saint-Venant overland flow — related but NOT river routing; treat as new |
 | Data components | `components/cdeps` (cdeps1.0.112) | datm/dlnd/docn/dice prescribed forcing | `data_sources` entries (JRA55, GSWP3, CPC, HadISST, …) | `earthsci_data/` has the pattern (era5, geosfp, ncep_ncar, …); CESM's own datasets are new `data_sources` |
 | Legacy/optional | `components/rtm` (rtm1_0_89), `components/mizuRoute` (v3.1.1), `components/ww3` (main_0.1.1) | River transport (legacy), alternative routing, waves | defer; revisit if a reference compset needs them | — |
 | Infra (build/test only, not modeled) | cime (cime6.7.1), ccs_config (ccs_config_cesm1.0.92), share (share1.1.22), libraries/parallelio (pio2_6_8), libraries/FMS (fi_260310), libraries/tuv-x (v0.14.3), libraries/mpi-serial, FTorch (optional), tools/* | Case creation, build, run, I/O, framework | not components; harness only | — |
@@ -201,7 +201,7 @@ trajectory) classification. For CESM the natural boundary layers are:
 - **Subassembly boundaries inside each component:** physics parameterization
   interfaces (CAM physics buffer / `cam_in`/`cam_out`; CLM's land-unit /
   column / pft decomposition; CICE's icepack column API; MOM6's
-  parameterization entry points; MOSART's routing/lake/groundwater steps;
+  parameterization entry points; MOSART's routing/irrigation/flood/direct-transfer steps;
   CMEPS's mediator phases and flux computations).
 - Record the exact run configuration (grid, timestep, coupling interval,
   namelist, precision — CESM components can run single- or double-precision)
@@ -393,8 +393,9 @@ Each milestone closes with merged PRs and passing inline tests.
    MOSART, I-class, C-class, single-column harnesses: SCAM, Icepack,
    clm1pt); minimal inputdata curated; `stage1/boundaries.md` published.
 3. **M2 — Instrumentation scaffolding + MOSART end to end.** Dump module +
-   fork branches; MOSART boundaries instrumented (routing/lakes/groundwater
-   one-step traces + pointwise laws); `stage1/dumps/mosart/`;
+   fork branches; MOSART boundaries instrumented (routing/hillslope/
+   subnetwork/channel one-step traces + pointwise laws; irrigation/flood
+   rate rules; direct transfer); `stage1/dumps/mosart/`;
    `stage2/mosart_routing.esm` stub → physics, tests green under
    `./esm test`. This closes the loop for the whole pipeline.
 4. **M3 — MOSART PR → EarthSciModels (merged); CICE instrumented.**
