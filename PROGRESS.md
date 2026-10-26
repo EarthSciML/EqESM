@@ -181,6 +181,20 @@ In progress. See PLAN.md §4.1 for the playbook.
   (mosart_driver.F90:375), `Euler` (mosart_physics.F90:51), pointwise
   laws `CRVRMAN_nosqrt` (F90:406), `CREHT_nosqrt` (F90:426), `GR*`
   family, hillslope/subnetwork routing, `Routing_KW` (F90:290).
+- **MOSART stage-2 skeleton** ✅ (2026-10-26) — worktree
+  `wt/stage2-mosart` (`../EqESM-wt-stage2-mosart`, branch `wt/stage2-mosart`),
+  commit `2907da3`: `stage2/` with six esm 1.3.0 files
+  (`mosart_templates.esm` pointwise laws CRVRMAN_nosqrt/CREHT_nosqrt/GR*,
+  `mosart_hillslope.esm`, `mosart_subnetwork.esm`, `mosart_channel.esm`
+  (Routing_KW), `mosart_coupling.esm` (RofCap unit conversions),
+  `mosart_routing.esm` (assembly: inline Control = mosart_run steps 2-8 +
+  set_subtimesteps, 29 variable_map couplings, enums, solver block)) +
+  `README.md` (file map, units, §2.6 mapping, per-law transcription notes,
+  divergences). All `esm validate` ✓, `esm test` clean (0 assertions; tests
+  blocks empty pending instrumentation dumps). Key decisions: routing steps
+  as storage ODEs with `apply_expression_template` laws; Manning n declared
+  `s/m^(1/3)` (unit checker); eroutUp/direct SMM gathers are placeholders
+  until the frivinp data source (stage 2.5).
 - **Next:** C-class download + run; M2 workers (3 dispatched):
   instrumentation (fork branch), stage2 skeleton, EarthSciModels/
   discretizations survey.
