@@ -4,7 +4,7 @@ Stage-2 implementation of the CESM MOSART river-routing component (mosart1.1.13,
 cesm3.0-alphabranch checkout `e59f2512`) as esm 1.3.0 files: component structure,
 imports/exports, solver block, the pointwise flow laws of `mosart_physics.F90`
 transcribed exactly, subcomponent routing steps, and top-level assembly. The
-`tests` blocks are intentionally empty pending the stage-1 instrumentation dumps
+`tests` blocks hold numeric tuples from the stage-1 instrumentation dumps
 (`stage1/dumps/mosart/`) — see [Testing](#testing).
 
 All model logic lives in `.esm` files; this README is the human-readable map.
@@ -184,20 +184,95 @@ storage by `·localdelt` (rate reading adopted, noted in variable descriptions);
 
 ## Testing
 
-- `tests` blocks are intentionally empty (`"tests": []`) in every model until
-  the stage-1 instrumentation dumps (`stage1/dumps/mosart/`) provide numeric
-  tuples (TODO in each file's metadata description).
-- Validation: `esm validate <file>` passes for all six files (esm 1.3.0,
-  EarthSciAST CLI v0.4.0); `esm test <file>` parses cleanly with 0 assertions.
-- First test targets, per boundaries.md §4: the pointwise laws (D boundaries)
-  `CRVRMAN_nosqrt`, `CREHT_nosqrt`, `GRMR/GRHR/GRPR/GRRR/GRHT/GRPT` as
-  instantaneous tuples, then `updateState_*`, `Routing_KW`, and the
-  irrigation/flood rate rules.
+All `tests` blocks are filled with numeric tuples from the stage-1
+instrumentation dumps (`stage1/dumps/mosart/`): instantaneous pointwise pins
+(`time_span {0,0}`, laws and geometry chains evaluated at their dump states)
+and one-step storage traces in the continuous-ODE form over one Euler substep
+`delt = 3600 s` (the assembly test spans one coupling period `[0, 10800]`).
+Every expected value is a real dump row — identified by step / ns / m-level /
+substep / gindex in the test descriptions; none are invented. Run the suite
+with
+
+    esm test stage2/mosart_*.esm
+
+(tests of mounted models run when their own file is a target; the assembly run
+additionally reports its 4 mounts). `esm validate` passes for all six files.
+
+| File | Tests | Assertions | What is pinned |
+|---|---|---|---|
+| `mosart_hillslope.esm` | 6 | 20 | CREHT_nosqrt pointwise (wet and dry states, cells 100312/101032/100313) + one-step growth/drain traces of `d(wh)/dt = qsur + ehout` |
+| `mosart_subnetwork.esm` | 8 | 30 | GRMR/GRHT/GRPT/GRRR chain pointwise (incl. the TINYVALUE zero guards) + Manning velocity + one-step etin/erlateral trace of `d(wt)/dt` |
+| `mosart_channel.esm` | 4 | 33 | dry-cell GRMR/GRHR/GRPR/GRRR chain and dry routing branches pointwise (2 cells + zero guard) + one-step `d(wr)/dt = erlateral` accumulation trace |
+| `mosart_coupling.esm` | 1 | 16 | med↔rof conversions: `Flrl_rofsur → qsur_m3s`, `volr/volrmch → Flrr_volr/volrmch`, all-zero streams |
+| `mosart_routing.esm` | 1 | 16 | one coupling period of the full assembly: mass-conserved `volr`, hillslope fill `wh`, subcycling diagnostics, zero branches |
+
+### Derived inputs and conversions
+
+- **Per-cell area** is not dumped directly: `area = qsur_m3s/qsur_ms` of the
+  step-1 dump rows = 2.900213644740529e9 m² for cell 100312 (verified against
+  `etin` and `volr`, which is `wh·area` to 1e-6 since `wt, wr ≪ wh·area`).
+  Per-cell areas differ (cell 101032's is ~2.909e9 m²).
+- **`Flrl_rofsur`** (mm/s) is derived from the dumped `qsur_m3s` by the inverse
+  of the cap conversion: `Flrl_rofsur = qsur_m3s/(area·0.001)`.
+- **numDT values** come from the law-dump row multiplicities (one row per
+  substep per (step, ns, m) key): `numDT_r = 4` and `numDT_t = 4` for cell
+  100312. The Control CFL equations reproduce them at the default
+  `rslp = tslp = 1e-4`, `areaTotal2 = 1e8` with the cell geometry, giving
+  `localdelt = delt/DLevelH2R/numDT = 3600/5/4 = 180 s` — asserted in the
+  assembly test along with `nsub = 3`, `delt = 3600` (the dump's three `ns`
+  levels per coupling step).
+- **`fthresh`**: the Fortran flood threshold is the `spval` sentinel
+  `abs(spval) = 1e36` (`mosart_vars.F90:24`) — always inactive; the .esm
+  default 0.0 is a placeholder, so the assembly test overrides
+  `Control.fthresh = 1e36`. With the placeholder, the flood rule would fire on
+  the first period (volr = 0.81 m³ > 0).
+
+### Scheme gaps (continuous ODE vs Fortran staggered Euler)
+
+The .esm routing steps are continuous limits of the Fortran's forward-Euler
+cascade (`D(wh)/dt`, `D(wt)/dt`, `D(wr)/dt`), so the traces carry measured,
+documented gaps (measured with the solver at reltol 1e-14; each test's
+description states its gap and the assertion bound, ~2–5× the gap):
+
+- hillslope fill: 1.0e-17 m abs = 5.5e-8 rel (growth step); drain step
+  1.2e-21 m = 4.3e-12 rel;
+- subnetwork: ~6e-17 m³ abs = 2e-11 rel on wt (the `etout` term is ~1e-8 of
+  `etin` here);
+- channel `wr` accumulation: **exact** — the dumped `erlat_avg` is the
+  DLevelH2R mean of the five m-level erlateral values, and the Fortran's
+  per-m-level sum Σ erlateral(m)·720 equals mean·3600, the continuous integral
+  with `erlateral` held at the mean.
+
+The one large gap is in the assembly: the continuous limit delivers the
+hillslope outflow `etin` to the subnetwork as a ramp, while the Fortran holds
+it constant at each Euler substep's entry state. Measured continuous end
+states (reltol 1e-14) are `wt = 2.0628e-6 m³` and `wr = 8.523e-16 m³` against
+the Fortran's `wt = 1.2267e-6 m³` (0.59×) and `wr = 2.620e-16 m³` (3.3×) — the
+wt/wr split of the stored water differs while `volr` (mass-conserving) agrees
+to 2.4e-16 rel and `wh` (qsur-dominated) to 1.0e-6 rel. The assembly test
+asserts `volr` and `wh`, documents the wt/wr gap, and pins `wr` only to the
+dry-channel threshold (1e-14 m³; both values are far below the TINYVALUE
+wetted-area cutoff that would wake the channel flow).
+
+### Coverage limitations (this data window)
+
+- The channel is dry through all 8 dumped steps (max `wr = 1.9e-12 m³` →
+  `mr = 1.3e-17 m² < TINYVALUE`), so the nonzero GRHR/GRPR flood-plain
+  branches (`mosart_physics.F90:501-572`) and the wet Manning routing branch
+  of `Routing_KW` are not exercised — they await a wetter window (stage-1
+  rerun with stronger forcing).
+- Likewise not present in the window: the `areaTotal2/(rwidth·rlen) > 1e6` and
+  `rlen <= 0` channel branches, the `tlen <= hlen` subnetwork pass-through,
+  and the nonzero irrigation / flood / qgwl / direct-transfer branches (all
+  cells routed normally; all forcing terms zero except step-1 `qsur`).
+- The dry-cell clamp of the channel (`erout = -(erlateral + erin + wr/localdelt)`,
+  F90:315-317) is exercised by the dump rows only through its non-firing
+  branch in this window (mr stays below TINYVALUE in every cell).
 
 ## Next steps (stage 2.5 / stage 3)
 
-1. Stage-1 instrumentation dumps → fill the `tests` blocks (per-cell traces
-   with 1-based cell indices pinned to the dump order).
+1. A wetter stage-1 forcing window to cover the channel flood-plain / wet
+   Manning branches and the irrigation/flood/direct-transfer nonzero branches.
 2. frivinp network `data_sources` (static) + ID/dnID gather → replace the
    `eroutUp`/`direct` placeholders.
 3. Mount into `eqesm.esm` and integrate with earthsciintegrator; compare

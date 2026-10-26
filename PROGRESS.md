@@ -257,4 +257,24 @@ In progress. See PLAN.md §4.1 for the playbook.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
-Not started. See PLAN.md §4.2–4.3 and §10.
+In progress (tests from dumps). See PLAN.md §4.2–4.3 and §10.
+
+- **MOSART stage-2 tests from dumps** ✅ (2026-10-26) — worktree
+  `wt/mosart-tests` (`../EqESM-wt-mosart-tests`, branch `wt/mosart-tests`):
+  filled the empty `tests` blocks of all five stage-2 files from the
+  stage-1 instrumentation dumps (`stage1/dumps/mosart/`, C_JRA_t62 run) —
+  hillslope 6 tests/20 assertions, subnetwork 8/30, channel 4/33,
+  coupling 1/16, routing assembly 1/16; **115 assertions, all green**
+  (`esm test`, default reltol 1e-4; `esm validate` clean). Every number
+  traced to a dump row (step/ns/nr/gindex); EqIce house style:
+  instantaneous laws at t=0 (`time_span {0,0}`) + one-step storage traces
+  at t=3600. Continuous-ODE trace tests document measured scheme gaps vs
+  Fortran (assembly: wt 2.063e-6 vs 1.227e-6, wr 8.52e-16 vs 2.62e-16 —
+  wr pinned only to dry threshold, wt not asserted; volr/wh asserted to
+  rel 1e-5). Findings: `fthresh` default 0.0 in Control is a placeholder
+  (Fortran uses abs(spval)=1e36 — assembly overrides); channel dry
+  through all 8 dump steps (max wr=1.9e-12 m3) so channel tests pin only
+  dry branches; `runoffocn`=spval for mask==1 never enters `runofftot`
+  (zeroed in .esm; no discrepancy). `mosart_templates.esm` untouched.
+  README gains a Testing section (test table, derived-input conversions,
+  scheme gaps, coverage limits).
