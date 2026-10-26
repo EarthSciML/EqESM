@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mosart_routing",
-  "description": "MOSART river-routing top-level component (stage 2 of the EqESM project): the cesm3.0-alphabranch mosart1.1.13 rof component as an esm 1.3.0 assembly, per the stage1/boundaries.md 1.5 boundary table and 2.6 subassembly mapping. Five systems: RofCap (mounted from ./mosart_coupling.esm, the med<->rof cap unit conversions), Hillslope (./mosart_hillslope.esm), Subnetwork (./mosart_subnetwork.esm), Channel (./mosart_channel.esm) - the Euler cascade of mosart_physics.F90 (hillslope -> subnetwork -> main channel, with the shared pointwise laws in ./mosart_templates.esm) - and the inline Control model, which is mosart_run (mosart_driver.F90:375-873) steps 2-8 written as algebraic rate rules over one coupling period: the irrigation withdrawal qirrig_actual = -min(-qirrig*coupling_period, wr)/coupling_period with the overage returned to qsub (F90:476-500), the flood rule flood = (volr - fthresh)/delt_coupling for mask==1 cells with volr = wt + wr + wh*area (F90:509-531, 854), the direct-transfer rules (frozen runoff, glc runoff, the qgwl_runoff_option all/negative/threshold branches, negative qsur/qsub, mask==0 cells; F90:533-772), the subcycling nsub = ceil(coupling_period/delt_mosart) with delt = delt_coupling/nsub (F90:786-800), the CFL sub-timesteps phi_r/phi_t and numDT_r/numDT_t of set_subtimesteps (mosart_tspatialunit_type.F90:624-684), the flow/runoff aggregation runofftot = direct + runoffocn + direct_glc with the mask==1/mask>=2 split (F90:844-867), and the ice_runoff branch of the rof_import_export export_fields (F90:362-382). The coupling array wires the data flow with variable_map param_to_var entries in the Euler order; the one network operation not yet wired is the rh_eroutUp upstream gather (erout of each cell mapped to the downstream cell's eroutUp, F90:158) and the rh_direct outlet gather - they are per-cell parameters (Channel.eroutUp, Control.direct_*) until the frivinp network data source lands (boundaries.md 2.4). The routing steps are written as storage ODEs whose continuous limit reproduces the Fortran's forward-Euler cascade; the discrete irrigation/flood storage jumps (wr -= irrig_volume, F90:497) are rate rules here and will become discrete events at stage 3. All fields use the standard CESM/CMEPS names; units are SI except the CMEPS surface fluxes (kg/m^2/s = mm/s). Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests blocks are intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_driver.F90 and mosart_physics.F90 (mosart1.1.13)."
+  "description": "MOSART river-routing top-level component (stage 2 of the EqESM project): the cesm3.0-alphabranch mosart1.1.13 rof component as an esm 1.3.0 assembly, per the stage1/boundaries.md 1.5 boundary table and 2.6 subassembly mapping. Five systems: RofCap (mounted from ./mosart_coupling.esm, the med<->rof cap unit conversions), Hillslope (./mosart_hillslope.esm), Subnetwork (./mosart_subnetwork.esm), Channel (./mosart_channel.esm) - the Euler cascade of mosart_physics.F90 (hillslope -> subnetwork -> main channel, with the shared pointwise laws in ./mosart_templates.esm) - and the inline Control model, which is mosart_run (mosart_driver.F90:375-873) steps 2-8 written as algebraic rate rules over one coupling period: the irrigation withdrawal qirrig_actual = -min(-qirrig*coupling_period, wr)/coupling_period with the overage returned to qsub (F90:476-500), the flood rule flood = (volr - fthresh)/delt_coupling for mask==1 cells with volr = wt + wr + wh*area (F90:509-531, 854), the direct-transfer rules (frozen runoff, glc runoff, the qgwl_runoff_option all/negative/threshold branches, negative qsur/qsub, mask==0 cells; F90:533-772), the subcycling nsub = ceil(coupling_period/delt_mosart) with delt = delt_coupling/nsub (F90:786-800), the CFL sub-timesteps phi_r/phi_t and numDT_r/numDT_t of set_subtimesteps (mosart_tspatialunit_type.F90:624-684), the flow/runoff aggregation runofftot = direct + runoffocn + direct_glc with the mask==1/mask>=2 split (F90:844-867), and the ice_runoff branch of the rof_import_export export_fields (F90:362-382). The coupling array wires the data flow with variable_map param_to_var entries in the Euler order; the one network operation not yet wired is the rh_eroutUp upstream gather (erout of each cell mapped to the downstream cell's eroutUp, F90:158) and the rh_direct outlet gather - they are per-cell parameters (Channel.eroutUp, Control.direct_*) until the frivinp network data source lands (boundaries.md 2.4). The routing steps are written as storage ODEs whose continuous limit reproduces the Fortran's forward-Euler cascade; the discrete irrigation/flood storage jumps (wr -= irrig_volume, F90:497) are rate rules here and will become discrete events at stage 3. All fields use the standard CESM/CMEPS names; units are SI except the CMEPS surface fluxes (kg/m^2/s = mm/s). The Control tests block holds the one-coupling-period assembly trace over [0, 10800] from the cold start of the dumped run (cell 100312), pinning the mass-conserved volr, the hillslope fill wh, the subcycling diagnostics numDT_r/numDT_t/localdelt/nsub/delt, and the zero branches (flow, flood, irrigation, direct transfers), with the wt/wr continuous-vs-staggered scheme gap documented rather than asserted (see stage2/README.md Testing). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_driver.F90 and mosart_physics.F90 (mosart1.1.13)."
  },
  "solver": {
   "stiffness": "moderate",
@@ -738,7 +738,69 @@
        { "op": "/", "args": ["rdepth", "rwidth"] } ] }
     }
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "coupling_step1_cell100312",
+     "description": "One-coupling-period trace of the full assembly over [0, 10800] (the ROF_NCPL=8 coupling period) from the cold start of mosart_run_imports.csv row (step 1, nt 1, gindex 100312): all storages zero, qsur = 7.51365591037279353e-05 m3/s (delivered through the cap as Flrl_rofsur = 2.59072497089951852e-11 mm/s over area = 2.900213644740529e9 m2), qsub = qgwl = qirrig = qglc = 0, mask = 1, fthresh = 1e36 (the Fortran flood threshold is the spval sentinel, mosart_vars.F90:24, not the 0.0 placeholder default; with the placeholder the flood rule would fire on the first period). Cell-100312 geometry for the three routing systems; the CFL defaults (rslp = tslp = 1e-4, areaTotal2 = 1e8) give numDT_r = numDT_t = 4 and localdelt = 180 s, matching the substep multiplicities of the gr/crvrman dumps, and nsub = ceil(10800/3600) = 3, delt = 3600 s, matching the three ns levels of the mosart_euler.csv dump rows per coupling step. End-of-period states of mosart_run_exports.csv row (1,1,100312): volr = 8.11474838320261793e-01 m3 (asserted: the continuous assembly conserves water exactly - the .esm subnetwork drains erlateral = -etout while d(wt)/dt = etin + etout, so d(volr)/dt = qsur with a dry channel, and the measured continuous end state 0.8114748383202616 m3 differs from the Fortran by 1.9e-16 m3 = 2.4e-16 rel) and wh = 2.79797873884816915e-10 m (asserted with rel 1e-5: the measured continuous end state 2.7979758559479384e-10 m trails the Fortran by 2.9e-16 m = 1.0e-6 rel, the second-order effect of the Fortran's staggered ehout on the otherwise qsur-dominated hillslope fill). The subnetwork and channel storages are a documented scheme gap, not asserted: the assembly delivers the hillslope outflow etin as a continuous ramp while the Fortran holds it constant at each Euler substep's entry state, so the measured continuous end states (solver at reltol 1e-14) wt = 2.0628127835562434e-06 m3 and wr = 8.523256587208812e-16 m3 sit above the Fortran's wt = 1.22671012572302206e-06 m3 (0.59x) and wr = 2.61999638886733984e-16 m3 (3.3x); wt is therefore not asserted, and wr is asserted only to the dry-channel threshold (|wr| < 1e-14 m3, both values being far below the TINYVALUE = 1e-14 wetted-area cutoff that would wake the channel flow). The zero branches of the period are pinned: flow, runofftot_liq, flood, qirrig_actual, direct_liq, rofl_m3s all stay 0 (dry channel, volr < fthresh, no direct transfers).",
+     "time_span": {"start": 0.0, "end": 10800.0},
+     "parameter_overrides": {
+      "RofCap.Flrl_rofsur": 2.5907249708995185e-11,
+      "RofCap.Flrl_irrig": 0.0,
+      "RofCap.area": 2900213644.740529,
+      "Control.area": 2900213644.740529,
+      "Control.mask": 1.0,
+      "Control.fthresh": 1e+36,
+      "Control.rlen": 144889.1719,
+      "Control.rwidth": 93.9573745727539,
+      "Control.tlen": 8341.719766593531,
+      "Control.twidth": 8168.043717446656,
+      "Hillslope.hslpsqrt": 0.3788139384975162,
+      "Hillslope.nh": 0.07745444774627686,
+      "Hillslope.Gxr": 0.0003,
+      "Hillslope.area": 2900213644.740529,
+      "Subnetwork.tslpsqrt": 0.099498743710662,
+      "Subnetwork.nt": 0.05000000074505806,
+      "Subnetwork.tlen": 8341.719766593531,
+      "Subnetwork.twidth": 8168.043717446656,
+      "Channel.rslpsqrt": 0.099498743710662,
+      "Channel.nr": 0.05000000074505806,
+      "Channel.rlen": 144889.1719,
+      "Channel.rwidth": 93.9573745727539,
+      "Channel.rwidth0": 469.78687286376953,
+      "Channel.rdepth": 2.0,
+      "Channel.area": 2900213644.740529
+     },
+     "initial_conditions": {
+      "Hillslope.wh": 0.0,
+      "Subnetwork.wt": 0.0,
+      "Channel.wr": 0.0
+     },
+     "tolerance": {"rel": 1e-05, "abs": 1e-16},
+     "assertions": [
+      {"variable": "Control.volr", "time": 10800.0, "expected": 0.8114748383202617},
+      {"variable": "Hillslope.wh", "time": 10800.0, "expected": 2.797978738848169e-10},
+      {
+       "variable": "Channel.wr",
+       "time": 10800.0,
+       "expected": 0.0,
+       "tolerance": {"rel": 1e-05, "abs": 1e-14}
+      },
+      {"variable": "Control.nsub", "time": 0.0, "expected": 3.0},
+      {"variable": "Control.delt", "time": 0.0, "expected": 3600.0},
+      {"variable": "Control.numDT_r", "time": 0.0, "expected": 4.0},
+      {"variable": "Control.numDT_t", "time": 0.0, "expected": 4.0},
+      {"variable": "Control.localdelt_r", "time": 0.0, "expected": 180.0},
+      {"variable": "Control.localdelt_t", "time": 0.0, "expected": 180.0},
+      {"variable": "Control.qsur_ms", "time": 0.0, "expected": 2.5907249708995185e-14},
+      {"variable": "Control.flow", "time": 10800.0, "expected": 0.0},
+      {"variable": "Control.runofftot_liq", "time": 10800.0, "expected": 0.0},
+      {"variable": "Control.flood", "time": 10800.0, "expected": 0.0},
+      {"variable": "Control.qirrig_actual", "time": 10800.0, "expected": 0.0},
+      {"variable": "Control.direct_liq", "time": 10800.0, "expected": 0.0},
+      {"variable": "Control.rofl_m3s", "time": 10800.0, "expected": 0.0}
+     ]
+    }
+   ]
   }
  },
  "coupling": [

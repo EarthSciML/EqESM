@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mosart_coupling",
-  "description": "MOSART cap-boundary component (stage 2 of the EqESM project): the med<->rof field conversions of rof_comp_nuopc/rof_import_export.F90 (mosart1.1.13) as algebraic equations, per the stage1/boundaries.md 1.5 boundary table. Imports (med -> rof): Flrl_rofsur, Flrl_rofsub, Flrl_rofgwl, Flrl_rofi, Flrl_irrig (lnd runoff, CMEPS kg/m^2/s which for water equals mm/s), and Fgrg_rofl, Fgrg_rofi (glc runoff, active when rof_from_glc). Exports (rof -> med): Forr_rofl, Forr_rofi, Forr_rofl_glc, Forr_rofi_glc, Flrr_flood, Flrr_volr, Flrr_volrmch, Sr_tdepth, Sr_tdepth_max. Import conversion, exactly state_getimport (rof_import_export.F90:589-595): q [m3/s] = field [mm/s] * med2mod_areacor * area [m2] * 0.001 [m/mm], where med2mod_areacor is the mesh-area correction factor (F90:209-210, ~1 for the rof mesh on the model grid) and 0.001 is spelled as the parameter mm_to_m [m/mm] for dimensional honesty. Export conversion, exactly state_setexport (F90:636-643): field [mm/s] = q [m3/s] * mod2med_areacor / (area [m2] * 0.001 [m/mm]); Flrr_flood carries the sign flip flood = -ctl%flood/(area*0.001) (F90:395, the land->rof positive convention); Flrr_volr = volr/area and Flrr_volrmch = wr/area are depths [m] with no mm scaling (F90:396-397); Sr_tdepth/Sr_tdepth_max are stream depths exported only when flds_r2l_stream_channel_depths (F90:398-402, tdepth_max = max(twidth0,0)*(rdepth/rwidth)). The direct-transfer, irrigation, flood and subcycling orchestration of mosart_run lives in the assembly mosart_routing.esm (its Control model) because the qgwl threshold option and the flood threshold need the channel storage wr; this file keeps the pure unit conversions, per the boundaries.md 2.6 mapping (cap boundary row). Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/cpl/nuopc/rof_import_export.F90 (mosart1.1.13)."
+  "description": "MOSART cap-boundary component (stage 2 of the EqESM project): the med<->rof field conversions of rof_comp_nuopc/rof_import_export.F90 (mosart1.1.13) as algebraic equations, per the stage1/boundaries.md 1.5 boundary table. Imports (med -> rof): Flrl_rofsur, Flrl_rofsub, Flrl_rofgwl, Flrl_rofi, Flrl_irrig (lnd runoff, CMEPS kg/m^2/s which for water equals mm/s), and Fgrg_rofl, Fgrg_rofi (glc runoff, active when rof_from_glc). Exports (rof -> med): Forr_rofl, Forr_rofi, Forr_rofl_glc, Forr_rofi_glc, Flrr_flood, Flrr_volr, Flrr_volrmch, Sr_tdepth, Sr_tdepth_max. Import conversion, exactly state_getimport (rof_import_export.F90:589-595): q [m3/s] = field [mm/s] * med2mod_areacor * area [m2] * 0.001 [m/mm], where med2mod_areacor is the mesh-area correction factor (F90:209-210, ~1 for the rof mesh on the model grid) and 0.001 is spelled as the parameter mm_to_m [m/mm] for dimensional honesty. Export conversion, exactly state_setexport (F90:636-643): field [mm/s] = q [m3/s] * mod2med_areacor / (area [m2] * 0.001 [m/mm]); Flrr_flood carries the sign flip flood = -ctl%flood/(area*0.001) (F90:395, the land->rof positive convention); Flrr_volr = volr/area and Flrr_volrmch = wr/area are depths [m] with no mm scaling (F90:396-397); Sr_tdepth/Sr_tdepth_max are stream depths exported only when flds_r2l_stream_channel_depths (F90:398-402, tdepth_max = max(twidth0,0)*(rdepth/rwidth)). The direct-transfer, irrigation, flood and subcycling orchestration of mosart_run lives in the assembly mosart_routing.esm (its Control model) because the qgwl threshold option and the flood threshold need the channel storage wr; this file keeps the pure unit conversions, per the boundaries.md 2.6 mapping (cap boundary row). The tests block pins the med<->rof import/export unit conversions pointwise (instantaneous tests, time_span {0,0}) from the step-1 boundary values of cell 100312 (mosart_run_imports.csv / mosart_run_exports.csv); see stage2/README.md Testing. Reference: stage1/cesm/components/mosart/src/cpl/nuopc/rof_import_export.F90 (mosart1.1.13)."
  },
  "models": {
   "RofCap": {
@@ -313,7 +313,51 @@
        0.0 ] }
     }
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "cap_conversions_step1_cell100312",
+     "description": "Instantaneous pin of the med<->rof unit conversions (rof_comp_nuopc/rof_import_export.F90:589-595 state_getimport, 636-643 state_setexport) from the step-1 boundary values of cell 100312. Import side: the cap surface-runoff stream qsur = 7.51365591037279353e-05 m3/s of mosart_run_imports.csv row (step 1, nt 1, nr 1, gindex 100312) corresponds to a land flux Flrl_rofsur = qsur/(area*mm_to_m) = 2.59072497089951852e-11 mm/s over area = 2.900213644740529e9 m2 (the qsur_m3s/qsur_ms ratio of the step-1 dump rows) and med2mod_areacor = 1; the other streams are zero in the run (qsub = qgwl = qirrig = qglc_liq = qglc_ice = 0 in the same row, so Flrl_rofsub = Flrl_rofgwl = Flrl_irrig = Fgrg_rofl = Fgrg_rofi = 0). Export side: the step-1 end-of-period states of mosart_run_exports.csv row (1,1,100312), volr = 8.11474838320261793e-01 m3 and volrmch = 9.03380478061898422e-26 m3, give the gridcell-average depths Flrr_volr = volr/area = 2.7979829685714803e-10 m and Flrr_volrmch = volrmch/area = 3.1148756220086e-35 m (F90:396-397, no mm scaling); with all runoff and flood streams zero in that row (runofftot = 0, flood = 0), Forr_rofl = Forr_rofi = Forr_rofl_glc = Forr_rofi_glc = 0 and Flrr_flood = 0. time_span {0,0} evaluates the conversions pointwise; the Fortran values are reproduced to round-off (rel 1e-12).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "Flrl_rofsur": 2.5907249708995185e-11,
+      "Flrl_rofsub": 0.0,
+      "Flrl_rofgwl": 0.0,
+      "Flrl_irrig": 0.0,
+      "Flrl_rofi": 0.0,
+      "Fgrg_rofl": 0.0,
+      "Fgrg_rofi": 0.0,
+      "area": 2900213644.740529,
+      "rofl_m3s": 0.0,
+      "rofi_m3s": 0.0,
+      "rofl_glc_m3s": 0.0,
+      "rofi_glc_m3s": 0.0,
+      "flood_m3s": 0.0,
+      "volr_m3": 0.8114748383202618,
+      "volrmch_m3": 9.033804780618984e-26,
+      "tdepth_m": 0.0,
+      "tdepth_max_m": 0.0
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-40},
+     "assertions": [
+      {"variable": "qsur_m3s", "time": 0.0, "expected": 7.513655910372794e-05},
+      {"variable": "qsub_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "qgwl_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "qirrig_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "qsur_ice_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "qglc_liq_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "qglc_ice_m3s", "time": 0.0, "expected": 0.0},
+      {"variable": "Forr_rofl", "time": 0.0, "expected": 0.0},
+      {"variable": "Forr_rofi", "time": 0.0, "expected": 0.0},
+      {"variable": "Forr_rofl_glc", "time": 0.0, "expected": 0.0},
+      {"variable": "Forr_rofi_glc", "time": 0.0, "expected": 0.0},
+      {"variable": "Flrr_flood", "time": 0.0, "expected": 0.0},
+      {"variable": "Flrr_volr", "time": 0.0, "expected": 2.7979829685714803e-10},
+      {"variable": "Flrr_volrmch", "time": 0.0, "expected": 3.1148756220086e-35},
+      {"variable": "Sr_tdepth", "time": 0.0, "expected": 0.0},
+      {"variable": "Sr_tdepth_max", "time": 0.0, "expected": 0.0}
+     ]
+    }
+   ]
   }
  }
 }

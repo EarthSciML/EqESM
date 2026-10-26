@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mosart_hillslope",
-  "description": "MOSART hillslope routing step (stage 2 of the EqESM project): the per-cell Euler step 1 of mosart_physics.F90:Euler (F90:74-80) composed of hillslopeRouting (F90:225-239) and updateState_hillslope (F90:352-360), written as a storage ODE with the pointwise laws imported from ./mosart_templates.esm. Equations, exactly as in the Fortran: ehout_manning = -CREHT_nosqrt(hslpsqrt, nh, Gxr, yh) (F90:232); the dry-cell clamp replaces ehout by -(qsur + wh/delt) when ehout < 0 and wh + (qsur + ehout)*delt < TINYVALUE (F90:233-236); dwh = qsur + ehout (F90:237); d(wh)/dt = dwh (the Euler storage advance wh += dwh*DeltaT, F90:77, in continuous limit); yh = wh (updateState_hillslope, F90:358); and the lateral inflow to the subnetwork etin = (-ehout + qsub)*area*frac (F90:79). Units per mosart_tstatusflux_type.F90 / mosart_tspatialunit_type.F90: wh, yh [m]; dwh, qsur, qsub, ehout [m/s]; etin [m3/s]; hslpsqrt [1]; Gxr [1/m]; area [m2]; frac [1]; nh is the hillslope Manning roughness (SI dimension s/m^(1/3), see mosart_templates.esm); delt is Tctl%DeltaT = delt_coupling/nsub (mosart_driver.F90:800). The qsur/qsub forcing arrives from the cap in m/s (mosart_driver.F90:806-813 converts the m3/s streams by /area). Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
+  "description": "MOSART hillslope routing step (stage 2 of the EqESM project): the per-cell Euler step 1 of mosart_physics.F90:Euler (F90:74-80) composed of hillslopeRouting (F90:225-239) and updateState_hillslope (F90:352-360), written as a storage ODE with the pointwise laws imported from ./mosart_templates.esm. Equations, exactly as in the Fortran: ehout_manning = -CREHT_nosqrt(hslpsqrt, nh, Gxr, yh) (F90:232); the dry-cell clamp replaces ehout by -(qsur + wh/delt) when ehout < 0 and wh + (qsur + ehout)*delt < TINYVALUE (F90:233-236); dwh = qsur + ehout (F90:237); d(wh)/dt = dwh (the Euler storage advance wh += dwh*DeltaT, F90:77, in continuous limit); yh = wh (updateState_hillslope, F90:358); and the lateral inflow to the subnetwork etin = (-ehout + qsub)*area*frac (F90:79). Units per mosart_tstatusflux_type.F90 / mosart_tspatialunit_type.F90: wh, yh [m]; dwh, qsur, qsub, ehout [m/s]; etin [m3/s]; hslpsqrt [1]; Gxr [1/m]; area [m2]; frac [1]; nh is the hillslope Manning roughness (SI dimension s/m^(1/3), see mosart_templates.esm); delt is Tctl%DeltaT = delt_coupling/nsub (mosart_driver.F90:800). The qsur/qsub forcing arrives from the cap in m/s (mosart_driver.F90:806-813 converts the m3/s streams by /area). The tests block pins the overland law CREHT_nosqrt pointwise (instantaneous D-boundary tests, time_span {0,0}) and the one-substep storage traces in the continuous-ODE form, with numeric tuples from the stage-1 instrumentation dumps (stage1/dumps/mosart/creht_nosqrt.csv, mosart_euler.csv); the trace assertions carry the measured Euler-vs-continuous scheme gaps (see stage2/README.md Testing). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
  },
  "models": {
   "Hillslope": {
@@ -147,7 +147,138 @@
      }
     }
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "overland_law_step1_sub2_cell100312",
+     "description": "Instantaneous pin of the overland-flow law CREHT_nosqrt at the hillslope (mosart_physics.F90:426-437) from stage1/dumps/mosart/creht_nosqrt.csv row (step 1, ns 2, nr 1, gindex 100312): yh = wh = 9.32660989523826711e-11 m, sqrthslp = 3.78813938497516212e-01, nh = 7.74544477462768555e-02, Gxr = 2.99999999999999974e-04 give ehout_manning = -CREHT_nosqrt = eht_raw = -2.81432250323167531e-20 m/s, and etin = (-ehout + qsub)*area*frac = 8.16213652457282613e-11 m3/s with area = 2.900213644740529e9 m2 (the qsur_m3s/qsur_ms ratio of the step-1 dump rows; qsur = 2.59072497089951852e-14 m/s from mosart_euler.csv row (1,2,entry,100312)). time_span {0,0} keeps wh at its initial condition so the law is evaluated pointwise; the dry-cell clamp does not fire (wh + (qsur + ehout)*delt = 1.87e-10 > TINYVALUE). The Fortran value is reproduced to round-off (rel 1e-12; cross-language pow() ulps).",
+     "time_span": { "start": 0.0, "end": 0.0 },
+     "parameter_overrides": {
+      "qsur": 2.59072497089951852e-14,
+      "qsub": 0.0,
+      "hslpsqrt": 3.78813938497516212e-01,
+      "nh": 7.74544477462768555e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "area": 2900213644.740529,
+      "frac": 1.0,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 9.32660989523826711e-11 },
+     "tolerance": { "rel": 1e-12, "abs": 1e-26 },
+     "assertions": [
+      { "variable": "yh", "time": 0.0, "expected": 9.32660989523826711e-11 },
+      { "variable": "ehout_manning", "time": 0.0, "expected": -2.81432250323167531e-20 },
+      { "variable": "ehout", "time": 0.0, "expected": -2.81432250323167531e-20 },
+      { "variable": "etin", "time": 0.0, "expected": 8.16213652457282613e-11 }
+     ]
+    },
+    {
+     "id": "overland_law_drain_cell101032",
+     "description": "Instantaneous pin of CREHT_nosqrt from creht_nosqrt.csv row (step 5, ns 1, nr 4, gindex 101032), a cell with a steeper hillslope: yh = 2.79791921922257878e-10 m, sqrthslp = 3.88458491991100663e-01, nh = 7.58072286844253540e-02, Gxr = 2.99999999999999974e-04 give eht_raw = ehout = -1.83998326708271600e-19 m/s (qsur = qsub = 0 in step 5, mosart_euler.csv row (5,1,entry,101032); the clamp cannot fire with qsur = 0 and wh > TINYVALUE).",
+     "time_span": { "start": 0.0, "end": 0.0 },
+     "parameter_overrides": {
+      "qsur": 0.0,
+      "qsub": 0.0,
+      "hslpsqrt": 3.88458491991100663e-01,
+      "nh": 7.58072286844253540e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 2.79791921922257878e-10 },
+     "tolerance": { "rel": 1e-12, "abs": 1e-26 },
+     "assertions": [
+      { "variable": "yh", "time": 0.0, "expected": 2.79791921922257878e-10 },
+      { "variable": "ehout_manning", "time": 0.0, "expected": -1.83998326708271600e-19 },
+      { "variable": "ehout", "time": 0.0, "expected": -1.83998326708271600e-19 }
+     ]
+    },
+    {
+     "id": "overland_law_drain_cell100313",
+     "description": "Instantaneous pin of CREHT_nosqrt from creht_nosqrt.csv row (step 5, ns 1, nr 2, gindex 100313): yh = 1.39897800399400462e-10 m, sqrthslp = 2.68886593194975043e-01, nh = 7.85291716456413269e-02, Gxr = 2.99999999999999974e-04 give eht_raw = ehout = -3.87267332350159691e-20 m/s. Varied mid-range inputs relative to the other law tests.",
+     "time_span": { "start": 0.0, "end": 0.0 },
+     "parameter_overrides": {
+      "qsur": 0.0,
+      "qsub": 0.0,
+      "hslpsqrt": 2.68886593194975043e-01,
+      "nh": 7.85291716456413269e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 1.39897800399400462e-10 },
+     "tolerance": { "rel": 1e-12, "abs": 1e-26 },
+     "assertions": [
+      { "variable": "yh", "time": 0.0, "expected": 1.39897800399400462e-10 },
+      { "variable": "ehout_manning", "time": 0.0, "expected": -3.87267332350159691e-20 },
+      { "variable": "ehout", "time": 0.0, "expected": -3.87267332350159691e-20 }
+     ]
+    },
+    {
+     "id": "overland_law_zero_storage",
+     "description": "Zero-storage pin from creht_nosqrt.csv row (step 1, ns 1, nr 1, gindex 100312): with yh = wh = 0 the Manning velocity is zeroed by the rr <= 0 guard and CREHT_nosqrt returns 0, so ehout_manning = ehout = -0 (eht_raw = -0 in the dump) and etin = 0 even with qsur = 2.59072497089951852e-14 m/s.",
+     "time_span": { "start": 0.0, "end": 0.0 },
+     "parameter_overrides": {
+      "qsur": 2.59072497089951852e-14,
+      "qsub": 0.0,
+      "hslpsqrt": 3.78813938497516212e-01,
+      "nh": 7.74544477462768555e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "area": 2900213644.740529,
+      "frac": 1.0,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 0.0 },
+     "tolerance": { "rel": 1e-12, "abs": 1e-26 },
+     "assertions": [
+      { "variable": "yh", "time": 0.0, "expected": 0.0 },
+      { "variable": "ehout_manning", "time": 0.0, "expected": 0.0 },
+      { "variable": "ehout", "time": 0.0, "expected": 0.0 },
+      { "variable": "etin", "time": 0.0, "expected": 0.0 }
+     ]
+    },
+    {
+     "id": "one_step_growth_step1_sub2",
+     "description": "One-substep trace in the continuous-ODE form over [0, 3600] (delt = Tctl%DeltaT from the mosart_euler.csv delt column): entry (step 1, ns 2, gindex 100312) wh = 9.32660989523826711e-11 m with qsur = 2.59072497089951852e-14 m/s, qsub = 0; the exit state (step 1, ns 2) is wh = 1.86532096589155226e-10 m, ehout = -2.81432250323167531e-20 m/s, etin = 8.16213652457282613e-11 m3/s (area = 2.900213644740529e9 m2, the qsur_m3s/qsur_ms ratio of the step-1 dump rows). The .esm integrates d(wh)/dt = qsur + ehout(wh) continuously while the Fortran advances wh += dwh*DeltaT with the law held at the substep-start depth (Euler step 1, F90:77); the measured scheme gap (continuous-ODE end state vs the Fortran's single Euler step, solver at reltol 1e-14) is 1.02e-17 m abs on wh = 5.5e-8 rel of the end state - the rel 1e-5 assertion bound is ~2x the measured gap.",
+     "time_span": { "start": 0.0, "end": 3600.0 },
+     "parameter_overrides": {
+      "qsur": 2.59072497089951852e-14,
+      "qsub": 0.0,
+      "hslpsqrt": 3.78813938497516212e-01,
+      "nh": 7.74544477462768555e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "area": 2900213644.740529,
+      "frac": 1.0,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 9.32660989523826711e-11 },
+     "tolerance": { "rel": 1e-5, "abs": 1e-16 },
+     "assertions": [
+      { "variable": "wh", "time": 3600.0, "expected": 1.86532096589155226e-10 },
+      { "variable": "ehout", "time": 0.0, "expected": -2.81432250323167531e-20 },
+      { "variable": "etin", "time": 0.0, "expected": 8.16213652457282613e-11 }
+     ]
+    },
+    {
+     "id": "one_step_drain_step2_sub1",
+     "description": "One-substep drain trace over [0, 3600]: entry (step 2, ns 1, gindex 100312) wh = 2.79797873884816915e-10 m with qsur = qsub = 0 (step-2 imports carry no runoff); the exit state (step 2, ns 1) is wh = 2.79797241651524941e-10 m. The ehout/etin assertions sit at time 0, where the state is the entry state and the law values equal the Fortran's substep values (ehout = -1.75620358877005223e-19 m/s, etin = 5.09336561109318995e-10 m3/s at the entry depth). With qsur = 0 the storage drains through the overland law only; the measured scheme gap (continuous-ODE end state vs the Fortran's single Euler step, solver at reltol 1e-14) is 1.19e-21 m abs on wh = 4.3e-12 rel of the end state (the Euler second-order term of the tiny relative drain of 2.3e-6 per step) - the rel 1e-7 bound is >1000x the measured gap.",
+     "time_span": { "start": 0.0, "end": 3600.0 },
+     "parameter_overrides": {
+      "qsur": 0.0,
+      "qsub": 0.0,
+      "hslpsqrt": 3.78813938497516212e-01,
+      "nh": 7.74544477462768555e-02,
+      "Gxr": 2.99999999999999974e-04,
+      "area": 2900213644.740529,
+      "frac": 1.0,
+      "delt": 3600.0
+     },
+     "initial_conditions": { "wh": 2.79797873884816915e-10 },
+     "tolerance": { "rel": 1e-7, "abs": 1e-17 },
+     "assertions": [
+      { "variable": "wh", "time": 3600.0, "expected": 2.79797241651524941e-10 },
+      { "variable": "ehout", "time": 0.0, "expected": -1.75620358877005223e-19 },
+      { "variable": "etin", "time": 0.0, "expected": 5.09336561109318995e-10 }
+     ]
+    }
+   ]
   }
  }
 }
