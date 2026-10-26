@@ -1,0 +1,223 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mosart_subnetwork",
+  "description": "MOSART subnetwork (tributary) routing step (stage 2 of the EqESM project): the per-cell Euler step 2 of mosart_physics.F90:Euler (F90:114-132) composed of subnetworkRouting (F90:243-269) and updateState_subnetwork (F90:364-381), written as a storage ODE with the pointwise laws imported from ./mosart_templates.esm. Equations, exactly as in the Fortran: with no tributaries (tlen <= hlen) the subnetwork passes the inflow straight through, etout = -etin (F90:250-252); otherwise the Manning velocity vt = CRVRMAN_nosqrt(tslpsqrt, nt, rt) (F90:253) and etout = -vt*mt (F90:254), with the dry-cell clamp etout = -(etin + wt/localdelt) when wt + (etin + etout)*localdelt < TINYVALUE (F90:255-260), in which case vt = -etout/mt when mt > 0 (F90:257-259); dwt = etin + etout (F90:262); d(wt)/dt = dwt (the storage advance wt += dwt*localdelt, F90:123, in continuous limit); updateState_subnetwork (F90:370-380) sets mt = GRMR(wt, tlen), yt = GRHT(mt, twidth), pt = GRPT(yt, twidth), rt = GRRR(mt, pt) when tlen > 0 and wt > 0, and zeroes all four otherwise; and the lateral outflow to the main channel erlateral = -etout (the per-substep accumulation and averaging of F90:125-127, in continuous limit). Units per mosart_tstatusflux_type.F90 / mosart_tspatialunit_type.F90: wt [m3]; etin, etout, dwt, erlateral [m3/s]; vt [m/s]; mt [m2]; yt, rt, pt [m]; tslpsqrt [1]; tlen, hlen, twidth [m]; nt is the subnetwork Manning roughness (SI dimension s/m^(1/3)); localdelt = Tctl%DeltaT/DLevelH2R/numDT_t(nr) (F90:120). One deliberate divergence, documented for reviewers: when tlen <= hlen the Fortran leaves vt stale (it is unused in that branch) while here vt always takes the Manning value; and when the dry-cell clamp fires with mt <= 0 the Fortran also leaves vt at the Manning value, which is what the ifelse expresses. Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
+ },
+ "models": {
+  "Subnetwork": {
+   "expression_template_imports": [
+    { "ref": "./mosart_templates.esm" }
+   ],
+   "variables": {
+    "wt": {
+     "type": "unknown",
+     "units": "m^3",
+     "default": 0.0,
+     "description": "storage of surface water in the subnetwork (TRunoff%wt), [m3]"
+    },
+    "dwt": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "change of subnetwork water storage (TRunoff%dwt) = etin + etout; the Fortran type comment says [m3] but the code assigns etin + etout [m3/s] and advances wt += dwt*localdelt, so the rate reading is the code's, [m3/s]"
+    },
+    "etout_manning": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "unclamped discharge from the subnetwork into the main reach, -vt*mt, [m3/s]"
+    },
+    "etout": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "discharge from the subnetwork into the main reach after the no-tributary branch and the dry-cell clamp (TRunoff%etout), [m3/s]"
+    },
+    "vt_manning": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "Manning velocity of the tributary flow CRVRMAN_nosqrt(tslpsqrt, nt, rt), [m/s]"
+    },
+    "vt": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "tributary flow velocity (TRunoff%vt): -etout/mt when the dry-cell clamp fired and mt > 0, the Manning value otherwise, [m/s]"
+    },
+    "mt": {
+     "type": "unknown",
+     "units": "m^2",
+     "description": "wetted cross-section area of the subnetwork (TRunoff%mt), [m2]"
+    },
+    "yt": {
+     "type": "unknown",
+     "units": "m",
+     "description": "water depth of the subnetwork (TRunoff%yt), [m]"
+    },
+    "pt": {
+     "type": "unknown",
+     "units": "m",
+     "description": "wetted perimeter of the subnetwork (TRunoff%pt), [m]"
+    },
+    "rt": {
+     "type": "unknown",
+     "units": "m",
+     "description": "hydraulic radius of the subnetwork (TRunoff%rt), [m]"
+    },
+    "erlateral": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "lateral flow from the subnetwork into the main reach (TRunoff%erlateral) = -etout, the per-substep accumulation of F90:125-127 in continuous limit, [m3/s]"
+    },
+    "etin": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "lateral inflow from the hillslope, including surface and subsurface runoff generation components (TRunoff%etin, computed by the hillslope step), [m3/s]"
+    },
+    "tslpsqrt": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.01,
+     "description": "sqrt of the average slope of the tributaries (TUnit%tslpsqrt, from frivinp tslp), [-]"
+    },
+    "nt": {
+     "type": "parameter",
+     "units": "s/m^(1/3)",
+     "default": 0.03,
+     "description": "Manning's roughness of the subnetwork at the hillslope (TUnit%nt, from frivinp); network file stores a bare number; declared with its SI dimension s/m^(1/3) for dimensional consistency"
+    },
+    "tlen": {
+     "type": "parameter",
+     "units": "m",
+     "default": 1000.0,
+     "description": "length of all sub-network reaches within the cell (TUnit%tlen, from frivinp), [m]"
+    },
+    "hlen": {
+     "type": "parameter",
+     "units": "m",
+     "default": 500.0,
+     "description": "length of the hillslope within the cell (TUnit%hlen); the Fortran branch condition tlen <= hlen selects cells with no tributaries (F90:250), [m]"
+    },
+    "twidth": {
+     "type": "parameter",
+     "units": "m",
+     "default": 10.0,
+     "description": "bankfull width of the sub-reach (TUnit%twidth, from frivinp twid), [m]"
+    },
+    "localdelt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 180.0,
+     "description": "local subnetwork substep = Tctl%DeltaT/DLevelH2R/numDT_t(nr) (F90:120), [s]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "vt_manning",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "manning_velocity",
+       "bindings": { "sqrtslp": "tslpsqrt", "n": "nt", "rr": "rt" } }
+    },
+    {
+     "lhs": "etout_manning",
+     "rhs": { "op": "*", "args": [
+       { "op": "-", "args": ["vt_manning"] },
+       "mt" ] }
+    },
+    {
+     "lhs": "etout",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "<=", "args": ["tlen", "hlen"] },
+       { "op": "-", "args": ["etin"] },
+       { "op": "ifelse", "args": [
+         { "op": "<", "args": [
+           { "op": "+", "args": [
+             "wt",
+             { "op": "*", "args": [
+               { "op": "+", "args": ["etin", "etout_manning"] },
+               "localdelt" ] } ] },
+           1.0e-14 ] },
+         { "op": "-", "args": [
+           { "op": "+", "args": ["etin", { "op": "/", "args": ["wt", "localdelt"] }] } ] },
+         "etout_manning"
+       ] }
+     ] }
+    },
+    {
+     "lhs": "vt",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["tlen", "hlen"] },
+         { "op": "and", "args": [
+           { "op": "<", "args": [
+             { "op": "+", "args": [
+               "wt",
+               { "op": "*", "args": [
+                 { "op": "+", "args": ["etin", "etout_manning"] },
+                 "localdelt" ] } ] },
+             1.0e-14 ] },
+           { "op": ">", "args": ["mt", 0.0] } ] } ] },
+       { "op": "/", "args": [
+         { "op": "-", "args": ["etout"] },
+         "mt" ] },
+       "vt_manning"
+     ] }
+    },
+    {
+     "lhs": "dwt",
+     "rhs": { "op": "+", "args": ["etin", "etout"] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["wt"], "wrt": "t" },
+     "rhs": "dwt"
+    },
+    {
+     "lhs": "mt",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["tlen", 0.0] },
+         { "op": ">", "args": ["wt", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "wetted_area",
+         "bindings": { "w": "wt", "len": "tlen" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "yt",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["tlen", 0.0] },
+         { "op": ">", "args": ["wt", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "rectangular_depth",
+         "bindings": { "m": "mt", "twid": "twidth" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "pt",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["tlen", 0.0] },
+         { "op": ">", "args": ["wt", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "rectangular_perimeter",
+         "bindings": { "h": "yt", "twid": "twidth" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "rt",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["tlen", 0.0] },
+         { "op": ">", "args": ["wt", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "hydraulic_radius",
+         "bindings": { "m": "mt", "p": "pt" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "erlateral",
+     "rhs": { "op": "-", "args": ["etout"] }
+    }
+   ],
+   "tests": []
+  }
+ }
+}

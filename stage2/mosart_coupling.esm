@@ -1,0 +1,319 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mosart_coupling",
+  "description": "MOSART cap-boundary component (stage 2 of the EqESM project): the med<->rof field conversions of rof_comp_nuopc/rof_import_export.F90 (mosart1.1.13) as algebraic equations, per the stage1/boundaries.md 1.5 boundary table. Imports (med -> rof): Flrl_rofsur, Flrl_rofsub, Flrl_rofgwl, Flrl_rofi, Flrl_irrig (lnd runoff, CMEPS kg/m^2/s which for water equals mm/s), and Fgrg_rofl, Fgrg_rofi (glc runoff, active when rof_from_glc). Exports (rof -> med): Forr_rofl, Forr_rofi, Forr_rofl_glc, Forr_rofi_glc, Flrr_flood, Flrr_volr, Flrr_volrmch, Sr_tdepth, Sr_tdepth_max. Import conversion, exactly state_getimport (rof_import_export.F90:589-595): q [m3/s] = field [mm/s] * med2mod_areacor * area [m2] * 0.001 [m/mm], where med2mod_areacor is the mesh-area correction factor (F90:209-210, ~1 for the rof mesh on the model grid) and 0.001 is spelled as the parameter mm_to_m [m/mm] for dimensional honesty. Export conversion, exactly state_setexport (F90:636-643): field [mm/s] = q [m3/s] * mod2med_areacor / (area [m2] * 0.001 [m/mm]); Flrr_flood carries the sign flip flood = -ctl%flood/(area*0.001) (F90:395, the land->rof positive convention); Flrr_volr = volr/area and Flrr_volrmch = wr/area are depths [m] with no mm scaling (F90:396-397); Sr_tdepth/Sr_tdepth_max are stream depths exported only when flds_r2l_stream_channel_depths (F90:398-402, tdepth_max = max(twidth0,0)*(rdepth/rwidth)). The direct-transfer, irrigation, flood and subcycling orchestration of mosart_run lives in the assembly mosart_routing.esm (its Control model) because the qgwl threshold option and the flood threshold need the channel storage wr; this file keeps the pure unit conversions, per the boundaries.md 2.6 mapping (cap boundary row). Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/cpl/nuopc/rof_import_export.F90 (mosart1.1.13)."
+ },
+ "models": {
+  "RofCap": {
+   "variables": {
+    "qsur_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "liquid surface runoff stream (ctl%qsur, m3/s) after the cap unit conversion, [m3/s]"
+    },
+    "qsub_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "liquid subsurface runoff stream (ctl%qsub, m3/s) after the cap unit conversion, [m3/s]"
+    },
+    "qgwl_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "gwl runoff stream (ctl%qgwl, m3/s) after the cap unit conversion, [m3/s]"
+    },
+    "qirrig_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "irrigation demand stream (ctl%qirrig, m3/s; negative, a demand) after the cap unit conversion, [m3/s]"
+    },
+    "qsur_ice_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "frozen runoff stream (the Flrl_rofi field is loaded into qsur(:,nt_ice), rof_import_export.F90:286-287), always routed directly to the outlet, [m3/s]"
+    },
+    "qglc_liq_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "liquid glc runoff stream (ctl%qglc_liq, F90:298-299), active only when rof_from_glc, [m3/s]"
+    },
+    "qglc_ice_m3s": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "frozen glc runoff stream (ctl%qglc_ice, F90:301-302), active only when rof_from_glc, [m3/s]"
+    },
+    "Forr_rofl": {
+     "type": "unknown",
+     "units": "mm/s",
+     "description": "liquid river runoff to the ocean (CMEPS kg/m^2/s equivalent), [mm/s]"
+    },
+    "Forr_rofi": {
+     "type": "unknown",
+     "units": "mm/s",
+     "description": "frozen river runoff to the ocean (CMEPS kg/m^2/s equivalent), [mm/s]"
+    },
+    "Forr_rofl_glc": {
+     "type": "unknown",
+     "units": "mm/s",
+     "description": "liquid glc runoff to the ocean (CMEPS kg/m^2/s equivalent), [mm/s]"
+    },
+    "Forr_rofi_glc": {
+     "type": "unknown",
+     "units": "mm/s",
+     "description": "frozen glc runoff to the ocean (CMEPS kg/m^2/s equivalent), [mm/s]"
+    },
+    "Flrr_flood": {
+     "type": "unknown",
+     "units": "mm/s",
+     "description": "flood water sent back to the land, negative in the land->rof flux convention (F90:389-395), [mm/s]"
+    },
+    "Flrr_volr": {
+     "type": "unknown",
+     "units": "m",
+     "description": "gridcell-average total water storage sent back to the land (F90:396), [m]"
+    },
+    "Flrr_volrmch": {
+     "type": "unknown",
+     "units": "m",
+     "description": "gridcell-average main-channel storage sent back to the land (F90:397), [m]"
+    },
+    "Sr_tdepth": {
+     "type": "unknown",
+     "units": "m",
+     "description": "stream depth (tributary depth yt) for lnd, exported only when flds_r2l_stream_channel_depths (F90:398-399), [m]"
+    },
+    "Sr_tdepth_max": {
+     "type": "unknown",
+     "units": "m",
+     "description": "maximum stream depth = max(twidth0, 0)*(rdepth/rwidth) (F90:401), exported only when flds_r2l_stream_channel_depths, [m]"
+    },
+    "Flrl_rofsur": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "lnd surface runoff to rof (CMEPS field name; kg/m^2/s of water = mm/s), [mm/s]"
+    },
+    "Flrl_rofsub": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "lnd subsurface runoff to rof (CMEPS field name; kg/m^2/s of water = mm/s), [mm/s]"
+    },
+    "Flrl_rofgwl": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "lnd gwl (glacier/wetland/lake) runoff to rof (CMEPS field name; kg/m^2/s of water = mm/s), [mm/s]"
+    },
+    "Flrl_rofi": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "lnd frozen runoff to rof (CMEPS field name; kg/m^2/s of water = mm/s), routed directly to the outlet, [mm/s]"
+    },
+    "Flrl_irrig": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": -0.0001,
+     "description": "lnd irrigation demand to rof (CMEPS field name; kg/m^2/s of water = mm/s; negative, a demand), [mm/s]"
+    },
+    "Fgrg_rofl": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "glc liquid runoff via rof (CMEPS field name; kg/m^2/s of water = mm/s), active when rof_from_glc, [mm/s]"
+    },
+    "Fgrg_rofi": {
+     "type": "parameter",
+     "units": "mm/s",
+     "default": 0.0,
+     "description": "glc frozen runoff via rof (CMEPS field name; kg/m^2/s of water = mm/s), active when rof_from_glc, [mm/s]"
+    },
+    "area": {
+     "type": "parameter",
+     "units": "m^2",
+     "default": 10000000.0,
+     "description": "area of the local cell (ctl%area), [m2]"
+    },
+    "mm_to_m": {
+     "type": "parameter",
+     "units": "m/mm",
+     "default": 0.001,
+     "description": "millimeters to meters conversion, the 0.001 of state_getimport (rof_import_export.F90:594), spelled with units for dimensional honesty, [m/mm]"
+    },
+    "med2mod_areacor": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "mesh-to-model area correction factor for fields received from the mediator (rof_import_export.F90:210), ~1 on the rof mesh, [-]"
+    },
+    "mod2med_areacor": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "model-to-mesh area correction factor for fields sent to the mediator (rof_import_export.F90:209), ~1 on the rof mesh, [-]"
+    },
+    "rof_from_glc": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 when glc runoff is routed through rof (ctl%rof_from_glc), [-]; 0/1 stands in for the Fortran logical"
+    },
+    "flds_r2l_stream_channel_depths": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 when the rof->lnd stream channel depth fields are active (rof_import_export.F90:398), [-]; 0/1 stands in for the Fortran logical"
+    },
+    "rofl_m3s": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "liquid runoff to the ocean in m3/s, computed by the assembly Control model (runofftot_liq, ice_runoff branch of F90:362-382), [m3/s]"
+    },
+    "rofi_m3s": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "frozen runoff to the ocean in m3/s, computed by the assembly Control model, [m3/s]"
+    },
+    "rofl_glc_m3s": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "liquid glc runoff in m3/s, computed by the assembly Control model (direct_glc_liq, F90:385), [m3/s]"
+    },
+    "rofi_glc_m3s": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "frozen glc runoff in m3/s, computed by the assembly Control model (direct_glc_ice, F90:386), [m3/s]"
+    },
+    "flood_m3s": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "flood flux in m3/s, computed by the assembly Control model (ctl%flood, F90:516), [m3/s]"
+    },
+    "volr_m3": {
+     "type": "parameter",
+     "units": "m^3",
+     "default": 0.0,
+     "description": "total water storage in m3, computed by the assembly Control model (ctl%volr = wt + wr + wh*area, F90:854), [m3]"
+    },
+    "volrmch_m3": {
+     "type": "parameter",
+     "units": "m^3",
+     "default": 0.0,
+     "description": "main-channel storage in m3, computed by the assembly Control model (TRunoff%wr), [m3]"
+    },
+    "tdepth_m": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "stream depth (tributary depth yt) in m, computed by the assembly Control model, [m]"
+    },
+    "tdepth_max_m": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "maximum stream depth in m, computed by the assembly Control model, [m]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "qsur_m3s",
+     "rhs": { "op": "*", "args": ["Flrl_rofsur", "med2mod_areacor", "area", "mm_to_m"] }
+    },
+    {
+     "lhs": "qsub_m3s",
+     "rhs": { "op": "*", "args": ["Flrl_rofsub", "med2mod_areacor", "area", "mm_to_m"] }
+    },
+    {
+     "lhs": "qgwl_m3s",
+     "rhs": { "op": "*", "args": ["Flrl_rofgwl", "med2mod_areacor", "area", "mm_to_m"] }
+    },
+    {
+     "lhs": "qirrig_m3s",
+     "rhs": { "op": "*", "args": ["Flrl_irrig", "med2mod_areacor", "area", "mm_to_m"] }
+    },
+    {
+     "lhs": "qsur_ice_m3s",
+     "rhs": { "op": "*", "args": ["Flrl_rofi", "med2mod_areacor", "area", "mm_to_m"] }
+    },
+    {
+     "lhs": "qglc_liq_m3s",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "==", "args": ["rof_from_glc", 1.0] },
+       { "op": "*", "args": ["Fgrg_rofl", "med2mod_areacor", "area", "mm_to_m"] },
+       0.0 ] }
+    },
+    {
+     "lhs": "qglc_ice_m3s",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "==", "args": ["rof_from_glc", 1.0] },
+       { "op": "*", "args": ["Fgrg_rofi", "med2mod_areacor", "area", "mm_to_m"] },
+       0.0 ] }
+    },
+    {
+     "lhs": "Forr_rofl",
+     "rhs": { "op": "/", "args": [
+       { "op": "*", "args": ["rofl_m3s", "mod2med_areacor"] },
+       { "op": "*", "args": ["area", "mm_to_m"] } ] }
+    },
+    {
+     "lhs": "Forr_rofi",
+     "rhs": { "op": "/", "args": [
+       { "op": "*", "args": ["rofi_m3s", "mod2med_areacor"] },
+       { "op": "*", "args": ["area", "mm_to_m"] } ] }
+    },
+    {
+     "lhs": "Forr_rofl_glc",
+     "rhs": { "op": "/", "args": [
+       { "op": "*", "args": ["rofl_glc_m3s", "mod2med_areacor"] },
+       { "op": "*", "args": ["area", "mm_to_m"] } ] }
+    },
+    {
+     "lhs": "Forr_rofi_glc",
+     "rhs": { "op": "/", "args": [
+       { "op": "*", "args": ["rofi_glc_m3s", "mod2med_areacor"] },
+       { "op": "*", "args": ["area", "mm_to_m"] } ] }
+    },
+    {
+     "lhs": "Flrr_flood",
+     "rhs": { "op": "-", "args": [
+       { "op": "/", "args": [
+         { "op": "*", "args": ["flood_m3s", "mod2med_areacor"] },
+         { "op": "*", "args": ["area", "mm_to_m"] } ] } ] }
+    },
+    {
+     "lhs": "Flrr_volr",
+     "rhs": { "op": "*", "args": [
+       { "op": "/", "args": ["volr_m3", "area"] },
+       "mod2med_areacor" ] }
+    },
+    {
+     "lhs": "Flrr_volrmch",
+     "rhs": { "op": "*", "args": [
+       { "op": "/", "args": ["volrmch_m3", "area"] },
+       "mod2med_areacor" ] }
+    },
+    {
+     "lhs": "Sr_tdepth",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "==", "args": ["flds_r2l_stream_channel_depths", 1.0] },
+       { "op": "*", "args": ["tdepth_m", "mod2med_areacor"] },
+       0.0 ] }
+    },
+    {
+     "lhs": "Sr_tdepth_max",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "==", "args": ["flds_r2l_stream_channel_depths", 1.0] },
+       { "op": "*", "args": ["tdepth_max_m", "mod2med_areacor"] },
+       0.0 ] }
+    }
+   ],
+   "tests": []
+  }
+ }
+}
