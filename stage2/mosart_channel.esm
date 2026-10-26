@@ -1,0 +1,292 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mosart_channel",
+  "description": "MOSART main-channel routing step (stage 2 of the EqESM project): the per-cell Euler step 4 of mosart_physics.F90:Euler (F90:175-209) composed of mainchannelRouting -> Routing_KW (F90:273-348) and updateState_mainchannel (F90:385-402), written as a storage ODE with the pointwise laws imported from ./mosart_templates.esm. Equations, exactly as in the Fortran (RoutingMethod = 1, the only implemented method, F90:280-284): erin = -eroutUp (F90:302-303); with no river network (rlen <= 0) vr = 0 and erout = -(erin + erlateral) (F90:306-308); for an unrealistically small drainage density per channel (areaTotal2/(rwidth*rlen) > 1e6) erout = -(erin + erlateral) (F90:310-312); otherwise the Manning velocity vr = CRVRMAN_nosqrt(rslpsqrt, nr, rr) (F90:313) and erout = -vr*mr (F90:314), with the dry-cell clamp erout = -(erlateral + erin + wr/localdelt) when -erout > TINYVALUE and wr + (erlateral + erin + erout)*localdelt < TINYVALUE (F90:315-317), in which case vr = -erout/mr when mr > 0 (F90:318-320); the groundwater term temp_gwl = qgwl*area*frac (F90:325); dwr = erlateral + erin + erout + temp_gwl (F90:327); d(wr)/dt = dwr (the storage advance wr += dwr*localdelt, F90:189, in continuous limit); updateState_mainchannel (F90:391-401) sets mr = GRMR(wr, rlen), yr = GRHR(mr, rwidth, rwidth0, rdepth), pr = GRPR(yr, rwidth, rwidth0, rdepth), rr = GRRR(mr, pr) when rlen > 0 and wr > 0, and zeroes all four otherwise; and the reach outflow streamflow flow = -erout (the accumulation flow -= erout of F90:201 with the DLevelH2R averaging, in continuous limit) is exported to the assembly for the runoff aggregation. Units per mosart_tstatusflux_type.F90 / mosart_tspatialunit_type.F90: wr [m3]; erin, erout, dwr, erlateral, eroutUp [m3/s]; vr [m/s]; mr [m2]; yr, pr, rr [m]; rslpsqrt [1]; rlen, rwidth, rwidth0, rdepth, areaTotal2 [m2, m, m, m, m2]; nr is the main-reach Manning roughness (SI dimension s/m^(1/3)); qgwl [m/s]; localdelt = Tctl%DeltaT/DLevelH2R/numDT_r(nr) (F90:184). eroutUp is the outflow sum of the upstream gridcells delivered by the rh_eroutUp sparse-matrix gather over the ID/dnID network (F90:158) - a network-topology operation whose per-cell value is a parameter here until the frivinp network data source lands (boundaries.md 2.4). Two deliberate divergences, documented for reviewers: when the areaTotal2 branch fires the Fortran leaves vr stale (unused there), while here vr takes the Manning value; and the Fortran's negative-storage warning (F90:329-334) is a diagnostic, not physics, and is not transcribed. Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
+ },
+ "models": {
+  "Channel": {
+   "expression_template_imports": [
+    { "ref": "./mosart_templates.esm" }
+   ],
+   "variables": {
+    "wr": {
+     "type": "unknown",
+     "units": "m^3",
+     "default": 0.0,
+     "description": "storage of surface water in the main channel (TRunoff%wr), [m3]"
+    },
+    "dwr": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "change of main-channel water storage (TRunoff%dwr) = erlateral + erin + erout + qgwl*area*frac; the Fortran type comment says [m3] but the code assigns a flux sum and advances wr += dwr*localdelt, so the rate reading is the code's, [m3/s]"
+    },
+    "erin": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "inflow from the upstream links (TRunoff%erin) = -eroutUp, [m3/s]"
+    },
+    "erout_manning": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "unclamped outflow into the downstream links, -vr*mr, [m3/s]"
+    },
+    "erout": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "outflow into the downstream links after the no-river / small-catchment branches and the dry-cell clamp (TRunoff%erout), [m3/s]"
+    },
+    "vr_manning": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "Manning velocity of the main-reach flow CRVRMAN_nosqrt(rslpsqrt, nr, rr), [m/s]"
+    },
+    "vr": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "main-reach flow velocity (TRunoff%vr): 0 when rlen <= 0, -erout/mr when the dry-cell clamp fired and mr > 0, the Manning value otherwise, [m/s]"
+    },
+    "mr": {
+     "type": "unknown",
+     "units": "m^2",
+     "description": "wetted cross-section area of the main channel (TRunoff%mr), [m2]"
+    },
+    "yr": {
+     "type": "unknown",
+     "units": "m",
+     "description": "water depth of the main channel (TRunoff%yr), [m]"
+    },
+    "pr": {
+     "type": "unknown",
+     "units": "m",
+     "description": "wetted perimeter of the main channel (TRunoff%pr), [m]"
+    },
+    "rr": {
+     "type": "unknown",
+     "units": "m",
+     "description": "hydraulic radius of the main channel (TRunoff%rr), [m]"
+    },
+    "flow": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "streamflow from the outlet of the reach (TRunoff%flow) = -erout, the Euler accumulation flow -= erout of F90:201 with the DLevelH2R averaging, in continuous limit, [m3/s]"
+    },
+    "eroutUp": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "outflow sum of the upstream gridcells (TRunoff%eroutUp), delivered by the rh_eroutUp ESMF SMM sparse-matrix gather over the ID/dnID network (F90:158); a network-topology input that is a plain parameter here until the frivinp network data source lands (boundaries.md 2.4), [m3/s]"
+    },
+    "erlateral": {
+     "type": "parameter",
+     "units": "m^3/s",
+     "default": 0.0,
+     "description": "lateral flow from the hillslope and subnetwork (TRunoff%erlateral, computed by the subnetwork step), [m3/s]"
+    },
+    "qgwl": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "gwl runoff term from glaciers, wetlands and lakes (TRunoff%qgwl, after the mosart_driver m3/s -> m/s /area conversion), [m/s]"
+    },
+    "rslpsqrt": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.01,
+     "description": "sqrt of the slope of the main river reach (TUnit%rslpsqrt, from frivinp rslp), [-]"
+    },
+    "nr": {
+     "type": "parameter",
+     "units": "s/m^(1/3)",
+     "default": 0.03,
+     "description": "Manning's roughness of the main reach (TUnit%nr, from frivinp); network file stores a bare number; declared with its SI dimension s/m^(1/3) for dimensional consistency"
+    },
+    "rlen": {
+     "type": "parameter",
+     "units": "m",
+     "default": 10000.0,
+     "description": "length of the main river reach (TUnit%rlen, from frivinp), [m]"
+    },
+    "rwidth": {
+     "type": "parameter",
+     "units": "m",
+     "default": 50.0,
+     "description": "bankfull width of the main reach (TUnit%rwidth, from frivinp rwid), [m]"
+    },
+    "rwidth0": {
+     "type": "parameter",
+     "units": "m",
+     "default": 200.0,
+     "description": "total width of the flood plain (TUnit%rwidth0, from frivinp rwid0), [m]"
+    },
+    "rdepth": {
+     "type": "parameter",
+     "units": "m",
+     "default": 2.0,
+     "description": "bankfull depth of the river cross section (TUnit%rdepth, from frivinp rdep), [m]"
+    },
+    "areaTotal2": {
+     "type": "parameter",
+     "units": "m^2",
+     "default": 100000000.0,
+     "description": "computed total upstream drainage area (TUnit%areaTotal2, from set_areatotal2), [m2]"
+    },
+    "area": {
+     "type": "parameter",
+     "units": "m^2",
+     "default": 10000000.0,
+     "description": "area of the local cell (TUnit%area, from frivinp), [m2]"
+    },
+    "frac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "fraction of the cell included in the study area (TUnit%frac, from frivinp), [-]"
+    },
+    "localdelt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 180.0,
+     "description": "local main-channel substep = Tctl%DeltaT/DLevelH2R/numDT_r(nr) (F90:184), [s]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "erin",
+     "rhs": { "op": "-", "args": ["eroutUp"] }
+    },
+    {
+     "lhs": "vr_manning",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "manning_velocity",
+       "bindings": { "sqrtslp": "rslpsqrt", "n": "nr", "rr": "rr" } }
+    },
+    {
+     "lhs": "erout_manning",
+     "rhs": { "op": "*", "args": [
+       { "op": "-", "args": ["vr_manning"] },
+       "mr" ] }
+    },
+    {
+     "lhs": "erout",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "<=", "args": ["rlen", 0.0] },
+       { "op": "-", "args": [
+         { "op": "+", "args": ["erin", "erlateral"] } ] },
+       { "op": "ifelse", "args": [
+         { "op": ">", "args": [
+           { "op": "/", "args": [
+             "areaTotal2",
+             { "op": "*", "args": ["rwidth", "rlen"] } ] },
+           1000000.0 ] },
+         { "op": "-", "args": [
+           { "op": "+", "args": ["erin", "erlateral"] } ] },
+         { "op": "ifelse", "args": [
+           { "op": "and", "args": [
+             { "op": ">", "args": [
+               { "op": "-", "args": ["erout_manning"] },
+               1.0e-14 ] },
+             { "op": "<", "args": [
+               { "op": "+", "args": [
+                 "wr",
+                 { "op": "*", "args": [
+                   { "op": "+", "args": ["erlateral", "erin", "erout_manning"] },
+                   "localdelt" ] } ] },
+               1.0e-14 ] } ] },
+           { "op": "-", "args": [
+             { "op": "+", "args": ["erlateral", "erin", { "op": "/", "args": ["wr", "localdelt"] }] } ] },
+           "erout_manning"
+         ] }
+       ] }
+     ] }
+    },
+    {
+     "lhs": "vr",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "<=", "args": ["rlen", 0.0] },
+       0.0,
+       { "op": "ifelse", "args": [
+         { "op": "and", "args": [
+           { "op": ">", "args": [
+             { "op": "-", "args": ["erout_manning"] },
+             1.0e-14 ] },
+           { "op": "and", "args": [
+             { "op": "<", "args": [
+               { "op": "+", "args": [
+                 "wr",
+                 { "op": "*", "args": [
+                   { "op": "+", "args": ["erlateral", "erin", "erout_manning"] },
+                   "localdelt" ] } ] },
+               1.0e-14 ] },
+             { "op": ">", "args": ["mr", 0.0] } ] } ] },
+         { "op": "/", "args": [
+           { "op": "-", "args": ["erout"] },
+           "mr" ] },
+         "vr_manning"
+       ] }
+     ] }
+    },
+    {
+     "lhs": "dwr",
+     "rhs": { "op": "+", "args": [
+       "erlateral",
+       "erin",
+       "erout",
+       { "op": "*", "args": ["qgwl", "area", "frac"] } ] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["wr"], "wrt": "t" },
+     "rhs": "dwr"
+    },
+    {
+     "lhs": "mr",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["rlen", 0.0] },
+         { "op": ">", "args": ["wr", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "wetted_area",
+         "bindings": { "w": "wr", "len": "rlen" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "yr",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["rlen", 0.0] },
+         { "op": ">", "args": ["wr", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "channel_depth",
+         "bindings": { "m": "mr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "pr",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["rlen", 0.0] },
+         { "op": ">", "args": ["wr", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "channel_perimeter",
+         "bindings": { "h": "yr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "rr",
+     "rhs": { "op": "ifelse", "args": [
+       { "op": "and", "args": [
+         { "op": ">", "args": ["rlen", 0.0] },
+         { "op": ">", "args": ["wr", 0.0] } ] },
+       { "op": "apply_expression_template", "args": [], "name": "hydraulic_radius",
+         "bindings": { "m": "mr", "p": "pr" } },
+       0.0
+     ] }
+    },
+    {
+     "lhs": "flow",
+     "rhs": { "op": "-", "args": ["erout"] }
+    }
+   ],
+   "tests": []
+  }
+ }
+}

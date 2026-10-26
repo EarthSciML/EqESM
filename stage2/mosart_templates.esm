@@ -1,0 +1,666 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mosart_templates",
+  "description": "Expression-template library for the MOSART river-routing component (stage 2 of the EqESM project): the pointwise flow laws and channel-geometry functions of mosart_physics.F90 (mosart1.1.13, cesm3.0-alphabranch checkout e59f2512), transcribed exactly for use by the hillslope / subnetwork / main-channel routing step components. The library carries (a) the Manning channel velocity v = (rr^2)^(1/3) sqrt(s) / n of CRVRMAN_nosqrt (mosart_physics.F90:406-422, including the rr <= 0 guard that zeroes the velocity), (b) the hillslope overland specific discharge eht = Gxr yh v of CREHT_nosqrt (F90:426-437), which calls the same Manning law, (c) the wetted cross-section area m = w/len of GRMR (F90:441-449), (d) the rectangular tributary depth m/twid and wetted perimeter twid + 2h of GRHT/GRPT (F90:453-481, with the TINYVALUE = 1.0e-14 dry-cell guards), (e) the hydraulic radius m/p of GRRR (F90:485-497), and (f) the three-part main-channel cross-section depth and wetted perimeter of GRHR/GRPR (F90:501-572): a rectangular bankfull section (width rwidth, depth rdepth), a trapezoidal flood-plain transition of slope SLOPE1 = 0.1, and a rectangular flood plain of width rwidth0; GRPR uses the exact Fortran constant 1/sin(atan(0.1)) (sinatanSLOPE1defr, F90:554). The Manning roughness n, nh, nt, nr are declared in the consuming components with their SI dimension s/m^(1/3) (the network file stores bare numbers; declaring the SI dimension keeps the equations dimensionally consistent: (rr^2)^(1/3) sqrt(s)/n has units m^(2/3)/(s/m^(1/3)) = m/s). All templates are match-less and invoked by name via apply_expression_template; the only shared-math dependency is overland_discharge -> manning_velocity (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). MOSART 1.1.13 has no tabulated (lookup-table) functions - all GR* geometry and the Manning law are analytic - so no function_tables entries are needed; Manning's n and the network geometry arrive as per-cell data from the frivinp network file (data source, pending stage-2.5). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
+ },
+ "expression_templates": {
+  "manning_velocity": {
+   "description": "Manning channel velocity CRVRMAN_nosqrt (mosart_physics.F90:406-422): v = ((rr*rr)^(1/3)) * sqrtslp / n, zeroed when the hydraulic radius rr <= 0 (the Fortran if/else). rr is the hydraulic radius [m], sqrtslp the sqrt of the bed slope [1], n the Manning roughness with its SI dimension s/m^(1/3).",
+   "params": [
+    "sqrtslp",
+    "n",
+    "rr"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       "rr",
+       0.0
+      ]
+     },
+     0.0,
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "^",
+          "args": [
+           {
+            "op": "^",
+            "args": [
+             "rr",
+             2
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             1,
+             3
+            ]
+           }
+          ]
+         },
+         "sqrtslp"
+        ]
+       },
+       "n"
+      ]
+     }
+    ]
+   }
+  },
+  "overland_discharge": {
+   "description": "Hillslope overland specific discharge CREHT_nosqrt (mosart_physics.F90:426-437): eht = Gxr * yh * CRVRMAN_nosqrt(sqrthslp, nh, yh) - the Manning velocity evaluated at the overland flow depth yh, scaled by the drainage density Gxr [1/m] and the depth. Shares the manning_velocity template by reference (the one shared-law factoring of the MOSART physics).",
+   "params": [
+    "sqrthslp",
+    "nh",
+    "Gxr",
+    "yh"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "Gxr",
+     "yh",
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "manning_velocity",
+      "bindings": {
+       "sqrtslp": "sqrthslp",
+       "n": "nh",
+       "rr": "yh"
+      }
+     }
+    ]
+   }
+  },
+  "wetted_area": {
+   "description": "Wetted channel cross-section area GRMR (mosart_physics.F90:441-449): m = w / len, the storage w [m3] spread over the reach length len [m].",
+   "params": [
+    "w",
+    "len"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "w",
+     "len"
+    ]
+   }
+  },
+  "rectangular_depth": {
+   "description": "Tributary water depth GRHT (mosart_physics.F90:453-465) assuming a rectangular channel: h = m / twid, zeroed when the wetted area m <= TINYVALUE (1.0e-14, the Fortran module constant of F90:40).",
+   "params": [
+    "m",
+    "twid"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       "m",
+       1e-14
+      ]
+     },
+     0.0,
+     {
+      "op": "/",
+      "args": [
+       "m",
+       "twid"
+      ]
+     }
+    ]
+   }
+  },
+  "rectangular_perimeter": {
+   "description": "Tributary wetted perimeter GRPT (mosart_physics.F90:469-481) assuming a rectangular channel: p = twid + 2*h, zeroed when the depth h <= TINYVALUE (1.0e-14).",
+   "params": [
+    "h",
+    "twid"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       "h",
+       1e-14
+      ]
+     },
+     0.0,
+     {
+      "op": "+",
+      "args": [
+       "twid",
+       {
+        "op": "*",
+        "args": [
+         2.0,
+         "h"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "hydraulic_radius": {
+   "description": "Hydraulic radius GRRR (mosart_physics.F90:485-497): r = m / p (wetted area over wetted perimeter), zeroed when the perimeter p <= TINYVALUE (1.0e-14).",
+   "params": [
+    "m",
+    "p"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       "p",
+       1e-14
+      ]
+     },
+     0.0,
+     {
+      "op": "/",
+      "args": [
+       "m",
+       "p"
+      ]
+     }
+    ]
+   }
+  },
+  "channel_depth": {
+   "description": "Main-channel water depth GRHR (mosart_physics.F90:501-532) for the three-part cross section: a rectangular bankfull section of width rwidth and depth rdepth, a trapezoidal flood-plain transition of slope SLOPE1 = 0.1 (SLOPE1def, F90:41) rising from width rwidth to rwidth0 over height 0.1*((rwidth0-rwidth)/2), and a rectangular flood plain of width rwidth0. h = 0 when m <= TINYVALUE; h = m/rwidth when not flooded (m - rdepth*rwidth <= TINYVALUE); when the storage reaches the trapezoid h = rdepth + SLOPE1*((rwidth0-rwidth)/2) + deltam/rwidth0 with deltam = m - rdepth*rwidth - (rwidth+rwidth0)*SLOPE1*((rwidth0-rwidth)/2)/2; in the trapezoid itself h = rdepth + (-rwidth + sqrt(rwidth^2 + 4*deltam/SLOPE1))*SLOPE1/2 with deltam = m - rdepth*rwidth. TINYVALUE = 1.0e-14.",
+   "params": [
+    "m",
+    "rwidth",
+    "rwidth0",
+    "rdepth"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       "m",
+       1e-14
+      ]
+     },
+     0.0,
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "m",
+           {
+            "op": "*",
+            "args": [
+             "rdepth",
+             "rwidth"
+            ]
+           }
+          ]
+         },
+         1e-14
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "m",
+         "rwidth"
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "m",
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               "rdepth",
+               "rwidth"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "+",
+                "args": [
+                 "rwidth",
+                 "rwidth0"
+                ]
+               },
+               0.1,
+               {
+                "op": "/",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     "rwidth0",
+                     "rwidth"
+                    ]
+                   },
+                   2.0
+                  ]
+                 },
+                 2.0
+                ]
+               }
+              ]
+             },
+             1e-14
+            ]
+           }
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           "rdepth",
+           {
+            "op": "*",
+            "args": [
+             0.1,
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 "rwidth0",
+                 "rwidth"
+                ]
+               },
+               2.0
+              ]
+             }
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "m",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   "rdepth",
+                   "rwidth"
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "+",
+                    "args": [
+                     "rwidth",
+                     "rwidth0"
+                    ]
+                   },
+                   0.1,
+                   {
+                    "op": "/",
+                    "args": [
+                     {
+                      "op": "/",
+                      "args": [
+                       {
+                        "op": "-",
+                        "args": [
+                         "rwidth0",
+                         "rwidth"
+                        ]
+                       },
+                       2.0
+                      ]
+                     },
+                     2.0
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             "rwidth0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "rwidth"
+              ]
+             },
+             {
+              "op": "sqrt",
+              "args": [
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "^",
+                  "args": [
+                   "rwidth",
+                   2
+                  ]
+                 },
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "*",
+                    "args": [
+                     4.0,
+                     {
+                      "op": "-",
+                      "args": [
+                       "m",
+                       {
+                        "op": "*",
+                        "args": [
+                         "rdepth",
+                         "rwidth"
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   },
+                   0.1
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           0.1,
+           {
+            "op": "/",
+            "args": [
+             2.0,
+             1.0
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "channel_perimeter": {
+   "description": "Main-channel wetted perimeter GRPR (mosart_physics.F90:536-572) for the same three-part cross section as channel_depth: p = 0 when h < TINYVALUE; p = rwidth + 2*h in the bankfull rectangle (h <= rdepth + TINYVALUE); in the flood plain p = rwidth + 2*(rdepth + ((rwidth0-rwidth)/2)*SLOPE1*sinatan + deltah) with deltah = h - rdepth - ((rwidth0-rwidth)/2)*SLOPE1; in the trapezoid p = rwidth + 2*(rdepth + (h - rdepth)*sinatan). sinatan is the Fortran sinatanSLOPE1defr = 1/sin(atan(SLOPE1def)) with SLOPE1def = 0.1, spelled here as the same expression (F90:554). TINYVALUE = 1.0e-14.",
+   "params": [
+    "h",
+    "rwidth",
+    "rwidth0",
+    "rdepth"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       "h",
+       1e-14
+      ]
+     },
+     0.0,
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "h",
+         {
+          "op": "+",
+          "args": [
+           "rdepth",
+           1e-14
+          ]
+         }
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         "rwidth",
+         {
+          "op": "*",
+          "args": [
+           2.0,
+           "h"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "h",
+           {
+            "op": "+",
+            "args": [
+             "rdepth",
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "rwidth0",
+                   "rwidth"
+                  ]
+                 },
+                 2.0
+                ]
+               },
+               0.1
+              ]
+             },
+             1e-14
+            ]
+           }
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           "rwidth",
+           {
+            "op": "*",
+            "args": [
+             2.0,
+             {
+              "op": "+",
+              "args": [
+               "rdepth",
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     "rwidth0",
+                     "rwidth"
+                    ]
+                   },
+                   2.0
+                  ]
+                 },
+                 0.1,
+                 {
+                  "op": "/",
+                  "args": [
+                   1.0,
+                   {
+                    "op": "sin",
+                    "args": [
+                     {
+                      "op": "atan",
+                      "args": [
+                       0.1
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "-",
+                "args": [
+                 "h",
+                 {
+                  "op": "+",
+                  "args": [
+                   "rdepth",
+                   {
+                    "op": "*",
+                    "args": [
+                     {
+                      "op": "/",
+                      "args": [
+                       {
+                        "op": "-",
+                        "args": [
+                         "rwidth0",
+                         "rwidth"
+                        ]
+                       },
+                       2.0
+                      ]
+                     },
+                     0.1
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           "rwidth",
+           {
+            "op": "*",
+            "args": [
+             2.0,
+             {
+              "op": "+",
+              "args": [
+               "rdepth",
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "h",
+                   "rdepth"
+                  ]
+                 },
+                 {
+                  "op": "/",
+                  "args": [
+                   1.0,
+                   {
+                    "op": "sin",
+                    "args": [
+                     {
+                      "op": "atan",
+                      "args": [
+                       0.1
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

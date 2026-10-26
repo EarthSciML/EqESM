@@ -1,0 +1,153 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mosart_hillslope",
+  "description": "MOSART hillslope routing step (stage 2 of the EqESM project): the per-cell Euler step 1 of mosart_physics.F90:Euler (F90:74-80) composed of hillslopeRouting (F90:225-239) and updateState_hillslope (F90:352-360), written as a storage ODE with the pointwise laws imported from ./mosart_templates.esm. Equations, exactly as in the Fortran: ehout_manning = -CREHT_nosqrt(hslpsqrt, nh, Gxr, yh) (F90:232); the dry-cell clamp replaces ehout by -(qsur + wh/delt) when ehout < 0 and wh + (qsur + ehout)*delt < TINYVALUE (F90:233-236); dwh = qsur + ehout (F90:237); d(wh)/dt = dwh (the Euler storage advance wh += dwh*DeltaT, F90:77, in continuous limit); yh = wh (updateState_hillslope, F90:358); and the lateral inflow to the subnetwork etin = (-ehout + qsub)*area*frac (F90:79). Units per mosart_tstatusflux_type.F90 / mosart_tspatialunit_type.F90: wh, yh [m]; dwh, qsur, qsub, ehout [m/s]; etin [m3/s]; hslpsqrt [1]; Gxr [1/m]; area [m2]; frac [1]; nh is the hillslope Manning roughness (SI dimension s/m^(1/3), see mosart_templates.esm); delt is Tctl%DeltaT = delt_coupling/nsub (mosart_driver.F90:800). The qsur/qsub forcing arrives from the cap in m/s (mosart_driver.F90:806-813 converts the m3/s streams by /area). Tests are pending the stage-1 instrumentation dumps (stage1/dumps/mosart/); the tests block is intentionally empty until the numeric tuples arrive (TODO). Reference: stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90 (mosart1.1.13)."
+ },
+ "models": {
+  "Hillslope": {
+   "expression_template_imports": [
+    { "ref": "./mosart_templates.esm" }
+   ],
+   "variables": {
+    "wh": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "storage of surface water at the hillslope (TRunoff%wh), [m]"
+    },
+    "dwh": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "change of hillslope water storage (TRunoff%dwh) = qsur + ehout, [m/s]"
+    },
+    "yh": {
+     "type": "unknown",
+     "units": "m",
+     "description": "depth of surface water (TRunoff%yh), defined by updateState_hillslope as yh = wh, [m]"
+    },
+    "ehout_manning": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "unclamped overland flow from the hillslope into the sub-network channels, -CREHT_nosqrt(...), [m/s]"
+    },
+    "ehout": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "overland flow after the dry-cell clamp of hillslopeRouting (TRunoff%ehout), [m/s]"
+    },
+    "etin": {
+     "type": "unknown",
+     "units": "m^3/s",
+     "description": "lateral inflow from hillslope into the subnetwork (TRunoff%etin) = (-ehout + qsub)*area*frac, [m3/s]"
+    },
+    "qsur": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "surface runoff generated from the hillslope (TRunoff%qsur, after the mosart_driver m3/s -> m/s /area conversion), [m/s]"
+    },
+    "qsub": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "subsurface runoff generated from the hillslope (TRunoff%qsub), [m/s]"
+    },
+    "hslpsqrt": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.01,
+     "description": "sqrt of the hillslope slope (TUnit%hslpsqrt, from the frivinp network file hslp), [-]"
+    },
+    "nh": {
+     "type": "parameter",
+     "units": "s/m^(1/3)",
+     "default": 0.03,
+     "description": "Manning's roughness of the hillslope, channel network excluded (TUnit%nh, from frivinp); network file stores a bare number; declared with its SI dimension s/m^(1/3) for dimensional consistency"
+    },
+    "Gxr": {
+     "type": "parameter",
+     "units": "1/m",
+     "default": 0.001,
+     "description": "drainage density within the cell (TUnit%Gxr, from frivinp gxr), [1/m]"
+    },
+    "area": {
+     "type": "parameter",
+     "units": "m^2",
+     "default": 10000000.0,
+     "description": "area of the local cell (TUnit%area, from frivinp), [m2]"
+    },
+    "frac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "fraction of the cell included in the study area (TUnit%frac, from frivinp), [-]"
+    },
+    "delt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 3600.0,
+     "description": "routing substep Tctl%DeltaT = delt_coupling/nsub (mosart_driver.F90:800), [s]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "ehout_manning",
+     "rhs": {
+      "op": "*",
+      "args": [
+       -1.0,
+       { "op": "apply_expression_template", "args": [], "name": "overland_discharge",
+         "bindings": { "sqrthslp": "hslpsqrt", "nh": "nh", "Gxr": "Gxr", "yh": "yh" } }
+      ]
+     }
+    },
+    {
+     "lhs": "ehout",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       { "op": "and", "args": [
+         { "op": "<", "args": ["ehout_manning", 0.0] },
+         { "op": "<", "args": [
+           { "op": "+", "args": [
+             "wh",
+             { "op": "*", "args": [
+               { "op": "+", "args": ["qsur", "ehout_manning"] },
+               "delt" ] } ] },
+           1.0e-14 ] } ] },
+       { "op": "*", "args": [
+         -1.0,
+         { "op": "+", "args": ["qsur", { "op": "/", "args": ["wh", "delt"] }] } ] },
+       "ehout_manning"
+      ]
+     }
+    },
+    {
+     "lhs": "dwh",
+     "rhs": { "op": "+", "args": ["qsur", "ehout"] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["wh"], "wrt": "t" },
+     "rhs": "dwh"
+    },
+    {
+     "lhs": "yh",
+     "rhs": "wh"
+    },
+    {
+     "lhs": "etin",
+     "rhs": {
+      "op": "*",
+      "args": [
+       { "op": "+", "args": [{ "op": "-", "args": ["ehout"] }, "qsub"] },
+       "area",
+       "frac"
+      ]
+     }
+    }
+   ],
+   "tests": []
+  }
+ }
+}
