@@ -51,7 +51,7 @@ In progress. See PLAN.md §4.1 for the playbook.
   ncdump round-trip verified. Note: `support.hdfgroup.org` 404s the classic
   release path — use the GitHub release asset (script updated).
   `stage1/runs/env.sh` provides the toolchain env (`NETCDF_PATH`).
-- **Compset survey** ✅ (2026-10-25) — merged (`33243cb`):
+- **Compset survey** ✅ (2026-10-25/26) — merged (`33243cb`):
   `stage1/runs/COMPSET_SURVEY.md` (368 lines). Smoke-run table: F-class
   `F2000climo`/`f19_f19_mg17` (CAM6+MOSART), CAM7 `FHISTC_LTso`/`ne3pg3`,
   I-class `I2000Clm60Sp` (CLM+MOSART coupled), D-class `D` (CICE),
@@ -63,6 +63,13 @@ In progress. See PLAN.md §4.1 for the playbook.
   `$HOME/.cime/config_machines.xml` supported, `DIN_LOC_ROOT` required);
   inputdata via OSDF endpoint first. **Bug:** `R2000MOSART` broken as
   shipped (`DLND%LCPL` invalid) → `bugs.md` #1; PLAN.md grid note updated.
+  Corrections (2026-10-26, `4c26cc8`, verified in `cam/bld/configure`):
+  **SCAM requires the SE dycore** → FSCAM grid is `ne3_ne3_mg37`, not
+  `f19_f19`; **radiation**: cam6 → RRTMG, cam7 → RTE-RRTMGP (my earlier
+  "CAM 6.4 = RRTMGP" note was wrong — the F-class CAM6 reference runs use
+  classic RRTMG). atmos_phys `0_31_000` pin re-verified via
+  `git submodule status` (the vendored ChangeLog top tag `0_07_000` is just
+  its first entry).
 - **Boundary catalog** ⏳ — worker dispatched (worktree `wt/boundaries`):
   CMEPS mediator phases/field bundles, per-component import/export caps,
   MOSART internals → `stage1/boundaries.md`.
