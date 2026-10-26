@@ -123,6 +123,10 @@
            The CIME Tools Makefile links -L$(LAPACK_LIBDIR) -llapack -lblas
            when LAPACK_LIBDIR is set. -->
       <env name="LAPACK_LIBDIR">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local/lib</env>
+      <!-- PATH is overwritten too: prepend our netCDF/HDF5 tools bin
+           (ncdump etc. — st_archive fails with "ncdump not found" without
+           it), then the module bin dirs, then standard system dirs. -->
+      <env name="PATH">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local/bin:/sw/apps/mpi/openmpi/5.0.1/gcc/13.3.0/bin:/sw/apps/gcc/13.3.0/bin:/usr/local/bin:/usr/bin:/bin</env>
       <!-- LD_LIBRARY_PATH is overwritten (CIME emits `export NAME=value`,
            no append), so list EVERY needed dir: our netCDF/HDF5/LAPACK
            stack, ESMF, and the gcc/openmpi module libs (which the module
