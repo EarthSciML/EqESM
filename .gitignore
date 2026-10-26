@@ -1,8 +1,10 @@
 # EarthSciAST CLI binary (untracked per AGENTS.md)
 /esm
 
-# Stage-1 artifacts: builds, dumps, source checkouts (large, regenerable)
-stage1/build/
+# Stage-1 artifacts: builds, dumps, source checkouts (large, regenerable);
+# keep the build *scripts* tracked (EqIce precedent)
+stage1/build/*
+!stage1/build/*.sh
 stage1/dumps/
 stage1/cesm/
 stage1/instrument/build/

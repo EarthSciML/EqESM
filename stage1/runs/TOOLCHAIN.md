@@ -15,7 +15,7 @@ recorded as such.
 | Scheduler | SLURM; partitions seen: `scavenger` (1 day), `secondary` (4 h), `ctessum` (3 days, nodes ccc0232–0236), `eng-research-gpu` (2 d), `ic-express` (8 h), `ic-highmem` (3 d), `IllinoisComputes` (3 d), `IllinoisComputes-GPU` (3 d) |
 | SLURM account | `ctessum` (assocs: `campusclu`, `ctessum-c…`, `ctessum-ic`, `ctessum`; default QOS `scav_high`, MaxJobs 40). Current job: `--partition=ctessum --account=ctessum --qos=scav_high`. |
 | Disk | `/projects`: Lustre "taiga", 22 PB total, 5.8 PB avail (72 % used). `/scratch.local`: 794 GB, 250 GB avail (69 % used); `/scratch.local/ctessum` exists and is owned by us. `/tmp` is RAM-backed — do not store builds there. |
-| Network | `https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/` → HTTP 200 (SVN server up; `/trunk/README` 404s, so that exact path is wrong but the server is reachable). `https://web.lcrc.anl.gov/public/e3sm/inputdata/` → HTTP 200. `https://github.com` → HTTP 200. All CESM inputdata sources reachable. |
+| Network | `https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/` → HTTP 200 (SVN server up; `/trunk/README` 404s, so that exact path is wrong but the server is reachable). `https://web.lcrc.anl.gov/public/e3sm/inputdata/` → HTTP 200. `https://github.com` → HTTP 200. All CESM inputdata sources reachable. **`data.cesm.ucar.edu` does NOT resolve (DNS rc=2)** — point CIME at `svn-ccsm-inputdata` + the LCRC mirror only. **No `svn` client** on the login node — CIME svn-protocol inputdata fetches need `--protocol=https` (or install svn). |
 | Existing CESM work | **None found.** Bounded searches for `*cesm*`, `*inputdata*`, `*cime*` under `/projects/illinois/eng/cee` (maxdepth 4, excluding ctessum) and `/scratch.local` (maxdepth 3) returned nothing. `/projects/illinois/eng/cee` holds ~30 group dirs (alipour, barros, ctessum, gardoni, …); no shared inputdata mirror. |
 
 ## 2. Probe results
@@ -37,7 +37,8 @@ Absent (checked via `module avail` grep and `module spider`): **netcdf, hdf5, pn
 - `cmake` 3.31.8 — system `/usr/bin/cmake` (no module needed)
 - `perl` 5.32.1 — system `/usr/bin/perl` (no module needed)
 - `python3` 3.9.25 — system `/usr/bin/python3`; `python/3.13.2` module also available (`/sw/apps/python/3.13.2/bin/python3`)
-- `apptainer` 1.5.4-1.el9 — system `/usr/bin/apptainer` (present, not a module)
+- `apptainer` 1.5.4-1.el9 — system `/usr/bin/apptainer` (present, not a module). Runs **unprivileged** (user-namespace): no `starter-suid` helper under `/usr/libexec/apptainer/bin`, `unshare -U --map-root-user` works (rc=0), so image builds are viable without setuid — the EqWeFiC "setuid mode" note is stale or cluster-state-dependent.
+- System python 3.9.25 already has CIME's Python deps: `lxml` 4.6.5, `pytest` 8.4.2, `numpy` 2.0.2, `pyyaml` (netCDF4/h5py are pip wheels — Python-only, not linkable).
 - `git` 2.48.1 (module default; system git also exists)
 - `ncdump`, `nc-config`, `nf-config`, `ncks`, `ncl`, `spack` — **none found in PATH**
 
@@ -111,4 +112,5 @@ module load openmpi/5.0.1-gcc-13.3.0
 5. **Inputdata has to be downloaded from NCAR/LCRC** — no local mirror. Both endpoints are reachable now; CESM compsets pull multi-GB inputdata, so budget disk under `/projects` (Lustre, 5.8 PB free) and mind the 40-job MaxJobs / scav_high QOS limits. The SVN inputdata server answers 200 on `/trunk/` (the `README` path 404s — path is wrong, server is fine).
 6. **`ctessum` partition is small (5 nodes, 3-day limit)** — fine for F-case testing; large production runs would need `scavenger`/`secondary` and a `--partition` override in `config_batch.xml`/`config_machines.xml`.
 7. **Group directory is shared** — keep all build artifacts (netCDF prefix, caches, spack-like trees) in a `.gitignore`d subdir of the EqESM worktree or under `ctessum/code/.cache`, not in the shared `ctessum/` root and not in `/tmp` (RAM).
-8. **Version pinning:** gcc 13.3.0 + openmpi 5.0.1 are the sibling-projects' pinned pair; intel 2025.0.4 + intel/mpi 2021.14 exist as an alternative if a Fortran-compiler-specific CESM bug appears (not recommended to start there).
+8. **Version pinning:** gcc 13.3.0 + openmpi 5.0.1 are the sibling-projects' pinned pair; intel 2025.0.4 + intel/mpi 2021.14 exist as an alternative if a Fortran-compiler-specific CESM bug appears (not recommended to start there). Note: `openmpi/5.0.8` exists under `/sw/apps` but has **no module** — stick with 5.0.1.
+9. **hdf5 download URL:** `support.hdfgroup.org` 404s the classic release path (site reorganized) — use the GitHub release asset (`https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz`).
