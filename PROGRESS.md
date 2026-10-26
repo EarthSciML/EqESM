@@ -26,11 +26,27 @@ Last updated: 2026-10-25.
 
 ## Milestone 1 — CESM source access + build; reference runs; boundary catalog
 
-Not started. See PLAN.md §4.1 for the playbook: pin `cesm3.0-alphabranch` +
-submodule tags into `stage1/cesm` (gitignored); toolchain probe (local
-netCDF/PIO build vs apptainer); CIME machine config; smoke runs (F-class,
-X-class w/ MOSART, I-class, C-class, SCAM / Icepack / clm1pt harnesses);
-minimal inputdata; `stage1/boundaries.md`.
+In progress. See PLAN.md §4.1 for the playbook.
+
+- **Source access + pins** ✅ (2026-10-25) — CESM `cesm3.0-alphabranch` @
+  `e59f251` checked out at `stage1/cesm` (gitignored, 4.1 GB) with
+  `bin/git-fleximod update`; all submodule tags pinned and recorded in
+  `stage1/runs/README.md` (cam6_4_212, ctsm5.4.063, cesm3_cice6_6_3_22,
+  mi_260909, cismwrap_3_00_002, mosart1.1.13, cmeps1.1.73, cdeps1.0.112,
+  cime6.7.1, …). Finding: CAM 6.4 radiation is **RTE-RRTMGP** (not RRTMG);
+  photolysis is tuv-x v0.14.3.
+- **Rust CLI** ✅ (2026-10-25) — `esm` 0.4.0 binary built from the
+  fast-forwarded `../EarthSciAST` checkout, copied to the repo root
+  (untracked); validates an esm 1.3.0 document (`./esm validate` clean).
+- **Toolchain probe** ⏳ — worker dispatched (worktree `wt/toolchain`):
+  modules/compilers/netCDF/apptainer availability, scheduler/account,
+  NCAR inputdata reachability → `stage1/runs/TOOLCHAIN.md`.
+- **Compset survey** ⏳ — worker dispatched (worktree `wt/compsets`):
+  F/X/I/C/B/G-class and FSCAM compsets, coarse grids, MOSART standalone
+  route, machine-entry requirements → `stage1/runs/COMPSET_SURVEY.md`.
+- **Next:** CIME machine config for this cluster; smoke runs (F-class,
+  X-class w/ MOSART, I-class, C-class, SCAM / Icepack / clm1pt harnesses);
+  minimal inputdata; `stage1/boundaries.md`.
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
