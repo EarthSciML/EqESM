@@ -117,6 +117,12 @@
            CMake build does find_package(ESMF REQUIRED). -->
       <env name="ESMFMKFILE">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk</env>
       <env name="ESMF_DIR">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/esmf</env>
+      <!-- LAPACK/BLAS: the cluster install (/sw/apps/lapack/3.12.1/lib64)
+           has liblapack.a + librefblas.a (no libblas); symlinked into
+           stage1/build/local/lib so that both -llapack and -lblas resolve.
+           The CIME Tools Makefile links -L$(LAPACK_LIBDIR) -llapack -lblas
+           when LAPACK_LIBDIR is set. -->
+      <env name="LAPACK_LIBDIR">/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/build/local/lib</env>
     </environment_variables>
   </machine>
 
