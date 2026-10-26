@@ -333,7 +333,7 @@ config. All F/I/D/B-class runs need `--run-unsupported` off the science grid.
 | 2 | MOSART (coupled) | `I2000Clm60Sp` (2000_DATM%GSWP3v1_CLM60%SP_SICE_SOCN_MOSART_DGLC%NOEVOLVE_SWAV) | `f10_f10_mg37` or `f19_f19_mg17`/`f09_f09_mg17` | ndays,1 | the tested CLM+MOSART route |
 | 2′ | MOSART standalone | `R2000MOSART` (2000_SATM_DLND%LCPL_SICE_SOCN_MOSART_SGLC_SWAV) — **fix `DLND%LCPL`→`DLND%RCPL`** | `f19_f19_mg17` (rof r05) | ndays,1 | broken as shipped; RCPL mode is tested (dlnd tests) |
 | 3 | Sea ice (CICE) | `D` (2000_DATM%JRA-RYF9091_SLND_CICE_DOCN%SOM_DROF%JRA-RYF9091_SGLC_SWAV); also `DTEST` | `f19_g17`/`f09_g17` (tested: `TL319_t232`) | ndays,1 | DOCN%SOM slab ocean; CICE on gx1v7 |
-| 4 | Ocean (MOM6) | `C_JRA` (2000_DATM%JRA-1p5-2023_SLND_DICE%SSMI_MOM6_DROF%JRA-1p5-2023_SGLC_SWAV) or `C` (DATM%NYF) | `T62_t232` (+ `mom/tx10deg` testmod ⇒ 36×32 ocean) or `TL319_t201` | ndays,1 | coarsest MOM6 tripole = tx2_0v1 (2°) |
+| 4 | Ocean (MOM6) | `C_JRA` (2000_DATM%JRA-1p5-2023_SLND_DICE%SSMI_MOM6_DROF%JRA-1p5-2023_SGLC_SWAV) or `C` (DATM%NYF) | `T62_t232` (+ `mom/tx10deg` testmod ⇒ 36×32 ocean) or `TL319_t201` | ndays,1 | coarsest MOM6 tripole = tx2_0v1 (2°); **SUCCESS 2026-10-26** (`C_JRA_t62`, full tx2_3v2, 7:53 wall, MOM6 23 steps, CFL 0.075, mass err 6e-19) — see notes below |
 | 5 | Fully coupled (stage 3) | `B1850C_LTso` (1850_CAM70%LT_CLM60%BGC-CROP_CICE_MOM6_MOSART_DGLC%NOEVOLVE_WW3); also `B1850C_MTso`, `BHISTC_LTso` | `ne30pg3_t232` (tested CESM3 grid); coarse: `ne3pg3_t232` (+ `mom/tx10deg`) | ndays,1 | full CESM3 coupled: CAM7+CLM6+CICE+MOM6+MOSART+WW3 |
 | 6 | CAM single column | `FSCAMARM97` (or any `FSCAM*`, `FCSCAM`) | **`ne3_ne3_mg37` (required — SCAM only works with the SE dycore**; `cam/bld/configure` dies otherwise; IOP ic files keyed to `hgrid="ne3np4"`; CAM's own tests use `SCT_D_Ln7` + `cam/scm_prep` on `ne3_ne3_mg37`; `scam_mandatory` usermods: `NTASKS=1`, `REST_OPTION=never`, `CLM_FORCE_COLDSTART=on`) | auto (nhours, e.g. 695) | PTS_MODE/lat/lon auto-set by compset; STOP_N per IOP |
 | — | Coupler testbed | `X` (2000_XATM_XLND_XICE_XOCN_XROF_XGLC_XWAV) | `f19_g17` | ndays,1 | all-stub; tested `SMS_D`/`ERS_Ln9` |
@@ -343,6 +343,28 @@ Grids shared between runs: `f19_f19_mg17` / `f09_f09_mg17` are usable by F-class
 (CAM), I-class (CLM+MOSART), and (as `f19_g17`/`f09_g17`) D-class (CICE) —
 one inputdata footprint (`f09`/`f19` + gx1v7 + r05) covers goals 1, 2, 3.
 MOSART's `r05` rof grid is the same across F and I compsets.
+
+### C-class run notes (2026-10-26, `C_JRA_t62` @ `T62_t232`, 1 day)
+
+- **`mom/tx10deg` testmod unusable as shipped** — the 6 files it references
+  (`ESMF_mesh_tx10deg_20260219.nc`, `ocean_hgrid_tx10deg_20260219.nc`, …)
+  exist on no inputdata server and no generator is in the checkout →
+  `bugs.md` #2. Ran the full `tx2_3v2` (2°) ocean instead: 72 PEs (2 nodes),
+  7:53 wall, MOM6 23 steps, stable (CFL 0.075, mass err 6e-19).
+- **Multi-node launch chain (all three walls documented in TOOLCHAIN.md #11):**
+  `mpirun` blocked by `pam_slurm_adopt` (ssh daemons) → `srun -n N` blocked by
+  PMI1/2 vs PMIx mismatch → working launcher `srun --mpi=pmix -n N` (machine
+  config `config_machines.xml`, committed). Submit from the interactive
+  session also requires `env -u SLURM_MEM_PER_NODE … ./case.submit`
+  (SLURM_MEM_* mutual-exclusion).
+- **`AUTO_MASKTABLE=True` FATAL on 36 OCN PEs** at tx2_3v2 ("Couldn't
+  auto-eliminate any land blocks") — workaround `AUTO_MASKTABLE = False` in
+  `user_nl_mom` (the `tx10deg` testmod does the same). Run crashed at init
+  ~10 min in, batch hung until manually cancelled — check `run/ocn.log.*`
+  for MOM FATALs, not just `cesm.log`.
+- Input data: 619 JRA55 v1.5 files (~775 GB) + MOM ICs — the background
+  download needs a retry loop (`check_input_data --download` ×3) to survive
+  transient server failures; first unattempted attempt died mid-download.
 
 ### Notes for stage-1 instrumentation targets
 

@@ -64,3 +64,28 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (run-configuration/inputdata gap).
 - **Status:** open (recorded; may be worth reporting upstream — the files
   were presumably generated once and never uploaded).
+
+## 3. MOM6 `AUTO_MASKTABLE=True` FATAL on 36 OCN PEs at tx2_3v2
+
+- **Location:** `components/mom/MOM6/src/framework/MOM_domains.F90`
+  `gen_auto_mask_table` (FATAL: "Couldn't auto-eliminate any land blocks.
+  Try to increase the number of MOM6 PEs or set AUTO_MASKTABLE to False.").
+- **Description:** a `C_JRA` case at `T62_t232` (full `tx2_3v2` ocean) with
+  the default `AUTO_MASKTABLE=True` (MOM_input.yaml default for
+  `TOPO_CONFIG="file"`) and 36 OCN PEs crashes in initialization: MOM6's
+  mask-table layout search cannot eliminate any land blocks at this PE
+  count/grid, calls `MOM_error(FATAL)`, then the error path segfaults
+  (recurse into `mpp_error_basic`; backtrace frames repeat), and the batch
+  job HANGS (srun never returns — the model aborted but the batch script
+  waits) until manually cancelled. The FATAL is only visible in
+  `run/ocn.log.*`, not `cesm.log`. The `mom/tx10deg`/`tx3deg` testmods set
+  `AUTO_MASKTABLE = False` in `user_nl_mom` — the known workaround.
+- **Impact on results:** C-class (active MOM6) cases at default PE counts
+  fail to initialize; workaround: `AUTO_MASKTABLE = False` in `user_nl_mom`
+  (no mask_table file needed — MOM6 then includes all-land blocks).
+  Possibly related: `TARGET_IO_PES` layout search interacting with the
+  36-PE/2-node decomposition.
+- **Reproduced/corrected in .esm:** n/a (run-configuration issue; the .esm
+  MOSART work is unaffected). Verified fix: `C_JRA_t62` runs to completion
+  (23 MOM6 steps, CFL 0.075, mass err 6e-19).
+- **Status:** open (recorded; workaround in `user_nl_mom`).

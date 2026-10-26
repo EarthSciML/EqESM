@@ -241,8 +241,19 @@ In progress. See PLAN.md §4.1 for the playbook.
   tests blocks from dumps (wt/mosart-tests): pointwise D-law tests
   (instantaneous, tight tolerance) + one-step I-boundary traces
   (continuous-ODE form, measured scheme gap per EqIce pattern).
-- **Next:** C_JRA_t62 srun run result; review/merge tests worker; then M3
-  kickoff (MOSART PR prep + CICE instrumentation).
+- **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
+  ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
+  `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
+  closes the M1 smoke-run matrix (F/I/D/SCAM/X/C all green). Three
+  launcher/runtime walls conquered (TOOLCHAIN.md #11): `mpirun` ssh-daemons
+  blocked by pam_slurm_adopt → `srun` PMI1/2-vs-PMIx mismatch →
+  `srun --mpi=pmix -n N` (machine config committed `cc59f31`); submit with
+  `env -u SLURM_MEM_PER_* ./case.submit`; `AUTO_MASKTABLE=False` in
+  user_nl_mom → bugs.md #3 (MOM6 auto-mask FATAL at 36 PEs; FATAL only in
+  `run/ocn.log.*`, and the batch job hangs after the abort until cancelled).
+  Run notes in COMPSET_SURVEY.md §C-class.
+- **Next:** review/merge tests worker; then M3 kickoff (MOSART PR prep +
+  CICE instrumentation).
 
 ## Milestone 2 — Instrumentation scaffolding + MOSART end to end
 
