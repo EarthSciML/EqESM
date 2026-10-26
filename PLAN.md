@@ -38,11 +38,20 @@ than re-inventing them.
 
 ## 2. Tooling and conventions
 
-- **Format:** `.esm`, JSON, current version `1.0.0` (esm-spec §2).
-  Variables are `unknown` or `parameter`; everything else (ODE states,
-  observed quantities, algebraic unknowns, parameter kinds) is derived
-  (esm-spec §6.3). The `solver` block (esm-spec §2.2) declares stiffness
-  where a document needs it; declare it in the document, never in a gate.
+- **Format:** `.esm`, JSON, current version **1.3.0** (esm-spec §2;
+  EarthSciAST **v0.4.0**, released 2026-10-25 — the local `../EarthSciAST`
+  checkout is fast-forwarded to it). Every document we author declares
+  `"esm": "1.3.0"`. Variables are `unknown` or `parameter`; everything else
+  (ODE states, observed quantities, algebraic unknowns, parameter kinds) is
+  derived (esm-spec §6.3). Version gates: a document uses a construct only
+  at the version that introduces it — 1.1.0 brought the `solver` block
+  (§2.2), 1.2.0 the `const` node `units` (§4.8.5), **1.3.0** the `solver`
+  fields `external` (§2.2.6) and `time_span` (§2.2.7). The `solver` block
+  declares stiffness/tolerances in the document itself (never in a gate),
+  and `solver.external` references an external run-configuration document
+  that EarthSciAST never opens — the hook for the EarthSciIntegrator run
+  config at stage 3 (§6.2). `solver.time_span` declares the interval a
+  document is meant to be simulated over.
 - **Authoring stance (esm-spec §1.1):** AST first, closed-function registry
   second, factoring third. Use `expression_templates` liberally; import
   shared templates by reference (esm-spec §9.6/§9.7) instead of repeating
@@ -72,19 +81,20 @@ than re-inventing them.
   soil/veg tables), forcing datasets — into `reaction_systems`,
   `function_tables`, or `data_sources`.
 - **Rust CLI:** a copy of the EarthSciAST CLI (`esm`) lives untracked in the
-  repo root (build from the sibling `../EarthSciAST` checkout:
-  `cargo build --release -p earthsci-ast`, or copy an existing binary).
-  Local testing is `./esm validate`, `./esm test`, `./esm units --check`.
-  Julia/Python runners are used only to debug a suspected CLI fault or to
-  match the EarthSciModels CI gate.
+  repo root, built from the sibling `../EarthSciAST` checkout at **v0.4.0**
+  (`cargo build --release -p earthsci-ast`; the released binary supports
+  esm 1.3.0). Local testing is `./esm validate`, `./esm test`,
+  `./esm units --check`. Julia/Python runners are used only to debug a
+  suspected CLI fault or to match the EarthSciModels CI gate.
 - **EarthSciIntegrator:** coupled-model time stepping (spec 0.1.0, Julia +
   Rust implementations with a shared conformance suite; local checkout
   `../EarthSciIntegrator`). Stage 3 consumes its run-config format
   (`esm_integrator` key, operators, macro-step control, partition,
   precision); the Rust implementation
-  (`rust/earthsci-integrator*` crates) is the local path. Revisit the
-  spec's status before stage 3 starts; gaps found are filed upstream, not
-  worked around locally.
+  (`rust/earthsci-integrator*` crates) is the local path. The run config
+  is referenced from `eqesm.esm`'s `solver.external` (esm 1.3.0, §2.2.6).
+  Revisit the spec's status before stage 3 starts; gaps found are filed
+  upstream, not worked around locally.
 - **Workflow (AGENTS.md):** manager-worker arrangement. The manager
   dispatches up to three subagents at a time, each working in a git
   worktree; the manager checks, merges, and cleans up as they complete.
@@ -303,7 +313,9 @@ macro-step control, partition, precision). Mirror the CIME driver order:
 - Time stepping of the coupled model runs through
   **EarthSciIntegrator** (AGENTS.md): a run config naming the operators,
   the macro-step (coupling interval), the partition, and the precision
-  (real32/real64, matching the reference run).
+  (real32/real64, matching the reference run). The run config is
+  referenced from the model's `solver.external` (esm 1.3.0), and the
+  simulation interval is declared in `solver.time_span`.
 - Tests cover 3–5 orchestrated coupling steps against the per-step dumps
   (pinned inputs; documented tolerances — exact for pure functions,
   measured for scheme gaps and for implicit-vs-instantaneous gaps, the

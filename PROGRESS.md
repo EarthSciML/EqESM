@@ -10,13 +10,17 @@ Last updated: 2026-10-25.
   playbooks, milestones M0–M10. Target: CESM `cesm3.0-alphabranch` (submodule
   tags pinned at M1), first component **MOSART**, top-level model
   **`eqesm.esm`** (AGENTS.md naming fixed).
+- **Format stance** ✅ — updated to **esm 1.3.0** (2026-10-25): all
+  documents declare `"esm": "1.3.0"`. The local `../EarthSciAST` checkout
+  was fast-forwarded to **v0.4.0** (released 2026-10-25; spec 1.3.0, schema
+  `esm/1.3.0`). 1.3.0 adds `solver.external` (§2.2.6 — run-config
+  reference, the EarthSciIntegrator hook) and `solver.time_span` (§2.2.7).
 - **Tracking files** ✅ — `PROGRESS.md` (this file), `bugs.md` (template),
   `.gitignore` (esm binary, stage-1 artifacts).
 - **Rust CLI** ⏳ — copy of the EarthSciAST CLI binary (`esm`, untracked) in
-  the repo root, built from the sibling `../EarthSciAST` checkout
-  (`cargo build --release -p earthsci-ast`) or copied from an existing
-  binary (e.g. `../esast-perf-bins/`). Verify `./esm validate` / `test` /
-  `units --check` on a trivial document.
+  the repo root, built from `../EarthSciAST` at v0.4.0
+  (`cargo build --release -p earthsci-ast`). Verify `./esm validate` /
+  `test` / `units --check` on a trivial document.
 - **Workflow check** ✅ — manager-worker arrangement with worktree
   subagents established (AGENTS.md); worktrees from `main`, up to 3 workers.
 
