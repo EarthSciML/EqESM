@@ -297,18 +297,28 @@ In progress. See PLAN.md §4.1 for the playbook.
   branch recreation, and the shell wrapper blocks force-push, so the
   rebase (onto main @ 6048aac, Project.toml conflict resolved) landed
   via API-delete + fresh push + new PR.
-  **CI (run 1, @1292b25):** consumer-e2e PASS; rust-cli, python, julia×4
-  FAIL — but all three are **pre-existing upstream failures at HEAD**
-  (verified against main's own runs): rust fails on
-  `gaschem/stratospheric/*` diffsol "Step size is too small"; python on
-  `atmospheric_dynamics/wsm6/cold_accretion.esm` unlowered_operator;
-  julia on `atmospheric_dynamics/ysu/ysu.esm` document tests. Our MOSART
-  files PASS everywhere the harness reaches them (rust 115/0/0; python
-  all 6 OK). One failure WAS ours: julia's `Pkg.test()` broke at the
-  harness level ("Package Test not found") because my rebase-conflict
-  rewrite of `Project.toml` dropped `[extras]`/`[targets]` — fixed in
-  `6047fa9` (restored verbatim; delta vs main is only the compat bump),
-  CI re-run in progress.
+  **CI (@1292b25 + @6047fa9):** consumer-e2e PASS; rust-cli, python,
+  julia×4 FAIL — but **all three runner failures are pre-existing
+  upstream breakages at HEAD, none from our files**, which pass on every
+  runner that reaches them (rust 115P/0F/0E; python all 6 files OK;
+  julia never reaches the sweep):
+  - rust: `gaschem/stratospheric/*` diffsol "Step size is too small" —
+    identical on main's own runs (39485217759).
+  - python: `atmospheric_dynamics/wsm6/cold_accretion.esm`
+    unlowered_operator — identical on main's own runs.
+  - julia: **upstream moving-HEAD breakage** — CI resolves EarthSciAST
+    from `rev=main`, which moved past v0.5.0 (SciML v3 merge #571):
+    EarthSciAST itself fails to PRECOMPILE on Julia 1.13.3
+    (SchemaValidationError) before any file loads. Reproduced locally:
+    f6f8a4bfd (v0.5.0) precompiles fine on 1.13.3; 408dabcb3 (current
+    main) fails identically. Affects every EarthSciModels PR at HEAD.
+    Our files verified under the Julia walker (115P/0F) at v0.5.0.
+  - One failure WAS ours (fixed `6047fa9`): my rebase-conflict rewrite
+    of `Project.toml` dropped `[extras]`/`[targets]` → `Pkg.test()`
+    "Package Test not found"; restored verbatim, delta vs main is only
+    the documented `EarthSciAST = "0.5"` compat bump (still correct:
+    with 0.3 the Julia resolve fails outright with "empty intersection").
+  Full diagnosis posted on the PR.
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
