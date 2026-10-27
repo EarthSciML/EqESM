@@ -296,8 +296,19 @@ In progress. See PLAN.md §4.1 for the playbook.
   PR history: #32 (pre-rebase) closed — GitHub refuses reopen after a
   branch recreation, and the shell wrapper blocks force-push, so the
   rebase (onto main @ 6048aac, Project.toml conflict resolved) landed
-  via API-delete + fresh push + new PR. CI pending (julia×4, python,
-  rust-cli, build; consumer-e2e already PASS).
+  via API-delete + fresh push + new PR.
+  **CI (run 1, @1292b25):** consumer-e2e PASS; rust-cli, python, julia×4
+  FAIL — but all three are **pre-existing upstream failures at HEAD**
+  (verified against main's own runs): rust fails on
+  `gaschem/stratospheric/*` diffsol "Step size is too small"; python on
+  `atmospheric_dynamics/wsm6/cold_accretion.esm` unlowered_operator;
+  julia on `atmospheric_dynamics/ysu/ysu.esm` document tests. Our MOSART
+  files PASS everywhere the harness reaches them (rust 115/0/0; python
+  all 6 OK). One failure WAS ours: julia's `Pkg.test()` broke at the
+  harness level ("Package Test not found") because my rebase-conflict
+  rewrite of `Project.toml` dropped `[extras]`/`[targets]` — fixed in
+  `6047fa9` (restored verbatim; delta vs main is only the compat bump),
+  CI re-run in progress.
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
