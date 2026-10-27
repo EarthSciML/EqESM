@@ -208,13 +208,14 @@
    }
   },
   "sea_freezing_temperature": {
-   "description": "Ocean freezing temperature under the default tfrz_option = 'mushy' (icepack_sea_freezing_temperature, icepack_therm_shared.F90:404-406): Tf = liquidus_temperature_mush(sss). The other namelist branches (icepack_parameters.F90:171) are 'linear_salt' (Tf = -depressT*sss, F90:408-410), 'constant' (Tf = Tocnfrz = -1.8, F90:412-414, icepack_parameters.F90:80), and 'minus1p8' (Tf = -1.8, F90:416-418).",
+   "description": "Ocean freezing temperature as imported under CESMCOUPLED (bugs.md #6; ice_import_export.F90:818-821): Tf = max(sss/(-18.48+0.01848*sss), -2.0), the Assur-1958 liquidus of shr_frz_freezetemp (share/shr_frz_mod.F90.in:94-105, the -2 C clamp of F90:104). The imported sss is already clamped to >= 0 (ice_import_export.F90:814-816). This is the same law as the mushy branch of icepack_sea_freezing_temperature (icepack_therm_shared.F90:404-406) for sss >= 0; the other icepack tfrz_option branches ('linear_salt', 'constant', 'minus1p8', icepack_parameters.F90:171) are not used in the coupled import path.",
    "params": ["sss"],
    "body": {
-    "op": "apply_expression_template",
-    "args": [],
-    "name": "liquidus_temperature_mush",
-    "bindings": { "Sbr": "sss" }
+    "op": "max",
+    "args": [
+     { "op": "/", "args": ["sss", { "op": "+", "args": [-18.48, { "op": "*", "args": [0.01848, "sss"] }] }] },
+     -2.0
+    ]
    }
   },
   "ice_temperature_from_enthalpy": {

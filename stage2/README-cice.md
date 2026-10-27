@@ -197,18 +197,117 @@ descriptions. Representative transcriptions:
 
 ## Testing
 
-The `tests` blocks are `[]` with TODO notes in the metadata: the numeric
-tuples come from the stage-1 instrumentation dumps (`stage1/dumps/cice/`),
-which are not yet produced for CICE. When the dumps land, each subcomponent
-gains instantaneous tests (time_span {0,0}) pinning the transcribed laws
-per-category (albedo/absorbed solar, enthalpy↔temperature round-trips,
-conductivity/kh, fsurfn components, congelation qbot, fbot, melt-pond dvn,
-strength/viscosities, the stress targets, the export aggregation rows), and
-the assembly gains the one-coupling-period trace over [0, 3600] from the cold
-start, following the MOSART skeleton's testing pattern.
+The stage-2 `tests` blocks pin the stage-1 instrumentation dumps
+(`stage1/dumps/cice/`) with instantaneous laws (`time_span {0,0}`, MOSART
+pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 
-`esm validate` on each file must pass; `esm test` currently reports 0
-assertions everywhere.
+| file | tests | assertions | what is pinned |
+|---|---|---|---|
+| `cice_coupling.esm` | 29 | 32 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, and the air-ice stress exports |
+| `cice_thermodynamics.esm` | 0 | 0 | none — the run's configuration (ktherm = 2 mushy, MU71, dEdd, nilyr = 8/nslyr = 3, hlid, similarity) exercises none of the transcribed laws (see coverage limits) |
+| `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
+| `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
+| `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
+
+All 32 coupling assertions reproduce the dumped values to round-off
+(`rel 1e-12`); every expected value traces to a specific dump row (step, cell,
+ncat) cited in the test description.
+
+### Derived inputs (the raw CMEPS fields are not dumped)
+
+The run dumps the fields *after* the import mapping (`cice_run_imports.csv`).
+The raw CMEPS inputs are reconstructed by inverting the same law, and the .esm
+must reproduce the dumped value:
+
+- `Faxa_*` / `Fioo_q` = dumped import / `med2mod_areacor`. The mesh areacor ≈
+  1.00033 (not 1), so the scaling genuinely bites (e.g. `flw = Faxa_lwdn·areacor`).
+- `Faxa_rain` = dumped frain × 1000 / areacor (the kg/m²/s → m/s rhofresh
+  conversion; pinned with the nonzero step-2 rain rows — step 1 is rain-free).
+- `Sa_ptem` / `Sa_dens` = the dumped potT / rhoa. The dump rows have
+  `potT = Tair` exactly, so the run used the Sa_ptem/Sa_dens branch; the
+  Sa_pbot fallback is not exercised (inverting the dumped rhoa gives
+  pbot = 99250.47 Pa, which would yield potT = 270.92 K, not the dumped
+  270.34 K) and carries no dump-based pin.
+- Per-category flux inputs for the export aggregation (fsensn, flatn, evapn,
+  swabs, flwoutn, fhocnn, freshn, fsaltn, fswthrun) are not dumped — only the
+  merged `cice_flux.csv` values are. The tests use the uniform per-category
+  value that makes the aicen-weighted sum reproduce the dumped `exit` value
+  (`flwoutn = exit flwout + (1−emissivity)·flw` for the outgoing-longwave
+  emissivity correction). The albedo and state pins use real per-category data:
+  `cice_albedo.csv` outputs × the coupling-time state of `cice_thermo_state.csv`
+  entry(S+1) — in the nuopc driver the export at the end of step S runs after
+  step S's dynamics (step_radiation at CICE_RunMod.F90:353, coupling_prep at
+  :363), so exports(S) = entry(S+1) to round-off.
+- `strairxT` / `strairyT` = dumped `Faii_taux` / `Faii_tauy` × aice / areacor
+  (inversion of the scale_fluxes + export chain; the pre-scale T-point stress
+  is not dumped).
+
+### Transcription fixes found while writing the tests
+
+1. **scale_fluxes `/aice` division missing.** `scale_fluxes`
+   (cicecore/cicedyn/general/ice_flux.F90:1565-1592) divides the aggregated
+   albedos, stresses, and fluxes by the ice area aice, so the coupled exports
+   are per unit ice area; the skeleton's aggregation equations omitted the
+   division. Dump-proven: Si_avsdr = 0.97303 = sum(albedo·aicen)/ailohi =
+   0.967465/0.994260. Fixed in `cice_coupling.esm`: the 13 aggregation
+   equations and Faii_taux/tauy now divide by `aice`, with the ice_flux.F90
+   line citations.
+2. **Faii_lwup ifelse arity.** The outgoing-longwave fix
+   (ice_import_export.F90:1149-1164) was transcribed with a malformed
+   3-argument `>` (only caught at test-compile time:
+   `invalid_operator_arity: operator '>' takes exactly 2 argument(s)`); rebuilt
+   as `ifelse(flwout > -1e-11, -stefan_boltzmann·(Tf+Tffresh)^4/ailohi, flwout)
+   · mod2med_areacor`.
+3. **Tf law.** The `sea_freezing_temperature` template transcribed the icepack
+   mushy liquidus, but the coupled import path (CESMCOUPLED) computes
+   `Tf = shr_frz_freezetemp(sss) = max(sss/(-18.48+0.01848·sss), -2.0)`
+   (share/shr_frz_mod.F90.in:94-105, ice_import_export.F90:818-821; bugs.md
+   #6). Updated the template; all 384 dumped rows match the coupled law to
+   round-off (the −2 °C clamp is not exercised: the run's sss < 35.64 psu).
+
+### Coverage limits (why the other files have no tests)
+
+- **Thermodynamics configuration mismatch.** The run
+   (stage1/cime/cases/D_cice_inst/run/ice_in) used ktherm = 2 (mushy) with
+   nilyr = 8/nslyr = 3, conduct = MU71, shortwave = dEdd, frzpnd = hlid,
+   kstrength = 1 (Rothrock), and atmbndy = similarity (the default); the
+   skeleton deliberately transcribes the icepack defaults (BL99 7/1, bubbly,
+   ccsm3 albedos, cesm pond, constant atmo, Hibler strength). The dEdd
+   albedos of `cice_albedo.csv` differ from the ccsm3 analytic laws by up to
+   ~10% (ncat 2, step 2: alvdfn = 0.9527 vs 0.8598), the Rothrock strength
+   P = 3.21e5 differs from the Hibler value 5.47e5, and the similarity scheme
+   gives nonzero Si_u10/Si_tref/Si_qref (1.104, 266.36, 1.95e-3) where the
+   transcribed constant scheme gives zero — so no dump value pins the
+   transcribed thermodynamics equations.
+- **Tsfc tracer not dumped.** The nt_Tsfc tracer reads 0 in every
+   `cice_thermo_state.csv` row (aggregate and per-category), so the Si_t
+   export and any surface-temperature law are unpinnable; the real value is
+   visible only in the exports (Si_t = 258.49 K at step 0, Tsfc ≈ −14.7 °C).
+- **Spatial-D lowering blocks dynamics/transport/assembly tests.** The
+   internal-stress divergence (strintx = D(sigma11,x) + D(sigma12,y)) and the
+   transport continuity D(aicen·u) are spatial rewrite targets (esm-spec 4.2);
+   an unlowered spatial D makes the whole-model compile fail
+   (`unlowered_operator: rewrite-target operator D reached evaluation without
+   being lowered`), even for `{0,0}` tests asserting only non-D variables, so
+   `cice_dynamics.esm`, `cice_transport.esm`, and `cice.esm` carry `tests: []`.
+   The EVP momentum/stress and ice-strength dumps (`cice_evp_momentum.csv`,
+   `cice_evp_stress.csv`, `cice_ice_strength.csv`, `cice_dyn_state.csv`,
+   `cice_transport_state.csv`) will be pinned once the EarthSciDiscretizations
+   lowering lands (stage 3).
+- **fswthru merge timing.** `merge_fluxes` weights fswthrun by the mid-thermo
+   aicen (icepack_therm_vertical.F90:3169), which is not a dumped state; a
+   per-category fswthru pin misses the dump by 0.1-18%, so Fioi_swpen uses the
+   uniform construction. The per-category fswthrun of `cice_albedo.csv` stays
+   available for the stage-3 dEdd tests.
+- **Si_t, the Sa_pbot branch, and the lwup fix branch** are unpinned (Tsfc
+   tracer not dumped; pbot branch not exercised by the run; flwout < −puny on
+   the ice-covered cell so the outgoing-longwave substitution never fires).
+- **Per-band Fioi_swpen_vdr/vdf/idr/idf** are dumped, but the stage-2 skeleton
+   carries them as deferred zero parameters; `cice_budget.csv` has a single
+   diagnostics row (hemispheric budgets are a stage-3 assembly concern).
+
+`esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
+assertions plus the 32 CICE coupling assertions with 0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)
 
