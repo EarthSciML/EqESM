@@ -1,0 +1,1924 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice_coupling",
+  "description": "CICE cap-boundary component (stage 2 of the EqESM project): the med<->ice field conversions and the export aggregation of ice_import_export.F90 (cesm3_cice6_6_3_22, cicecore/drivers/nuopc/cmeps/) as algebraic equations, per the stage1/boundaries.md 1.3 boundary table. Imports (med -> ice), exactly ice_import (F90:414-700): the ocean state So_t -> sst, So_s -> sss, So_u/So_v -> uocn/vocn, So_dhdx/So_dhdy -> ss_tltx/ss_tlty (F90:477-482, 610-624); the atmosphere state Sa_z -> zlvl, Sa_tbot -> Tair, Sa_shum -> Qa, Sa_u/Sa_v -> uatm/vatm (F90:487-501, 606-608); the potential-temperature branch Sa_ptem -> potT and Sa_dens -> rhoa when both are present, else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 and rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) with the Fortran's zero/1.2 fallbacks (F90:503-515, 655-681); the flux imports Fioo_q -> frzmlt, Faxa_swvdr/swndr/swvdf/swndf -> swvdr/swidr/swvdf/swidf, Faxa_lwdn -> flw, Faxa_rain -> frain, Faxa_snow -> fsnow, each multiplied by med2mod_areacor (F90:529-575) with frain converted kg/m2/s -> m/s by rhofresh for the melt-pond consumption (icepack_meltpond_lvl.F90:160). Exports (ice -> med), exactly ice_export (F90:1030-1317) and the merge_fluxes aggregation of icepack_flux.F90:180-260: the ice-fraction scaling ailohi = min(aice, 1) (F90:949) and the state fields Si_ifrac, Si_t = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; the trcr(:,nt_Tsfc) aggregate of icepack_aggregate), Si_avsdr/anidr/avsdf/anidf = sum_n(albedo*aicen) (direct = diffuse under the ccsm3 shortwave scheme, icepack_shortwave.F90:568-572), Si_vice = sum_n vicen, Si_vsno = sum_n vsnon, Si_snowh = vsno/ailohi for ailohi > 0 (F90:1121-1129); the air-ice fluxes Faii_taux/tauy = strairxT/strairyT (the T-point atmo stress of the constant boundary-layer scheme, F90:962-964), Faii_lat/sen = sum_n(flatn/fsensn*aicen) (icepack_flux.F90:204-206), Faii_lwup = sum_n((flwoutn-(1-emissivity)*flw)*aicen) with the outgoing-longwave fix -stefan_boltzmann*(Tf+Tffresh)^4/ailohi where flwout > -puny (F90:213-215, 1149-1164), Faii_evap = sum_n(evapn*aicen), Faii_swnet = sum_n(swabs*aicen); and the ice-ocean fluxes Fioi_swpen = sum_n(fswthru*aicen) (F90:247), Fioi_melth = sum_n(fhocnn*aicen), Fioi_meltw = sum_n(freshn*aicen), Fioi_salt = sum_n(fsaltn*aicen), Fioi_taux/tauy = -strocnxT/strocnyT (F90:966-968, the sign flip of the ice-into-ocean stress convention). All Faii_*/Fioi_* exports carry mod2med_areacor (state_setexport areacor, F90:1051-1317); the Si_* state exports do not. The wave (Si_thick, Si_floediam), aerosol (Fioi_bcpho/bcphi, Fioi_flxdst), isotope (Fioi_meltw_wiso, Faii_evap_wiso, Si_qref_wiso), and per-band penetration (Fioi_swpen_vdr/vdf/idr/idf) exports are deferred and carried as zero parameters; the reference-height exports Si_u10/Si_tref/Si_qref are zero under the transcribed constant atmbndy scheme (atmo_boundary_const does not compute Tref/Qref/Uref; the similarity scheme is deferred). The POP-grid rotation of tauxa/tauya/tauxo/tauyo (ANGLET, F90:962-968) and the tmask ocean-mask guards collapse to the identity on the single-cell skeleton and are documented in the descriptions. The Tf ocean freezing temperature is the tfrz_option = 'mushy' liquidus of icepack_sea_freezing_temperature (icepack_therm_shared.F90:404-406) via the shared template. The tests block is empty pending the stage-1 instrumentation dumps (stage1/dumps/cice/). Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90."
+ },
+ "index_sets": {
+  "ncat": {
+   "kind": "interval",
+   "size": "N_CAT"
+  }
+ },
+ "metaparameters": {
+  "N_CAT": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of ice thickness categories (namelist ncat = 5), [-]"
+  }
+ },
+ "models": {
+  "IceCap": {
+   "expression_template_imports": [
+    {
+     "ref": "./cice_templates.esm"
+    }
+   ],
+   "variables": {
+    "zlvl": {
+     "type": "unknown",
+     "units": "m",
+     "description": "atmosphere level height above the surface (import Sa_z, ice_import_export.F90:487-489, 590-591), [m]"
+    },
+    "Tair": {
+     "type": "unknown",
+     "units": "K",
+     "description": "air temperature at the lowest model level (import Sa_tbot, F90:500-501), [K]"
+    },
+    "Qa": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "air specific humidity at the lowest model level (import Sa_shum, F90:505-506), [kg/kg]"
+    },
+    "sst": {
+     "type": "unknown",
+     "units": "degC",
+     "description": "sea surface temperature (import So_t, F90:477-478, 580-581; degC internally, Tffresh added where Kelvin is needed), [C]"
+    },
+    "sss": {
+     "type": "unknown",
+     "units": "ppt",
+     "description": "sea surface salinity (import So_s, F90:480-481, 583-584), [ppt]"
+    },
+    "uocn": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "ocean surface current, x (import So_u, F90:605-606), [m/s]"
+    },
+    "vocn": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "ocean surface current, y (import So_v), [m/s]"
+    },
+    "uatm": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "x wind velocity at zlvl (import Sa_u, F90:607-608; on the T grid, rotated to the model grid by ANGLET in prepare_forcing, ice_forcing.F90:1800-1807 - the identity on the single-cell skeleton), [m/s]"
+    },
+    "vatm": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "y wind velocity at zlvl (import Sa_v), [m/s]"
+    },
+    "ss_tltx": {
+     "type": "unknown",
+     "units": "1",
+     "description": "x sea-surface slope for the coupled tilt stress (import So_dhdx, F90:608-609), [-]"
+    },
+    "ss_tlty": {
+     "type": "unknown",
+     "units": "1",
+     "description": "y sea-surface slope (import So_dhdy), [-]"
+    },
+    "frzmlt": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "ocean-to-ice heat flux available for bottom melt (import Fioo_q, the SOM 'freezing-melting' flux, F90:529-532, times med2mod_areacor), [W/m2]"
+    },
+    "swvdr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward shortwave, visible, direct (import Faxa_swvdr, F90:534-537, times med2mod_areacor), [W/m2]"
+    },
+    "swidr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward shortwave, near-IR, direct (import Faxa_swndr, F90:538-541), [W/m2]"
+    },
+    "swvdf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward shortwave, visible, diffuse (import Faxa_swvdf, F90:542-545), [W/m2]"
+    },
+    "swidf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward shortwave, near-IR, diffuse (import Faxa_swndf, F90:546-549), [W/m2]"
+    },
+    "flw": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward longwave radiation (import Faxa_lwdn, F90:550-553, times med2mod_areacor), [W/m2]"
+    },
+    "frain": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "rainfall rate in m/s: the cap Faxa_rain kg/m2/s field times med2mod_areacor divided by rhofresh = 1000 (the melt-pond code consumes frain in m/s via the frain*dt term, icepack_meltpond_lvl.F90:160), [m/s]"
+    },
+    "fsnow": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "snowfall rate (import Faxa_snow, F90:558-561, times med2mod_areacor; kg/m2/s is what the thermodynamics consumes; the new-snow thickness is fsnow*dt/rhos, icepack_therm_vertical.F90:1640-1650), [kg/m2/s]"
+    },
+    "potT": {
+     "type": "unknown",
+     "units": "K",
+     "description": "air potential temperature: the Sa_ptem import when Sa_ptem and Sa_dens are present (F90:503-508, 655-656); else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 when the pressure is positive, else 0 (F90:660-668), [K]"
+    },
+    "rhoa": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "air density: the Sa_dens import when present (F90:503-508, 657); else the Sa_pbot branch rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) when Tair /= 0, else 1.2 (F90:669-679), [kg/m3]"
+    },
+    "Tf": {
+     "type": "unknown",
+     "units": "degC",
+     "description": "ocean freezing temperature under tfrz_option = 'mushy' (icepack_sea_freezing_temperature, icepack_therm_shared.F90:404-406; the Assur-1958 liquidus of icepack_mushy_physics.F90:227-261), used by the Faii_lwup fix, [C]"
+    },
+    "aice": {
+     "type": "unknown",
+     "units": "1",
+     "description": "aggregate ice concentration aice = sum_n aicen (icepack_aggregate; the coupling ice fraction of ice_state%aice), [-]"
+    },
+    "vice": {
+     "type": "unknown",
+     "units": "m",
+     "description": "aggregate ice volume per unit grid-cell area vice = sum_n vicen, [m]"
+    },
+    "vsno": {
+     "type": "unknown",
+     "units": "m",
+     "description": "aggregate snow volume per unit grid-cell area vsno = sum_n vsnon, [m]"
+    },
+    "ailohi": {
+     "type": "unknown",
+     "units": "1",
+     "description": "ice area for the coupler scaling: ailohi = min(aice, 1) (ice_import_export.F90:949), [-]"
+    },
+    "Tsrf": {
+     "type": "unknown",
+     "units": "K",
+     "description": "ice surface temperature in Kelvin, the trcr(:,nt_Tsfc) aggregate: Tsrf = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; icepack_aggregate), [K]"
+    },
+    "alvdr": {
+     "type": "unknown",
+     "units": "1",
+     "description": "aggregate visible-direct albedo Si_avsdr = sum_n(alvdrn*aicen) (merge_fluxes/icepack_aggregate; direct = diffuse under the ccsm3 scheme, icepack_shortwave.F90:568-572), [-]"
+    },
+    "alidr": {
+     "type": "unknown",
+     "units": "1",
+     "description": "aggregate near-IR-direct albedo Si_anidr = sum_n(alidrn*aicen), [-]"
+    },
+    "alvdf": {
+     "type": "unknown",
+     "units": "1",
+     "description": "aggregate visible-diffuse albedo Si_avsdf = sum_n(alvdfn*aicen), [-]"
+    },
+    "alidf": {
+     "type": "unknown",
+     "units": "1",
+     "description": "aggregate near-IR-diffuse albedo Si_anidf = sum_n(alidfn*aicen), [-]"
+    },
+    "fsens": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate sensible heat flux Faii_sen = sum_n(fsensn*aicen) (merge_fluxes, icepack_flux.F90:204), [W/m2]"
+    },
+    "flat": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate latent heat flux Faii_lat = sum_n(flatn*aicen) (icepack_flux.F90:206), [W/m2]"
+    },
+    "fswabs": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate shortwave absorbed in ice and ocean Faii_swnet = sum_n(swabs*aicen) (icepack_flux.F90:210), [W/m2]"
+    },
+    "flwout": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate outgoing longwave: flwout = sum_n((flwoutn-(1-emissivity)*flw)*aicen) (icepack_flux.F90:213-215; emissivity = 0.985), [W/m2]"
+    },
+    "evap": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "aggregate evaporative water flux Faii_evap = sum_n(evapn*aicen) (icepack_flux.F90:219), [kg/m2/s]"
+    },
+    "fhocn": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate net heat flux to the ocean Fioi_melth = sum_n(fhocnn*aicen) (icepack_flux.F90:253), [W/m2]"
+    },
+    "fresh": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "aggregate fresh-water flux to the ocean Fioi_meltw = sum_n(freshn*aicen) (icepack_flux.F90:255), [kg/m2/s]"
+    },
+    "fsalt": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "aggregate salt flux to the ocean Fioi_salt = sum_n(fsaltn*aicen) (icepack_flux.F90:257), [kg/m2/s]"
+    },
+    "Si_ifrac": {
+     "type": "unknown",
+     "units": "1",
+     "description": "ice fraction sent to the mediator: Si_ifrac = ailohi (ice_import_export.F90:1044-1045), [-]"
+    },
+    "Si_t": {
+     "type": "unknown",
+     "units": "K",
+     "description": "surface temperature of the ice-covered portion in Kelvin: Si_t = Tsrf (F90:1073-1074; the state_setexport ifrac=ailohi scaling divides by the ice fraction on the mediator side), [K]"
+    },
+    "Si_avsdr": {
+     "type": "unknown",
+     "units": "1",
+     "description": "visible-direct albedo state export Si_avsdr = alvdr (F90:1077-1078), [-]"
+    },
+    "Si_anidr": {
+     "type": "unknown",
+     "units": "1",
+     "description": "near-IR-direct albedo state export Si_anidr = alidr (F90:1081-1082), [-]"
+    },
+    "Si_avsdf": {
+     "type": "unknown",
+     "units": "1",
+     "description": "visible-diffuse albedo state export Si_avsdf = alvdf (F90:1085-1086), [-]"
+    },
+    "Si_anidf": {
+     "type": "unknown",
+     "units": "1",
+     "description": "near-IR-diffuse albedo state export Si_anidf = alidf (F90:1089-1090), [-]"
+    },
+    "Si_vsno": {
+     "type": "unknown",
+     "units": "m",
+     "description": "snow volume state export Si_vsno = vsno (F90:1105-1106), [m]"
+    },
+    "Si_vice": {
+     "type": "unknown",
+     "units": "m",
+     "description": "ice volume state export Si_vice = vice (F90:1109-1110), [m]"
+    },
+    "Si_snowh": {
+     "type": "unknown",
+     "units": "m",
+     "description": "snow depth over the ice-covered area: Si_snowh = vsno/ailohi for ailohi > 0, else 0 (F90:1121-1129), [m]"
+    },
+    "Faii_taux": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "zonal air-ice stress export: Faii_taux = strairxT*mod2med_areacor (F90:1052-1057; the Fortran rotates the T-point stress to lat-lon with ANGLET, F90:962-964 - the identity on the single-cell skeleton), [N/m2]"
+    },
+    "Faii_tauy": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "meridional air-ice stress export: Faii_tauy = strairyT*mod2med_areacor (F90:1058-1063), [N/m2]"
+    },
+    "Faii_lat": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "latent heat flux export Faii_lat = flat*mod2med_areacor (F90:1064-1069), [W/m2]"
+    },
+    "Faii_sen": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "sensible heat flux export Faii_sen = fsens*mod2med_areacor (F90:1070-1075), [W/m2]"
+    },
+    "Faii_lwup": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "outgoing longwave export Faii_lwup = flwout*mod2med_areacor with the fix: where flwout > -puny the Fortran substitutes -stefan_boltzmann*(Tf+Tffresh)^4/ailohi (F90:1149-1164, the aice_init = 0 case; tmask guard dropped on the single-cell skeleton), [W/m2]"
+    },
+    "Faii_evap": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "evaporative water flux export Faii_evap = evap*mod2med_areacor (F90:1166-1171), [kg/m2/s]"
+    },
+    "Faii_swnet": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "shortwave absorbed in ice and ocean export Faii_swnet = fswabs*mod2med_areacor (F90:1172-1177), [W/m2]"
+    },
+    "Fioi_swpen": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "shortwave through the ice to the ocean export Fioi_swpen = fswthru*mod2med_areacor (F90:1180-1185), [W/m2]"
+    },
+    "Fioi_melth": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "heat flux to the ocean export Fioi_melth = fhocn*mod2med_areacor (F90:1222-1227), [W/m2]"
+    },
+    "Fioi_meltw": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "fresh-water flux to the ocean export Fioi_meltw = fresh*mod2med_areacor (F90:1228-1233), [kg/m2/s]"
+    },
+    "Fioi_salt": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "salt flux to the ocean export Fioi_salt = fsalt*mod2med_areacor (F90:1234-1239), [kg/m2/s]"
+    },
+    "Fioi_taux": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "zonal ice-ocean stress export: Fioi_taux = -strocnxT*mod2med_areacor (F90:1240-1245; the Fortran's tauxo = -strocnxT_iavg, the T-point average of the U-point stress strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072, rotated with ANGLET - the single-cell skeleton collapses the X2Y mapping and consumes the dynamics component's full ocean stress taux of dyn_finish, ice_dyn_shared.F90:1345-1348), [N/m2]"
+    },
+    "Fioi_tauy": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "meridional ice-ocean stress export: Fioi_tauy = -strocnyT*mod2med_areacor (F90:1246-1251), [N/m2]"
+    },
+    "Sa_z": {
+     "type": "parameter",
+     "units": "m",
+     "default": 10.0,
+     "description": "atmosphere reference height of the lowest model level (CMEPS Sa_z, m), [m]"
+    },
+    "Sa_tbot": {
+     "type": "parameter",
+     "units": "K",
+     "default": 271.0,
+     "description": "air temperature at the lowest model level (CMEPS Sa_tbot), [K]"
+    },
+    "Sa_shum": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.002,
+     "description": "air specific humidity at the lowest model level (CMEPS Sa_shum), [kg/kg]"
+    },
+    "Sa_ptem": {
+     "type": "parameter",
+     "units": "K",
+     "default": 271.0,
+     "description": "air potential temperature (CMEPS Sa_ptem), [K]"
+    },
+    "Sa_dens": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1.2,
+     "description": "air density (CMEPS Sa_dens), [kg/m3]"
+    },
+    "Sa_pbot": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 100000.0,
+     "description": "air pressure at the lowest model level (CMEPS Sa_pbot), [Pa]"
+    },
+    "Sa_u": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "x wind velocity at zlvl (CMEPS Sa_u), [m/s]"
+    },
+    "Sa_v": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "y wind velocity at zlvl (CMEPS Sa_v), [m/s]"
+    },
+    "So_t": {
+     "type": "parameter",
+     "units": "degC",
+     "default": -1.8,
+     "description": "sea surface temperature (CMEPS So_t, degC), [C]"
+    },
+    "So_s": {
+     "type": "parameter",
+     "units": "ppt",
+     "default": 34.0,
+     "description": "sea surface salinity (CMEPS So_s), [ppt]"
+    },
+    "So_u": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "ocean surface current, x (CMEPS So_u), [m/s]"
+    },
+    "So_v": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "ocean surface current, y (CMEPS So_v), [m/s]"
+    },
+    "So_dhdx": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "x sea-surface slope (CMEPS So_dhdx), [-]"
+    },
+    "So_dhdy": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "y sea-surface slope (CMEPS So_dhdy), [-]"
+    },
+    "Fioo_q": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "ocean-to-ice heat flux (CMEPS Fioo_q, the SOM freezing-melting flux), [W/m2]"
+    },
+    "Faxa_swvdr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "downward shortwave, visible, direct (CMEPS Faxa_swvdr), [W/m2]"
+    },
+    "Faxa_swndr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "downward shortwave, near-IR, direct (CMEPS Faxa_swndr), [W/m2]"
+    },
+    "Faxa_swvdf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "downward shortwave, visible, diffuse (CMEPS Faxa_swvdf), [W/m2]"
+    },
+    "Faxa_swndf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "downward shortwave, near-IR, diffuse (CMEPS Faxa_swndf), [W/m2]"
+    },
+    "Faxa_lwdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 200.0,
+     "description": "downward longwave radiation (CMEPS Faxa_lwdn), [W/m2]"
+    },
+    "Faxa_rain": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "rainfall rate (CMEPS Faxa_rain, kg/m2/s = mm/s of water), [kg/m2/s]"
+    },
+    "Faxa_snow": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "snowfall rate (CMEPS Faxa_snow, kg/m2/s = mm/s of water), [kg/m2/s]"
+    },
+    "Sa_ptem_dens_present": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "1 when the mediator sends Sa_ptem and Sa_dens (the primary potT/rhoa branch of ice_import_export.F90:503-515); 0/1 stands in for the Fortran state field check, [-]"
+    },
+    "Sa_pbot_present": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 when the mediator sends Sa_pbot instead (the potT/rhoa fallback branch, F90:515-527, 658-681); 0/1 stands in for the state field check, [-]"
+    },
+    "med2mod_areacor": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "mediator-to-model area correction factor applied to the imported flux fields (state_getimport areacor, ice_import_export.F90:529-575), ~1 on the ice mesh, [-]"
+    },
+    "mod2med_areacor": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "model-to-mediator area correction factor applied to the exported flux fields (state_setexport areacor, F90:1051-1317), ~1 on the ice mesh, [-]"
+    },
+    "Tsfc": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "degC",
+     "default": 0.0,
+     "description": "per-category ice/snow surface temperature (wired from the thermodynamics component; the aggregate trcr(:,nt_Tsfc) of icepack_aggregate weights it by aicen), [C]"
+    },
+    "aicen": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category ice area fraction (wired from the transport component), [-]"
+    },
+    "vicen": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "per-category ice volume per unit grid-cell area (wired from the transport component), [m]"
+    },
+    "vsnon": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "per-category snow volume per unit grid-cell area (wired from the transport component), [m]"
+    },
+    "alvdrn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category visible-direct albedo (wired from the thermodynamics component), [-]"
+    },
+    "alidrn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category near-IR-direct albedo, [-]"
+    },
+    "alvdfn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category visible-diffuse albedo, [-]"
+    },
+    "alidfn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category near-IR-diffuse albedo, [-]"
+    },
+    "fsensn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category sensible heat flux (wired from the thermodynamics component), [W/m2]"
+    },
+    "flatn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category latent heat flux, [W/m2]"
+    },
+    "swabs": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category total shortwave absorbed at the surface, [W/m2]"
+    },
+    "flwoutn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category outgoing longwave flux, [W/m2]"
+    },
+    "evapn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "per-category sublimation/condensation water flux, [kg/m2/s]"
+    },
+    "fhocnn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category net heat flux to the ocean, [W/m2]"
+    },
+    "freshn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "per-category fresh-water flux to the ocean, [kg/m2/s]"
+    },
+    "fsaltn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "per-category salt flux to the ocean, [kg/m2/s]"
+    },
+    "strairxT": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "T-point x air-ice stress (wired from the assembly Control model, the atmo_boundary_const stress of icepack_atmo.F90:460-464 aggregated by aicen in merge_fluxes, icepack_flux.F90:187-189), [N/m2]"
+    },
+    "strairyT": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "T-point y air-ice stress, [N/m2]"
+    },
+    "strocnxT": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "x ice-ocean stress at T points for the export sign flip (wired from the dynamics component's full ocean stress taux, dyn_finish, ice_dyn_shared.F90:1345-1348; see Fioi_taux), [N/m2]"
+    },
+    "strocnyT": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "y ice-ocean stress at T points (wired from the dynamics component's tauy), [N/m2]"
+    },
+    "Si_imask": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ocean mask sent to the mediator: Si_imask = ocn_gridcell_frac on the meshnc grid, else nint(hm) (F90:1047-1070); a grid field, deferred on the single-cell skeleton, [-]"
+    },
+    "Si_u10": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "10-m atmosphere reference wind speed export (F90:1093-1094): not computed by the transcribed atmbndy = 'constant' scheme (atmo_boundary_const leaves Uref = 0); computed by the similarity scheme, deferred, [m/s]"
+    },
+    "Si_tref": {
+     "type": "parameter",
+     "units": "K",
+     "default": 0.0,
+     "description": "2-m reference temperature export (F90:1097-1098): zero under the constant atmo scheme (Tref is an output of atmo_boundary_layer only), deferred with the similarity scheme, [K]"
+    },
+    "Si_qref": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "2-m reference specific humidity export (F90:1101-1102): zero under the constant atmo scheme, deferred, [kg/kg]"
+    },
+    "Si_thick": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "floe thickness to the wave component (F90:1136-1141, floethick = vice/aice for aice > puny): the flds_wave coupling is deferred, [m]"
+    },
+    "Si_floediam": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "floe diameter to the wave component (F90:1143-1161): the flds_wave coupling is deferred, [m]"
+    },
+    "Fioi_swpen_vdr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-band shortwave through the ice, visible direct (F90:1193-1198): the per-band fswthru_* fields are not carried by the stage-2 thermodynamics skeleton, deferred, [W/m2]"
+    },
+    "Fioi_swpen_vdf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-band shortwave through the ice, visible diffuse (F90:1199-1204), deferred, [W/m2]"
+    },
+    "Fioi_swpen_idr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-band shortwave through the ice, near-IR direct (F90:1205-1210), deferred, [W/m2]"
+    },
+    "Fioi_swpen_idf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-band shortwave through the ice, near-IR diffuse (F90:1211-1216), deferred, [W/m2]"
+    },
+    "Fioi_bcpho": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "hydrophobic black-carbon flux to the ocean (F90:1272-1277): aerosol coupling (Faxa_bcph/Faxa_dstwet/Faxa_dstdry imports, F90:684-731) is deferred, [kg/m2/s]"
+    },
+    "Fioi_bcphi": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "hydrophilic black-carbon flux to the ocean (F90:1278-1283), deferred, [kg/m2/s]"
+    },
+    "Fioi_flxdst": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "dust flux to the ocean (F90:1284-1289), deferred, [kg/m2/s]"
+    },
+    "Fioi_meltw_wiso": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "water-isotope melt-water flux (F90:1294-1304): isotope tracers are off, deferred, [kg/m2/s]"
+    },
+    "Faii_evap_wiso": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "water-isotope evaporative flux (F90:1306-1316), deferred, [kg/m2/s]"
+    },
+    "Si_qref_wiso": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "water-isotope reference humidity (F90:1317-1321), deferred, [kg/kg]"
+    },
+    "fswthru": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "aggregate shortwave transmitted through the ice Fioi_swpen = sum_n(fswthrun*aicen) (merge_fluxes, icepack_flux.F90:247), [W/m2]"
+    },
+    "fswthrun": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "per-category shortwave transmitted through the ice into the ocean (the Fortran fswthrun, wired from the thermodynamics component), [W/m2]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "zlvl",
+     "rhs": "Sa_z"
+    },
+    {
+     "lhs": "Tair",
+     "rhs": "Sa_tbot"
+    },
+    {
+     "lhs": "Qa",
+     "rhs": "Sa_shum"
+    },
+    {
+     "lhs": "sst",
+     "rhs": "So_t"
+    },
+    {
+     "lhs": "sss",
+     "rhs": "So_s"
+    },
+    {
+     "lhs": "uocn",
+     "rhs": "So_u"
+    },
+    {
+     "lhs": "vocn",
+     "rhs": "So_v"
+    },
+    {
+     "lhs": "uatm",
+     "rhs": "Sa_u"
+    },
+    {
+     "lhs": "vatm",
+     "rhs": "Sa_v"
+    },
+    {
+     "lhs": "ss_tltx",
+     "rhs": "So_dhdx"
+    },
+    {
+     "lhs": "ss_tlty",
+     "rhs": "So_dhdy"
+    },
+    {
+     "lhs": "frzmlt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Fioo_q",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "swvdr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_swvdr",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "swidr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_swndr",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "swvdf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_swvdf",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "swidf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_swndf",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "flw",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_lwdn",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "frain",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "Faxa_rain",
+         "med2mod_areacor"
+        ]
+       },
+       1000.0
+      ]
+     }
+    },
+    {
+     "lhs": "fsnow",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faxa_snow",
+       "med2mod_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "potT",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "Sa_ptem_dens_present",
+         1.0
+        ]
+       },
+       "Sa_ptem",
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           "Sa_pbot_present",
+           1.0
+          ]
+         },
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": ">",
+            "args": [
+             "Sa_pbot",
+             0.0
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "Tair",
+             {
+              "op": "^",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 100000.0,
+                 "Sa_pbot"
+                ]
+               },
+               0.286
+              ]
+             }
+            ]
+           },
+           0.0
+          ]
+         },
+         0.0
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "rhoa",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "Sa_ptem_dens_present",
+         1.0
+        ]
+       },
+       "Sa_dens",
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           "Sa_pbot_present",
+           1.0
+          ]
+         },
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": "!=",
+            "args": [
+             "Tair",
+             0.0
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             "Sa_pbot",
+             {
+              "op": "*",
+              "args": [
+               287.058,
+               {
+                "op": "+",
+                "args": [
+                 1.0,
+                 {
+                  "op": "*",
+                  "args": [
+                   0.608,
+                   "Qa"
+                  ]
+                 }
+                ]
+               },
+               "Tair"
+              ]
+             }
+            ]
+           },
+           1.2
+          ]
+         },
+         1.2
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Tf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "sea_freezing_temperature",
+      "bindings": {
+       "sss": "sss"
+      }
+     }
+    },
+    {
+     "lhs": "aice",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "aicen",
+        "ncat"
+       ]
+      },
+      "args": [
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "vice",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "vicen",
+        "ncat"
+       ]
+      },
+      "args": [
+       "vicen"
+      ]
+     }
+    },
+    {
+     "lhs": "vsno",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "vsnon",
+        "ncat"
+       ]
+      },
+      "args": [
+       "vsnon"
+      ]
+     }
+    },
+    {
+     "lhs": "ailohi",
+     "rhs": {
+      "op": "min",
+      "args": [
+       "aice",
+       1.0
+      ]
+     }
+    },
+    {
+     "lhs": "Tsrf",
+     "rhs": {
+      "op": "+",
+      "args": [
+       273.15,
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "faq",
+          "output_idx": [],
+          "reduce": "+",
+          "ranges": {
+           "ncat": {
+            "from": "ncat"
+           }
+          },
+          "expr": {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "Tsfc",
+              "ncat"
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "aicen",
+              "ncat"
+             ]
+            }
+           ]
+          },
+          "args": [
+           "Tsfc",
+           "aicen"
+          ]
+         },
+         "ailohi"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "alvdr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "alvdrn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "alvdrn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "alidr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "alidrn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "alidrn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "alvdf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "alvdfn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "alvdfn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "alidf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "alidfn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "alidfn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fsens",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "fsensn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "fsensn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "flat",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "flatn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "flatn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fswabs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "swabs",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "swabs",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "flwout",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "flwoutn",
+            "ncat"
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            0.015,
+            "flw"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "flwoutn",
+       "flw",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "evap",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "evapn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "evapn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fswthru",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "fswthrun",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "fswthrun",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fhocn",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "fhocnn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "fhocnn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fresh",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "freshn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "freshn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "fsalt",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "fsaltn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "fsaltn",
+       "aicen"
+      ]
+     }
+    },
+    {
+     "lhs": "Si_ifrac",
+     "rhs": "ailohi"
+    },
+    {
+     "lhs": "Si_t",
+     "rhs": "Tsrf"
+    },
+    {
+     "lhs": "Si_avsdr",
+     "rhs": "alvdr"
+    },
+    {
+     "lhs": "Si_anidr",
+     "rhs": "alidr"
+    },
+    {
+     "lhs": "Si_avsdf",
+     "rhs": "alvdf"
+    },
+    {
+     "lhs": "Si_anidf",
+     "rhs": "alidf"
+    },
+    {
+     "lhs": "Si_vsno",
+     "rhs": "vsno"
+    },
+    {
+     "lhs": "Si_vice",
+     "rhs": "vice"
+    },
+    {
+     "lhs": "Si_snowh",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "ailohi",
+         0.0
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "vsno",
+         "ailohi"
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_taux",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "strairxT",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_tauy",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "strairyT",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_lat",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "flat",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_sen",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fsens",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_lwup",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           {
+            "op": ">",
+            "args": [
+             "flwout",
+             -1e-11
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "*",
+                "args": [
+                 5.67e-08,
+                 {
+                  "op": "^",
+                  "args": [
+                   {
+                    "op": "+",
+                    "args": [
+                     "Tf",
+                     273.15
+                    ]
+                   },
+                   4
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             "ailohi"
+            ]
+           },
+           "flwout"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               5.67e-08,
+               {
+                "op": "^",
+                "args": [
+                 {
+                  "op": "+",
+                  "args": [
+                   "Tf",
+                   273.15
+                  ]
+                 },
+                 4
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "ailohi"
+          ]
+         },
+         "flwout"
+        ]
+       },
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_evap",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "evap",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Faii_swnet",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fswabs",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_swpen",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fswthru",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_melth",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fhocn",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_meltw",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fresh",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_salt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "fsalt",
+       "mod2med_areacor"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_taux",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "strocnxT",
+         "mod2med_areacor"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_tauy",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "strocnyT",
+         "mod2med_areacor"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": []
+  }
+ }
+}

@@ -1,0 +1,488 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice_templates",
+  "description": "Expression-template library for the CICE sea-ice component (stage 2 of the EqESM project): the pointwise physical laws of cesm3_cice6_6_3_22 (checkout stage1/cesm/components/cice), transcribed exactly for use by the thermodynamics, dynamics, transport, and coupling subcomponents. The library carries (a) the shortwave/albedo family of icepack_shortwave.F90: the ccsm3 bare-ice and snow albedos of compute_albedos (F90:466-597) with the thickness factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (F90:541-542), the surface-temperature factor fT = min(Timelt-Tsfcn-1, 0) (F90:548-549), the fractional snow cover asnow = hs/(hs+snowpatch) (F90:575-579), and the absorbed/penetrating shortwave split of absorbed_solar (F90:701-896) with the visible-band extinction law fswpen*exp(-kappav*z) (F90:867) and i0vis = 0.70 (F90:769); (b) the thermodynamics family of icepack_therm_shared.F90 (surface_heat_flux F90:109-167, saturation humidity F90:152-154, liquidus Tmlt = -depressT*Sin F90:383-386, the Assur-1958 mushy liquidus of icepack_mushy_physics.F90:227-261 with the az1/az2 rational form and the Sb_liq break, the l_brine quadratic temperature-from-enthalpy F90:68-101, the fresh-ice and snow enthalpy inversions), of icepack_therm_bl99.F90 (the bubbly-brine Pringle et al. 2007 conductivity kilyr = max((2.11 - 0.011 T + 0.09 S/min(-puny,T)) rhoi/917, kimin) F90:918-924, the MU71 form F90:911-916, the interface conductances kh F90:927-959), of icepack_therm_vertical.F90 (the congelation enthalpy qbot F90:1432-1443, the ocean heat flux fbot of frzmlt_bottom_lateral F90:662-678 with the 0.006 transfer coefficient F90:674 and the Maykut-Perovich m1/m2 lateral law F90:637-640, 679-775), and of icepack_meltpond_lvl.F90 (the 'cesm' melt-pond volume change F90:154-174); (c) the atmosphere family of icepack_atmo.F90 (the constant boundary-layer scheme atmo_boundary_const F90:398-496: tau = rhoa*0.0012*wind F90:460, shcoef = senscoef cp_air rhoa wind and lhcoef = latncoef Lheat rhoa wind F90:493-494, ocean saturation humidity F90:483-484); and (d) the dynamics family of icepack_mechred.F90 (the Hibler 1979 ice strength P = Pstar vice exp(-Cstar (1-aice)) F90:1720), ice_dyn_shared.F90 (the strain-rate invariant Delta F90:2156-2159, the capped viscosity/replacement-pressure split of visc_replpress F90:2467-2471, the ocean-ice stress magnitude and seabed coefficient of stepu F90:931-937), and ice_dyn_evp.F90 (the classic-EVP stress relaxation maps for stressp, stressm, and stress12 F90:1584-1609). All templates are match-less pointwise laws invoked by name via apply_expression_template; the only shared-math dependencies are the two saturation-humidity laws and the shortwave attenuation law, which are factored and referenced by surface_heat_flux, shortwave_through_ice, layer_absorbed_shortwave, and sea_freezing_temperature (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). Constants are the icepack_parameters.F90 module values (rhoi = 917 F90:62, rhos = 330 F90:61, rhow = 1026 F90:65, rhofresh = 1000 F90:66, cp_ice = 2106 F90:74, cp_ocn = 4218 F90:75, Tffresh = 273.15 F90:82, Lsub = 2.835e6 F90:83, Lvap = 2.501e6 F90:84, Lfresh = Lsub - Lvap = 3.34e5 F90:74, depressT = 0.054 F90:77, kice = 2.03 F90:88, ksno = 0.30 F90:90, snowpatch = 0.02 F90:92, puny = 1e-11 F90:36, emissivity = 0.985 F90:156, stefan_boltzmann = 567e-10 F90:159, kappav = 1.4 F90:161, albocn = 0.06 F90:157, albicev = 0.78 F90:166, albicei = 0.36 F90:167, albsnowv = 0.98 F90:168, albsnowi = 0.70 F90:169, ahmax = 0.3 F90:170, ustar_min = 0.005 F90:99, Pstar = 2.75e4 F90:262, Cstar = 20 F90:264, cp_air = 1005 F90:281, qqqice = 11637800 F90:286, TTTice = 5897.8 F90:287, qqqocn = 627572.4 F90:288, TTTocn = 5107.4 F90:289, senscoef = 0.0012 F90:290, latncoef = 0.0015 F90:291, ice_ref_salinity = 4 F90:87, kimin = 0.10 and betak = 0.13 in icepack_therm_bl99.F90:34-35, and the melt-pond Td = 2, rexp = 0.01 in icepack_meltpond_lvl.F90:111-112), the dEdd shortwave tuning (dT_melt = 1, dalb_mlt = -0.075, dalb_mltv = -0.1, dalb_mlti = -0.15, i0vis = 0.70, icepack_shortwave.F90:511-518, 769), and the Assur liquidus constants (az1_liq = -18.48, bz1_liq = 0, az2_liq = -10.3085, bz2_liq = 62.4, Sb_liq = 123.66702800276086, icepack_mushy_physics.F90:36-55)."
+ },
+ "expression_templates": {
+  "snow_cover_fraction": {
+   "description": "Fractional area of snow cover asnow (compute_albedos, icepack_shortwave.F90:574-579): asnow = hs/(hs + snowpatch) when the snow depth hs > puny, else 0. snowpatch = 0.02 m and puny = 1e-11 (icepack_parameters.F90:92, 36).",
+   "params": ["hs"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     { "op": ">", "args": ["hs", 1e-11] },
+     { "op": "/", "args": ["hs", { "op": "+", "args": ["hs", 0.02] }] },
+     0.0
+    ]
+   }
+  },
+  "thickness_albedo_factor": {
+   "description": "Piecewise-linear albedo dependence on ice thickness fh (compute_albedos, icepack_shortwave.F90:541-542): fh = min(atan(hi*4)/atan(ahmax*4), 1). ahmax = 0.3 m (icepack_parameters.F90:170); the Fortran's c4 = 4.0 is the constant of F90:38.",
+   "params": ["hi"],
+   "body": {
+    "op": "min",
+    "args": [
+     { "op": "/", "args": [
+       { "op": "atan", "args": [{ "op": "*", "args": ["hi", 4.0] }] },
+       { "op": "atan", "args": [{ "op": "*", "args": [0.3, 4.0] }] } ] },
+     1.0
+    ]
+   }
+  },
+  "surface_temperature_albedo_factor": {
+   "description": "Piecewise-linear albedo dependence on surface temperature fT (compute_albedos, icepack_shortwave.F90:548-549): fT = min((Timelt - Tsfcn)/dT_melt - 1, 0), with Timelt = 0 C (icepack_parameters.F90:85) and dT_melt = 1 (icepack_shortwave.F90:511).",
+   "params": ["Tsfcn"],
+   "body": {
+    "op": "min",
+    "args": [
+     { "op": "-", "args": [
+       { "op": "/", "args": [{ "op": "-", "args": [0.0, "Tsfcn"] }, 1.0] },
+       1.0 ] },
+     0.0
+    ]
+   }
+  },
+  "bare_ice_albedo": {
+   "description": "Bare-ice albedo with thickness and temperature dependence plus the ocean-albedo floor (compute_albedos, icepack_shortwave.F90:543-555): al = max(albice*fh + albocn*(1-fh) - dalb_mlt*fT, albocn). Used with (albice, dalb_mlt) = (albicev = 0.78, dalb_mlt = -0.075) for visible and (albicei = 0.36, dalb_mlt = -0.075) for near-IR (icepack_parameters.F90:166-167, icepack_shortwave.F90:512-513); albocn = 0.06 (F90:157).",
+   "params": ["albice", "dalb_mlt", "fh", "fT"],
+   "body": {
+    "op": "max",
+    "args": [
+     { "op": "-", "args": [
+       { "op": "+", "args": [
+         { "op": "*", "args": ["albice", "fh"] },
+         { "op": "*", "args": [0.06, { "op": "-", "args": [1.0, "fh"] }] } ] },
+       { "op": "*", "args": ["dalb_mlt", "fT"] } ] },
+     0.06
+    ]
+   }
+  },
+  "snow_albedo": {
+   "description": "Snow albedo with temperature dependence (compute_albedos, icepack_shortwave.F90:559-564): al = albsnow - dalb_mlt*fT. Used with (albsnow, dalb_mlt) = (albsnowv = 0.98, dalb_mltv = -0.1) for visible and (albsnowi = 0.70, dalb_mlti = -0.15) for near-IR (icepack_parameters.F90:168-169, icepack_shortwave.F90:515-516).",
+   "params": ["albsnow", "dalb_mlt", "fT"],
+   "body": { "op": "-", "args": ["albsnow", { "op": "*", "args": ["dalb_mlt", "fT"] }] }
+  },
+  "area_weighted_albedo": {
+   "description": "Ice/snow area-weighted albedo combining the bare-ice and snow albedos (compute_albedos, icepack_shortwave.F90:582-589): al = al_ice*(1-asnow) + al_snow*asnow. The Fortran applies it to the four direct/diffuse, visible/NIR combinations.",
+   "params": ["al_ice", "al_snow", "asnow"],
+   "body": {
+    "op": "+",
+    "args": [
+     { "op": "*", "args": ["al_ice", { "op": "-", "args": [1.0, "asnow"] }] },
+     { "op": "*", "args": ["al_snow", "asnow"] }
+    ]
+   }
+  },
+  "absorbed_shortwave": {
+   "description": "Total shortwave absorbed at the surface swabs (absorbed_solar, icepack_shortwave.F90:828-838): swabs = swvdr*((1-alvdrni)*(1-asnow) + (1-alvdrns)*asnow) + swvdf*((1-alvdfni)*(1-asnow) + (1-alvdfns)*asnow) + swidr*((1-alidrni)*(1-asnow) + (1-alidrns)*asnow) + swidf*((1-alidfni)*(1-asnow) + (1-alidfns)*asnow). All four solar bands are absorbed at the surface (no IR penetration in this parameterization).",
+   "params": ["swvdr", "swvdf", "swidr", "swidf", "alvdrni", "alvdfni", "alidrni", "alidfni", "alvdrns", "alvdfns", "alidrns", "alidfns", "asnow"],
+   "body": {
+    "op": "+",
+    "args": [
+     { "op": "*", "args": ["swvdr", { "op": "+", "args": [
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alvdrni"] }, { "op": "-", "args": [1.0, "asnow"] }] },
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alvdrns"] }, "asnow"] } ] }] },
+     { "op": "*", "args": ["swvdf", { "op": "+", "args": [
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alvdfni"] }, { "op": "-", "args": [1.0, "asnow"] }] },
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alvdfns"] }, "asnow"] } ] }] },
+     { "op": "*", "args": ["swidr", { "op": "+", "args": [
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alidrni"] }, { "op": "-", "args": [1.0, "asnow"] }] },
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alidrns"] }, "asnow"] } ] }] },
+     { "op": "*", "args": ["swidf", { "op": "+", "args": [
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alidfni"] }, { "op": "-", "args": [1.0, "asnow"] }] },
+       { "op": "*", "args": [{ "op": "-", "args": [1.0, "alidfns"] }, "asnow"] } ] }] }
+    ]
+   }
+  },
+  "penetrating_shortwave": {
+   "description": "Shortwave penetrating the surface into the ice interior fswpen (absorbed_solar, icepack_shortwave.F90:840-852): fswpen = i0vis*(swvdr*(1-alvdrni)*(1-asnow) + swvdf*(1-alvdfni)*(1-asnow)). Only visible radiation penetrates (i0vis = 0.70, F90:769); the near-IR terms are commented out in the Fortran (F90:844-845).",
+   "params": ["swvdr", "swvdf", "alvdrni", "alvdfni", "asnow"],
+   "body": {
+    "op": "*",
+    "args": [
+     0.7,
+     { "op": "+", "args": [
+       { "op": "*", "args": ["swvdr", { "op": "-", "args": [1.0, "alvdrni"] }, { "op": "-", "args": [1.0, "asnow"] }] },
+       { "op": "*", "args": ["swvdf", { "op": "-", "args": [1.0, "alvdfni"] }, { "op": "-", "args": [1.0, "asnow"] }] } ] }
+    ]
+   }
+  },
+  "shortwave_transmittance": {
+   "description": "Beer-Lambert transmittance of visible radiation through ice (absorbed_solar, icepack_shortwave.F90:867): tran = exp(-kappav*depth), with kappav = 1.4 m^-1 the visible extinction coefficient (icepack_parameters.F90:161). The Fortran evaluates it at layer bottoms depth = hilyr*k.",
+   "params": ["kappav", "depth"],
+   "body": { "op": "exp", "args": [{ "op": "-", "args": [{ "op": "*", "args": ["kappav", "depth"] }] }] }
+  },
+  "shortwave_through_ice": {
+   "description": "Shortwave transmitted through the ice into the ocean (absorbed_solar, icepack_shortwave.F90:883): fswthru = fswpen*exp(-kappav*hi), i.e. the shortwave_transmittance law evaluated at the total ice thickness hi.",
+   "params": ["fswpen", "kappav", "hi"],
+   "body": {
+    "op": "*",
+    "args": [
+     "fswpen",
+     { "op": "apply_expression_template", "args": [], "name": "shortwave_transmittance",
+       "bindings": { "kappav": "kappav", "depth": "hi" } }
+    ]
+   }
+  },
+  "layer_absorbed_shortwave": {
+   "description": "Shortwave absorbed within the ice layer between depths ztop and zbot (absorbed_solar, icepack_shortwave.F90:862-880): Iswabs = fswpen*(exp(-kappav*ztop) - exp(-kappav*zbot)) = fswpen*(trantop - tranbot) with the layer boundaries at hilyr*(k-1) and hilyr*k in the Fortran.",
+   "params": ["fswpen", "kappav", "ztop", "zbot"],
+   "body": {
+    "op": "*",
+    "args": [
+     "fswpen",
+     { "op": "-", "args": [
+       { "op": "apply_expression_template", "args": [], "name": "shortwave_transmittance",
+         "bindings": { "kappav": "kappav", "depth": "ztop" } },
+       { "op": "apply_expression_template", "args": [], "name": "shortwave_transmittance",
+         "bindings": { "kappav": "kappav", "depth": "zbot" } } ] }
+    ]
+   }
+  },
+  "saturation_specific_humidity_ice": {
+   "description": "Saturated surface specific humidity over ice Qsfc (surface_heat_flux, icepack_therm_shared.F90:152-154): Qsfc = qqqice*exp(-TTTice/TsfK)/rhoa with TsfK = Tsf + Tffresh. qqqice = 11637800, TTTice = 5897.8 (icepack_parameters.F90:286-287), Tffresh = 273.15 (F90:82). Tsf is in C, Qsfc in kg/kg.",
+   "params": ["Tsf", "rhoa"],
+   "body": {
+    "op": "/",
+    "args": [
+     { "op": "*", "args": [
+       11637800.0,
+       { "op": "exp", "args": [{ "op": "-", "args": [
+         { "op": "/", "args": [5897.8, { "op": "+", "args": ["Tsf", 273.15] }] } ] }] } ] },
+     "rhoa"
+    ]
+   }
+  },
+  "saturation_specific_humidity_ocn": {
+   "description": "Saturated surface specific humidity over ocean ssq (atmo_boundary_const, icepack_atmo.F90:482-484): ssq = qqqocn*exp(-TTTocn/TsfK)/rhoa. qqqocn = 627572.4, TTTocn = 5107.4 (icepack_parameters.F90:288-289). The constant scheme uses the ocean saturation curve for both surface types (F90:483).",
+   "params": ["Tsf", "rhoa"],
+   "body": {
+    "op": "/",
+    "args": [
+     { "op": "*", "args": [
+       627572.4,
+       { "op": "exp", "args": [{ "op": "-", "args": [
+         { "op": "/", "args": [5107.4, { "op": "+", "args": ["Tsf", 273.15] }] } ] }] } ] },
+     "rhoa"
+    ]
+   }
+  },
+  "surface_heat_flux": {
+   "description": "Net flux to the top surface excluding the conductive flux fsurfn (surface_heat_flux, icepack_therm_shared.F90:147-165): fsurfn = fswsfc + emissivity*flw - emissivity*stefan_boltzmann*TsfK^4 + shcoef*(potT - TsfK) + lhcoef*(Qa - Qsfc), with TsfK = Tsf + Tffresh and Qsfc the ice saturation humidity (saturation_specific_humidity_ice). emissivity = 0.985, stefan_boltzmann = 567e-10 (icepack_parameters.F90:156, 159).",
+   "params": ["Tsf", "fswsfc", "rhoa", "flw", "potT", "Qa", "shcoef", "lhcoef"],
+   "body": {
+    "op": "+",
+    "args": [
+     "fswsfc",
+     { "op": "*", "args": [0.985, "flw"] },
+     { "op": "-", "args": [
+       { "op": "*", "args": [0.985, 5.67e-8,
+         { "op": "^", "args": [{ "op": "+", "args": ["Tsf", 273.15] }, 4] }] } ] },
+     { "op": "*", "args": ["shcoef", { "op": "-", "args": ["potT", { "op": "+", "args": ["Tsf", 273.15] }] }] },
+     { "op": "*", "args": ["lhcoef", { "op": "-", "args": ["Qa",
+       { "op": "apply_expression_template", "args": [], "name": "saturation_specific_humidity_ice",
+         "bindings": { "Tsf": "Tsf", "rhoa": "rhoa" } } ] }] }
+    ]
+   }
+  },
+  "liquidus_temperature": {
+   "description": "Liquidus temperature of the BL99 thermodynamics (icepack_liquidus_temperature, icepack_therm_shared.F90:383-386): Tmlt = -depressT*Sin, the ktherm /= 2 branch; depressT = 0.054 C/ppt (icepack_parameters.F90:77).",
+   "params": ["Sin"],
+   "body": { "op": "*", "args": [-0.054, "Sin"] }
+  },
+  "liquidus_temperature_mush": {
+   "description": "Liquidus temperature of the mushy thermodynamics from the Assur (1958) empirical relation (liquidus_temperature_mush, icepack_mushy_physics.F90:227-261): zTin = (Sbr/(M1_liq + N1_liq*Sbr) + O1_liq)*t_high + (Sbr/(M2_liq + N2_liq*Sbr) + O2_liq)*(1-t_high) with t_high = 1 for Sbr <= Sb_liq, M1_liq = az1_liq = -18.48, N1_liq = -az1p_liq = az1_liq/1000 = 0.01848, O1_liq = -bz1_liq/az1_liq = 0, M2_liq = az2_liq = -10.3085, N2_liq = -az2p_liq = 0.0103085, O2_liq = -bz2_liq/az2_liq = 62.4/10.3085, Sb_liq = 123.66702800276086 (F90:36-55, 249-259). The ifelse replaces the Fortran's merge with the same selection; both branches are finite on the two salinity ranges.",
+   "params": ["Sbr"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     { "op": "<=", "args": ["Sbr", 123.66702800276086] },
+     { "op": "+", "args": [
+       { "op": "/", "args": ["Sbr", { "op": "+", "args": [-18.48, { "op": "*", "args": [0.01848, "Sbr"] }] }] },
+       0.0 ] },
+     { "op": "+", "args": [
+       { "op": "/", "args": ["Sbr", { "op": "+", "args": [-10.3085, { "op": "*", "args": [0.0103085, "Sbr"] }] }] },
+       { "op": "/", "args": [62.4, 10.3085] } ] }
+    ]
+   }
+  },
+  "sea_freezing_temperature": {
+   "description": "Ocean freezing temperature under the default tfrz_option = 'mushy' (icepack_sea_freezing_temperature, icepack_therm_shared.F90:404-406): Tf = liquidus_temperature_mush(sss). The other namelist branches (icepack_parameters.F90:171) are 'linear_salt' (Tf = -depressT*sss, F90:408-410), 'constant' (Tf = Tocnfrz = -1.8, F90:412-414, icepack_parameters.F90:80), and 'minus1p8' (Tf = -1.8, F90:416-418).",
+   "params": ["sss"],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "liquidus_temperature_mush",
+    "bindings": { "Sbr": "sss" }
+   }
+  },
+  "ice_temperature_from_enthalpy": {
+   "description": "Internal ice temperature from enthalpy (calculate_Tin_from_qin, icepack_therm_shared.F90:68-101): with brine (l_brine) the quadratic cp_ice*Tin^2 + ((cp_ocn-cp_ice)*Tmltk - qin/rhoi - Lfresh)*Tin + Lfresh*Tmltk = 0 solved by Tin = min((-bb1 - sqrt(bb1^2 - 4*cp_ice*cc1))/(2*cp_ice), Tmltk); fresh ice (l_brine = 0) Tin = (Lfresh + qin/rhoi)/cp_ice (F90:97-98). cp_ice = 2106, cp_ocn = 4218, rhoi = 917 (icepack_parameters.F90:74-75, 62), Lfresh = Lsub - Lvap = 3.34e5 (F90:74, 83-84). The Fortran aborts on a negative discriminant (F90:90-94); the .esm skeleton cannot express the abort and notes it as a guard for the stage-2 tests.",
+   "params": ["qin", "Tmltk", "l_brine"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     { "op": ">", "args": ["l_brine", 0.5] },
+     { "op": "min", "args": [
+       { "op": "/", "args": [
+         { "op": "-", "args": [
+           { "op": "+", "args": [
+             334000.0,
+             { "op": "/", "args": ["qin", 917.0] },
+             { "op": "-", "args": [
+               { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmltk"] } ] }
+           ] },
+           { "op": "sqrt", "args": [
+             { "op": "-", "args": [
+               { "op": "^", "args": [
+                 { "op": "+", "args": [
+                   { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmltk"] },
+                   { "op": "-", "args": [{ "op": "/", "args": ["qin", 917.0] }] },
+                   { "op": "-", "args": [334000.0] } ] },
+                 2 ] },
+               { "op": "*", "args": [4.0, 2106.0, 334000.0, "Tmltk"] } ] }] }
+         ] },
+         { "op": "*", "args": [2.0, 2106.0] } ] },
+       "Tmltk" ] },
+     { "op": "/", "args": [
+       { "op": "+", "args": [334000.0, { "op": "/", "args": ["qin", 917.0] }] },
+       2106.0 ] }
+    ]
+   }
+  },
+  "snow_temperature_from_enthalpy": {
+   "description": "Snow layer temperature from enthalpy (fresh snow, icepack_therm_vertical.F90:888): zTsn = (Lfresh + zqsn/rhos)/cp_ice. rhos = 330 (icepack_parameters.F90:61).",
+   "params": ["qsn"],
+   "body": { "op": "/", "args": [
+     { "op": "+", "args": [334000.0, { "op": "/", "args": ["qsn", 330.0] }] },
+     2106.0 ] }
+  },
+  "ice_enthalpy": {
+   "description": "Internal ice enthalpy from temperature, the inverse of calculate_Tin_from_qin (BL99 with brine, the functional form of the congelation enthalpy at icepack_therm_vertical.F90:1437-1439): qin = rhoi*(cp_ice*T - Lfresh + (cp_ocn-cp_ice)*Tmlts + Lfresh*Tmlts/T); fresh ice (l_brine = 0) qin = rhoi*(cp_ice*T - Lfresh). T in C, qin in J/m3.",
+   "params": ["zTin", "Tmlts", "l_brine"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     { "op": ">", "args": ["l_brine", 0.5] },
+     { "op": "*", "args": [917.0, { "op": "+", "args": [
+       { "op": "*", "args": [2106.0, "zTin"] },
+       { "op": "-", "args": [334000.0] },
+       { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmlts"] },
+       { "op": "/", "args": [{ "op": "*", "args": [334000.0, "Tmlts"] }, "zTin"] } ] }] },
+     { "op": "*", "args": [917.0, { "op": "+", "args": [
+       { "op": "*", "args": [2106.0, "zTin"] },
+       { "op": "-", "args": [334000.0] } ] }] }
+    ]
+   }
+  },
+  "snow_enthalpy": {
+   "description": "Snow layer enthalpy from temperature (inverse of snow_temperature_from_enthalpy; the snow enthalpy is qsn = rhos*(cp_ice*Tsn - Lfresh), consistent with icepack_therm_vertical.F90:888).",
+   "params": ["zTsn"],
+   "body": { "op": "*", "args": [330.0, { "op": "+", "args": [
+     { "op": "*", "args": [2106.0, "zTsn"] },
+     { "op": "-", "args": [334000.0] } ] }] }
+  },
+  "ice_conductivity_bubbly": {
+   "description": "Thermal conductivity of saline ice, Pringle et al. (2007) 'bubbly brine' (conductivity, icepack_therm_bl99.F90:918-924): kilyr = max((2.11 - 0.011*T + 0.09*S/min(-puny,T))*rhoi/917, kimin). The Fortran multiplies by rhoi/917 (F90:922), unity for rhoi = 917 kg/m3 (icepack_parameters.F90:62); min(-puny, T) guards the S/T term as T approaches 0 (puny = 1e-11, F90:36), and kimin = 0.10 W/m/K (icepack_therm_bl99.F90:35). T in C, S in ppt.",
+   "params": ["zTin", "zSin"],
+   "body": {
+    "op": "max",
+    "args": [
+     { "op": "+", "args": [
+       2.11,
+       { "op": "-", "args": [{ "op": "*", "args": [0.011, "zTin"] }] },
+       { "op": "/", "args": [
+         { "op": "*", "args": [0.09, "zSin"] },
+         { "op": "min", "args": [-1e-11, "zTin"] } ] } ] },
+     0.1
+    ]
+   }
+  },
+  "ice_conductivity_mu71": {
+   "description": "Thermal conductivity of saline ice, Maykut-Untersteiner (1971) form with Wettlaufer (1991) constants (conductivity, icepack_therm_bl99.F90:911-916): kilyr = max(kice + betak*S/min(-puny,T), kimin), with kice = 2.03 (icepack_parameters.F90:88), betak = 0.13 (icepack_therm_bl99.F90:34), kimin = 0.10 (F90:35). Selected by conduct = 'MU71' (default 'bubbly').",
+   "params": ["zTin", "zSin"],
+   "body": {
+    "op": "max",
+    "args": [
+     { "op": "+", "args": [
+       2.03,
+       { "op": "/", "args": [
+         { "op": "*", "args": [0.13, "zSin"] },
+         { "op": "min", "args": [-1e-11, "zTin"] } ] } ] },
+     0.1
+    ]
+   }
+  },
+  "interface_conductivity": {
+   "description": "Effective conductivity at an interior layer interface (conductivity, icepack_therm_bl99.F90:956-959): kh = 2*k1*k2/((k1+k2)*h), the harmonic mean of the two layer conductivities over the layer thickness h (W/m2/K). The boundary forms are kh_top = 2*ksno/hslyr (F90:930), kh_snowice = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) (F90:931-933), and kh_bot = 2*kilyr(nilyr)/hilyr (F90:940).",
+   "params": ["k1", "k2", "h"],
+   "body": { "op": "/", "args": [
+     { "op": "*", "args": [2.0, "k1", "k2"] },
+     { "op": "*", "args": [{ "op": "+", "args": ["k1", "k2"] }, "h"] } ] }
+  },
+  "congelation_enthalpy": {
+   "description": "Enthalpy of new ice growing at the bottom (thickness_changes, icepack_therm_vertical.F90:1432-1443): with brine, qbot = -rhoi*(cp_ice*(Tmlts-Tbot) + Lfresh*(1-Tmlts/Tbot) - cp_ocn*Tmlts) capped at qbotmax = -0.5*rhoi*Lfresh (F90:1436-1440); fresh ice, qbot = -rhoi*(-cp_ice*Tbot + Lfresh) (F90:1442). Tmlts = -depressT*zSin(nilyr) is the liquidus at the bottom layer (F90:1432).",
+   "params": ["Tbot", "Tmlts", "l_brine"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     { "op": ">", "args": ["l_brine", 0.5] },
+     { "op": "min", "args": [
+       { "op": "-", "args": [
+         { "op": "*", "args": [917.0, { "op": "+", "args": [
+           { "op": "*", "args": [2106.0, { "op": "-", "args": ["Tmlts", "Tbot"] }] },
+           { "op": "*", "args": [334000.0, { "op": "-", "args": [1.0, { "op": "/", "args": ["Tmlts", "Tbot"] }] }] },
+           { "op": "-", "args": [{ "op": "*", "args": [4218.0, "Tmlts"] }] } ] }] } ] },
+       { "op": "*", "args": [-0.5, 917.0, 334000.0] } ] },
+     { "op": "-", "args": [
+       { "op": "*", "args": [917.0, { "op": "+", "args": [
+         { "op": "*", "args": [-2106.0, "Tbot"] },
+         334000.0 ] }] } ] }
+    ]
+   }
+  },
+  "ocean_heat_flux": {
+   "description": "Heat flux from the ocean to the ice bottom fbot (frzmlt_bottom_lateral, icepack_therm_vertical.F90:662-678): fbot = max(-cp_ocn*rhow*0.006*max(sst-Tbot, 0)*ustar, frzmlt), the Maykut-McPhee (1995) boundary-layer form with the 0.006 transfer coefficient (F90:672-674; the 'Cdn_ocn' fbot_xfer_type branch F90:668-671 is deferred). ustar is the skin friction velocity, floored at ustar_min = 0.005 m/s (F90:665-666, icepack_parameters.F90:99).",
+   "params": ["sst", "Tf", "ustar", "frzmlt"],
+   "body": {
+    "op": "max",
+    "args": [
+     { "op": "-", "args": [
+       { "op": "*", "args": [4218.0, 1026.0, 0.006,
+         { "op": "max", "args": [{ "op": "-", "args": ["sst", "Tf"] }, 0.0] },
+         "ustar"] } ] },
+     "frzmlt"
+    ]
+   }
+  },
+  "meltpond_cesm_dvn": {
+   "description": "Change in melt pond volume over the ice-covered area of a category, 'cesm' pond option (compute_ponds_lvl, icepack_meltpond_lvl.F90:154-174): dvn = rfrac/rhofresh*(meltt*rhoi + melts*rhos + frain*dt)*aicen (F90:158-160, the use_smliq_pnd = false branch) reduced by the freeze-up term dvn = dvn - volpn*(1 - exp(rexp*dTs/Tp)) with Tp = Timelt - Td = -2 C and dTs = max(Tp - Tsfcn, 0) (F90:171-174). Td = 2, rexp = 0.01 (F90:111-112); rfrac is the meltwater retention fraction (namelist, default 0.85, icepack_parameters.F90:351); frain is the rain rate in m/s (Faxa_rain kg/m2/s divided by rhofresh).",
+   "params": ["rfrac", "meltt", "melts", "frain", "dt", "aicen", "volpn", "Tsfcn"],
+   "body": {
+    "op": "-",
+    "args": [
+     { "op": "*", "args": [
+       { "op": "/", "args": ["rfrac", 1000.0] },
+       { "op": "+", "args": [
+         { "op": "*", "args": ["meltt", 917.0] },
+         { "op": "*", "args": ["melts", 330.0] },
+         { "op": "*", "args": ["frain", "dt"] } ] },
+       "aicen" ] },
+     { "op": "*", "args": ["volpn", { "op": "-", "args": [1.0,
+       { "op": "exp", "args": [
+         { "op": "/", "args": [
+           { "op": "*", "args": [0.01, { "op": "max", "args": [
+             { "op": "-", "args": [
+               { "op": "-", "args": [0.0, 2.0] },
+               "Tsfcn" ] },
+             0.0 ] }] },
+           { "op": "-", "args": [0.0, 2.0] } ] }] } ] }] }
+    ]
+   }
+  },
+  "atmo_constant_tau": {
+   "description": "Atmosphere-ice momentum stress magnitude of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:460-464): tau = rhoa*0.0012*wind, with the stress components strx = tau*uatm, stry = tau*vatm (F90:463-464). The default atmbndy = 'similarity' scheme (icepack_atmo.F90:200-444, an iterative Monin-Obukhov solve) is deferred.",
+   "params": ["rhoa", "wind"],
+   "body": { "op": "*", "args": ["rhoa", 0.0012, "wind"] }
+  },
+  "atmo_constant_shcoef": {
+   "description": "Sensible-heat transfer coefficient of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:493): shcoef = senscoef*cp_air*rhoa*wind, with senscoef = 0.0012 (icepack_parameters.F90:290) and cp_air = 1005 J/kg/K (F90:281).",
+   "params": ["rhoa", "wind"],
+   "body": { "op": "*", "args": [0.0012, 1005.0, "rhoa", "wind"] }
+  },
+  "atmo_constant_lhcoef": {
+   "description": "Latent-heat transfer coefficient of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:494): lhcoef = latncoef*Lheat*rhoa*wind, with latncoef = 0.0015 (icepack_parameters.F90:291) and Lheat = Lsub = 2.835e6 J/kg for ice, Lvap = 2.501e6 J/kg for ocean (icepack_atmo.F90:472-476, icepack_parameters.F90:83-84).",
+   "params": ["rhoa", "wind", "Lheat"],
+   "body": { "op": "*", "args": [0.0015, "Lheat", "rhoa", "wind"] }
+  },
+  "ice_strength_hibler": {
+   "description": "Ice strength of the Hibler (1979) formulation (icepack_ice_strength, icepack_mechred.F90:1720): strength = Pstar*vice*exp(-Cstar*(1-aice)), with Pstar = 2.75e4 N/m2 and Cstar = 20 (icepack_parameters.F90:262, 264). This is the kstrength /= 1 branch; the default kstrength = 1 Rothrock (1975) potential-energy form (F90:1666-1712) depends on the ridge distribution state (apartic, hrmax, hrmin, hrexp, krdg, aksum) and is deferred.",
+   "params": ["vice", "aice"],
+   "body": { "op": "*", "args": [27500.0, "vice",
+     { "op": "exp", "args": [{ "op": "-", "args": [
+       { "op": "*", "args": [20.0, { "op": "-", "args": [1.0, "aice"] }] } ] }] }] }
+  },
+  "strain_invariant_delta": {
+   "description": "Strain-rate invariant Delta of the elliptical yield curve (strain_rates, ice_dyn_shared.F90:2156-2159): Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)), with e_factor = e_yieldcurve^2/e_plasticpot^4 (set_evp_parameters, F90:465).",
+   "params": ["divu", "tension", "shear", "e_factor"],
+   "body": { "op": "sqrt", "args": [
+     { "op": "+", "args": [
+       { "op": "^", "args": ["divu", 2] },
+       { "op": "*", "args": ["e_factor",
+         { "op": "+", "args": [
+           { "op": "^", "args": ["tension", 2] },
+           { "op": "^", "args": ["shear", 2] } ] }] } ] }] }
+  },
+  "viscosity_scale": {
+   "description": "Shared scale of the bulk viscosity, shear viscosity, and replacement pressure (visc_replpress, ice_dyn_shared.F90:2467-2468): tmpcalc = capping*strength/max(Delta, DminArea) + (1-capping)*strength/(Delta + DminArea). capping = 1 (default namelist) selects the capped form; DminArea is the minimum strain rate of the cell (DminTarea).",
+   "params": ["capping", "strength", "Delta", "DminArea"],
+   "body": { "op": "+", "args": [
+     { "op": "*", "args": ["capping",
+       { "op": "/", "args": ["strength", { "op": "max", "args": ["Delta", "DminArea"] }] }] },
+     { "op": "*", "args": [{ "op": "-", "args": [1.0, "capping"] },
+       { "op": "/", "args": ["strength", { "op": "+", "args": ["Delta", "DminArea"] }] }] } ] }
+  },
+  "bulk_viscosity": {
+   "description": "Twice the bulk viscosity (visc_replpress, ice_dyn_shared.F90:2469): zetax2 = (1+Ktens)*tmpcalc. Ktens = 0 by default (namelist, the Lemieux et al. 2016 tensile strength is off).",
+   "params": ["Ktens", "tmpcalc"],
+   "body": { "op": "*", "args": [{ "op": "+", "args": [1.0, "Ktens"] }, "tmpcalc"] }
+  },
+  "shear_viscosity": {
+   "description": "Twice the shear viscosity (visc_replpress, ice_dyn_shared.F90:2471): etax2 = epp2i*zetax2, with epp2i = 1/e_plasticpot^2 (set_evp_parameters, F90:464) and e_plasticpot = 2 (default namelist).",
+   "params": ["epp2i", "zetax2"],
+   "body": { "op": "*", "args": ["epp2i", "zetax2"] }
+  },
+  "replacement_pressure": {
+   "description": "Replacement pressure of the plastic potential (visc_replpress, ice_dyn_shared.F90:2470): rep_prs = (1-Ktens)*tmpcalc*Delta. With the default Ktens = 0 and capping = 1 this is rep_prs = strength*Delta/max(Delta, DminArea).",
+   "params": ["Ktens", "tmpcalc", "Delta"],
+   "body": { "op": "*", "args": [{ "op": "-", "args": [1.0, "Ktens"] }, "tmpcalc", "Delta"] }
+  },
+  "evp_stressp_update": {
+   "description": "Classic-EVP update of the sum stress stressp = sigma11 + sigma22 (stress, ice_dyn_evp.F90:1584-1591): stressp_new = (stressp*(1-arlx1i*revp) + arlx1i*(zetax2*divu - rep_prs))*denom1. For classic EVP (revp = 0, F90:473) this is the under-relaxed map toward the plastic target zetax2*divu - rep_prs; arlx1i = 1/(2*elasticDamp*ndte) and denom1 = 1/(1+arlx1i) (set_evp_parameters, ice_dyn_shared.F90:474-477).",
+   "params": ["stressp", "arlx1i", "revp", "zetax2", "divu", "rep_prs", "denom1"],
+   "body": { "op": "*", "args": [
+     { "op": "+", "args": [
+       { "op": "*", "args": ["stressp", { "op": "-", "args": [1.0, { "op": "*", "args": ["arlx1i", "revp"] }] }] },
+       { "op": "*", "args": ["arlx1i", { "op": "-", "args": [
+         { "op": "*", "args": ["zetax2", "divu"] }, "rep_prs" ] }] } ] },
+     "denom1" ] }
+  },
+  "evp_stressm_update": {
+   "description": "Classic-EVP update of the difference stress stressm = sigma11 - sigma22 (stress, ice_dyn_evp.F90:1593-1600): stressm_new = (stressm*(1-arlx1i*revp) + arlx1i*etax2*tension)*denom1, with the plastic target etax2*tension.",
+   "params": ["stressm", "arlx1i", "revp", "etax2", "tension", "denom1"],
+   "body": { "op": "*", "args": [
+     { "op": "+", "args": [
+       { "op": "*", "args": ["stressm", { "op": "-", "args": [1.0, { "op": "*", "args": ["arlx1i", "revp"] }] }] },
+       { "op": "*", "args": ["arlx1i", "etax2", "tension"] } ] },
+     "denom1" ] }
+  },
+  "evp_stress12_update": {
+   "description": "Classic-EVP update of the shear stress stress12 = sigma12 (stress, ice_dyn_evp.F90:1602-1609): stress12_new = (stress12*(1-arlx1i*revp) + arlx1i*0.5*etax2*shear)*denom1, with the plastic target 0.5*etax2*shear (the Fortran's p5 factor).",
+   "params": ["stress12", "arlx1i", "revp", "etax2", "shear", "denom1"],
+   "body": { "op": "*", "args": [
+     { "op": "+", "args": [
+       { "op": "*", "args": ["stress12", { "op": "-", "args": [1.0, { "op": "*", "args": ["arlx1i", "revp"] }] }] },
+       { "op": "*", "args": ["arlx1i", 0.5, "etax2", "shear"] } ] },
+     "denom1" ] }
+  },
+  "ocean_ice_stress_magnitude": {
+   "description": "Magnitude of the relative ocean-ice current times the drag (stepu, ice_dyn_shared.F90:931-932): vrel = aiX*rhow*Cw*sqrt((uocn-uvel)^2 + (vocn-vvel)^2). aiX is the ice concentration at the U point (aice), Cw the ocean-ice drag coefficient (dragio = 0.00536 default, icepack_parameters.F90:266), rhow = 1026 (F90:65).",
+   "params": ["aiX", "rhow", "Cw", "uocn", "vocn", "uvel", "vvel"],
+   "body": { "op": "*", "args": ["aiX", "rhow", "Cw", { "op": "sqrt", "args": [
+     { "op": "+", "args": [
+       { "op": "^", "args": [{ "op": "-", "args": ["uocn", "uvel"] }, 2] },
+       { "op": "^", "args": [{ "op": "-", "args": ["vocn", "vvel"] }, 2] } ] }] }] }
+  },
+  "seabed_stress_coefficient": {
+   "description": "Linear seabed stress coefficient (stepu, ice_dyn_shared.F90:937): Cb = TbU/(sqrt(uvel^2 + vvel^2) + u0), with TbU the seabed stress factor (nonzero only over landfast-ice grounding zones) and u0 = 5e-5 m/s the velocity floor (namelist, default 5e-5).",
+   "params": ["TbU", "uvel", "vvel", "u0"],
+   "body": { "op": "/", "args": ["TbU", { "op": "+", "args": [
+     { "op": "sqrt", "args": [
+       { "op": "+", "args": [
+         { "op": "^", "args": ["uvel", 2] },
+         { "op": "^", "args": ["vvel", 2] } ] }] },
+     "u0" ] }] }
+  }
+ }
+}
