@@ -1,238 +1,279 @@
-# CICE stage 2 — `.esm` skeleton
+# MOSART stage 2 — `.esm` skeleton
 
-Stage-2 implementation of the CESM CICE sea-ice component (cesm3_cice6_6_3_22,
-checkout `stage1/cesm/components/cice`) as esm 1.3.0 files: component structure,
-imports/exports, solver block, the pointwise column/dynamics/transport laws of
-the default configuration transcribed exactly, subcomponents, and top-level
-assembly. The `tests` blocks are empty pending the stage-1 instrumentation
-dumps (`stage1/dumps/cice/`) — see [Testing](#testing).
+Stage-2 implementation of the CESM MOSART river-routing component (mosart1.1.13,
+cesm3.0-alphabranch checkout `e59f2512`) as esm 1.3.0 files: component structure,
+imports/exports, solver block, the pointwise flow laws of `mosart_physics.F90`
+transcribed exactly, subcomponent routing steps, and top-level assembly. The
+`tests` blocks hold numeric tuples from the stage-1 instrumentation dumps
+(`stage1/dumps/mosart/`) — see [Testing](#testing).
 
 All model logic lives in `.esm` files; this README is the human-readable map.
-Sources: `stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/`
-(`ice_import_export.F90`, `CICE_RunMod.F90`),
-`stage1/cesm/components/cice/src/cicecore/cicedyn/general/`
-(`ice_step_mod.F90`, `ice_forcing.F90`, `ice_flux.F90`),
-`stage1/cesm/components/cice/src/cicecore/cicedyn/dynamics/`
-(`ice_dyn_evp.F90`, `ice_dyn_shared.F90`),
-`stage1/cesm/components/cice/src/cicecore/cicedyn/analysis/`
-(`ice_transport_driver.F90`, `ice_transport_remap.F90`),
-`stage1/cesm/components/cice/src/icepack/columnphysics/`
-(`icepack_shortwave.F90`, `icepack_therm_shared.F90`, `icepack_therm_bl99.F90`,
-`icepack_therm_vertical.F90`, `icepack_meltpond_lvl.F90`, `icepack_atmo.F90`,
-`icepack_mechred.F90`, `icepack_mushy_physics.F90`, `icepack_flux.F90`,
-`icepack_parameters.F90`), and the boundary plan in `stage1/boundaries.md` (§1.3).
-
-Default configuration transcribed (namelist defaults): `shortwave = 'dEdd'`
-(albedo/shortwave laws of the ccsm3 branch — the delta-Eddington solver itself
-is deferred), `kdyn = 1` (EVP), `grid_ice = 'B'`, `ndtd = 1`, `ndte = 120`,
-`revised_evp = .false.`, `elasticDamp = 0.36`, `Ktens = 0`,
-`e_yieldcurve = e_plasticpot = 2`, `capping = 1`, `u0 = 5e-5`, `cosw = 1`,
-`sinw = 0`, `kstrength = 1` (Rothrock ridging deferred; the Hibler strength is
-transcribed), `atmbndy = 'similarity'` (deferred; the constant scheme is
-transcribed), `ktherm = 1` (BL99), `conduct = 'bubbly'`,
-`tfrz_option = 'mushy'`, `saltflux_option = 'constant'`, `frzpnd = 'cesm'`,
-`ncat = 5`, `nilyr = 7`, `nslyr = 1`, `l_brine = .true.`, `dt = 3600 s`.
+Sources: `stage1/cesm/components/mosart/src/riverroute/mosart_physics.F90`,
+`stage1/cesm/components/mosart/src/riverroute/mosart_driver.F90`,
+`stage1/cesm/components/mosart/src/riverroute/mosart_tstatusflux_type.F90`,
+`stage1/cesm/components/mosart/src/riverroute/mosart_tspatialunit_type.F90`,
+`stage1/cesm/components/mosart/src/cpl/nuopc/rof_import_export.F90`,
+and the boundary/subassembly plan in `stage1/boundaries.md` (§1.5, §2.6).
 
 ## File map
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `cice_templates.esm` | Expression-template library (41 templates): snow cover / albedo / absorbed-penetrating shortwave | `icepack_shortwave.F90`: compute_albedos 466-597, absorbed_solar 701-896 |
-| | saturation humidity, surface heat flux, liquidus (linear + mushy), enthalpy↔temperature (BL99 brine quadratic, fresh, snow) | `icepack_therm_shared.F90`: surface_heat_flux 147-165, liquidus 383-418; `icepack_mushy_physics.F90`: 227-261; calculate_Tin_from_qin 68-101; snow temperature 470-484 |
-| | conductivity (bubbly Pringle 2007 / MU71) and interface conductances, congelation enthalpy, ocean heat flux, melt-pond volume change | `icepack_therm_bl99.F90`: conductivity 874-961; `icepack_therm_vertical.F90`: qbot 1432-1443, fbot 662-678; `icepack_meltpond_lvl.F90`: 154-174 |
-| | constant atmo boundary layer (tau, shcoef, lhcoef) | `icepack_atmo.F90`: atmo_boundary_const 398-496 (460-464, 493-494) |
-| | Hibler strength, Delta invariant, viscosities/replacement pressure, classic-EVP stress maps, ocean-ice stress, seabed stress | `icepack_mechred.F90`: 1720; `ice_dyn_shared.F90`: strain_rates 2081-2161, visc_replpress 2444-2473, set_evp_parameters 451-484; stepu 923-964 |
-| `cice_thermodynamics.esm` | Model `Thermodynamics` — prep_radiation shortwave/albedo, step_therm1 vertical heat conduction + surface energy balance, step_therm2 growth/melt/ponds and ocean heat/fresh/salt fluxes; 67 equations over ncat × nilyr/nslyr | `icepack_step_mod.F90`/`icepack_therm_bl99.F90` (tridiagonal 1038-1210 as semi-discrete flux-divergence ODEs), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559) |
-| `cice_dynamics.esm` | Model `Dynamics` — B-grid momentum balance (continuous limit of stepu) and classic-EVP stress relaxation ODEs, Hibler strength, viscosities; 34 equations over one cell | `ice_dyn_shared.F90`: stepu 923-964, dyn_prep2 815-833, dyn_finish 1345-1348, Tmass 540; `ice_dyn_evp.F90`: stress 1584-1609 |
-| `cice_transport.esm` | Model `Transport` — per-category conservative advection d(a)/dt + div(a·u) = 0 (and volume forms) as spatial-D rewrite targets; enthalpy-tracer statement documented, deferred to stage 3 | `ice_transport_driver.F90`: 251-700; `ice_transport_remap.F90`: 317-831 |
-| `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; 62 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260 |
-| `cice.esm` | Top-level assembly: mounts the four subcomponents by reference + inline `Control` (dt_dyn subcycling, constant atmo boundary layer), 59 `variable_map` coupling entries, solver block | `CICE_RunMod.F90`: ice_step 109-369; `ice_step_mod.F90`: step_dyn_horiz 990-1074; `ice_forcing.F90`: prepare_forcing 1606-1825; `icepack_atmo.F90`: 398-496 |
+| `mosart_templates.esm` | Expression-template library: `manning_velocity`, `overland_discharge`, `wetted_area`, `rectangular_depth`, `rectangular_perimeter`, `hydraulic_radius`, `channel_depth`, `channel_perimeter` | `mosart_physics.F90`: CRVRMAN_nosqrt 406-422, CREHT_nosqrt 426-437, GRMR 441-449, GRHT 453-465, GRPT 469-481, GRRR 485-497, GRHR 501-532, GRPR 536-572 |
+| `mosart_hillslope.esm` | Model `Hillslope` — Euler step 1: hillslopeRouting + updateState_hillslope, `etin` lateral inflow | `mosart_physics.F90`: Euler 74-80, hillslopeRouting 225-239, updateState_hillslope 352-360 |
+| `mosart_subnetwork.esm` | Model `Subnetwork` — Euler step 2: subnetworkRouting + updateState_subnetwork, `erlateral` | `mosart_physics.F90`: Euler 114-132, subnetworkRouting 243-269, updateState_subnetwork 364-381 |
+| `mosart_channel.esm` | Model `Channel` — Euler step 4: Routing_KW + updateState_mainchannel, `flow` | `mosart_physics.F90`: Euler 175-209, Routing_KW 273-348, updateState_mainchannel 385-402 |
+| `mosart_coupling.esm` | Model `RofCap` — med↔rof cap unit conversions only | `rof_import_export.F90`: state_getimport 589-595, state_setexport 636-643, fields 88-117, areacor 209-210, tdepth_max 401 |
+| `mosart_routing.esm` | Top-level assembly: mounts RofCap/Hillslope/Subnetwork/Channel by reference + inline `Control` (mosart_run steps 2-8, subtimestep logic, aggregation), 29 `variable_map` coupling entries, enums, solver block | `mosart_driver.F90`: mosart_run 375-873; `mosart_tspatialunit_type.F90`: set_subtimesteps 624-684 |
 
-The PDEs are written as spatial-D rewrite targets
-(`div(c·u) = D(c·uvel, x) + D(c·vvel, y)`) to be lowered by discretization
-templates from `github.com/earthsciml/EarthSciDiscretizations` in stage 3,
-exactly as the incremental-remapping scheme replaces the continuous flux form
-with the departure-cell integrals of the Fortran. The momentum equation is the
-continuous limit of the Fortran's implicit stepu solve (the cca/ccb/ab2 algebra
-is solver machinery, documented rather than transcribed); the classic-EVP
-stress maps become relaxation ODEs d(σ)/dt = (σ_target − σ)/Td with
-Td = 2·elasticDamp·dt.
+The routing steps are written as storage ODEs (`D(wh)/dt`, `D(wt)/dt`, `D(wr)/dt`)
+with the pointwise laws as observed variables via `apply_expression_template` —
+the continuous limit of the Fortran's forward-Euler cascade; at stage 3 the ODEs
+are integrated with `github.com/earthsciml/earthsciintegrator`. Dry-cell clamps
+and the Fortran if/else branches are transcribed as `ifelse` expressions.
 
 ## Units
 
-All fields are SI; temperatures are °C internally (`degC` ≡ K in the unit
-checker's algebra) with `Tffresh = 273.15` added where Kelvin is needed;
-salinity is ppt; the CMEPS flux imports are W/m² and kg/m²/s (the latter equals
-mm/s of water).
+Per `mosart_tstatusflux_type.F90` and `mosart_tspatialunit_type.F90` geometry:
 
-| Quantity | Symbols | Units |
+| Quantity | Symbol | Units |
 |---|---|---|
-| Thicknesses / volumes / depths | `hi`, `hs`, `hilyr`, `hslyr`, `vicen`, `vsnon`, `hpnd`, `vice`, `vsno`, `Si_snowh` | m (volumes per unit grid-cell area) |
-| Enthalpies | `qicen`, `qsnon`, `qbot` | J/m³ |
-| Temperatures | `zTin`, `zTsn`, `Tmlts`, `Tbot`, `Tsfc`, `Tf`, `sst` | degC; `potT`, `Tair`, `Si_t` in K |
-| Conductivities / conductances | `kilyr`, `kslyr`; `kh_top`, `kh_snowice`, `kh_bot` | W/m/K; W/m²/K |
-| Fluxes | `fswsfc`, `fswpen`, `fswthru`, `fsurfn`, `fsensn`, `flatn`, `flwoutn`, `fbot`, `fhocnn`, `frzmlt`, sw bands, Faii_*/Fioi_* | W/m² |
-| Water fluxes | `evapn`, `freshn`, `fsaltn`, `fsnow` | kg/m²/s; `frain` in m/s (cap conversion by rhofresh) |
-| Stresses | `strength`, `stressp/m/12`, `sigma*`, `rep_prs` | N/m; `tau`, `strairx/y`, `taux/y`, `strintx/y`, `strtltx/y`, `Cb` | N/m² |
-| Strain rates | `divu`, `tension`, `shear`, `Delta`, `deltaminEVP` | 1/s |
-| Mass | `m` (Tmass) | kg/m² |
-| Viscosities | `zetax2`, `etax2`, `tmpcalc` | kg/s |
-| Dynamics | `uvel`, `vvel`, `uocn`, `vocn`, `uatm`, `vatm`, `wind`, `u0` | m/s |
-| Air | `rhoa` | kg/m³; `Qa`, `Qsfc` kg/kg; `Sa_z`/`zlvl` m; `Sa_pbot` Pa |
-| Time | `dt`, `dt_dyn`, `Td` | s |
-| Constants | `puny = 1e-11`, `Tffresh = 273.15`, `rhoi = 917`, `rhos = 330`, `rhow = 1026`, `cp_ice = 2106`, `cp_ocn = 4218`, `cp_air = 1005`, `Lfresh = 3.34e5`, `Lsub = 2.835e6`, `Lvap = 2.501e6`, `depressT = 0.054`, `emissivity = 0.985`, `stefan_boltzmann = 5.67e-8`, `gravit = 9.80616` | (icepack_parameters.F90:36, 82, 62, 61, 65, 74-75, 281, 83-84, 77, 156, 159, 56) |
+| Hillslope storage / depth | `wh`, `yh` | m |
+| Subnetwork storage | `wt` | m³ |
+| Main-channel storage | `wr` | m³ |
+| Hillslope fluxes | `qsur`, `qsub`, `ehout`, `dwh` | m/s |
+| Subnetwork / channel fluxes | `etin`, `etout`, `erlateral`, `erin`, `erout`, `dwr`, `eroutUp`, `flow`, `qirrig_actual`, `flood` | m³/s |
+| Velocities | `vt`, `vr` | m/s |
+| Cross-section areas | `mt`, `mr` | m² |
+| Depths / perimeters / radii | `yt`, `pt`, `rt`, `yr`, `pr`, `rr` | m |
+| Slopes (sqrt) | `hslpsqrt`, `tslpsqrt`, `rslpsqrt` | 1 |
+| Drainage density | `Gxr` | 1/m |
+| Lengths / widths | `tlen`, `hlen`, `twidth`, `rlen`, `rwidth`, `rwidth0`, `rdepth` | m |
+| Areas | `area`, `areaTotal2` | m² |
+| Manning roughness | `nh`, `nt`, `nr` | s/m^(1/3) |
+| Times | `delt`, `localdelt`, `coupling_period`, `delt_coupling`, `delt_mosart` | s |
+| Cap fields (CMEPS) | `Flrl_*`, `Fgrg_*`, `Forr_*`, `Flrr_flood` | mm/s |
+| Cap depth fields | `Flrr_volr`, `Flrr_volrmch`, `Sr_tdepth`, `Sr_tdepth_max` | m |
 
 **Unit notes**
 
-- `"C"` parses as Coulomb in the esm unit checker, so all Celsius fields use
-  `degC` (identical to K in the checker's algebra).
-- `lhcoef` is W/m² (per specific-humidity difference, not per K): the Fortran
-  `lhcoef = latncoef·Lheat·rhoa·wind` (icepack_atmo.F90:494) carries the latent
-  heat inside the coefficient.
-- `evapn` requires the ρ in the numerator: the Fortran
-  `evapn += dhs·rhos` (icepack_therm_vertical.F90:1502-1521) is transcribed as
-  the continuous rate `evapn = esub·rhos/((qsn − rhos·Lvap)·dt)`; `fsaltn`
-  divides by dt (`fsaltn = −rhoi·dhi·ice_ref_salinity·0.001/dt`, F90:521).
-- All icepack module constants are inlined as bare literals inside the
-  templates; the unit checker treats bare literals as dimension-Unknown and
-  skips products/comparisons containing them, which is how the many
-  Fortran-sloppy unit mixes (e.g. `meltt·rhoi + frain·dt` in the melt-pond
-  law) validate.
-- `sign()` preserves its argument's dimension, so the Fortran's
-  `sign(1, fm)` of the ocean-stress rotation is carried as the `hemis`
-  parameter (+1/−1).
+- Manning's n is declared with its SI dimension `s/m^(1/3)` (the frivinp network
+  file stores bare numbers). This keeps the equations dimensionally consistent:
+  `(rr²)^(1/3)·sqrt(slope)/n` has units `m^(2/3)/(s/m^(1/3)) = m/s`. The esm 1.3.0
+  unit checker treats a mismatch as a hard error, so this declaration is required.
+- Cap fields are imported in `mm/s` (= CMEPS kg/m²/s for water) and converted
+  with `mm_to_m` [m/mm] = 0.001 exactly as `state_getimport`
+  (`q [m³/s] = field [mm/s] · med2mod_areacor · area · 0.001`).
+- `Flrr_volr = volr/area` and `Flrr_volrmch = wr/area` are depths [m] with **no**
+  mm scaling, per `state_setexport` (F90:396-397).
+- `TINYVALUE = 1.0e-14` and `SLOPE1 = 0.1` are inlined as bare literals in the
+  templates (the unit checker skips comparisons against undeterminable operands).
 
-## §1.3 mapping, as implemented
+## §2.6 mapping, as implemented
 
-| Boundary (boundaries.md §1.3) | Proposed | Implemented |
+| Subassembly (boundaries.md §2.6) | Proposed | Implemented |
 |---|---|---|
-| Import (med→ice): atm state, rad/precip, ocn state, Fioo_q | `cice_coupling.esm` | ✓ `IceCap`: renames + areacor + Sa_pbot potT/rhoa branch; uocn/vocn/ss_tltx/ss_tlty wired to Dynamics; potT/Qa/rhoa/sw*/flw/sst/sss/frzmlt/frain/fsnow wired to Thermodynamics; uatm/vatm/rhoa wired to the assembly `Control` atmo scheme |
-| Export (ice→med): Si_* state, Faii_* atm/ice fluxes, Fioi_* ice/ocn fluxes | `cice_coupling.esm` | ✓ `IceCap`: ailohi, Tsrf, aggregate albedos, vice/vsno/snowh, merge_fluxes sums, areacor; Fioi_taux/tauy sign flip from the Dynamics full ocean stress |
-| Wave exports (Si_thick, Si_floediam), aerosols (Fioi_bcpho/bcphi, Fioi_flxdst), isotopes, per-band Fioi_swpen_* | `cice_coupling.esm` | ◐ deferred — carried as zero parameters with file:line notes (wave/aerosol/isotope tracers off; per-band fswthru_* not in the stage-2 column skeleton) |
-| EVP dynamics + icepack column thermodynamics (the run step) | `cice_dynamics.esm` + `cice_thermodynamics.esm` | ✓ mounted in `cice.esm` with the ice_step ordering documented (step_prep → prep_radiation → step_therm1 → step_therm2 → update_state → ndtd loop step_dyn_horiz(evp → transport_remap) → step_dyn_ridge → update_state) |
-| Transport (advection) | `cice_transport.esm` | ✓ continuity system as spatial-D rewrite targets; the enthalpy-tracer equations documented, deferred to the stage-3 incremental-remap lowering |
-| Ridging (kstrength = 1 Rothrock) | TBD | — deferred (the Hibler kstrength ≠ 1 strength is transcribed so the dynamics closes) |
-| Tsfc implicit surface energy balance | `cice_thermodynamics.esm` | ◐ the balance fsurfn(Tsfc) + fcondtopn = 0 (icepack_therm_bl99.F90:1116-1128) is transcendental in Tsfc (saturation-humidity exponential); esm 1.3.0 cannot express implicit equations, so Tsfc is a parameter fed by the coupled solve in stage 3 |
+| Cap boundary (kg/m²s↔m³/s) | `mosart_coupling.esm` | ✓ `mosart_coupling.esm` (RofCap) — pure unit conversions |
+| Direct transfer (mosart_run steps 2-4) | `mosart_coupling.esm` | ⚠ moved into inline `Control` in `mosart_routing.esm`: the qgwl threshold option and the flood rule need `Channel.wr`, so the orchestration lives with the systems (annotated deviation from the §2.6 table) |
+| Irrigation/flood (steps 2-3) | `mosart_routing.esm` | ✓ `Control` (rate rules) |
+| Routing hillslope+subnetwork+channel | `mosart_routing.esm` | ✓ mounted subassemblies, coupled in Euler order |
+| Flow laws / geometry (D, first test targets) | `mosart_routing.esm` templates | ✓ factored into `mosart_templates.esm`, imported by reference |
+| Network topology (Init, set_routehandles, set_subtimesteps) | data source + discretization | ◐ set_subtimesteps (CFL phi/numDT/localdelt) is in `Control`; set_routehandles / frivinp network data source deferred (stage 2.5) |
+| Lakes/reservoirs/groundwater | TBD | — (not present in this MOSART; §2.5) |
+| State/budget | harness | — (stage 3, with `mosart_budget_type.F90` as a conservation test) |
 
 ## Pointwise laws — Fortran vs esm transcription notes
 
-All templates are match-less, invoked by name (`apply_expression_template`
-with bindings), and transcribed exactly with file:line citations in the
-descriptions. Representative transcriptions:
+All templates are match-less, invoked by name, and transcribed exactly. Fortran
+formula → esm formula:
 
-| Template | Fortran | esm |
+| Template | Fortran (mosart_physics.F90) | esm |
 |---|---|---|
-| `snow_cover_fraction` | `asnow = hs/(hs+snowpatch)` for `hs > puny` (icepack_shortwave.F90:574-579) | `ifelse(hs > 1e-11, hs/(hs+0.02), 0)` |
-| `thickness_albedo_factor` | `fh = min(atan(hi·4)/atan(ahmax·4), 1)` (F90:541-542) | `min(atan(hi·4)/atan(0.3·4), 1)` |
-| `layer_absorbed_shortwave` | `Iswabs = fswpen·(exp(−kappav·ztop) − exp(−kappav·zbot))` (F90:862-880) | `fswpen·(transmittance(ztop) − transmittance(zbot))`, calling `shortwave_transmittance` by reference |
-| `surface_heat_flux` | `fsurfn = fswsfc + ε·flw − ε·σ·TsfK⁴ + shcoef·(potT−TsfK) + lhcoef·(Qa−Qsfc)` (icepack_therm_shared.F90:147-165) | same, with `Qsfc` from `saturation_specific_humidity_ice` |
-| `ice_temperature_from_enthalpy` | brine quadratic `cp_ice·T² + ((cp_ocn−cp_ice)·Tmltk − qin/ρi − L)·T + L·Tmltk = 0` solved by the negative root (F90:68-101) | `ifelse(l_brine > 0.5, min((−bb1−√(bb1²−4·cp_ice·cc1))/(2·cp_ice), Tmltk), (L+qin/ρi)/cp_ice)`; the Fortran abort on a negative discriminant is a noted guard |
-| `ice_conductivity_bubbly` | `k = max((2.11 − 0.011·T + 0.09·S/min(−puny,T))·ρi/917, kimin)` (icepack_therm_bl99.F90:918-924) | same with `min(−1e-11, T)` |
-| `congelation_enthalpy` | `qbot = −ρi·(cp_ice·(Tmlts−Tbot) + L·(1−Tmlts/Tbot) − cp_ocn·Tmlts)`, capped at `−0.5·ρi·L` (icepack_therm_vertical.F90:1432-1443) | same, `ifelse` brine/fresh, `min` cap |
-| `ocean_heat_flux` | `fbot = max(−cp_ocn·rhow·0.006·max(sst−Tf,0)·ustar, frzmlt)` (F90:662-678) | same; ustar floored at 0.005 in the model |
-| `meltpond_cesm_dvn` | `dvn = rfrac/rhofresh·(meltt·ρi + melts·ρs + frain·dt)·aicen − volpn·(1−exp(rexp·dTs/Tp))` (icepack_meltpond_lvl.F90:154-174) | same with `Tp = −2`, `rexp = 0.01`, `dTs = max(−2−Tsfcn, 0)` |
-| `atmo_constant_tau/shcoef/lhcoef` | `tau = ρa·0.0012·wind`; `shcoef = 0.0012·1005·ρa·wind`; `lhcoef = 0.0015·Lheat·ρa·wind` (icepack_atmo.F90:460, 493-494) | identical, `Lheat = Lsub = 2.835e6` for ice |
-| `ice_strength_hibler` | `strength = Pstar·vice·exp(−Cstar·(1−aice))` (icepack_mechred.F90:1720) | identical (`Pstar = 2.75e4`, `Cstar = 20`) |
-| `viscosity_scale` | `tmpcalc = capping·P/max(Δ,Dmin) + (1−capping)·P/(Δ+Dmin)` (ice_dyn_shared.F90:2467-2468) | identical; `Dmin = deltaminEVP = 1e-11` |
-| `evp_stressp_update` | `stressp_new = (stressp·(1−arlx1i·revp) + arlx1i·(zetax2·divu − rep_prs))·denom1` (ice_dyn_evp.F90:1584-1591) | transcribed as the relaxation ODE `D(stressp)/t = (stressp_target − stressp)/Td` with `Td = 2·elasticDamp·dt` (see divergences) |
+| `manning_velocity` | CRVRMAN_nosqrt: `v = ((rr²)^(1/3))·sqrtslp/n`, zeroed when `rr <= 0` | `ifelse(rr <= 0, 0, ((rr²)^(1/3))·sqrtslp/n)` |
+| `overland_discharge` | CREHT_nosqrt: `eht = Gxr·yh·CRVRMAN_nosqrt(sqrthslp, nh, yh)` | same, calling `manning_velocity` by reference (the one shared-law factoring) |
+| `wetted_area` | GRMR: `m = w/len` | `w/len` |
+| `rectangular_depth` | GRHT: `h = m/twid`, zeroed when `m <= TINYVALUE` | `ifelse(m <= 1e-14, 0, m/twid)` |
+| `rectangular_perimeter` | GRPT: `p = twid + 2·h`, zeroed when `h <= TINYVALUE` | `ifelse(h <= 1e-14, 0, twid + 2·h)` |
+| `hydraulic_radius` | GRRR: `r = m/p`, zeroed when `p <= TINYVALUE` | `ifelse(p <= 1e-14, 0, m/p)` |
+| `channel_depth` | GRHR three-part cross section (bankfull rectangle → trapezoid of slope SLOPE1=0.1 → flood plain): `h=0` if `m<=TINYVALUE`; `m/rwidth` if `m - rdepth·rwidth <= TINYVALUE`; trapezoid `rdepth + (-rwidth + sqrt(rwidth² + 4·deltam/SLOPE1))·SLOPE1/2`, `deltam = m - rdepth·rwidth`; flood plain `rdepth + SLOPE1·((rwidth0-rwidth)/2) + deltam/rwidth0`, `deltam = m - rdepth·rwidth - (rwidth+rwidth0)·SLOPE1·((rwidth0-rwidth)/2)/2` | nested `ifelse` with `SLOPE1 = 0.1` inlined; trapezoid threshold test `m > rdepth·rwidth + (rwidth+rwidth0)·0.1·((rwidth0-rwidth)/2)/2 + 1e-14` as in F90:517-518 |
+| `channel_perimeter` | GRPR: `p=0` if `h<TINYVALUE`; bankfull `rwidth + 2·h` if `h <= rdepth+TINYVALUE`; flood plain `rwidth + 2·(rdepth + ((rwidth0-rwidth)/2)·SLOPE1·sinatan + deltah)`, `deltah = h - rdepth - ((rwidth0-rwidth)/2)·SLOPE1`; trapezoid `rwidth + 2·(rdepth + (h-rdepth)·sinatan)`; `sinatan = sinatanSLOPE1defr = 1/sin(atan(SLOPE1def))` (F90:554) | same structure; `sinatan` spelled as the identical expression `1/sin(atan(0.1))` |
+
+Substep / routing transcriptions:
+
+- **Hillslope** (Euler step 1): `ehout_manning = -CREHT_nosqrt(...)`;
+  dry-cell clamp fires when `ehout_manning < 0` **and**
+  `wh + (qsur + ehout_manning)·delt < TINYVALUE`, replacing `ehout` by
+  `-(qsur + wh/delt)`; `dwh = qsur + ehout`; `yh = wh`;
+  `etin = (-ehout + qsub)·area·frac`.
+- **Subnetwork** (Euler step 2): no tributaries (`tlen <= hlen`) → `etout = -etin`
+  (pass-through); otherwise `vt_manning = manning_velocity(tslpsqrt, nt, rt)`,
+  `etout_manning = -vt_manning·mt`, dry-cell clamp `etout = -(etin + wt/localdelt)`
+  when `wt + (etin + etout_manning)·localdelt < TINYVALUE`; `vt = -etout/mt` when
+  the clamp fired and `mt > 0` (F90:257-259); `dwt = etin + etout`;
+  `erlateral = -etout`. Geometry (`mt, yt, pt, rt`) from GRMR/GRHT/GRPT/GRRR when
+  `tlen > 0` and `wt > 0`, else all zero (updateState_subnetwork).
+- **Channel** (Euler step 4, RoutingMethod=1 only, F90:280-284): `erin = -eroutUp`;
+  `rlen <= 0` → `vr = 0`, `erout = -(erin + erlateral)`;
+  `areaTotal2/(rwidth·rlen) > 1e6` → `erout = -(erin + erlateral)` (F90:310-312);
+  else `vr_manning = manning_velocity(rslpsqrt, nr, rr)`, `erout_manning = -vr_manning·mr`,
+  dry-cell clamp fires when `-erout_manning > TINYVALUE` **and**
+  `wr + (erlateral + erin + erout_manning)·localdelt < TINYVALUE`, then
+  `erout = -(erlateral + erin + wr/localdelt)` and `vr = -erout/mr` when `mr > 0`;
+  `dwr = erlateral + erin + erout + qgwl·area·frac`; `flow = -erout`. Geometry
+  (`mr, yr, pr, rr`) from GRMR/GRHR/GRPR/GRRR when `rlen > 0` and `wr > 0`, else zero.
+- **Control** (mosart_run + set_subtimesteps): `nsub = ceil(coupling_period/delt_mosart)`
+  (F90:786-789), `delt = delt_coupling/nsub`; CFL diagnostics
+  `phi_r = areaTotal2·sqrt(rslp)/(rlen·rwidth)`, `phi_t = area·sqrt(tslp)/(tlen·twidth)`;
+  `numDT = max(ifelse(phi >= 10, DLevelR·log10(phi) + 1, DLevelR + 1), 1)`;
+  `localdelt_t = delt/DLevelH2R/numDT_t`, `localdelt_r = delt/DLevelH2R/numDT_r`.
+  Irrigation: `irrig_volume = -qirrig_m3s·coupling_period`,
+  `qirrig_actual = -min(irrig_volume, wr)/coupling_period`, overage returned to
+  subsurface: `qsub_i = qsub_m3s + ifelse(irrig_volume > wr, (wr - irrig_volume)/coupling_period, 0)`.
+  Flood (mask==1 only): `volr = wt + wr + wh·area`, `flood = ifelse(volr > fthresh, (volr - fthresh)/delt_coupling, 0)`.
+  Direct transfer: negative `qsur_f`/`qsub_i` and mask==0 cells to `direct_liq`;
+  `qgwl` under `qgwl_runoff_option` (all/negative/threshold: `qgwl_m3s·coupling_period + wr < river_depth_minimum·area`),
+  active only for `bypass_routing_option` direct_in_place/direct_to_outlet; frozen
+  runoff `direct_ice = qsur_ice_m3s`; glc streams under `rof_from_glc`.
+  Aggregation: `runoffocn_liq = flow` for mask>=2; `runofftot_liq = direct_liq + runoffocn_liq + direct_glc_liq`;
+  `runofftot_ice = direct_ice + direct_glc_ice`; the ice_runoff branch of
+  export_fields (rof_import_export.F90:362-382): with `ice_runoff` on,
+  `rofl_m3s = runofftot_liq - direct_glc_liq`, `rofi_m3s = direct_ice`;
+  with it off, `rofl_m3s = runofftot_liq + direct_ice - direct_glc_liq`, `rofi_m3s = 0`.
 
 ## Documented divergences (all annotated in file metadata)
 
-1. **Heat conduction as semi-discrete ODEs.** The Fortran assembles and solves
-   an implicit backward-Euler tridiagonal for Tsfc and the layer temperatures
-   (icepack_therm_bl99.F90:1038-1210); the skeleton writes the equivalent
-   energy-conserving method-of-lines form
-   `d(q_k)/dt = (kh_up·(T_up−T_k) + kh_dn·(T_dn−T_k) + Iswabs_k)/hilyr`
-   (volumetric-enthalpy balance, no ρ·cp factor), with the interface
-   conductances kh of the conductivity subroutine (F90:874-961) and the
-   per-layer absorbed shortwave of absorbed_solar (icepack_shortwave.F90:
-   862-880). The stage-3 integrator reproduces the backward-Euler trajectory.
-2. **Tsfc is a parameter.** The implicit surface energy balance
-   `fsurfn(Tsfc) + fcondtopn = 0` (icepack_therm_bl99.F90:1116-1128) is
-   transcendental in Tsfc; esm 1.3.0 has no implicit equations, so Tsfc is a
-   free parameter of the thermodynamics model fed by the coupled solve.
-3. **Momentum equation as continuous limit.** stepu's implicit-solve algebra
-   (cca/ccb/ab2/cc1/cc2, ice_dyn_shared.F90:949-959) is solver machinery; the
-   skeleton writes `m·du/dt = τa + τtilt + τo + ∇·σ − Cb·u + m·f·k̂×u` with the
-   full ocean stress of dyn_finish (F90:1345-1348) and the tilt stress
-   `strtltx = −gravit·m·ss_tltx` (F90:826).
-4. **EVP stress evolution as relaxation ODEs.** The classic-EVP under-relaxed
-   subcycle maps (ice_dyn_evp.F90:1584-1609, `arlx = 2·elasticDamp·ndte = 86.4`,
-   `brlx = ndte`) are written as `d(σ)/dt = (σ_target − σ)/Td` with
-   `Td = 2·elasticDamp·dt`; the four-corner (NE/NW/SW/SE) staggered stresses
-   are collapsed to one cell value (documented; the B-grid stencil is a stage-3
-   discretization concern).
-5. **Hibler strength in place of Rothrock.** The default `kstrength = 1`
-   Rothrock potential-energy form (icepack_mechred.F90:1666-1712) depends on
-   the ridge distribution state; the `kstrength ≠ 1` Hibler form (F90:1720) is
-   transcribed so the dynamics closes.
-6. **Constant atmo scheme in place of similarity.** The default
-   `atmbndy = 'similarity'` Monin-Obukhov iteration (icepack_atmo.F90:200-444)
-   is deferred; the constant scheme (F90:398-496) is transcribed. Consequently
-   the reference-height exports Si_u10/Si_tref/Si_qref are zero (the constant
-   scheme does not compute Tref/Qref/Uref).
-7. **Enthalpy-tracer transport documented, not carried.** The conservative
-   forms `d(vicen·qicen)/dt + div(vicen·qicen·u) = 0` are the Fortran's type-2
-   tracer transport (ice_transport_driver.F90:98-102); the product-form LHS
-   cannot define an unknown under the esm equation-balance rule, and the
-   tracers are parameters fed by the thermodynamics states, so the equations
-   are documented and asserted at stage 3 when the incremental-remap
-   discretization lands.
-8. **Grid and stagger collapse.** The single-cell skeleton collapses the B-grid
-   staggering (T/U points), the ANGLET POP-grid rotations of the export
-   stresses (ice_import_export.F90:962-968), the `aiU` division of the
-   T-point ocean-stress average (ice_step_mod.F90:1051-1072), and the tmask
-   ocean-mask guards; each collapse is annotated at the affected variable.
-9. **`frain` in m/s.** The cap converts Faxa_rain kg/m²/s to m/s by rhofresh
-   for the melt-pond term `frain·dt` (icepack_meltpond_lvl.F90:160), matching
-   the skeleton's rate-form meltt/melts; the Fortran's per-step lengths vs
-   the esm rate convention is documented in the melt-pond template.
+1. **Subnetwork `vt` when no tributaries** (`tlen <= hlen`): the Fortran leaves
+   `vt` stale (unused in the pass-through branch); here `vt` always takes the
+   Manning value (the `ifelse` on the clamp condition handles the other branch).
+   Values agree whenever `vt` is used downstream.
+2. **Channel `vr` in the `areaTotal2/(rwidth·rlen) > 1e6` branch**: the Fortran
+   leaves `vr` at the Manning value (unused); here the same is expressed (the
+   `vr` ifelse only zeroes for `rlen <= 0` and overrides on the dry-cell clamp).
+3. **`volr` uses the running `wr`** (the F90:854 sum `wt + wr + wh·area` is
+   computed *after* the irrigation/flood rules in mosart_run; the esm Control
+   computes `volr` from the coupled `wr` — consistent because the flood rule is
+   a rate rule in the same algebraic system).
+4. **Irrigation and flood as rate rules**: the Fortran removes the irrigation
+   volume and flood volume from storage once per coupling period (storage
+   jumps); the esm writes them as continuous rate rules
+   (`qirrig_actual = -min(irrig_volume, wr)/coupling_period`, `flood = (volr - fthresh)/delt_coupling`).
+   Same coupling-period totals; the intra-period trajectory differs. Stage-3
+   integration may replace these with discrete events.
+5. **Negative-storage warning** (`write_msg` in updateState_*, F90:361, 384)
+   not transcribed (diagnostic only).
+6. **`eroutUp` upstream gather and the `rh_direct` outlet gather** are plain
+   parameters (`Channel.eroutUp`, `Control.direct_*`) — placeholders until the
+   frivinp network data source lands (stage 2.5, boundaries.md §2.4); the
+   ID/dnID ESMF SMM topology is not expressible without it.
+7. **Fortran logicals** (`rof_from_glc`, `flds_r2l_stream_channel_depths`,
+   `ice_runoff`) are 0/1 parameters compared with `== 1.0`.
+8. **`D(wh)/dt` continuous limit**: the Fortran advances storage with forward
+   Euler at `delt` (hillslope) / `localdelt` (subnetwork, channel) with
+   DLevelH2R/numDT averaging; the esm ODEs integrate continuously with the
+   subtimestep counts entering only through `localdelt`. Instantaneous-vs-average
+   differences are expected and will be characterized against the dumps.
 
-## Bugs found in the Fortran code
+## Bugs found in the C++/Fortran code
 
-| # | Location | Bug / quirk |
-|---|---|---|
-| 1 | `icepack_atmo.F90:463-464` (atmo_boundary_const) | `strx = tau·uatm` omits the `/wind` direction-cosine normalization — the vmag division is commented out at F90:328-329 and the active stress is dimensionally `kg/s³` (a 10 m/s wind gives a 10× stress). Transcribed as written (the stage-3 tests must pin the active code); the esm skeleton declares the honest `kg/s^3` dimension at Control.strairx/strairy and the dynamics consumes the same value with its N/m² momentum balance annotated. |
-| 2 | `icepack_therm_shared.F90:90-94` (calculate_Tin_from_qin) | The Fortran aborts on a negative discriminant of the brine quadratic; the .esm skeleton cannot express the abort and carries it as a documented guard for the stage-2 tests (a negative discriminant in a dump would expose a thermodynamics inconsistency upstream). |
+Centralized list (per AGENTS.md): see `bugs.md` in the repo root; nothing new
+found during this transcription. Notable observations worth a `bugs.md` entry:
+`dwt`/`dwr` type comments say [m3] but the code assigns flux sums and advances
+storage by `·localdelt` (rate reading adopted, noted in variable descriptions);
+`qgwl` is added to `dwr` without an `ifelse` when `bypass_routing_option = none`
+(F90:327 is unconditional).
 
 ## Testing
 
-The `tests` blocks are `[]` with TODO notes in the metadata: the numeric
-tuples come from the stage-1 instrumentation dumps (`stage1/dumps/cice/`),
-which are not yet produced for CICE. When the dumps land, each subcomponent
-gains instantaneous tests (time_span {0,0}) pinning the transcribed laws
-per-category (albedo/absorbed solar, enthalpy↔temperature round-trips,
-conductivity/kh, fsurfn components, congelation qbot, fbot, melt-pond dvn,
-strength/viscosities, the stress targets, the export aggregation rows), and
-the assembly gains the one-coupling-period trace over [0, 3600] from the cold
-start, following the MOSART skeleton's testing pattern.
+All `tests` blocks are filled with numeric tuples from the stage-1
+instrumentation dumps (`stage1/dumps/mosart/`): instantaneous pointwise pins
+(`time_span {0,0}`, laws and geometry chains evaluated at their dump states)
+and one-step storage traces in the continuous-ODE form over one Euler substep
+`delt = 3600 s` (the assembly test spans one coupling period `[0, 10800]`).
+Every expected value is a real dump row — identified by step / ns / m-level /
+substep / gindex in the test descriptions; none are invented. Run the suite
+with
 
-`esm validate` on each file must pass; `esm test` currently reports 0
-assertions everywhere.
+    esm test stage2/mosart_*.esm
 
-## Scheme gaps (continuous ODE vs Fortran discrete)
+(tests of mounted models run when their own file is a target; the assembly run
+additionally reports its 4 mounts). `esm validate` passes for all six files.
 
-- The Fortran's backward-Euler tridiagonal, the stepu implicit solve, and the
-  EVP subcycle iteration become ODEs; the discrete-equivalent trajectories are
-  matched at stage 3 through the integrator and the discretization templates.
-- The incremental-remapping advection (departure points, transport integrals,
-  the category-0 open-water mass) is a discretization, not a pointwise law;
-  the skeleton carries its continuous continuity system.
-- The ridging (kstrength = 1), the delta-Eddington shortwave solver, the
-  similarity atmo boundary layer, the salinity-profile module (zSin is a
-  prescribed parameter with the 'constant' profile), the melt-pond
-  tracers hpnd/apnd/alvl (prescribed parameters), and the wave/aerosol/isotope
-  tracers are deferred.
-- The `Si_imask` ocean mask is a grid field (deferred on the single-cell
-  skeleton).
+| File | Tests | Assertions | What is pinned |
+|---|---|---|---|
+| `mosart_hillslope.esm` | 6 | 20 | CREHT_nosqrt pointwise (wet and dry states, cells 100312/101032/100313) + one-step growth/drain traces of `d(wh)/dt = qsur + ehout` |
+| `mosart_subnetwork.esm` | 8 | 30 | GRMR/GRHT/GRPT/GRRR chain pointwise (incl. the TINYVALUE zero guards) + Manning velocity + one-step etin/erlateral trace of `d(wt)/dt` |
+| `mosart_channel.esm` | 4 | 33 | dry-cell GRMR/GRHR/GRPR/GRRR chain and dry routing branches pointwise (2 cells + zero guard) + one-step `d(wr)/dt = erlateral` accumulation trace |
+| `mosart_coupling.esm` | 1 | 16 | med↔rof conversions: `Flrl_rofsur → qsur_m3s`, `volr/volrmch → Flrr_volr/volrmch`, all-zero streams |
+| `mosart_routing.esm` | 1 | 16 | one coupling period of the full assembly: mass-conserved `volr`, hillslope fill `wh`, subcycling diagnostics, zero branches |
+
+### Derived inputs and conversions
+
+- **Per-cell area** is not dumped directly: `area = qsur_m3s/qsur_ms` of the
+  step-1 dump rows = 2.900213644740529e9 m² for cell 100312 (verified against
+  `etin` and `volr`, which is `wh·area` to 1e-6 since `wt, wr ≪ wh·area`).
+  Per-cell areas differ (cell 101032's is ~2.909e9 m²).
+- **`Flrl_rofsur`** (mm/s) is derived from the dumped `qsur_m3s` by the inverse
+  of the cap conversion: `Flrl_rofsur = qsur_m3s/(area·0.001)`.
+- **numDT values** come from the law-dump row multiplicities (one row per
+  substep per (step, ns, m) key): `numDT_r = 4` and `numDT_t = 4` for cell
+  100312. The Control CFL equations reproduce them at the default
+  `rslp = tslp = 1e-4`, `areaTotal2 = 1e8` with the cell geometry, giving
+  `localdelt = delt/DLevelH2R/numDT = 3600/5/4 = 180 s` — asserted in the
+  assembly test along with `nsub = 3`, `delt = 3600` (the dump's three `ns`
+  levels per coupling step).
+- **`fthresh`**: the Fortran flood threshold is the `spval` sentinel
+  `abs(spval) = 1e36` (`mosart_vars.F90:24`) — always inactive; the .esm
+  default 0.0 is a placeholder, so the assembly test overrides
+  `Control.fthresh = 1e36`. With the placeholder, the flood rule would fire on
+  the first period (volr = 0.81 m³ > 0).
+
+### Scheme gaps (continuous ODE vs Fortran staggered Euler)
+
+The .esm routing steps are continuous limits of the Fortran's forward-Euler
+cascade (`D(wh)/dt`, `D(wt)/dt`, `D(wr)/dt`), so the traces carry measured,
+documented gaps (measured with the solver at reltol 1e-14; each test's
+description states its gap and the assertion bound, ~2–5× the gap):
+
+- hillslope fill: 1.0e-17 m abs = 5.5e-8 rel (growth step); drain step
+  1.2e-21 m = 4.3e-12 rel;
+- subnetwork: ~6e-17 m³ abs = 2e-11 rel on wt (the `etout` term is ~1e-8 of
+  `etin` here);
+- channel `wr` accumulation: **exact** — the dumped `erlat_avg` is the
+  DLevelH2R mean of the five m-level erlateral values, and the Fortran's
+  per-m-level sum Σ erlateral(m)·720 equals mean·3600, the continuous integral
+  with `erlateral` held at the mean.
+
+The one large gap is in the assembly: the continuous limit delivers the
+hillslope outflow `etin` to the subnetwork as a ramp, while the Fortran holds
+it constant at each Euler substep's entry state. Measured continuous end
+states (reltol 1e-14) are `wt = 2.0628e-6 m³` and `wr = 8.523e-16 m³` against
+the Fortran's `wt = 1.2267e-6 m³` (0.59×) and `wr = 2.620e-16 m³` (3.3×) — the
+wt/wr split of the stored water differs while `volr` (mass-conserving) agrees
+to 2.4e-16 rel and `wh` (qsur-dominated) to 1.0e-6 rel. The assembly test
+asserts `volr` and `wh`, documents the wt/wr gap, and pins `wr` only to the
+dry-channel threshold (1e-14 m³; both values are far below the TINYVALUE
+wetted-area cutoff that would wake the channel flow).
+
+### Coverage limitations (this data window)
+
+- The channel is dry through all 8 dumped steps (max `wr = 1.9e-12 m³` →
+  `mr = 1.3e-17 m² < TINYVALUE`), so the nonzero GRHR/GRPR flood-plain
+  branches (`mosart_physics.F90:501-572`) and the wet Manning routing branch
+  of `Routing_KW` are not exercised — they await a wetter window (stage-1
+  rerun with stronger forcing).
+- Likewise not present in the window: the `areaTotal2/(rwidth·rlen) > 1e6` and
+  `rlen <= 0` channel branches, the `tlen <= hlen` subnetwork pass-through,
+  and the nonzero irrigation / flood / qgwl / direct-transfer branches (all
+  cells routed normally; all forcing terms zero except step-1 `qsur`).
+- The dry-cell clamp of the channel (`erout = -(erlateral + erin + wr/localdelt)`,
+  F90:315-317) is exercised by the dump rows only through its non-firing
+  branch in this window (mr stays below TINYVALUE in every cell).
 
 ## Next steps (stage 2.5 / stage 3)
 
-1. Instrument the CICE run (stage 1) and extract per-component tuples
-   (thermo column, EVP subcycle, remap transport, cap aggregation).
-2. Fill the `tests` blocks; reconcile any transcription mismatches.
-3. Submit the discretization templates (spatial-D lowering, incremental remap)
-   to EarthSciDiscretizations; wire the Tsfc implicit solve; mount the full
-   B-grid stencil.
-4. Couple CICE with the other components in the top-level `eqesm.esm` model
-   and integrate with `github.com/earthsciml/earthsciintegrator`.
+1. A wetter stage-1 forcing window to cover the channel flood-plain / wet
+   Manning branches and the irrigation/flood/direct-transfer nonzero branches.
+2. frivinp network `data_sources` (static) + ID/dnID gather → replace the
+   `eroutUp`/`direct` placeholders.
+3. Mount into `eqesm.esm` and integrate with earthsciintegrator; compare
+   against full-CESM simulations (conservation via `mosart_budget_type.F90`).
