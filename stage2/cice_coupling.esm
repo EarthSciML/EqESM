@@ -2278,6 +2278,41 @@
      ]
     },
     {
+     "id": "icecap_export_sit_step1_cell2_4",
+     "description": "Instantaneous pin of the export surface temperature Si_t = Tsrf = Tffresh + sum_n(Tsfcn*aicen)/ailohi (ice_import_export.F90:950-951, the trcr(:,nt_Tsfc) aggregate of icepack_aggregate) against cice_run_exports.csv row (step 1, i=2, j=4). The Tsfcn and aicen overrides are the per-category coupling-time state of cice_thermo_state.csv entry (step 2, i=2, j=4) - the state the export saw after the step-1 thermodynamics (exports(S) = thermo_state entry(S+1)); the .esm reproduces Si_t = 265.484142700586744 K (= Tffresh + the dumped aggregate Tsfc -7.66585729941324434 C) to round-off. (These values were unreadable before the dump tracer-index fix, fork ced43eb / rerun 11864874.)",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "Tsfc": [
+       -2.2040766223642834,
+       -7.904278174167289,
+       -7.62044699838754,
+       -7.598347035357697,
+       -7.747853105088929
+      ],
+      "aicen": [
+       0.009852850608356705,
+       0.012855529713203084,
+       0.02967522239569254,
+       0.16810878906591015,
+       0.7737677729487741
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Si_t",
+       "time": 0.0,
+       "expected": 265.48414270058674
+      }
+     ]
+    },
+    {
      "id": "icecap_export_vice_step1_cell2_4",
      "description": "Instantaneous pin of the export ice volume Si_vice = sum_n vicen (F90:1109-1110) against cice_run_exports.csv row (step 1, i=2, j=4), with vicen from cice_thermo_state.csv entry (step 2, i=2, j=4): the .esm reproduces Si_vice = 2.22875511635124752e+01 m to round-off.",
      "time_span": {

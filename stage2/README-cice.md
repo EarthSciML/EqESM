@@ -279,10 +279,15 @@ must reproduce the dumped value:
    gives nonzero Si_u10/Si_tref/Si_qref (1.104, 266.36, 1.95e-3) where the
    transcribed constant scheme gives zero — so no dump value pins the
    transcribed thermodynamics equations.
-- **Tsfc tracer not dumped.** The nt_Tsfc tracer reads 0 in every
-   `cice_thermo_state.csv` row (aggregate and per-category), so the Si_t
-   export and any surface-temperature law are unpinnable; the real value is
-   visible only in the exports (Si_t = 258.49 K at step 0, Tsfc ≈ −14.7 °C).
+- **Tsfc tracer (dump bug, now fixed).** The first instrumented run read
+   the `nt_Tsfc`/`nt_qice`/`nt_qsno` tracers with the j and tracer indices
+   swapped (`trcrn(i,nt,j,n,blk)` vs the declared `(i,j,nt,n,blk)`), so
+   Tsfc/Tsfcn/qice/qsno read 0 in every `cice_thermo_state.csv` row and
+   Tsfcn/alvl/apnd/hpnd/ipnd read 0 in `cice_albedo.csv`. Fixed in the
+   instrumented fork (`ced43eb`, superproject `c8a3bef`; rerun job
+   11864874) — the columns now carry physical values (Tsfc ≈ −14.7 °C,
+   qice_1 ≈ −3.03e8 J/m3) and the Si_t export is pinned against them
+   (test `icecap_export_sit_step1_cell2_4`).
 - **Spatial-D lowering blocks dynamics/transport/assembly tests.** The
    internal-stress divergence (strintx = D(sigma11,x) + D(sigma12,y)) and the
    transport continuity D(aicen·u) are spatial rewrite targets (esm-spec 4.2);
