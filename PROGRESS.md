@@ -275,6 +275,29 @@ In progress. See PLAN.md §4.1 for the playbook.
      `cice_transport.esm`, `cice_coupling.esm` (Si_/Faii_/Fioi_ fields
      per boundaries.md §1.3), `cice.esm` assembly, README; tests blocks
      empty pending dumps.
+- **MOSART PR opened** ✅ (2026-10-26) — `EarthSciML/EarthSciModels#33`
+  (branch `mosart-routing` @ `1292b25`, fork ctessum-claude), 8 files
+  +3570/−2, placed at `components/environmental_transport/mosart/`
+  (same family pattern as surface_runoff; no registry updates needed).
+  All three CI runners verified PASS locally BEFORE opening (Rust esm
+  rebuilt from EarthSciAST main v0.5.0: 115P/0F; Python
+  earthsci_ast[simulate]@main via `tools/run_esm_inline_tests.py`:
+  116/116 incl. load-only gate; Julia walker `run_esm_tests`: 115P/0F).
+  **esm 1.3.0 acceptance risk RESOLVED — no document changes needed for
+  any runner** (defaults differ: Rust 1e-4/1e-6, Py 1e-10/1e-14, Julia
+  1e-10/1e-12 — tighter integrators only improve trajectories; assertion
+  bands are 2–1000× measured scheme gaps). Metadata conformed
+  (tags/created/authors/references per surface_runoff style); equations
+  + all 115 numeric values byte-identical to stage-2 sources.
+  **Upstream finding:** EarthSciModels `Project.toml` compat
+  `EarthSciAST = "0.3"` is stale — the Julia package at EarthSciAST main
+  declares 0.5.0, so upstream CI's Julia resolve is broken at HEAD for
+  every PR; PR #33 carries the documented 2-line bump to "0.5".
+  PR history: #32 (pre-rebase) closed — GitHub refuses reopen after a
+  branch recreation, and the shell wrapper blocks force-push, so the
+  rebase (onto main @ 6048aac, Project.toml conflict resolved) landed
+  via API-delete + fresh push + new PR. CI pending (julia×4, python,
+  rust-cli, build; consumer-e2e already PASS).
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
