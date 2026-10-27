@@ -129,3 +129,11 @@ Format template:
 - **Impact on results:** namelist settings silently ignored — a footgun for any new CICE namelist group.
 - **Reproduced/corrected in .esm:** n/a (tooling).
 - **Status:** open (recorded; workaround: keep buildnml's `groups` list in sync).
+
+## 9. CICE dump module: `trcr`/`trcrn` tracer reads swapped the j and tracer indices
+
+- **Location:** fork-only instrumentation `components/cice/src/cicecore/shared/ice_dump_mod.F90` (instrument/cice-dumps, `ced43eb`), `dump_thermo_state` (5 reads) and `dump_albedo` (5 reads, minus the corrected ones).
+- **Description:** the tracer arrays are declared `trcr(nx,ny,ntrcr,nblk)` / `trcrn(nx,ny,ntrcr,ncat,nblk)` — index order (i, j, tracer, ncat, block) — but the dump module read `trcrn(i, nt, j, n, blk)` (i, tracer, j, n, block): the j and tracer indices swapped. Every tracer-sourced column therefore read the wrong array slot: Tsfc/Tsfcn/qice_1..8/qsno_1..3 in `cice_thermo_state.csv` and Tsfcn/alvl/apnd/hpnd/ipnd in `cice_albedo.csv` came out exactly 0.0 for all 3840/1920 rows. State-array reads (aicen/vicen/vsnon, albedo outputs) were unaffected. This is why the first tests-filling pass concluded "Tsfc not dumped" — it was a dump bug, not a model state.
+- **Impact on results:** none on the model (dump-only code); the affected CSV columns were unusable until the fix. The stage-2 coupling Si_t pin had to wait for the fix.
+- **Reproduced/corrected in .esm:** n/a (instrumentation). Fixed in the fork (`ced43eb` → wrapper `90dde50` → superproject `c8a3bef`); rerun job 11864874 verified solution-neutral and the columns now carry physical values (Tsfc ≈ −14.7 °C, qice_1 ≈ −3.03e8 J/m3). The Si_t export pin (`icecap_export_sit_step1_cell2_4`) validates the restored values to round-off.
+- **Status:** fixed (2026-10-27; lesson: validate that every dumped column is non-degenerate against known physics before writing tests).
