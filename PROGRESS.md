@@ -253,6 +253,28 @@ In progress. See PLAN.md §4.1 for the playbook.
   the M2 loop: stub → physics → tests green under `./esm test`.**
   **M2 remaining:** EarthSciModels PR prep (esm 1.3.0 CI acceptance check
   per survey risk) + CICE instrumentation (M3).
+- **M3 kickoff** (2026-10-26) — three workers dispatched in parallel:
+  1. **MOSART PR prep** (wt `mosart-routing` in EarthSciModels): copy
+     stage-2 files into the corpus (placement TBD: `river_routing/` vs
+     `environmental_transport/`), conform metadata (tags/authors/
+     references), and verify under ALL THREE CI runners (Python
+     earthsci_ast[simulate]@main, Julia walker, Rust esm built from
+     EarthSciAST main) — the survey's version-drift risk (corpus 1.0.0
+     vs our 1.3.0) is the gate. No PR opened until manager review.
+  2. **CICE instrumentation** (CESM fork worktree `instrument/cice-dumps`):
+     mirror the MOSART dump-module pattern (namelist-gated, PET-0, CSV
+     headers); instrument Icepack column laws (albedo, freezing temp,
+     strength P, EVP stress, drag), CICE_Run I-boundaries, transport,
+     budget; validate with a `D`-class instrumented run (single node,
+     `srun --mpi=pmix` launcher + `env -u SLURM_MEM_PER_*` submit);
+     dumps → `stage1/dumps/cice/`; solution-neutrality vs D_f19g17.
+  3. **CICE stage-2 skeleton** (wt/stage2-cice): mirror the MOSART
+     skeleton — `cice_templates.esm` (laws transcribed exactly from
+     icepack/cicedyn source), `cice_thermodynamics.esm` (vertical heat
+     conduction as PDE, continuous form), `cice_dynamics.esm` (EVP),
+     `cice_transport.esm`, `cice_coupling.esm` (Si_/Faii_/Fioi_ fields
+     per boundaries.md §1.3), `cice.esm` assembly, README; tests blocks
+     empty pending dumps.
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
