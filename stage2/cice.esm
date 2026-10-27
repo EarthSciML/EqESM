@@ -1,0 +1,655 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice",
+  "description": "CICE sea-ice top-level component (stage 2 of the EqESM project): the cesm3_cice6_6_3_22 ice component as an esm 1.3.0 assembly, per the stage1/boundaries.md 1.3 boundary table. Five systems: IceCap (mounted from ./cice_coupling.esm, the med<->ice cap renames, the med2mod/mod2med areacor scaling, and the merge_fluxes export aggregation of ice_import_export.F90), Thermodynamics (./cice_thermodynamics.esm, the BL99 column physics: prep_radiation shortwave/albedo, step_therm1 vertical conduction and surface energy balance, step_therm2 growth/melt/ponds and the ocean heat/fresh/salt fluxes), Dynamics (./cice_dynamics.esm, the EVP momentum balance and stress relaxation of step_dyn_horiz), Transport (./cice_transport.esm, the per-category conservative advection of the incremental-remap scheme), and the inline Control model, which is the ice_step orchestration (CICE_RunMod.F90:109-369 via ice_step_mod.F90) written as algebraic rate rules over one coupling period: the subcycling dt_dyn = dt/ndtd of the dynamics loop (CICE_RunMod.F90:271-281, ice_calendar dt_dyn), and the atmosphere boundary layer of the constant scheme (atmo_boundary_const, icepack_atmo.F90:398-496): wind = sqrt(uatm^2 + vatm^2) (prepare_forcing, ice_forcing.F90:1796), tau = rhoa*0.0012*wind with the components strairx = tau*uatm, strairy = tau*vatm (F90:460-464), shcoef = senscoef*cp_air*rhoa*wind (F90:493) and lhcoef = latncoef*Lsub*rhoa*wind (F90:494, Lheat = Lsub for ice F90:472-476). The coupling array wires the data flow with variable_map param_to_var entries in the ice_step order: the cap state fields (potT, Qa, rhoa, the four shortwave bands, flw, sst, sss, frzmlt, frain, fsnow, uocn, vocn, ss_tltx, ss_tlty) into Thermodynamics and Dynamics; the transport-owned mass states aicen/vicen/vsnon into Thermodynamics, Dynamics, and the cap aggregation; the thermodynamics-owned enthalpy states qicen/qsnon into the Transport tracers; the dynamics-owned velocity uvel/vvel into Transport and the full ocean stress taux/tauy into the cap's Fioi_taux/tauy sign flip and the thermodynamics' ustar; and the per-category thermodynamics fluxes and albedos into the cap's export aggregation. Deferred to stage 3 (documented in the subcomponent descriptions and stage2/README-cice.md): the Tsfc implicit surface-energy-balance solve (carried as a free parameter), the incremental-remap discretization of the transport PDEs (EarthSciDiscretizations lowering), the kstrength = 1 Rothrock ridging and the kdyn/ktherm alternates, the similarity atmbndy scheme, the per-band Fioi_swpen_* fields, and the wave/aerosol/isotope exports. The tests block is empty pending the stage-1 instrumentation dumps (stage1/dumps/cice/). Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/."
+ },
+ "solver": {
+  "stiffness": "high",
+  "time_span": {
+   "start": 0,
+   "end": 3600
+  },
+  "external": "cice.run.json"
+ },
+ "index_sets": {
+  "cell": {
+   "kind": "interval",
+   "size": "N_CELL"
+  },
+  "ncat": {
+   "kind": "interval",
+   "size": "N_CAT"
+  },
+  "ice_layer": {
+   "kind": "interval",
+   "size": "N_ILYR"
+  },
+  "snow_layer": {
+   "kind": "interval",
+   "size": "N_SLYR"
+  }
+ },
+ "metaparameters": {
+  "N_CELL": {
+   "type": "integer",
+   "default": 1,
+   "description": "number of ice grid cells in the stage-2 skeleton (one cell; the full model runs the block-decomposed B grid), [-]"
+  },
+  "N_CAT": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of ice thickness categories (namelist ncat = 5), [-]"
+  },
+  "N_ILYR": {
+   "type": "integer",
+   "default": 7,
+   "description": "number of ice layers (namelist nilyr = 7), [-]"
+  },
+  "N_SLYR": {
+   "type": "integer",
+   "default": 1,
+   "description": "number of snow layers (namelist nslyr = 1), [-]"
+  }
+ },
+ "models": {
+  "Thermodynamics": {
+   "ref": "./cice_thermodynamics.esm"
+  },
+  "Dynamics": {
+   "ref": "./cice_dynamics.esm"
+  },
+  "Transport": {
+   "ref": "./cice_transport.esm"
+  },
+  "IceCap": {
+   "ref": "./cice_coupling.esm"
+  },
+  "Control": {
+   "expression_template_imports": [
+    {
+     "ref": "./cice_templates.esm"
+    }
+   ],
+   "variables": {
+    "dt_dyn": {
+     "type": "unknown",
+     "units": "s",
+     "description": "dynamics timestep of the ndtd subcycle loop: dt_dyn = dt/ndtd (ice_calendar dt_dyn, passed to step_dyn_horiz, CICE_RunMod.F90:271-281), [s]"
+    },
+    "wind": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "wind speed at the lowest model level: wind = sqrt(uatm^2 + vatm^2) (prepare_forcing, ice_forcing.F90:1796, 1819), [m/s]"
+    },
+    "tau": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "atmosphere-ice momentum stress magnitude of the constant boundary-layer scheme: tau = rhoa*0.0012*wind (atmo_boundary_const, icepack_atmo.F90:460), [N/m2]"
+    },
+    "strairx": {
+     "type": "unknown",
+     "units": "kg/s^3",
+     "description": "x air-ice stress at T points: strairx = tau*uatm (atmo_boundary_const, icepack_atmo.F90:463; the per-category strairxn of step_therm1 is identical across categories - no Tsfc dependence - so the merge_fluxes aggregation of icepack_flux.F90:187-189 collapses to this single value). The Fortran omits the /wind direction-cosine normalization (the vmag division is commented out, F90:328-329), so the transcription carries the dimension kg/s^3 of the active code; the quirk is logged in stage2/README-cice.md, [kg/s3]"
+    },
+    "strairy": {
+     "type": "unknown",
+     "units": "kg/s^3",
+     "description": "y air-ice stress at T points: strairy = tau*vatm (F90:464; see strairx for the missing /wind normalization), [kg/s3]"
+    },
+    "shcoef": {
+     "type": "unknown",
+     "units": "W/m^2/K",
+     "description": "sensible-heat transfer coefficient: shcoef = senscoef*cp_air*rhoa*wind (atmo_boundary_const, icepack_atmo.F90:493; senscoef = 0.0012, cp_air = 1005), [W/m2/K]"
+    },
+    "lhcoef": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "latent-heat transfer coefficient: lhcoef = latncoef*Lsub*rhoa*wind (atmo_boundary_const, icepack_atmo.F90:494 with Lheat = Lsub = 2.835e6 for ice, F90:472-476; latncoef = 0.0015), [W/m2]"
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 3600.0,
+     "description": "coupling/thermodynamics timestep (namelist dt = 3600 s; the step_therm1/2 column physics runs once per step), [s]"
+    },
+    "ndtd": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "number of dynamics subcycles per step (namelist ndtd = 1), [-]"
+    },
+    "uatm": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "x wind velocity at zlvl (wired from the cap import Sa_u), [m/s]"
+    },
+    "vatm": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "y wind velocity at zlvl (wired from the cap import Sa_v), [m/s]"
+    },
+    "rhoa": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1.2,
+     "description": "air density (wired from the cap import Sa_dens or the Sa_pbot branch), [kg/m3]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "dt_dyn",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "dt",
+       "ndtd"
+      ]
+     }
+    },
+    {
+     "lhs": "wind",
+     "rhs": {
+      "op": "sqrt",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "^",
+          "args": [
+           "uatm",
+           2
+          ]
+         },
+         {
+          "op": "^",
+          "args": [
+           "vatm",
+           2
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "tau",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_constant_tau",
+      "bindings": {
+       "rhoa": "rhoa",
+       "wind": "wind"
+      }
+     }
+    },
+    {
+     "lhs": "strairx",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "tau",
+       "uatm"
+      ]
+     }
+    },
+    {
+     "lhs": "strairy",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "tau",
+       "vatm"
+      ]
+     }
+    },
+    {
+     "lhs": "shcoef",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_constant_shcoef",
+      "bindings": {
+       "rhoa": "rhoa",
+       "wind": "wind"
+      }
+     }
+    },
+    {
+     "lhs": "lhcoef",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_constant_lhcoef",
+      "bindings": {
+       "rhoa": "rhoa",
+       "wind": "wind",
+       "Lheat": 2835000.0
+      }
+     }
+    }
+   ],
+   "tests": []
+  }
+ },
+ "coupling": [
+  {
+   "type": "variable_map",
+   "from": "IceCap.uatm",
+   "to": "Control.uatm",
+   "transform": "param_to_var",
+   "description": "x wind into the atmo boundary layer (ice_import Sa_u)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.vatm",
+   "to": "Control.vatm",
+   "transform": "param_to_var",
+   "description": "y wind into the atmo boundary layer (ice_import Sa_v)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.rhoa",
+   "to": "Control.rhoa",
+   "transform": "param_to_var",
+   "description": "air density into the atmo boundary layer (ice_import Sa_dens or the Sa_pbot branch)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.dt",
+   "to": "Thermodynamics.dt",
+   "transform": "param_to_var",
+   "description": "column-physics timestep (step_therm1/2, CICE_RunMod.F90:240-252)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.dt_dyn",
+   "to": "Dynamics.dt",
+   "transform": "param_to_var",
+   "description": "dynamics timestep of the ndtd subcycle loop (step_dyn_horiz, CICE_RunMod.F90:279)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.strairx",
+   "to": "Dynamics.strairx",
+   "transform": "param_to_var",
+   "description": "T-point air-ice stress mapped to the U-point momentum balance (grid_average_X2Y of strairxT, ice_dyn_evp.F90:474-475; identity on the single-cell skeleton)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.strairy",
+   "to": "Dynamics.strairy",
+   "transform": "param_to_var",
+   "description": "T-point air-ice stress mapped to the U-point momentum balance"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.strairx",
+   "to": "IceCap.strairxT",
+   "transform": "param_to_var",
+   "description": "T-point air-ice stress into the Faii_taux export (merge_fluxes strairxT, icepack_flux.F90:187-189)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.strairy",
+   "to": "IceCap.strairyT",
+   "transform": "param_to_var",
+   "description": "T-point air-ice stress into the Faii_tauy export"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.shcoef",
+   "to": "Thermodynamics.shcoef",
+   "transform": "param_to_var",
+   "description": "sensible-heat transfer coefficient into the surface energy balance (atmo_boundary_const F90:493)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Control.lhcoef",
+   "to": "Thermodynamics.lhcoef",
+   "transform": "param_to_var",
+   "description": "latent-heat transfer coefficient into the surface energy balance (F90:494)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.potT",
+   "to": "Thermodynamics.potT",
+   "transform": "param_to_var",
+   "description": "air potential temperature into the surface energy balance (ice_import Sa_ptem or the Sa_pbot branch)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.Qa",
+   "to": "Thermodynamics.Qa",
+   "transform": "param_to_var",
+   "description": "air specific humidity into the surface energy balance (ice_import Sa_shum)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.rhoa",
+   "to": "Thermodynamics.rhoa",
+   "transform": "param_to_var",
+   "description": "air density into the saturation humidity and surface energy balance"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.swvdr",
+   "to": "Thermodynamics.swvdr",
+   "transform": "param_to_var",
+   "description": "visible direct shortwave into the absorbed_solar/prep_radiation step"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.swvdf",
+   "to": "Thermodynamics.swvdf",
+   "transform": "param_to_var",
+   "description": "visible diffuse shortwave into prep_radiation"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.swidr",
+   "to": "Thermodynamics.swidr",
+   "transform": "param_to_var",
+   "description": "near-IR direct shortwave into prep_radiation"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.swidf",
+   "to": "Thermodynamics.swidf",
+   "transform": "param_to_var",
+   "description": "near-IR diffuse shortwave into prep_radiation"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.flw",
+   "to": "Thermodynamics.flw",
+   "transform": "param_to_var",
+   "description": "downward longwave into the surface energy balance (ice_import Faxa_lwdn)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.sst",
+   "to": "Thermodynamics.sst",
+   "transform": "param_to_var",
+   "description": "sea surface temperature into the ocean heat flux fbot (ice_import So_t)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.sss",
+   "to": "Thermodynamics.sss",
+   "transform": "param_to_var",
+   "description": "sea surface salinity into the bottom liquidus (ice_import So_s)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.frzmlt",
+   "to": "Thermodynamics.frzmlt",
+   "transform": "param_to_var",
+   "description": "ocean-to-ice heat flux into fbot (ice_import Fioo_q)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.frain",
+   "to": "Thermodynamics.frain",
+   "transform": "param_to_var",
+   "description": "rain rate (m/s) into the melt-pond volume change (ice_import Faxa_rain divided by rhofresh)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.fsnow",
+   "to": "Thermodynamics.fsnow",
+   "transform": "param_to_var",
+   "description": "snowfall rate into the new-snow thickness (ice_import Faxa_snow)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.aicen",
+   "to": "Thermodynamics.aicen",
+   "transform": "param_to_var",
+   "description": "advected category area into the column physics (the Fortran advects aicen before step_therm1 of the next step)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vicen",
+   "to": "Thermodynamics.vicen",
+   "transform": "param_to_var",
+   "description": "advected category ice volume into the column physics"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vsnon",
+   "to": "Thermodynamics.vsnon",
+   "transform": "param_to_var",
+   "description": "advected category snow volume into the column physics"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.aicen",
+   "to": "Dynamics.aicen",
+   "transform": "param_to_var",
+   "description": "category area into the strength and stress aggregation (aice = sum_n aicen)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vicen",
+   "to": "Dynamics.vicen",
+   "transform": "param_to_var",
+   "description": "category ice volume into the strength and mass aggregation"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vsnon",
+   "to": "Dynamics.vsnon",
+   "transform": "param_to_var",
+   "description": "category snow volume into the mass aggregation Tmass"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.aicen",
+   "to": "IceCap.aicen",
+   "transform": "param_to_var",
+   "description": "category area into the export aggregation (ailohi, Tsrf, fluxes)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vicen",
+   "to": "IceCap.vicen",
+   "transform": "param_to_var",
+   "description": "category ice volume into the Si_vice export"
+  },
+  {
+   "type": "variable_map",
+   "from": "Transport.vsnon",
+   "to": "IceCap.vsnon",
+   "transform": "param_to_var",
+   "description": "category snow volume into the Si_vsno/Si_snowh exports"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.qicen",
+   "to": "Transport.qicen",
+   "transform": "param_to_var",
+   "description": "updated ice enthalpy into the advected tracer nt_qice (the conservative tracer transport is documented in the transport component, deferred to stage 3)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.qsnon",
+   "to": "Transport.qsnon",
+   "transform": "param_to_var",
+   "description": "updated snow enthalpy into the advected tracer nt_qsno"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.uvel",
+   "to": "Transport.uvel",
+   "transform": "param_to_var",
+   "description": "B-grid x velocity into the remap advection (ice_HaloUpdate of uvel before transport, ice_transport_driver.F90:430-445)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.vvel",
+   "to": "Transport.vvel",
+   "transform": "param_to_var",
+   "description": "B-grid y velocity into the remap advection"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.uocn",
+   "to": "Dynamics.uocn",
+   "transform": "param_to_var",
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_u)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.vocn",
+   "to": "Dynamics.vocn",
+   "transform": "param_to_var",
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_v)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.ss_tltx",
+   "to": "Dynamics.ss_tltx",
+   "transform": "param_to_var",
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdx)"
+  },
+  {
+   "type": "variable_map",
+   "from": "IceCap.ss_tlty",
+   "to": "Dynamics.ss_tlty",
+   "transform": "param_to_var",
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdy)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.taux",
+   "to": "Thermodynamics.strocnxT",
+   "transform": "param_to_var",
+   "description": "full ocean stress into the ustar of fbot (the single-cell skeleton collapses the T-point average of strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.tauy",
+   "to": "Thermodynamics.strocnyT",
+   "transform": "param_to_var",
+   "description": "full ocean stress into the ustar of fbot"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.taux",
+   "to": "IceCap.strocnxT",
+   "transform": "param_to_var",
+   "description": "full ocean stress into the Fioi_taux sign flip (tauxo = -strocnxT_iavg, ice_import_export.F90:966-968)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Dynamics.tauy",
+   "to": "IceCap.strocnyT",
+   "transform": "param_to_var",
+   "description": "full ocean stress into the Fioi_tauy sign flip"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.Tsfc",
+   "to": "IceCap.Tsfc",
+   "transform": "param_to_var",
+   "description": "per-category surface temperature into the Tsrf export aggregation (trcr(:,nt_Tsfc) of icepack_aggregate)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.flatn",
+   "to": "IceCap.flatn",
+   "transform": "param_to_var",
+   "description": "per-category latent heat flux into the Faii_lat aggregation (icepack_flux.F90:206)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.fsensn",
+   "to": "IceCap.fsensn",
+   "transform": "param_to_var",
+   "description": "per-category sensible heat flux into the Faii_sen aggregation (F90:204)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.swabs",
+   "to": "IceCap.swabs",
+   "transform": "param_to_var",
+   "description": "per-category absorbed shortwave into the Faii_swnet aggregation (F90:210)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.flwoutn",
+   "to": "IceCap.flwoutn",
+   "transform": "param_to_var",
+   "description": "per-category outgoing longwave into the Faii_lwup aggregation (F90:213-215)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.evapn",
+   "to": "IceCap.evapn",
+   "transform": "param_to_var",
+   "description": "per-category sublimation/condensation flux into the Faii_evap aggregation (F90:219)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.fswthru",
+   "to": "IceCap.fswthrun",
+   "transform": "param_to_var",
+   "description": "per-category transmitted shortwave into the Fioi_swpen aggregation (F90:247)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.fhocnn",
+   "to": "IceCap.fhocnn",
+   "transform": "param_to_var",
+   "description": "per-category ocean heat flux into the Fioi_melth aggregation (F90:253)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.freshn",
+   "to": "IceCap.freshn",
+   "transform": "param_to_var",
+   "description": "per-category fresh-water flux into the Fioi_meltw aggregation (F90:255)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.fsaltn",
+   "to": "IceCap.fsaltn",
+   "transform": "param_to_var",
+   "description": "per-category salt flux into the Fioi_salt aggregation (F90:257)"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.alvdrn",
+   "to": "IceCap.alvdrn",
+   "transform": "param_to_var",
+   "description": "per-category visible-direct albedo into the Si_avsdr aggregation"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.alidrn",
+   "to": "IceCap.alidrn",
+   "transform": "param_to_var",
+   "description": "per-category near-IR-direct albedo into the Si_anidr aggregation"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.alvdfn",
+   "to": "IceCap.alvdfn",
+   "transform": "param_to_var",
+   "description": "per-category visible-diffuse albedo into the Si_avsdf aggregation"
+  },
+  {
+   "type": "variable_map",
+   "from": "Thermodynamics.alidfn",
+   "to": "IceCap.alidfn",
+   "transform": "param_to_var",
+   "description": "per-category near-IR-diffuse albedo into the Si_anidf aggregation"
+  }
+ ]
+}

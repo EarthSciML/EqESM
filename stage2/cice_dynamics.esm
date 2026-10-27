@@ -1,0 +1,626 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice_dynamics",
+  "description": "CICE sea-ice dynamics (stage 2 of the EqESM project): the B-grid momentum balance and the classic-EVP stress evolution of the default kdyn = 1 (EVP) configuration of cesm3_cice6_6_3_22, written over a single grid cell (N_CELL = 1) with the ncat thickness categories. The Fortran integrates the momentum equation in stepu (ice_dyn_shared.F90:923-964) inside the ndte = 120 subcycles of evp (ice_dyn_evp.F90:259-1447), solving implicitly with the intermediates vrel = aiX*rhow*Cw*|u_ocn - u| (F90:931-932), taux/tauy = vrel*waterx/y with the cosw/sinw rotation of the ocean velocity (F90:817-818; the default cosw = 1, sinw = 0), Cb = TbU/(|u| + u0) (F90:937), cca = (brlx + revp)*Umassdti + vrel*cosw + Cb, ccb = fm + sign(1,fm)*vrel*sinw, ab2 = cca^2 + ccb^2, cc1/cc2 (F90:949-956) and the update uvel = (cca*cc1 + ccb*cc2)/ab2, vvel = (cca*cc2 - ccb*cc1)/ab2 (F90:958-959); the skeleton writes the continuous limit m*du/dt = tau_a + tau_tilt + tau_o + div(sigma) - Cb*u + m*f*khat x u instead (the implicit-solve algebra cca/ccb/ab2/cc1/cc2 is solver machinery, documented here rather than transcribed). The stress evolution: the classic-EVP under-relaxed maps stressp_new = (stressp*(1-arlx1i*revp) + arlx1i*(zetax2*divu - rep_prs))*denom1 etc. (stress, ice_dyn_evp.F90:1584-1609) with arlx = 2*elasticDamp*ndte, arlx1i = 1/arlx, brlx = ndte, denom1 = 1/(1+arlx1i) for revised_evp = .false. (set_evp_parameters, ice_dyn_shared.F90:451-484), which relax toward the plastic targets zetax2*divu - rep_prs, etax2*tension, 0.5*etax2*shear with the subcycle time step dt/ndte, i.e. the continuous relaxation d(sigma)/dt = (sigma_target - sigma)/Td with Td = 2*elasticDamp*dt (elasticDamp = 0.36 default); the skeleton carries stressp/stressm/stress12 as relaxation-ODE states and collapses the Fortran's four-corner (NE/NW/SW/SE) staggered stresses to one cell value, documenting the collapse in stage2/README-cice.md. Viscosities and replacement pressure: visc_replpress (ice_dyn_shared.F90:2444-2473) with capping = 1 (default), Ktens = 0 (default), epp2i = 1/e_plasticpot^2 = 0.25 and e_factor = e_yieldcurve^2/e_plasticpot^4 = 0.25 (set_evp_parameters F90:464-465; e_plasticpot = e_yieldcurve = 2 defaults); Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)) (strain_rates, F90:2156-2159; the Fortran computes area-weighted corner strain rates F90:2094-2154, the skeleton's divu/tension/shear are the local D(u,x)+D(v,y), D(u,x)-D(v,y), D(u,y)+D(v,x) rewrite targets), and the minimum strain rate deltaminEVP = 1e-11 s^-1 (ice_init.F90:454; DminTarea = deltaminEVP*tarea F90:383). Ice strength: the Hibler (1979) form strength = Pstar*vice*exp(-Cstar*(1-aice)) (icepack_ice_strength, icepack_mechred.F90:1720, Pstar = 2.75e4 N/m^2 and Cstar = 20, icepack_parameters.F90:262, 264); the default kstrength = 1 Rothrock (1975) potential-energy form (F90:1666-1712) depends on the ridge-distribution state and is deferred to the ridging work. The divergence of the internal stress is written as the spatial rewrite targets strintx = D(sigma11,x) + D(sigma12,y) and strinty = D(sigma12,x) + D(sigma22,y) with sigma11 = (stressp+stressm)/2, sigma22 = (stressp-stressm)/2, sigma12 = stress12 (the Fortran's B-grid combination strintx = uarear*(str(:,:,1)+str(:,:,2)+str(:,:,3)+str(:,:,4)), ice_dyn_evp.F90:1698-1736). The ice mass per area m = rhoi*vice + rhos*vsno (dyn_prep1, ice_dyn_shared.F90:540), the sea-surface-tilt stress strtltx = -gravit*m*ss_tltx (ssh_stress = 'coupled', F90:826-827), and the full ocean-ice stress for coupling strocnx = vrel*((uocn-uvel)*cosw - (vocn-vvel)*sinw*sign(1,fm)) (dyn_finish, F90:1345-1348) are transcribed. The tests block is empty pending the stage-1 instrumentation dumps (stage1/dumps/cice/)."
+ },
+ "index_sets": {
+  "cell": { "kind": "interval", "size": "N_CELL" },
+  "ncat": { "kind": "interval", "size": "N_CAT" }
+ },
+ "metaparameters": {
+  "N_CELL": { "type": "integer", "default": 1, "description": "number of ice grid cells in the stage-2 skeleton (one cell; the full model runs the block-decomposed B grid), [-]" },
+  "N_CAT": { "type": "integer", "default": 5, "description": "number of ice thickness categories (namelist ncat = 5), [-]" }
+ },
+ "models": {
+  "Dynamics": {
+   "expression_template_imports": [
+    { "ref": "./cice_templates.esm" }
+   ],
+   "variables": {
+    "uvel": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "m/s",
+     "description": "x-component of the ice velocity at U points (ice_dyn_evp.F90), the momentum state, [m/s]"
+    },
+    "vvel": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "m/s",
+     "description": "y-component of the ice velocity at U points, the momentum state, [m/s]"
+    },
+    "stressp": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "EVP stress sum stressp = sigma11 + sigma22 (the four-corner stressp_1..4 collapsed per cell), the classic-EVP relaxation state, [N/m]"
+    },
+    "stressm": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "EVP stress difference stressm = sigma11 - sigma22 (stressm_1..4 collapsed), the classic-EVP relaxation state, [N/m]"
+    },
+    "stress12": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "EVP shear stress stress12 = sigma12 (stress12_1..4 collapsed), the classic-EVP relaxation state, [N/m]"
+    },
+    "sigma11": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "normal stress component sigma11 = (stressp + stressm)/2, [N/m]"
+    },
+    "sigma22": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "normal stress component sigma22 = (stressp - stressm)/2, [N/m]"
+    },
+    "sigma12": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "shear stress component sigma12 = stress12, [N/m]"
+    },
+    "strintx": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "x divergence of the internal stress tensor, the rewrite target strintx = D(sigma11,x) + D(sigma12,y) (the Fortran's B-grid strintx = uarear*sum of the four str(:,:,1..4) combinations, ice_dyn_evp.F90:1698-1736), [N/m2]"
+    },
+    "strinty": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "y divergence of the internal stress tensor, the rewrite target strinty = D(sigma12,x) + D(sigma22,y), [N/m2]"
+    },
+    "divu": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "1/s",
+     "description": "strain-rate divergence divu = D(u,x) + D(v,y) (strain_rates, ice_dyn_shared.F90:2094-2105; the Fortran's corner values are area-weighted), [1/s]"
+    },
+    "tension": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "1/s",
+     "description": "tension strain rate tension = D(u,x) - D(v,y) (strain_rates, F90:2108-2119), [1/s]"
+    },
+    "shear": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "1/s",
+     "description": "shearing strain rate shear = D(u,y) + D(v,x) = 2*e12 (strain_rates, F90:2122-2133), [1/s]"
+    },
+    "Delta": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "1/s",
+     "description": "strain-rate invariant of the elliptical yield curve, Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)) (strain_rates, F90:2156-2159), [1/s]"
+    },
+    "strength": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "ice strength P of the Hibler (1979) formulation (icepack_ice_strength, icepack_mechred.F90:1720); the default kstrength = 1 Rothrock form is deferred, [N/m]"
+    },
+    "tmpcalc": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/s",
+     "description": "shared scale of the viscosities and replacement pressure: capping*strength/max(Delta, DminArea) + (1-capping)*strength/(Delta + DminArea) (visc_replpress, ice_dyn_shared.F90:2467-2468), [kg/s]"
+    },
+    "zetax2": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/s",
+     "description": "twice the bulk viscosity zetax2 = (1+Ktens)*tmpcalc (visc_replpress, F90:2469), [kg/s]"
+    },
+    "etax2": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/s",
+     "description": "twice the shear viscosity etax2 = epp2i*zetax2 (visc_replpress, F90:2471), [kg/s]"
+    },
+    "rep_prs": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "replacement pressure rep_prs = (1-Ktens)*tmpcalc*Delta (visc_replpress, F90:2470), [N/m]"
+    },
+    "stressp_target": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "plastic target of stressp, zetax2*divu - rep_prs (the arlx1i-weighted term of the classic-EVP update, stress, ice_dyn_evp.F90:1587), [N/m]"
+    },
+    "stressm_target": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "plastic target of stressm, etax2*tension (ice_dyn_evp.F90:1595), [N/m]"
+    },
+    "stress12_target": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m",
+     "description": "plastic target of stress12, 0.5*etax2*shear (the p5 factor of ice_dyn_evp.F90:1603), [N/m]"
+    },
+    "Td": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "s",
+     "description": "classic-EVP stress relaxation time Td = 2*elasticDamp*dt (the continuous limit of the under-relaxed subcycle map: arlx1i = 1/(2*elasticDamp*ndte) per subcycle of length dt/ndte), [s]"
+    },
+    "aice": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "1",
+     "description": "total ice concentration aice = sum_ncat aicen (the aice argument of icepack_ice_strength, ice_dyn_evp.F90:543), [-]"
+    },
+    "vice": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "m",
+     "description": "total ice volume per unit area vice = sum_ncat vicen, [m]"
+    },
+    "vsno": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "m",
+     "description": "total snow volume per unit area vsno = sum_ncat vsnon, [m]"
+    },
+    "m": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/m^2",
+     "description": "ice mass per unit area Tmass = rhoi*vice + rhos*vsno (dyn_prep1, ice_dyn_shared.F90:540), [kg/m2]"
+    },
+    "vrel": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/m^2/s",
+     "description": "relative ocean-ice current times the drag: vrel = aice*rhow*Cw*|u_ocn - uvel| (stepu, ice_dyn_shared.F90:931-932), [kg/m2/s]"
+    },
+    "taux": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "x ocean-ice stress of the momentum balance, the full coupled form vrel*((uocn-uvel)*cosw - (vocn-vvel)*sinw*sign(1,fm)) (dyn_finish, F90:1345-1348); stepu carries only the vrel*waterx partial term (F90:933-934), [N/m2]"
+    },
+    "tauy": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "y ocean-ice stress, vrel*((vocn-vvel)*cosw + (uocn-uvel)*sinw*sign(1,fm)) (dyn_finish, F90:1347-1348), [N/m2]"
+    },
+    "Cb": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "kg/m^2/s",
+     "description": "linear seabed (basal) stress coefficient Cb = TbU/(|uvel| + u0) (stepu, ice_dyn_shared.F90:937), [kg/m2/s]"
+    },
+    "strtltx": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "stress due to the sea-surface slope, strtltx = -gravit*m*ss_tltx under ssh_stress = 'coupled' (dyn_prep2, ice_dyn_shared.F90:826), [N/m2]"
+    },
+    "strtlty": {
+     "type": "unknown",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "description": "stress due to the sea-surface slope, strtlty = -gravit*m*ss_tlty (F90:827), [N/m2]"
+    },
+    "aicen": {
+     "type": "parameter",
+     "shape": ["ncat"],
+     "units": "1",
+     "default": 0.0,
+     "description": "ice area fraction per category (the coupled ice state, wired from the transport model in the assembly), [-]"
+    },
+    "vicen": {
+     "type": "parameter",
+     "shape": ["ncat"],
+     "units": "m",
+     "default": 0.0,
+     "description": "ice volume per unit grid-cell area per category (wired from the transport model), [m]"
+    },
+    "vsnon": {
+     "type": "parameter",
+     "shape": ["ncat"],
+     "units": "m",
+     "default": 0.0,
+     "description": "snow volume per unit grid-cell area per category (wired from the transport model), [m]"
+    },
+    "strairx": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "x wind stress on ice (strairx, computed by the assembly's atmo scheme and mapped T->U), [N/m2]"
+    },
+    "strairy": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "y wind stress on ice, [N/m2]"
+    },
+    "uocn": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "ocean surface current, x direction at U points (cap So_u), [m/s]"
+    },
+    "vocn": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "ocean surface current, y direction at U points (cap So_v), [m/s]"
+    },
+    "ss_tltx": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "1",
+     "default": 0.0,
+     "description": "x sea-surface slope for the coupled tilt stress (cap So_dhdx), [-]"
+    },
+    "ss_tlty": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "1",
+     "default": 0.0,
+     "description": "y sea-surface slope for the coupled tilt stress (cap So_dhdy), [-]"
+    },
+    "fcor": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "1/s",
+     "default": 1.0e-4,
+     "description": "Coriolis parameter 2*Omega*sin(latitude) at the U points (fcor, ice_dyn_shared.F90:814), [1/s]"
+    },
+    "hemis": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "1",
+     "default": 1.0,
+     "description": "hemisphere factor sign(1,fm) of the ocean-stress rotation: +1 where the Coriolis parameter fm is positive, -1 where negative (stepu, ice_dyn_shared.F90:944), [-]"
+    },
+    "TbU": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "seabed stress factor (nonzero only over landfast-ice grounding zones; seabed_stress_factor_LKD/prob, ice_dyn_shared.F90:1384-1681), [N/m2]"
+    },
+    "Cw": {
+     "type": "parameter",
+     "shape": ["cell"],
+     "units": "1",
+     "default": 0.00536,
+     "description": "ocean-ice neutral drag coefficient Cdn_ocn (namelist dragio = 0.00536 default, icepack_parameters.F90:266), [-]"
+    },
+    "gravit": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration (gravit, icepack_parameters.F90:56), [m/s2]"
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 3600.0,
+     "description": "dynamics timestep (namelist dt; the EVP subcycles ndte = 120 times per step), [s]"
+    },
+    "elasticDamp": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.36,
+     "description": "elastic damping parameter of the EVP scheme (namelist elasticDamp = 0.36), [-]"
+    },
+    "ndte": {
+     "type": "parameter",
+     "units": "1",
+     "default": 120.0,
+     "description": "number of EVP subcycles per dynamics step (namelist ndte = 120), [-]"
+    },
+    "e_plasticpot": {
+     "type": "parameter",
+     "units": "1",
+     "default": 2.0,
+     "description": "ratio of the major to minor axes of the elliptical plastic potential (namelist e_plasticpot = 2), [-]"
+    },
+    "e_yieldcurve": {
+     "type": "parameter",
+     "units": "1",
+     "default": 2.0,
+     "description": "ratio of the major to minor axes of the elliptical yield curve (namelist e_yieldcurve = 2), [-]"
+    },
+    "capping": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "1 for the capped viscosity form strength/max(Delta, DminArea), 0 for strength/(Delta + DminArea) (namelist capping = 1), [-]"
+    },
+    "Ktens": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "tensile strength coefficient (namelist Ktens = 0, the Lemieux et al. 2016 tensile strength is off), [-]"
+    },
+    "cosw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "cosine of the ocean-current rotation angle (namelist cosw = 1, no rotation), [-]"
+    },
+    "sinw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "sine of the ocean-current rotation angle (namelist sinw = 0), [-]"
+    },
+    "u0": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 5.0e-5,
+     "description": "velocity floor in the seabed stress denominator (namelist u0 = 5e-5 m/s), [m/s]"
+    },
+    "deltaminEVP": {
+     "type": "parameter",
+     "units": "1/s",
+     "default": 1.0e-11,
+     "description": "minimum strain rate for the EVP viscosities (deltaminEVP = 1e-11 s^-1, ice_init.F90:454; DminTarea = deltaminEVP*tarea), [1/s]"
+    },
+    "arlx": {
+     "type": "parameter",
+     "units": "1",
+     "default": 86.4,
+     "description": "classic-EVP elastic parameter arlx = 2*elasticDamp*ndte = 86.4 (set_evp_parameters, ice_dyn_shared.F90:474-475), [-]"
+    },
+    "arlx1i": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.011574074074074074,
+     "description": "inverse elastic parameter arlx1i = 1/arlx = 1/86.4 (set_evp_parameters, F90:476), [-]"
+    },
+    "brlx": {
+     "type": "parameter",
+     "units": "1",
+     "default": 120.0,
+     "description": "classic-EVP parameter brlx = ndte = 120 (set_evp_parameters, F90:477), [-]"
+    },
+    "denom1": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.988558352402746,
+     "description": "classic-EVP denominator denom1 = 1/(1+arlx1i) = 86.4/87.4 (set_evp_parameters, F90:478), [-]"
+    },
+    "epp2i": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.25,
+     "description": "inverse plastic-potential eccentricity squared epp2i = 1/e_plasticpot^2 = 0.25 (set_evp_parameters, F90:464), [-]"
+    },
+    "e_factor": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.25,
+     "description": "yield-curve factor of the Delta invariant e_factor = e_yieldcurve^2/e_plasticpot^4 = 0.25 (set_evp_parameters, F90:465), [-]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "aice",
+     "rhs": { "op": "faq", "output_idx": [], "reduce": "+",
+       "ranges": { "ncat": { "from": "ncat" } },
+       "expr": { "op": "index", "args": ["aicen", "ncat"] },
+       "args": ["aicen"] }
+    },
+    {
+     "lhs": "vice",
+     "rhs": { "op": "faq", "output_idx": [], "reduce": "+",
+       "ranges": { "ncat": { "from": "ncat" } },
+       "expr": { "op": "index", "args": ["vicen", "ncat"] },
+       "args": ["vicen"] }
+    },
+    {
+     "lhs": "vsno",
+     "rhs": { "op": "faq", "output_idx": [], "reduce": "+",
+       "ranges": { "ncat": { "from": "ncat" } },
+       "expr": { "op": "index", "args": ["vsnon", "ncat"] },
+       "args": ["vsnon"] }
+    },
+    {
+     "lhs": "m",
+     "rhs": { "op": "+", "args": [
+       { "op": "*", "args": [917.0, "vice"] },
+       { "op": "*", "args": [330.0, "vsno"] } ] }
+    },
+    {
+     "lhs": "strength",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "ice_strength_hibler",
+       "bindings": { "vice": "vice", "aice": "aice" } }
+    },
+    {
+     "lhs": "divu",
+     "rhs": { "op": "+", "args": [
+       { "op": "D", "args": ["uvel"], "wrt": "x" },
+       { "op": "D", "args": ["vvel"], "wrt": "y" } ] }
+    },
+    {
+     "lhs": "tension",
+     "rhs": { "op": "-", "args": [
+       { "op": "D", "args": ["uvel"], "wrt": "x" },
+       { "op": "D", "args": ["vvel"], "wrt": "y" } ] }
+    },
+    {
+     "lhs": "shear",
+     "rhs": { "op": "+", "args": [
+       { "op": "D", "args": ["uvel"], "wrt": "y" },
+       { "op": "D", "args": ["vvel"], "wrt": "x" } ] }
+    },
+    {
+     "lhs": "Delta",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "strain_invariant_delta",
+       "bindings": { "divu": "divu", "tension": "tension", "shear": "shear", "e_factor": "e_factor" } }
+    },
+    {
+     "lhs": "tmpcalc",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "viscosity_scale",
+       "bindings": { "capping": "capping", "strength": "strength", "Delta": "Delta", "DminArea": "deltaminEVP" } }
+    },
+    {
+     "lhs": "zetax2",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "bulk_viscosity",
+       "bindings": { "Ktens": "Ktens", "tmpcalc": "tmpcalc" } }
+    },
+    {
+     "lhs": "etax2",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "shear_viscosity",
+       "bindings": { "epp2i": "epp2i", "zetax2": "zetax2" } }
+    },
+    {
+     "lhs": "rep_prs",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "replacement_pressure",
+       "bindings": { "Ktens": "Ktens", "tmpcalc": "tmpcalc", "Delta": "Delta" } }
+    },
+    {
+     "lhs": "stressp_target",
+     "rhs": { "op": "-", "args": [
+       { "op": "*", "args": ["zetax2", "divu"] },
+       "rep_prs" ] }
+    },
+    {
+     "lhs": "stressm_target",
+     "rhs": { "op": "*", "args": ["etax2", "tension"] }
+    },
+    {
+     "lhs": "stress12_target",
+     "rhs": { "op": "*", "args": [0.5, "etax2", "shear"] }
+    },
+    {
+     "lhs": "Td",
+     "rhs": { "op": "*", "args": [2.0, "elasticDamp", "dt"] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["stressp"], "wrt": "t" },
+     "rhs": { "op": "/", "args": [
+       { "op": "-", "args": ["stressp_target", "stressp"] },
+       "Td" ] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["stressm"], "wrt": "t" },
+     "rhs": { "op": "/", "args": [
+       { "op": "-", "args": ["stressm_target", "stressm"] },
+       "Td" ] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["stress12"], "wrt": "t" },
+     "rhs": { "op": "/", "args": [
+       { "op": "-", "args": ["stress12_target", "stress12"] },
+       "Td" ] }
+    },
+    {
+     "lhs": "sigma11",
+     "rhs": { "op": "/", "args": [
+       { "op": "+", "args": ["stressp", "stressm"] },
+       2.0 ] }
+    },
+    {
+     "lhs": "sigma22",
+     "rhs": { "op": "/", "args": [
+       { "op": "-", "args": ["stressp", "stressm"] },
+       2.0 ] }
+    },
+    {
+     "lhs": "sigma12",
+     "rhs": "stress12"
+    },
+    {
+     "lhs": "strintx",
+     "rhs": { "op": "+", "args": [
+       { "op": "D", "args": ["sigma11"], "wrt": "x" },
+       { "op": "D", "args": ["sigma12"], "wrt": "y" } ] }
+    },
+    {
+     "lhs": "strinty",
+     "rhs": { "op": "+", "args": [
+       { "op": "D", "args": ["sigma12"], "wrt": "x" },
+       { "op": "D", "args": ["sigma22"], "wrt": "y" } ] }
+    },
+    {
+     "lhs": "vrel",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "ocean_ice_stress_magnitude",
+       "bindings": { "aiX": "aice", "rhow": 1026.0, "Cw": "Cw", "uocn": "uocn", "vocn": "vocn",
+         "uvel": "uvel", "vvel": "vvel" } }
+    },
+    {
+     "lhs": "taux",
+     "rhs": { "op": "*", "args": ["vrel",
+       { "op": "-", "args": [
+         { "op": "*", "args": [
+           { "op": "-", "args": ["uocn", "uvel"] },
+           "cosw" ] },
+         { "op": "*", "args": [
+           { "op": "-", "args": ["vocn", "vvel"] },
+           "sinw",
+           "hemis" ] } ] }] }
+    },
+    {
+     "lhs": "tauy",
+     "rhs": { "op": "*", "args": ["vrel",
+       { "op": "+", "args": [
+         { "op": "*", "args": [
+           { "op": "-", "args": ["vocn", "vvel"] },
+           "cosw" ] },
+         { "op": "*", "args": [
+           { "op": "-", "args": ["uocn", "uvel"] },
+           "sinw",
+           "hemis" ] } ] }] }
+    },
+    {
+     "lhs": "Cb",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "seabed_stress_coefficient",
+       "bindings": { "TbU": "TbU", "uvel": "uvel", "vvel": "vvel", "u0": "u0" } }
+    },
+    {
+     "lhs": "strtltx",
+     "rhs": { "op": "-", "args": [
+       { "op": "*", "args": ["gravit", "m", "ss_tltx"] } ] }
+    },
+    {
+     "lhs": "strtlty",
+     "rhs": { "op": "-", "args": [
+       { "op": "*", "args": ["gravit", "m", "ss_tlty"] } ] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["uvel"], "wrt": "t" },
+     "rhs": { "op": "/", "args": [
+       { "op": "+", "args": [
+         "strairx", "strtltx", "taux", "strintx",
+         { "op": "-", "args": [{ "op": "*", "args": ["Cb", "uvel"] }] },
+         { "op": "*", "args": ["fcor", "m", "vvel"] } ] },
+       "m" ] }
+    },
+    {
+     "lhs": { "op": "D", "args": ["vvel"], "wrt": "t" },
+     "rhs": { "op": "/", "args": [
+       { "op": "+", "args": [
+         "strairy", "strtlty", "tauy", "strinty",
+         { "op": "-", "args": [{ "op": "*", "args": ["Cb", "vvel"] }] },
+         { "op": "-", "args": [{ "op": "*", "args": ["fcor", "m", "uvel"] }] } ] },
+       "m" ] }
+    }
+   ],
+   "tests": []
+  }
+ }
+}

@@ -1,0 +1,241 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice_transport",
+  "description": "CICE horizontal transport (stage 2 of the EqESM project): the per-category conservative advection of the default configuration of cesm3_cice6_6_3_22, written over the ncat thickness categories. The Fortran advects the category area (the 'mass' field mm, including open water in category 0) and the per-category tracers with the incremental-remapping scheme of Dukowicz & Baumgardner (2000) / Lipscomb & Hunke (2004) (transport_remap, ice_transport_driver.F90:251-700; horizontal_remap, ice_transport_remap.F90:317-831; construct_fields F90:1009-1283; departure_points F90:1449-1623; transport_integrals F90:3188-3472), and the B-grid velocity is defined at the cell corners (ice_HaloUpdate of uvel/vvel before the remap, ice_transport_driver.F90:430-445). The conservative statement per category n is the continuity system d(a_n)/dt + div(a_n u) = 0, d(v_n)/dt + div(v_n u) = 0, d(vs_n)/dt + div(vs_n u) = 0 for the area aicen, the ice volume per unit area vicen = a_n*h_n, and the snow volume vsnon, together with the energy-conservation forms d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 and d(vsnon*qsnon)/dt + div(vsnon*qsnon*u) = 0 for the layer enthalpies (the Fortran's type-2 tracer transport conserves the tracer*mass product; qicen/qsnon are carried as tracers nt_qice/nt_qsno, ice_transport_driver.F90:98-102). The skeleton writes these as spatial-D rewrite targets (div(c u) = D(c*uvel, x) + D(c*vvel, y)) to be lowered by a discretization template from the EarthSciDiscretizations library in stage 3, exactly as the incremental-remapping scheme replaces the continuous flux form with the departure-cell integrals of the Fortran. The two enthalpy-tracer equations are documented but not carried as model equations in this skeleton: their product-form LHS cannot define an unknown under the esm equation-balance rule, and the tracer fields are parameters fed by the thermodynamics states (the assembly wires Thermodynamics.qicen -> Transport.qicen by param_to_var); the conservative tracer statement d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 is asserted once the incremental-remap discretization lands in stage 3. aicen/vicen/vsnon are the transport states; qicen/qsnon are parameter tracers (wired from the thermodynamics component's states in the assembly via param_to_var), uvel/vvel are parameter forcing (wired from the dynamics component), and the open-water concentration aice0 = 1 - sum_n aicen is a diagnostic of the assembly/coupling layer. The tests block is empty pending the stage-1 instrumentation dumps (stage1/dumps/cice/)."
+ },
+ "index_sets": {
+  "ncat": {
+   "kind": "interval",
+   "size": "N_CAT"
+  },
+  "ice_layer": {
+   "kind": "interval",
+   "size": "N_ILYR"
+  },
+  "snow_layer": {
+   "kind": "interval",
+   "size": "N_SLYR"
+  }
+ },
+ "metaparameters": {
+  "N_CAT": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of ice thickness categories (namelist ncat = 5), [-]"
+  },
+  "N_ILYR": {
+   "type": "integer",
+   "default": 7,
+   "description": "number of ice layers (namelist nilyr = 7), [-]"
+  },
+  "N_SLYR": {
+   "type": "integer",
+   "default": 1,
+   "description": "number of snow layers (namelist nslyr = 1), [-]"
+  }
+ },
+ "models": {
+  "Transport": {
+   "variables": {
+    "aicen": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "ice area fraction per category, the transported area state: d(aicen)/dt + div(aicen*u) = 0 (the Fortran 'mass' field mm of horizontal_remap, ice_transport_remap.F90:279-280, including category 0 open water), [-]"
+    },
+    "vicen": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "ice volume per unit grid-cell area per category vicen = aicen*hin, the transported volume state: d(vicen)/dt + div(vicen*u) = 0, [m]"
+    },
+    "vsnon": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "snow volume per unit grid-cell area per category vsnon = aicen*hsn, the transported snow-volume state: d(vsnon)/dt + div(vsnon*u) = 0, [m]"
+    },
+    "qicen": {
+     "type": "parameter",
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
+     "units": "J/m^3",
+     "default": 0.0,
+     "description": "ice layer enthalpy tracer (nt_qice, ice_transport_driver.F90:98-102), advected in the product-conservative form d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 (the Fortran's type-2 tracer transport conserves the tracer*mass product); the tracer equation is documented in the model description and deferred to stage 3 (the product-form LHS cannot define an unknown under the esm equation-balance rule), so the field is carried here as a parameter wired from the thermodynamics component's state, [J/m3]"
+    },
+    "qsnon": {
+     "type": "parameter",
+     "shape": [
+      "ncat",
+      "snow_layer"
+     ],
+     "units": "J/m^3",
+     "default": 0.0,
+     "description": "snow layer enthalpy tracer (nt_qsno), advected in the product-conservative form d(vsnon*qsnon)/dt + div(vsnon*qsnon*u) = 0; carried as a parameter wired from the thermodynamics component (see qicen), [J/m3]"
+    },
+    "uvel": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "x-component of the ice velocity at the B-grid corner points (wired from the dynamics component), [m/s]"
+    },
+    "vvel": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "y-component of the ice velocity at the B-grid corner points (wired from the dynamics component), [m/s]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "aicen"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "aicen",
+             "uvel"
+            ]
+           }
+          ],
+          "wrt": "x"
+         },
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "aicen",
+             "vvel"
+            ]
+           }
+          ],
+          "wrt": "y"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "vicen"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "vicen",
+             "uvel"
+            ]
+           }
+          ],
+          "wrt": "x"
+         },
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "vicen",
+             "vvel"
+            ]
+           }
+          ],
+          "wrt": "y"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "vsnon"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "vsnon",
+             "uvel"
+            ]
+           }
+          ],
+          "wrt": "x"
+         },
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "vsnon",
+             "vvel"
+            ]
+           }
+          ],
+          "wrt": "y"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": []
+  }
+ }
+}
