@@ -365,6 +365,61 @@ In progress. See PLAN.md §4.1 for the playbook.
 
 In progress (tests from dumps). See PLAN.md §4.2–4.3 and §10.
 
+- **CICE instrumentation (M3) — run complete, dumps validated** ✅
+  (2026-10-27) — fork worktree `stage1/EqESM-cesm-cice` (branch
+  `instrument/cice-dumps`): `ice_dump_mod.F90` in
+  `components/cice/src/cicecore/shared/` (leaf module, auto-picked-up by
+  the CICE Makefile glob) + 9 wired files + cice-wrapper XML/buildnml.
+  All Fortran syntax-checked against the reference D_f19g17 build's .mod
+  files and compiled clean in the real `case.build` (cice built in 138 s).
+  Final commit chain: cice/src `2dbb70f` → cice wrapper `bcb9496` →
+  superproject `8cb32cd` (all local/unpushed, branch `instrument/cice-dumps`).
+  - 13 CSVs in `stage1/dumps/cice/` (gitignored), all `cice_`-prefixed:
+    run_imports, run_exports, freezing_temp, thermo_state, thermo_flux,
+    flux, dyn_state, transport_state, ice_strength, evp_stress,
+    evp_momentum, albedo, budget. EqIce headers
+    (`# description` / `# columns`), PET-0-only, first
+    `dump_first_cells`×`dump_first_steps` (32×12), OMP-critical writes,
+    `dump_nml` gated (default off), `dump_init`/`dump_finalize` wired
+    into cice_init2/ModelFinalize.
+  - Case `D_cice_inst` (D f19_g17, 18 tasks × 2 thr, 1 day, dt=3600 s →
+    24 steps; mirrors D_f19g17). Final run job **11857562** (first
+    validated run 11857263): COMPLETED 0:0, model execution success.
+    Walls hit and fixed: (1) fork worktree submodules not initialized /
+    wrong commits — reset to pinned via `git submodule update --checkout`
+    (plus cdeps nested fox/genf90 + a stray staged-deletion state in
+    cdeps restored); (2) **nmlgen validates but drops unknown-to-the-
+    writer groups** — cice buildnml writes a hard-coded `groups` list,
+    so dump_nml never reached ice_in; added `'dump_nml'` (wrapper
+    `16ff7fb`); first submit (11857214) cancelled 10 min in, regenerated
+    via preview_namelists; (3) **blank line after every data row in
+    evp_stress and freezing_temp** — final value write lacked
+    `advance='no'` (fixed in `2dbb70f`, rerun 11857562; all 13 CSVs now
+    zero blank lines).
+  - **Validation** (all green): solution neutrality — iceh + restart
+    bit-identical vs D_f19g17 modulo title/timestamp attrs
+    (`stage1/analysis/compare_iceh.py`); freezing-temp law
+    Tf = max(S/(−18.48+0.01848·S), −2.0) (shr_frz mushy) on all 384 rows,
+    identical to run_imports sss/Tf; EVP stress relaxation laws
+    (newp/newm/new12) on all 184320 rows; EVP momentum chain
+    vrel→Cb→cca/ccb→ab2→cc1/cc2→uvel/vvel on all 40320 rows (28 of 32
+    traced T cells have ice-covered NE U corners); row counts exact
+    (thermo/dyn/transport 32×5×2×12=3840 each, budget 1 row at step 24).
+    Run record: `stage1/runs/cice_instrument.json`.
+  - Bugs found so far: (a) icepack_atmo `strx=tau·uatm` missing `/wind`
+    (already in bugs.md); (b) CICE nuopc cap never calls CICE_Finalize
+    (dump_finalize wired in ModelFinalize instead); (c) **confirmed**:
+    CESMCOUPLED ice_import computes Tf with shr_frz_freezetemp keyed to
+    the *mediator's* tfrz_option, never icepack_sea_freezing_temperature
+    (CICE's tfrz_option); numerically identical here because both
+    resolve to the same mushy liquidus at ocean salinities — the
+    decoupling only bites for non-mushy settings; (d) CIME nmlgen drops
+    groups absent from buildnml's hard-coded list (see above). Worktree
+    left fully clean (cam nested-clm pointer state + FTorch gitlink
+    restored; orphaned clm gitdir remains inside .git metadata, inert).
+    **Next: fill CICE stage-2 skeleton tests from dumps (repeat the M2
+    loop)**.
+
 - **MOSART stage-2 tests from dumps** ✅ (2026-10-26) — worktree
   `wt/mosart-tests` (`../EqESM-wt-mosart-tests`, branch `wt/mosart-tests`):
   filled the empty `tests` blocks of all five stage-2 files from the

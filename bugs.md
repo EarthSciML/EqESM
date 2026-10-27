@@ -89,3 +89,43 @@ Format template:
   MOSART work is unaffected). Verified fix: `C_JRA_t62` runs to completion
   (23 MOM6 steps, CFL 0.075, mass err 6e-19).
 - **Status:** open (recorded; workaround in `user_nl_mom`).
+
+## 4. CICE `strx`/`stry` wind stress missing the `/wind` (unit-vector) normalization
+
+- **Location:** `components/cice/src/icepack/columnphysics/icepack_atmo.F90:328-329` (high-frequency branch) and `:463-464` (standard branch, `icepack_atm`).
+- **Description:** the commented intent is `strx = tau * uatm / vmag` with `tau = rhoa * ustar^2` (a stress magnitude, N/m^2). The standard branch computes `tau = rhoa*ustar*rd` (still proportional to wind speed) and then `strx = tau*uatm`, `stry = tau*vatm` — the division by the wind magnitude is missing, so the surface stress scales with wind speed instead of being a unit-vector-projected stress. The high-frequency branch is worse: `strx = tau*sqrt((uatm-uvel)^2+(vatm-vvel)^2)*(uatm-uvel)` with `tau = rhoa*0.0012*wind` — an extra wind-magnitude factor on top of the missing normalization.
+- **Impact on results:** standalone CICE atmosphere surface stress (and hence ice drift forcing) is wrong by a factor of the wind speed when `calc_strair` uses these branches; the CESM-coupled D-class runs receive the atmosphere stress from the coupler (`Faii_taux`), so this path is not exercised there.
+- **Reproduced/corrected in .esm:** the stage-2 CICE skeleton (`stage2/cice_atmosphere.esm` etc.) documents the correct `strx = tau*uatm/wind` law; the .esm formulation will not reproduce the bug.
+- **Status:** open (recorded; reported to the EqESM bug list per PLAN.md §8).
+
+## 5. CICE `calculate_Tin_from_qin` aborts on negative quadratic discriminant
+
+- **Location:** `components/cice/src/icepack/columnphysics/icepack_therm_shared.F90:89-94`.
+- **Description:** for brine ice (`l_brine`), `Tin` comes from the quadratic `aa1*T^2 + bb1*T + cc1 = 0`; when the discriminant `csqrt = bb1^2 - 4*aa1*cc1` is negative the code calls `icepack_warnings_setabort(.true.,...)` and returns, aborting the whole run, instead of clamping or handling the unphysical (qin, Tmltk) combination. The guard comment in the stage-2 skeleton notes the risk.
+- **Impact on results:** an unphysical enthalpy state anywhere aborts the model run rather than producing a local, bounded answer.
+- **Reproduced/corrected in .esm:** n/a (guard noted in the CICE stage-2 skeleton docs).
+- **Status:** open (recorded).
+
+## 6. CESMCOUPLED CICE freezing temperature decoupled from CICE's `tfrz_option`
+
+- **Location:** `components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90:817-832` (`ice_import`, `#ifdef CESMCOUPLED` branch).
+- **Description:** under CESMCOUPLED the imported ocean freezing temperature is computed with `shr_frz_freezetemp(sss)` (share/shr_frz_mod.F90.in, Assur-1958 liquidus, clamped to >= -2 C), keyed to the **mediator's** `tfreeze_option`; `icepack_sea_freezing_temperature` (which honors CICE's own `tfrz_option`) is compiled only in the `#else` branch. CICE's `tfrz_option` namelist setting therefore has no effect on the Tf used in the coupled import path.
+- **Impact on results:** with the default `tfrz_option='mushy'` on both sides the two functions coincide numerically for ocean salinities (verified against the stage-1 dump: all 384 `cice_freezing_temp.csv` rows match `Tf = max(S/(-18.48+0.01848*S), -2.0)` to round-off, and `icepack_liquidus_temperature_mush`'s high-temperature branch is the same law), so no difference in this run; a non-mushy CICE `tfrz_option` (or mediator mismatch) would silently use the wrong law.
+- **Reproduced/corrected in .esm:** the stage-2 CICE coupling skeleton documents the import-side Tf law as actually used (shr_frz mushy); flagged so the .esm can reproduce either law explicitly.
+- **Status:** open (recorded; confirmed numerically via the M3 dump).
+
+## 7. CICE nuopc cap never calls `CICE_Finalize`
+
+- **Location:** `components/cice/src/cicecore/drivers/nuopc/cmeps/ice_comp_nuopc.F90` (cap `Finalize`); the model-level `CICE_Finalize` exists in the other drivers (e.g. `cicecore/drivers/direct/hadgem3/CICE_FinalMod.F90:30`).
+- **Description:** the nuopc cap's finalize routine does not call the model-level `CICE_Finalize`, so finalize-side work (diagnostics, and in our instrumentation `dump_finalize`) never runs in the CESM context. The stage-1 dump module's `dump_finalize` was therefore wired into the cap's `ModelFinalize` instead.
+- **Impact on results:** none for the science; finalize-side bookkeeping (e.g. final output flushes) is skipped.
+- **Reproduced/corrected in .esm:** n/a (harness-level; documented in the instrumentation notes).
+- **Status:** open (recorded).
+
+## 8. CIME nmlgen silently drops namelist groups absent from the writer's hard-coded list
+
+- **Location:** `components/cice/cime_config/buildnml` (the `groups` list) + cime `nmlgen`/`namelist_definition_cice.xml`.
+- **Description:** CIME's namelist generator validates `namelist_definition_cice.xml` (including unknown-to-the-writer groups) but only *writes* groups that appear in buildnml's hard-coded `groups` array; a new group (e.g. `dump_nml`) that is perfectly valid in the XML silently disappears from `ice_in` with no error. First D_cice_inst submit ran without `&dump_nml` (job 11857214 cancelled); fixed by adding `'dump_nml'` to the list (cice wrapper `16ff7fb`).
+- **Impact on results:** namelist settings silently ignored — a footgun for any new CICE namelist group.
+- **Reproduced/corrected in .esm:** n/a (tooling).
+- **Status:** open (recorded; workaround: keep buildnml's `groups` list in sync).
