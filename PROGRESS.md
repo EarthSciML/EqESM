@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-25.
+Last updated: 2026-10-27.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -318,7 +318,35 @@ In progress. See PLAN.md §4.1 for the playbook.
     "Package Test not found"; restored verbatim, delta vs main is only
     the documented `EarthSciAST = "0.5"` compat bump (still correct:
     with 0.3 the Julia resolve fails outright with "empty intersection").
-  Full diagnosis posted on the PR.
+  Full diagnosis posted on the PR. **Decision (2026-10-27): upstream CI
+  red is out of scope — EarthSciModels' runners (gaschem, wsm6, julia
+  precompile) are broken at HEAD for every PR; not ours to fix. PR #33
+  remains open + mergeable; our files pass on every runner that reaches
+  them. No further upstream CI work.**
+- **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
+  `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
+  (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
+  (67 eqs: prep_radiation + step_therm1/2, heat conduction as semi-discrete
+  flux-divergence ODEs), `cice_dynamics.esm` (34 eqs: EVP momentum + stress
+  relaxation + Hibler strength), `cice_transport.esm` (3 continuity eqs as
+  D(c)/t = −∇·(c·u) rewrite targets), `cice_coupling.esm` (62 eqs: ice_import
+  renames, areacor, merge_fluxes exports), `cice.esm` assembly (59 param_to_var
+  entries, solver external cice.run.json, dt_dyn subcycling + constant-atmo
+  Control), `README-cice.md`. All 6 files validate clean; 0 tests pending
+  dumps. Reviewed: Hibler strength + strairx claims verified against
+  Fortran (icepack_mechred.F90:1715-1725, icepack_atmo.F90:455-470; the
+  `/vmag` normalization bug confirmed at F90:328-329 — logged in
+  bugs.md). Two bugs logged: (1) `strx = tau·uatm` missing `/wind`
+  normalization (icepack_atmo.F90:463-464); (2) calculate_Tin_from_qin
+  negative-discriminant abort (guard note). Manager fix during review:
+  worker had REPLACED the shared `stage2/README.md` (MOSART docs, which
+  mosart .esm descriptions reference) with CICE docs — restored MOSART
+  README byte-identical (`38dc737`) and moved CICE docs to
+  `stage2/README-cice.md`, CICE descriptions repointed. Merged, worktree
+  removed, branch deleted; `esm test stage2/`: MOSART 115P/0F/0E still
+  green, CICE mounted (8 mounts). **Next: CICE instrumentation worker
+  (ses_e854ab19fffeDY1bFNMNGV7Ef3, D-class instrumented run) → fill CICE
+  skeleton tests from dumps (repeat the M2 loop).**
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
