@@ -323,6 +323,33 @@ In progress. See PLAN.md §4.1 for the playbook.
   precompile) are broken at HEAD for every PR; not ours to fix. PR #33
   remains open + mergeable; our files pass on every runner that reaches
   them. No further upstream CI work.**
+- **CICE instrumentation validated** ✅ (2026-10-27) — worker
+  (ses_e854ab19fffeDY1bFNMNGV7Ef3): D_cice_inst run (jobs 11857263/
+  11857562) COMPLETED 0:0; 13 CSVs in `stage1/dumps/cice/`; laws verified
+  to round-off (freezing temp 384 rows; EVP stress 184,320 rows; EVP
+  momentum chain 40,320 rows); solution neutrality vs D_f19g17 (iceh
+  bit-identical, `stage1/analysis/compare_iceh.py`); bugs.md #4–#8 added;
+  `stage1/runs/cice_instrument.json` written. **Manager review found a
+  dump bug**: `trcr`/`trcrn` reads in `dump_thermo_state`/`dump_albedo`
+  had the j and tracer indices swapped (declared (i,j,tracer,ncat,blk)),
+  so Tsfc/Tsfcn/qice/qsno/alvl/apnd/hpnd/ipnd read 0.0 in every row —
+  the tests worker had misread this as "Tsfc not dumped". Fixed
+  (fork `ced43eb` → wrapper `90dde50` → superproject `c8a3bef`), rebuilt,
+  rerun (job 11864874, COMPLETED 0:0, solution-neutral): columns now
+  physical (Tsfc ≈ −14.7 °C, qice_1 ≈ −3.03e8 J/m3). bugs.md #9.
+- **CICE coupling tests** ✅ (2026-10-27, merged `1fba628`) — worker
+  (ses_e821e9d0fffeds2K1facI3YHhN) filled `cice_coupling.esm` tests:
+  30 tests/33 assertions (`time_span {0,0}`, rel 1e-12, every value
+  dump-cited), pinning imports (frzmlt/frain/fsnow/flw/sw bands via
+  med2mod_areacor inversion), the Tf = max(S/(−18.48+0.01848S), −2.0)
+  law (all 384 rows), and the export aggregation (Si_ifrac/vice/vsno/
+  snowh, albedo Si_avsdr etc. incl. the scale_fluxes `/aice` division,
+  Fioi_swpen). Three transcription fixes found while writing tests:
+  scale_fluxes /aice division (ice_flux.F90:1565-1592), Faii_lwup ifelse
+  arity (ice_import_export.F90:1149-1164), Tf law → the coupled
+  shr_frz_freezetemp form (bugs.md #6). Manager added the Si_t export
+  pin (`c8db84a`) after the dump fix; README-cice.md Testing section
+  rewritten. `esm test stage2/`: 148P/0F/0E (115 MOSART + 33 CICE).
 - **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
   `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
   (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
@@ -344,9 +371,22 @@ In progress. See PLAN.md §4.1 for the playbook.
   README byte-identical (`38dc737`) and moved CICE docs to
   `stage2/README-cice.md`, CICE descriptions repointed. Merged, worktree
   removed, branch deleted; `esm test stage2/`: MOSART 115P/0F/0E still
-  green, CICE mounted (8 mounts). **Next: CICE instrumentation worker
-  (ses_e854ab19fffeDY1bFNMNGV7Ef3, D-class instrumented run) → fill CICE
-  skeleton tests from dumps (repeat the M2 loop).**
+  green, CICE mounted (8 mounts). **M3 CICE loop status:** coupling
+  tests merged (33 assertions, above); thermo/dynamics/transport tests
+  BLOCKED on a **skeleton configuration mismatch** (worker finding,
+  dump-verified): the reference D-class run uses ktherm=2 mushy (MU71
+  conductivity), shortwave=dEdd (alvdfn 0.9527 vs the transcribed ccsm3
+  0.8598), atmbndy=similarity (Si_u10/tref/qref = 1.104/266.36/1.95e-3
+  vs constant-scheme zeros), kstrength=1 Rothrock (P=3.21e5 vs Hibler
+  5.47e5) — but the skeleton transcribed the icepack defaults
+  (BL99/ccsm3/constant atmo/Hibler). No dump value pins the transcribed
+  thermo/dynamics equations. **Next: re-transcribe the CICE skeleton
+  thermo/dynamics/templates to the run configuration (mushy/dEdd/
+  similarity/Rothrock), then fill those tests from the dumps.** (Also
+  noted: Tsfc implicit surface-energy-balance solve stays a free
+  parameter until stage 3; dynamics/transport spatial-D rewrite targets
+  need EarthSciDiscretizations lowering — `unlowered_operator` compile
+  block even for `{0,0}` tests.)**
 - **C-class run — SUCCESS** ✅ (2026-10-26) — `C_JRA_t62` (full tx2_3v2
   ocean, 72 PEs/2 nodes, 1 day) COMPLETED (job 11842203, 7:53 wall;
   `case.run success`): MOM6 23 steps, CFL 0.075, mass err 6e-19. This
