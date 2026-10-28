@@ -105,7 +105,7 @@
     "lhcoef": {
      "type": "unknown",
      "units": "W/m^2",
-     "description": "latent-heat transfer coefficient: lhcoef = latncoef*Lsub*rhoa*wind (atmo_boundary_const, icepack_atmo.F90:494 with Lheat = Lsub = 2.835e6 for ice, F90:472-476; latncoef = 0.0015), [W/m2]"
+     "description": "latent-heat transfer coefficient: lhcoef = latncoef*Lsub*rhoa*wind (atmo_boundary_const, icepack_atmo.F90:494 with Lheat = Lsub = 2.8347e6 for ice -- the nuopc-cap value, ice_comp_nuopc.F90:415-450, bugs.md #11 -- vs 2.835e6, F90:472-476; latncoef = 0.0015), [W/m2]"
     },
     "dt": {
      "type": "parameter",
