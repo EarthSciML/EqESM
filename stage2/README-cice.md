@@ -27,9 +27,11 @@ Default configuration transcribed (namelist defaults): `shortwave = 'dEdd'`
 is deferred), `kdyn = 1` (EVP), `grid_ice = 'B'`, `ndtd = 1`, `ndte = 120`,
 `revised_evp = .false.`, `elasticDamp = 0.36`, `Ktens = 0`,
 `e_yieldcurve = e_plasticpot = 2`, `capping = 1`, `u0 = 5e-5`, `cosw = 1`,
-`sinw = 0`, `kstrength = 1` (Rothrock ridging deferred; the Hibler strength is
-transcribed), `atmbndy = 'similarity'` (deferred; the constant scheme is
-transcribed), `ktherm = 1` (BL99), `conduct = 'bubbly'`,
+`sinw = 0`, `kstrength = 1` (the Rothrock potential-energy strength is
+transcribed and dump-pinned in the coupling cap; the ridge redistribution
+itself is a stage-3 dynamics concern), `atmbndy = 'similarity'` (the
+Monin-Obukhov iteration is transcribed and dump-pinned in the coupling cap;
+the constant scheme remains for the assembly Control), `ktherm = 1` (BL99), `conduct = 'bubbly'`,
 `tfrz_option = 'mushy'`, `saltflux_option = 'constant'`, `frzpnd = 'cesm'`,
 `ncat = 5`, `nilyr = 7`, `nslyr = 1`, `l_brine = .true.`, `dt = 3600 s`.
 
@@ -37,15 +39,15 @@ transcribed), `ktherm = 1` (BL99), `conduct = 'bubbly'`,
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `cice_templates.esm` | Expression-template library (41 templates): snow cover / albedo / absorbed-penetrating shortwave | `icepack_shortwave.F90`: compute_albedos 466-597, absorbed_solar 701-896 |
+| `cice_templates.esm` | Expression-template library (63 templates): snow cover / albedo / absorbed-penetrating shortwave | `icepack_shortwave.F90`: compute_albedos 466-597, absorbed_solar 701-896 |
 | | saturation humidity, surface heat flux, liquidus (linear + mushy), enthalpy↔temperature (BL99 brine quadratic, fresh, snow) | `icepack_therm_shared.F90`: surface_heat_flux 147-165, liquidus 383-418; `icepack_mushy_physics.F90`: 227-261; calculate_Tin_from_qin 68-101; snow temperature 470-484 |
 | | conductivity (bubbly Pringle 2007 / MU71) and interface conductances, congelation enthalpy, ocean heat flux, melt-pond volume change | `icepack_therm_bl99.F90`: conductivity 874-961; `icepack_therm_vertical.F90`: qbot 1432-1443, fbot 662-678; `icepack_meltpond_lvl.F90`: 154-174 |
-| | constant atmo boundary layer (tau, shcoef, lhcoef) | `icepack_atmo.F90`: atmo_boundary_const 398-496 (460-464, 493-494) |
-| | Hibler strength, Delta invariant, viscosities/replacement pressure, classic-EVP stress maps, ocean-ice stress, seabed stress | `icepack_mechred.F90`: 1720; `ice_dyn_shared.F90`: strain_rates 2081-2161, visc_replpress 2444-2473, set_evp_parameters 451-484; stepu 923-964 |
+| | constant atmo boundary layer (tau, shcoef, lhcoef) and the similarity scheme (neutral drag, relative wind, stability parameter, stable/unstable psi, exchange coefficients, 2-m psix2, Tref/Qref/Uref) | `icepack_atmo.F90`: atmo_boundary_const 398-496 (460-464, 493-494); atmo_boundary_layer 52-389 (215, 176-210, 985-989, 1015-1075, 289-291, 364-378) |
+| | Hibler and Rothrock strength (cumulative distribution, exponential participation, ridge redistribution hrmin/hrexp/krdg, aksum, strength term), Delta invariant, viscosities/replacement pressure, classic-EVP stress maps, ocean-ice stress, seabed stress | `icepack_mechred.F90`: 1720, ridge_itd 848-1036, icepack_ice_strength 1660-1712; `ice_dyn_shared.F90`: strain_rates 2081-2161, visc_replpress 2444-2473, set_evp_parameters 451-484; stepu 923-964 |
 | `cice_thermodynamics.esm` | Model `Thermodynamics` — prep_radiation shortwave/albedo, step_therm1 vertical heat conduction + surface energy balance, step_therm2 growth/melt/ponds and ocean heat/fresh/salt fluxes; 67 equations over ncat × nilyr/nslyr | `icepack_step_mod.F90`/`icepack_therm_bl99.F90` (tridiagonal 1038-1210 as semi-discrete flux-divergence ODEs), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559) |
 | `cice_dynamics.esm` | Model `Dynamics` — B-grid momentum balance (continuous limit of stepu) and classic-EVP stress relaxation ODEs, Hibler strength, viscosities; 34 equations over one cell | `ice_dyn_shared.F90`: stepu 923-964, dyn_prep2 815-833, dyn_finish 1345-1348, Tmass 540; `ice_dyn_evp.F90`: stress 1584-1609 |
 | `cice_transport.esm` | Model `Transport` — per-category conservative advection d(a)/dt + div(a·u) = 0 (and volume forms) as spatial-D rewrite targets; enthalpy-tracer statement documented, deferred to stage 3 | `ice_transport_driver.F90`: 251-700; `ice_transport_remap.F90`: 317-831 |
-| `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; 62 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260 |
+| `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; the similarity atmo boundary layer (5-iteration unroll) with the aicen_init-weighted reference-height exports, and the Rothrock strength law as an algebraic probe of the dynamics physics; 154 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260; `icepack_atmo.F90`: atmo_boundary_layer 52-389; `icepack_mechred.F90`: ridge_itd 848-1036, icepack_ice_strength 1660-1712 |
 | `cice.esm` | Top-level assembly: mounts the four subcomponents by reference + inline `Control` (dt_dyn subcycling, constant atmo boundary layer), 59 `variable_map` coupling entries, solver block | `CICE_RunMod.F90`: ice_step 109-369; `ice_step_mod.F90`: step_dyn_horiz 990-1074; `ice_forcing.F90`: prepare_forcing 1606-1825; `icepack_atmo.F90`: 398-496 |
 
 The PDEs are written as spatial-D rewrite targets
@@ -80,7 +82,7 @@ mm/s of water).
 | Dynamics | `uvel`, `vvel`, `uocn`, `vocn`, `uatm`, `vatm`, `wind`, `u0` | m/s |
 | Air | `rhoa` | kg/m³; `Qa`, `Qsfc` kg/kg; `Sa_z`/`zlvl` m; `Sa_pbot` Pa |
 | Time | `dt`, `dt_dyn`, `Td` | s |
-| Constants | `puny = 1e-11`, `Tffresh = 273.15`, `rhoi = 917`, `rhos = 330`, `rhow = 1026`, `cp_ice = 2106`, `cp_ocn = 4218`, `cp_air = 1005`, `Lfresh = 3.34e5`, `Lsub = 2.835e6`, `Lvap = 2.501e6`, `depressT = 0.054`, `emissivity = 0.985`, `stefan_boltzmann = 5.67e-8`, `gravit = 9.80616` | (icepack_parameters.F90:36, 82, 62, 61, 65, 74-75, 281, 83-84, 77, 156, 159, 56) |
+| Constants | `puny = 1e-11`, `Tffresh = 273.15`, `rhoi = 917`, `rhos = 330`, `rhow = 1026`, `cp_ice = 2106`, `cp_ocn = 4218`, `cp_air = 1005`, `Lfresh = 3.34e5`, `Lsub = 2.835e6`, `Lvap = 2.501e6`, `depressT = 0.054`, `emissivity = 0.95` (D-class forcing_nml), `stefan_boltzmann = 5.67e-8`, `gravit = 9.80616`, `vonkar = 0.4`, `zref = 10`, `iceruf = 5e-4`, `zvir = 0.606`, `cp_wv = 1810`, `Cf = 17`, `Gstar = 0.15`, `astar = 0.05`, `maxraft = 1`, `mu_rdg = 4` (D-class namelist) | (icepack_parameters.F90:36, 82, 62, 61, 65, 74-75, 281, 83-84, 77, 159, 56, 190, 284-285, 283, 282, 261, 269; icepack_mechred.F90:70-72, 74; icepack_parameters.F90:2814) |
 
 **Unit notes**
 
@@ -111,7 +113,7 @@ mm/s of water).
 | Wave exports (Si_thick, Si_floediam), aerosols (Fioi_bcpho/bcphi, Fioi_flxdst), isotopes, per-band Fioi_swpen_* | `cice_coupling.esm` | ◐ deferred — carried as zero parameters with file:line notes (wave/aerosol/isotope tracers off; per-band fswthru_* not in the stage-2 column skeleton) |
 | EVP dynamics + icepack column thermodynamics (the run step) | `cice_dynamics.esm` + `cice_thermodynamics.esm` | ✓ mounted in `cice.esm` with the ice_step ordering documented (step_prep → prep_radiation → step_therm1 → step_therm2 → update_state → ndtd loop step_dyn_horiz(evp → transport_remap) → step_dyn_ridge → update_state) |
 | Transport (advection) | `cice_transport.esm` | ✓ continuity system as spatial-D rewrite targets; the enthalpy-tracer equations documented, deferred to the stage-3 incremental-remap lowering |
-| Ridging (kstrength = 1 Rothrock) | TBD | — deferred (the Hibler kstrength ≠ 1 strength is transcribed so the dynamics closes) |
+| Ridging (kstrength = 1 Rothrock) | `cice_coupling.esm` (algebraic probe) | ◐ the Rothrock strength law (icepack_mechred.F90:1660-1712 with the ridge_itd state, krdg_partic = krdg_redist = 1, mu_rdg = 4) is transcribed and dump-pinned in `IceCap` (the dynamics skeleton cannot compile tests on the single-cell geometry); the ridge redistribution of area/volume/enthalpy (ridge_shift, F90:1068+) is a stage-3 dynamics concern |
 | Tsfc implicit surface energy balance | `cice_thermodynamics.esm` | ◐ the balance fsurfn(Tsfc) + fcondtopn = 0 (icepack_therm_bl99.F90:1116-1128) is transcendental in Tsfc (saturation-humidity exponential); esm 1.3.0 cannot express implicit equations, so Tsfc is a parameter fed by the coupled solve in stage 3 |
 
 ## Pointwise laws — Fortran vs esm transcription notes
@@ -132,7 +134,15 @@ descriptions. Representative transcriptions:
 | `ocean_heat_flux` | `fbot = max(−cp_ocn·rhow·0.006·max(sst−Tf,0)·ustar, frzmlt)` (F90:662-678) | same; ustar floored at 0.005 in the model |
 | `meltpond_cesm_dvn` | `dvn = rfrac/rhofresh·(meltt·ρi + melts·ρs + frain·dt)·aicen − volpn·(1−exp(rexp·dTs/Tp))` (icepack_meltpond_lvl.F90:154-174) | same with `Tp = −2`, `rexp = 0.01`, `dTs = max(−2−Tsfcn, 0)` |
 | `atmo_constant_tau/shcoef/lhcoef` | `tau = ρa·0.0012·wind`; `shcoef = 0.0012·1005·ρa·wind`; `lhcoef = 0.0015·Lheat·ρa·wind` (icepack_atmo.F90:460, 493-494) | identical, `Lheat = Lsub = 2.835e6` for ice |
+| `atmo_neutral_drag` | `rdn = vonkar/log(zref/iceruf)` (icepack_atmo.F90:215) | identical (`vonkar = 0.4`, `zref = 10`, `iceruf = 5e-4`) |
+| `atmo_stability_parameter` | `hol = vonkar·gravit·zlvl·(tstar/thva + qstar/(1/zvir+Qa))/ustar²`, clamped to |hol| ≤ 10 (F90:985-989) | identical (sign-preserving clamp via min/max) |
+| `atmo_psi_momentum_unstable` / `atmo_psi_scalar_unstable` | Paulson-1970 forms with `capital_X = sqrt(max(sqrt(|1−16·hol|), 1))` (F90:1040-1075) | identical, `pih = π/2`; the stable branch `psi_stable = −(0.7·hol + 0.75·(hol−14.3)·exp(−0.35·hol) + 10.7)` (F90:1017-1019) |
+| `atmo_reference_temperature/humidity/wind` | `Tref = potT − delt·(rh/vonkar)·(alzs+al2−psixh+psix2) − 0.01·zTrf`; `Qref = Qa − delq·(re/vonkar)·(…)`; `Uref = vmag_rel·rd/rdn` (F90:366-378) | identical; psix2 = −5·hols·stable + (1−stable)·ψ_scalar_unstable(hols) at hols = hol·2/zlvl (F90:364-365) |
 | `ice_strength_hibler` | `strength = Pstar·vice·exp(−Cstar·(1−aice))` (icepack_mechred.F90:1720) | identical (`Pstar = 2.75e4`, `Cstar = 20`) |
+| `ridge_cumulative_area` | `Gsum(n) = Gsum(n−1) + aicen(n)` for `aicen(n) > puny`, `Gsum(0) = aice0` for `aice0 > puny` (F90:850-879) | nested prefix sum over m ≤ n with the aicen/aice0 masks |
+| `ridge_participation_exponential` | `apartic = [exp(−G(n−1)/astar) − exp(−G(n)/astar)]/(1 − exp(−astari))`, `astari = 20` (F90:919-934) | identical (`astar = 0.05`) |
+| `ridge_hrmin/hrexp/krdg` | `hrmin = min(2·hi, hi+maxraft)`; `hrexp = mu_rdg·√hi`; `krdg = (hrmin+hrexp)/hi` for `aicen > puny`, else `krdg = 1` (F90:1004-1010) | identical (`maxraft = 1`, `mu_rdg = 4`), `hi = max(vicen/aicen, puny)` |
+| `ridge_strength_term` | `apartic·(h2rdg/krdg − hi²)` with `h2rdg = hrmin² + 2·hrmin·hrexp + 2·hrexp²` (F90:1697-1706) | identical; the cap sums it into `strength = Cf·Cp·Σ/aksum` (F90:1710) |
 | `viscosity_scale` | `tmpcalc = capping·P/max(Δ,Dmin) + (1−capping)·P/(Δ+Dmin)` (ice_dyn_shared.F90:2467-2468) | identical; `Dmin = deltaminEVP = 1e-11` |
 | `evp_stressp_update` | `stressp_new = (stressp·(1−arlx1i·revp) + arlx1i·(zetax2·divu − rep_prs))·denom1` (ice_dyn_evp.F90:1584-1591) | transcribed as the relaxation ODE `D(stressp)/t = (stressp_target − stressp)/Td` with `Td = 2·elasticDamp·dt` (see divergences) |
 
@@ -162,15 +172,18 @@ descriptions. Representative transcriptions:
    `Td = 2·elasticDamp·dt`; the four-corner (NE/NW/SW/SE) staggered stresses
    are collapsed to one cell value (documented; the B-grid stencil is a stage-3
    discretization concern).
-5. **Hibler strength in place of Rothrock.** The default `kstrength = 1`
-   Rothrock potential-energy form (icepack_mechred.F90:1666-1712) depends on
-   the ridge distribution state; the `kstrength ≠ 1` Hibler form (F90:1720) is
-   transcribed so the dynamics closes.
-6. **Constant atmo scheme in place of similarity.** The default
-   `atmbndy = 'similarity'` Monin-Obukhov iteration (icepack_atmo.F90:200-444)
-   is deferred; the constant scheme (F90:398-496) is transcribed. Consequently
-   the reference-height exports Si_u10/Si_tref/Si_qref are zero (the constant
-   scheme does not compute Tref/Qref/Uref).
+5. **Similarity iteration unrolled to 5 fixed updates.** The Monin-Obukhov
+   do-while (icepack_atmo.F90:269) is unrolled for the D-class `natmiter = 5`
+   and `atmiter_conv = 0` (unset), which always runs the full 5 updates; the
+   always-5 unroll reproduces the dumped reference-height exports to machine
+   precision for Tref/Qref. The assembly `Control` still uses the constant
+   scheme for the stresses (strairxT/strairyT stay parameters; the similarity
+   stress wiring is a stage-3 concern).
+6. **Rothrock strength in the coupling cap.** The kstrength = 1 strength law
+   (icepack_mechred.F90:1660-1712) is transcribed and dump-pinned in `IceCap`
+   because the dynamics skeleton cannot compile tests (unlowered spatial D);
+   the `cice_ice_strength.csv` rows reproduce to rel 1e-9. The Hibler
+   kstrength ≠ 1 form stays available as `ice_strength_hibler`.
 7. **Enthalpy-tracer transport documented, not carried.** The conservative
    forms `d(vicen·qicen)/dt + div(vicen·qicen·u) = 0` are the Fortran's type-2
    tracer transport (ice_transport_driver.F90:98-102); the product-form LHS
@@ -203,15 +216,23 @@ pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
-| `cice_coupling.esm` | 29 | 32 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, and the air-ice stress exports |
+| `cice_coupling.esm` | 36 | 47 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), and the Rothrock strength law (2 dump rows) |
 | `cice_thermodynamics.esm` | 0 | 0 | none — the run's configuration (ktherm = 2 mushy, MU71, dEdd, nilyr = 8/nslyr = 3, hlid, similarity) exercises none of the transcribed laws (see coverage limits) |
 | `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
 | `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
 | `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
 
-All 32 coupling assertions reproduce the dumped values to round-off
+All 32 original coupling assertions reproduce the dumped values to round-off
 (`rel 1e-12`); every expected value traces to a specific dump row (step, cell,
-ncat) cited in the test description.
+ncat) cited in the test description. The 14 added assertions pin the
+similarity exports (Si_tref/Si_qref at `rel 1e-9`, machine precision) and the
+Rothrock strength (two dump rows at `rel 1e-9`); Si_u10 carries a documented
+`rel 1e-4` gap: the uvelT_icep reconstruction (ice_step_mod.F90:114-128, the
+uarea-weighted average of the U-point uvel) reproduces the run's T-point
+velocity only to ~1e-4 m/s, and Uref = |Uatm−U|·rd/rdn amplifies that
+difference by rd/rdn ≈ 8. The source of the residual is unidentified (the
+run-side value is consumed inside step_therm1, not dumped); the pin is kept at
+the observed precision rather than tightening past it.
 
 ### Derived inputs (the raw CMEPS fields are not dumped)
 
@@ -241,6 +262,15 @@ must reproduce the dumped value:
 - `strairxT` / `strairyT` = dumped `Faii_taux` / `Faii_tauy` × aice / areacor
   (inversion of the scale_fluxes + export chain; the pre-scale T-point stress
   is not dumped).
+- Similarity-test inputs: `Sa_u`/`Sa_v`/`Sa_ptem`/`Sa_shum`/`Sa_dens`/`Sa_z`
+  are the dumped imports of `cice_run_imports.csv`; `uvelT`/`vvelT` are the
+  uarea-weighted averages of the four surrounding U-point uvel/vvel of
+  `cice_dyn_state.csv` (phase `d_entr`, the uvelT_icep reconstruction of
+  ice_step_mod.F90:114-128 with the gx1v7 HTN/HTE cell-edge lengths);
+  `Tsfcn`/`aicen_init` are the entry(S) per-category states of
+  `cice_thermo_state.csv` (the surface temperature and the aicen saved before
+  the thermodynamics, which merge_fluxes weights Trefn/Qrefn/Urefn by) and
+  `aicen` is entry(S+1) (the aice of the scale_fluxes division).
 
 ### Transcription fixes found while writing the tests
 
@@ -272,13 +302,12 @@ must reproduce the dumped value:
    nilyr = 8/nslyr = 3, conduct = MU71, shortwave = dEdd, frzpnd = hlid,
    kstrength = 1 (Rothrock), and atmbndy = similarity (the default); the
    skeleton deliberately transcribes the icepack defaults (BL99 7/1, bubbly,
-   ccsm3 albedos, cesm pond, constant atmo, Hibler strength). The dEdd
-   albedos of `cice_albedo.csv` differ from the ccsm3 analytic laws by up to
-   ~10% (ncat 2, step 2: alvdfn = 0.9527 vs 0.8598), the Rothrock strength
-   P = 3.21e5 differs from the Hibler value 5.47e5, and the similarity scheme
-   gives nonzero Si_u10/Si_tref/Si_qref (1.104, 266.36, 1.95e-3) where the
-   transcribed constant scheme gives zero — so no dump value pins the
-   transcribed thermodynamics equations.
+   ccsm3 albedos, cesm pond). The dEdd albedos of `cice_albedo.csv` differ
+   from the ccsm3 analytic laws by up to ~10% (ncat 2, step 2: alvdfn = 0.9527
+   vs 0.8598) — so no dump value pins the transcribed thermodynamics equations.
+   The Rothrock strength and the similarity reference-height exports are
+   transcribed and pinned in the coupling cap (the D-class settings kstrength =
+   1, krdg_partic = krdg_redist = 1, mu_rdg = 4, natmiter = 5, highfreq).
 - **Tsfc tracer (dump bug, now fixed).** The first instrumented run read
    the `nt_Tsfc`/`nt_qice`/`nt_qsno` tracers with the j and tracer indices
    swapped (`trcrn(i,nt,j,n,blk)` vs the declared `(i,j,nt,n,blk)`), so
@@ -298,7 +327,9 @@ must reproduce the dumped value:
    The EVP momentum/stress and ice-strength dumps (`cice_evp_momentum.csv`,
    `cice_evp_stress.csv`, `cice_ice_strength.csv`, `cice_dyn_state.csv`,
    `cice_transport_state.csv`) will be pinned once the EarthSciDiscretizations
-   lowering lands (stage 3).
+   lowering lands (stage 3); the ice-strength law itself is already pinned in
+   the coupling cap (see above), and `cice_dyn_state.csv` feeds the similarity
+   tests through the uvelT/vvelT reconstruction.
 - **fswthru merge timing.** `merge_fluxes` weights fswthrun by the mid-thermo
    aicen (icepack_therm_vertical.F90:3169), which is not a dumped state; a
    per-category fswthru pin misses the dump by 0.1-18%, so Fioi_swpen uses the
@@ -312,7 +343,7 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
-assertions plus the 32 CICE coupling assertions with 0 failures and 0 errors.
+assertions plus the 46 CICE coupling assertions with 0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)
 
@@ -322,11 +353,13 @@ assertions plus the 32 CICE coupling assertions with 0 failures and 0 errors.
 - The incremental-remapping advection (departure points, transport integrals,
   the category-0 open-water mass) is a discretization, not a pointwise law;
   the skeleton carries its continuous continuity system.
-- The ridging (kstrength = 1), the delta-Eddington shortwave solver, the
-  similarity atmo boundary layer, the salinity-profile module (zSin is a
+- The ridge redistribution (ridge_shift, icepack_mechred.F90:1068+), the
+  delta-Eddington shortwave solver, the salinity-profile module (zSin is a
   prescribed parameter with the 'constant' profile), the melt-pond
   tracers hpnd/apnd/alvl (prescribed parameters), and the wave/aerosol/isotope
-  tracers are deferred.
+  tracers are deferred. (The Rothrock strength law and the similarity atmo
+  boundary layer are transcribed and pinned in the coupling cap; the assembly
+  `Control` atmo scheme remains the constant branch.)
 - The `Si_imask` ocean mask is a grid field (deferred on the single-cell
   skeleton).
 
