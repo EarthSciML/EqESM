@@ -2,661 +2,1059 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_thermodynamics",
-  "description": "CICE column thermodynamics (stage 2 of the EqESM project): the per-category vertical heat conduction, surface energy balance, and growth/melt closures of the default ktherm = 1 (BL99) configuration of cesm3_cice6_6_3_22, written over the ncat thickness categories and the nilyr/nslyr layer axes. The Fortran state is the layer enthalpy (zqin, zqsn; icepack_therm_vertical.F90:1155-1156) with temperatures recovered by calculate_Tin_from_qin (icepack_therm_shared.F90:68-101) and icepack_snow_temperature (F90:470-484); this model carries qicen/qsnon as states and recovers zTin/zTsn through the same laws. Heat conduction: the Fortran assembles and solves an implicit backward-Euler tridiagonal for the surface and layer temperatures (get_matrix_elements_calc_Tsfc and the interior rows, icepack_therm_bl99.F90:1038-1210, with etai = dt/(rhoi*ci*hilyr) F90:366); this model writes the equivalent energy-conserving semi-discrete (method-of-lines) form d(q_k)/dt = (kh_up*(T_up - T_k) + kh_dn*(T_dn - T_k) + Iswabs_k)/hilyr with the interface conductances kh of the conductivity subroutine (F90:874-961: kh_top = 2*ksno/hslyr F90:930, kh_snowice = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) F90:931-933, kh_bot = 2*kilyr(nilyr)/hilyr F90:940, interior harmonic means F90:956-958) and the per-layer absorbed shortwave of absorbed_solar (icepack_shortwave.F90:862-880), i.e. the continuous PDE rho*cp*dT/dt = d/dz(k dT/dz) + S with the l_brine heat capacity ci = cp_ice - Lfresh*Tmlts/(zTin*Tin_init) (icepack_therm_bl99.F90:360-365) folded into the enthalpy form. The surface temperature Tsfc is solved in the Fortran by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 with the Newton-linearized tridiagonal row (icepack_therm_bl99.F90:1116-1128, melting clamp Tsfc = min(Tsfc, 0) F90:1130-1162); the balance is transcendental in Tsfc (the saturation-humidity exponential), so the skeleton carries Tsfc as a parameter fed by the coupled solve and computes fsurfn and its components (surface_heat_flux, icepack_therm_shared.F90:147-165) as algebraic closures. The albedo and shortwave absorption follow compute_albedos and absorbed_solar (icepack_shortwave.F90:466-597, 701-896) with the default ccsm3 albedo constants and the dEdd shortwave tuning (shortwave = 'dEdd' namelist default; the dEdd radiative-transfer solver itself is deferred). Growth/melt closures transcribe the energy partition esub/econ/etop_mlt/ebot_mlt/ebot_gro (icepack_therm_vertical.F90:1333-1342), the congelation enthalpy qbot and congel (F90:1432-1467), the bottom melt and top melt with the melt enthalpy qm = zqin (qmlt = 0 for ktherm = 1, F90:1281-1287; the layer-by-layer energy cascade with the min(-dzi, ...) clamps at F90:1523-1603 is documented and pinned by the stage-2 tests), the sublimation/condensation mass flux evapn (F90:1355-1403, 1546-1559), the fresh/salt fluxes freshn/fsaltn (F90:510-522, constant saltflux_option with ice_ref_salinity = 4) and the residual ocean heat flux fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt (F90:1630, einex_sfc_flux = 0). The ocean heat flux fbot follows frzmlt_bottom_lateral (F90:553-775) with the default fbot_xfer_type = 'constant' 0.006 transfer coefficient (F90:672-674); the lateral-melt terms (m1/m2 law F90:637-640, 679-775) are transcribed in the template library and deferred from the closures. The melt pond volume change follows the 'cesm' branch of compute_ponds_lvl (icepack_meltpond_lvl.F90:37-196, frzpnd = 'cesm' namelist default); the pond drainage/flush and lid physics are deferred. The per-category ice state (aicen, vicen, vsnon) is carried as parameters, matching the Fortran operator split in which the column physics consumes the state and the ITD/transport steps update it (update_state_vthermo, icepack_therm_vertical.F90:2178-2234); the assembly wires the growth/melt rates into the state update in stage 3. All pointwise laws are shared by reference from ./cice_templates.esm. The tests block is empty: the stage-1 dump window (stage1/dumps/cice/) exercises none of the transcribed laws - the run used ktherm = 2 (mushy) with nilyr = 8/nslyr = 3 against the transcribed BL99 defaults (7/1), conduct = 'MU71' against the transcribed 'bubbly', shortwave = 'dEdd' against the transcribed ccsm3 albedo laws, frzpnd = 'hlid' against the transcribed 'cesm' pond, and atmbndy = 'similarity' against the transcribed constant scheme (stage1/cime/cases/D_cice_inst/run/ice_in); the dEdd albedos of cice_albedo.csv differ from the ccsm3 laws (e.g. ncat 2, step 2: dumped alvdfn = 0.9527 vs the ccsm3 law 0.8598); and the Tsfc tracer reads 0 in every cice_thermo_state.csv row (stage-1 instrumentation does not capture the nt_Tsfc tracer), so no dump value can pin the transcribed equations. See stage2/README-cice.md 'Testing'."
+  "description": "CICE column thermodynamics (stage 2 of the EqESM project): the per-category vertical heat conduction, surface energy balance, and growth/melt closures of the D-class run configuration of cesm3_cice6_6_3_22 (ktherm = 2 mushy, shortwave = 'dEdd', frzpnd = 'hlid' sea-level ponds, nilyr = 8, nslyr = 3, phi_i_mushy = 0.45, hs0 = 0.0, snwredist = 'none', use_smliq_pnd = .false., congel_freeze = 'one-step', saltflux_option = 'constant', tfrz_option = 'mushy', conduct = 'MU71', dpscale = 1e-3, vapor_flux_correction = .false.), written over the ncat thickness categories and the nilyr/nslyr layer axes. The Fortran state is the layer enthalpy (zqin, zqsn; icepack_therm_vertical.F90:1155-1156) with temperatures recovered by icepack_mushy_temperature_mush (icepack_mushy_physics.F90:348-452) for the ice and icepack_enthalpy_snow/temperature_snow (F90:145-179) for the snow; this model carries qicen/qsnon as states and recovers zTin/zTsn through the same laws. Heat conduction: the Fortran assembles and solves an implicit backward-Euler tridiagonal for the surface and layer temperatures (the mushy two-stage solver, icepack_therm_mushy.F90:1800-1985 with the kh conductances F90:1928-2061); this model writes the equivalent energy-conserving semi-discrete (method-of-lines) form d(q_k)/dt = (kh_up*(T_up - T_k) + kh_dn*(T_dn - T_k) + Iswabs_k)/hilyr with the interface conductances kh of the mushy conductance block (F90:1989-2061: kh_top = 2*kslyr/hslyr F90:2042, kh_snowice = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) F90:2046-2048, kh_bot = 2*kilyr(nilyr)/hilyr F90:2060, interior harmonic means F90:2052-2054) and the per-layer absorbed shortwave of the dEdd solver (Iswabs/Sswabs, deferred to the delta-Eddington rewrite, carried as parameters), i.e. the continuous PDE rho*cp*dT/dt = d/dz(k dT/dz) + S in enthalpy form; the layer conductivity is the mush law km = phi*(kb - ki) + ki of heat_conductivity (icepack_mushy_physics.F90:476-494; the ktherm = 1 MU71/bubbly laws remain as alternates in cice_templates.esm and are not used here). The surface temperature Tsfc is solved in the Fortran by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 (icepack_therm_mushy.F90:1674-1677); the balance is transcendental in Tsfc (the saturation-humidity exponential), so the skeleton carries Tsfc as a parameter fed by the coupled solve (stage-3 wiring). Growth/melt closures of thickness_changes (icepack_therm_vertical.F90): the melt enthalpies qmlt = enthalpy_of_melting(zSin) and qm = zqin - qmlt (F90:1283-1287), the congelation enthalpy qbot = qbotm - qbotw with qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) and qbotw = enthalpy_brine(sst) under congel_freeze = 'one-step' (F90:1413-1416), the top/basal melt closures dhi = etop_mlt/qm(1) and ebot_mlt/qm(nilyr) (F90:1565-1581, 1589-1603), the snow/ice sublimation-condensation closures with qsub = zqsn(1) - rhos*Lvap over snow and qm(1) - rhoi*Lvap over ice (F90:1355-1403, 1502-1559), and the ocean heat flux fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt + emlt_ocn/dt with emlt_ocn = -(qbotw*congel + qmlt(1)*(meltt + evapin/rhoi) + qmlt(nilyr)*meltb) (F90:1419, 1401, 1571, 1595, 1630, 1917; max(zqin, qmlt) = qmlt in the run regime since qm < 0 at melt). Radiation: the dEdd surface laws of icepack_shortwave.F90 - the snow fraction of shortwave_dEdd_set_snow (F90:3448-3454, hs0 = 0.0 so fs in {0,1}), the effective pond area of shortwave_dEdd_set_eff for tr_pond_sealvl (F90:3495-3637), the band albedos alvdrn/alidrn/alvdfn/alidfn (outputs of the deferred compute_dEdd_3bd solve, F90:1677-2936, carried as parameters), the component albedos albicen/albsnon/albpndn of F90:1496-1498 (the band-weighted sums of the awtvdr/awtidr/awtvdf/awtidf weights, icepack_parameters.F90:218-221; exact for the run's fs in {0,1} and apeffn = 0 surface-type masks), and the conservation fswint = swabs - fswsfc - fswthru with swabs = sum(sw*(1-al)) and fswthru = sum of the four band transmissions. Melt ponds: the 'hlid' sea-level scheme of compute_ponds_sealvl (icepack_meltpond_sealvl.F90:50-265) with the Stefan lid growth/melt; dvn carries the per-step dvpondn and the pond tracers apnd/hpnd/ipnd/dhsn/ffracn are carried as parameters fed by the coupling (stage 3), with only the set_eff apeffn law pinned by tests. The freshn/fsaltn laws (F90:510-521) and the surface-flux block (surface_heat_flux, icepack_therm_shared.F90:109-167; frzmlt_bottom_lateral, F90:637-678) are unchanged from the ktherm = 1 skeleton. The delta-Eddington solver (compute_dEdd_3bd, icepack_shortwave.F90:1677-3389) and the mushy enthalpy/T inversion pinning are deferred; see stage2/README-cice.md for the coverage table."
  },
  "index_sets": {
-  "ncat": { "kind": "interval", "size": "N_CAT" },
-  "ice_layer": { "kind": "interval", "size": "N_ILYR" },
-  "snow_layer": { "kind": "interval", "size": "N_SLYR" }
+  "ncat": {
+   "kind": "interval",
+   "size": "N_CAT"
+  },
+  "ice_layer": {
+   "kind": "interval",
+   "size": "N_ILYR"
+  },
+  "snow_layer": {
+   "kind": "interval",
+   "size": "N_SLYR"
+  }
  },
  "metaparameters": {
-  "N_CAT": { "type": "integer", "default": 5, "description": "number of ice thickness categories (namelist ncat = 5), [-]"},
-  "N_ILYR": { "type": "integer", "default": 7, "description": "number of ice layers (namelist nilyr = 7), [-]"},
-  "N_SLYR": { "type": "integer", "default": 1, "description": "number of snow layers (namelist nslyr = 1), [-]"}
+  "N_CAT": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of ice thickness categories (namelist ncat = 5), [-]"
+  },
+  "N_ILYR": {
+   "type": "integer",
+   "default": 8,
+   "description": "number of ice layers (namelist nilyr = 8 in the D-class run), [-]"
+  },
+  "N_SLYR": {
+   "type": "integer",
+   "default": 3,
+   "description": "number of snow layers (namelist nslyr = 3 in the D-class run), [-]"
+  }
  },
  "models": {
   "Thermodynamics": {
    "expression_template_imports": [
-    { "ref": "./cice_templates.esm" }
+    {
+     "ref": "./cice_templates.esm"
+    }
    ],
    "variables": {
     "qicen": {
      "type": "unknown",
-     "shape": ["ncat", "ice_layer"],
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
      "units": "J/m^3",
-     "description": "ice layer enthalpy (zqin, icepack_therm_vertical.F90:1155), the conserved vertical thermo state, [J/m3]"
+     "default": 0.0,
+     "description": "ice layer enthalpy (zqin, icepack_therm_vertical.F90:1155), the conserved vertical thermo state for the mushy (ktherm = 2) thermodynamics, [J/m3]"
     },
     "qsnon": {
      "type": "unknown",
-     "shape": ["ncat", "snow_layer"],
+     "shape": [
+      "ncat",
+      "snow_layer"
+     ],
      "units": "J/m^3",
+     "default": 0.0,
      "description": "snow layer enthalpy (zqsn, F90:1156), [J/m3]"
     },
     "Tmlts": {
      "type": "unknown",
-     "shape": ["ncat", "ice_layer"],
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
      "units": "degC",
-     "description": "layer liquidus temperature Tmlts = -depressT*zSin (icepack_liquidus_temperature, icepack_therm_shared.F90:383-386), [C]"
+     "description": "layer liquidus temperature of the mushy thermodynamics, Tmlts = liquidus_temperature_mush(zSin) (icepack_mushy_physics.F90:227-261, the Assur 1958 liquidus), [C]"
     },
     "zTin": {
      "type": "unknown",
-     "shape": ["ncat", "ice_layer"],
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
      "units": "degC",
-     "description": "internal ice layer temperatures recovered from the enthalpy (calculate_Tin_from_qin, icepack_therm_shared.F90:68-101, via icepack_ice_temperature F90:434-452), [C]"
+     "description": "internal ice layer temperatures recovered from the enthalpy (icepack_mushy_temperature_mush, icepack_mushy_physics.F90:348-452, the piecewise quadratic inversion of the Assur liquidus), [C]"
     },
     "zTsn": {
      "type": "unknown",
-     "shape": ["ncat", "snow_layer"],
+     "shape": [
+      "ncat",
+      "snow_layer"
+     ],
      "units": "degC",
-     "description": "internal snow layer temperatures recovered from the enthalpy (icepack_snow_temperature, icepack_therm_shared.F90:470-484; fresh snow, F90:479-481), [C]"
+     "description": "internal snow layer temperatures recovered from the enthalpy (icepack_enthalpy_snow/temperature_snow, icepack_mushy_physics.F90:145-179; fresh snow), [C]"
     },
     "hi": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
-     "description": "total ice thickness per category hi = vicen/aicen (compute_albedos, icepack_shortwave.F90:537), zeroed for open-water categories (aicen <= puny), [m]"
+     "description": "total ice thickness per category hi = vicen/aicen (compute_ponds_sealvl, icepack_meltpond_sealvl.F90:134), zeroed for open-water categories (aicen <= puny), [m]"
     },
     "hs": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
-     "description": "snow depth per category hs = vsnon/aicen (F90:538), zeroed for open-water categories, [m]"
+     "description": "snow depth per category hs = vsnon/aicen (F90:135), zeroed for open-water categories, [m]"
     },
     "hilyr": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
-     "description": "ice layer thickness hilyr = hi/nilyr (icepack_therm_bl99.F90:865), [m]"
+     "description": "ice layer thickness hilyr = hi/nilyr, [m]"
     },
     "hslyr": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
      "description": "snow layer thickness hslyr = hs/nslyr, [m]"
     },
     "kilyr": {
      "type": "unknown",
-     "shape": ["ncat", "ice_layer"],
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
      "units": "W/m/K",
-     "description": "thermal conductivity at ice layer midpoints (conductivity, icepack_therm_bl99.F90:918-924, Pringle et al. 2007 bubbly brine; conduct = 'bubbly' namelist default), [W/m/K]"
+     "description": "thermal conductivity at ice layer midpoints, the mushy heat_conductivity km = phi*(kb - ki) + ki with phi the liquid fraction (icepack_mushy_physics.F90:476-494, ki = 2.3 and kb = 0.5375 F90:62-63); the ktherm = 2 law, [W/m/K]"
     },
     "kslyr": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m/K",
-     "description": "snow conductivity kslyr = ksno = 0.30 (conductivity, icepack_therm_bl99.F90:906-908; icepack_parameters.F90:90), [W/m/K]"
+     "description": "snow conductivity kslyr = ksno = 0.30 (conductivity_snow_array, icepack_mushy_physics.F90:130-139; icepack_parameters.F90:90), [W/m/K]"
     },
     "kilyr_top": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m/K",
      "description": "conductivity of ice layer 1 (gather kilyr(:,1)), [W/m/K]"
     },
     "kilyr_bot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m/K",
      "description": "conductivity of the bottom ice layer (gather kilyr(:,nilyr)), [W/m/K]"
     },
     "zTin_top": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
-     "description": "temperature of ice layer 1 (gather zTin(:,1)), [C]"
+     "description": "temperature of ice layer 1 (gather zTin(:,1)), the snow-ice interface temperature, [C]"
     },
     "zTin_bot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
      "description": "temperature of the bottom ice layer (gather zTin(:,nilyr)), [C]"
     },
+    "zTsn_top": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "degC",
+     "description": "temperature of the top snow layer (gather zTsn(:,1)), the temperature the top conductive flux fcondtopn is taken against (fcondtop = 2*ks(1)*(Tsf - zTsn(1))/hslyr, icepack_therm_mushy.F90:1677; icepack_therm_bl99.F90:402), [C]"
+    },
     "zTsn_bot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
-     "description": "temperature of the bottom snow layer (gather zTsn(:,nslyr)), [C]"
-    },
-    "qicen_top": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "J/m^3",
-     "description": "enthalpy of ice layer 1 (gather qicen(:,1)), the melt enthalpy qm(1) for ktherm = 1, [J/m3]"
-    },
-    "qicen_bot": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "J/m^3",
-     "description": "enthalpy of the bottom ice layer (gather qicen(:,nilyr)), the melt enthalpy qm(nilyr) for ktherm = 1, [J/m3]"
+     "description": "temperature of the bottom snow layer (gather zTsn(:,nslyr)), the snow-ice interface temperature feeding the ice top boundary flux, [C]"
     },
     "qsnon_top": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^3",
      "description": "enthalpy of snow layer 1 (gather qsnon(:,1)), the snow melt enthalpy zqsn(1), [J/m3]"
     },
-    "Tmlts_bot": {
+    "qmlt": {
      "type": "unknown",
-     "shape": ["ncat"],
-     "units": "degC",
-     "description": "liquidus of the bottom ice layer (gather Tmlts(:,nilyr); the congelation Tmlts = -depressT*zSin(nilyr) of icepack_therm_vertical.F90:1432), [C]"
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
+     "units": "J/m^3",
+     "description": "melt enthalpy of the mush from the layer bulk salinity, qmlt(k) = enthalpy_of_melting(zSin(k)) = cp_ocn*rhow*liquidus_temperature_mush(zSin(k)) (icepack_therm_vertical.F90:1283, the ktherm = 2 branch; icepack_mushy_physics.F90:313-325), [J/m3]"
+    },
+    "qm": {
+     "type": "unknown",
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
+     "units": "J/m^3",
+     "description": "meltable enthalpy per layer qm(k) = zqin(k) - qmlt(k) (icepack_therm_vertical.F90:1287), the ktherm = 2 denominator of the growth/melt closures, [J/m3]"
+    },
+    "qm_top": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "meltable enthalpy of ice layer 1 (gather qm(:,1)), the top-melt and ice-sublimation enthalpy, [J/m3]"
+    },
+    "qm_bot": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "meltable enthalpy of the bottom ice layer (gather qm(:,nilyr)), the bottom-melt enthalpy, [J/m3]"
+    },
+    "qmlt_top": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "melt enthalpy of ice layer 1 (gather qmlt(:,1)), the emlt_ocn weight of the top melt and sublimation, [J/m3]"
+    },
+    "qmlt_bot": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "melt enthalpy of the bottom ice layer (gather qmlt(:,nilyr)), the emlt_ocn weight of the bottom melt, [J/m3]"
     },
     "kh_top": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2/K",
-     "description": "conductance at the top snow surface kh(1) = 2*kslyr/hslyr (conductivity, icepack_therm_bl99.F90:930), [W/m2/K]"
+     "description": "conductance at the top snow surface kh(1) = 2*kslyr/hslyr (the mushy conductance block, icepack_therm_mushy.F90:2042; identical to the ktherm = 1 form, icepack_therm_bl99.F90:930), [W/m2/K]"
     },
     "kh_snowice": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2/K",
-     "description": "conductance at the snow-ice interface kh(1+nslyr) = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) (F90:931-933), [W/m2/K]"
+     "description": "conductance at the snow-ice interface kh(1+nslyr) = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) (F90:2046-2048), [W/m2/K]"
     },
     "kh_bot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2/K",
-     "description": "conductance at the bottom ice surface kh(1+nslyr+nilyr) = 2*kilyr(nilyr)/hilyr (F90:940), [W/m2/K]"
+     "description": "conductance at the bottom ice surface kh(1+nslyr+nilyr) = 2*kilyr(nilyr)/hilyr (F90:2060), [W/m2/K]"
     },
     "Tbot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
-     "description": "ice bottom temperature, the ocean freezing temperature at sss under tfrz_option = 'mushy' (frzmlt_bottom_lateral sets Tbot = Tf, icepack_therm_vertical.F90:650; icepack_sea_freezing_temperature, icepack_therm_shared.F90:404-406), [C]"
-    },
-    "fh": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "thickness albedo factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (compute_albedos, icepack_shortwave.F90:541-542), [-]"
-    },
-    "fT": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "surface-temperature albedo factor fT = min(Timelt - Tsfcn - 1, 0) (F90:548-549), [-]"
-    },
-    "asnow": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "fractional area of snow cover asnow = hs/(hs + snowpatch) for hs > puny (F90:574-579), [-]"
-    },
-    "alvdfni": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "bare-ice diffuse visible albedo (F90:543-555 with albicev = 0.78, dalb_mlt = -0.075), [-]"
-    },
-    "alidfni": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "bare-ice diffuse near-IR albedo (F90:543-555 with albicei = 0.36, dalb_mlt = -0.075), [-]"
-    },
-    "alvdfns": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "snow diffuse visible albedo (F90:559-564 with albsnowv = 0.98, dalb_mltv = -0.1), [-]"
-    },
-    "alidfns": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "snow diffuse near-IR albedo (F90:559-564 with albsnowi = 0.70, dalb_mlti = -0.15), [-]"
-    },
-    "alvdfn": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "combined visible diffuse albedo alvdfn = alvdfni*(1-asnow) + alvdfns*asnow (F90:582-589), [-]"
-    },
-    "alidfn": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "combined near-IR diffuse albedo (F90:582-589), [-]"
-    },
-    "alvdrn": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "combined visible direct albedo; direct = diffuse (F90:568-572, 586-587), [-]"
-    },
-    "alidrn": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "1",
-     "description": "combined near-IR direct albedo; direct = diffuse (F90:568-572, 588-589), [-]"
-    },
-    "swabs": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "W/m^2",
-     "description": "total shortwave absorbed at the surface (absorbed_solar, icepack_shortwave.F90:828-838), [W/m2]"
-    },
-    "fswpen": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "W/m^2",
-     "description": "shortwave penetrating the surface into the ice interior (F90:840-852), [W/m2]"
-    },
-    "fswsfc": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "W/m^2",
-     "description": "shortwave absorbed at the ice/snow surface fswsfc = swabs - fswpen (F90:854), [W/m2]"
-    },
-    "fswthru": {
-     "type": "unknown",
-     "shape": ["ncat"],
-     "units": "W/m^2",
-     "description": "shortwave transmitted through the ice into the ocean fswthru = fswpen*exp(-kappav*hi) (F90:883), [W/m2]"
-    },
-    "Iswabs": {
-     "type": "unknown",
-     "shape": ["ncat", "ice_layer"],
-     "units": "W/m^2",
-     "description": "shortwave absorbed in each ice layer Iswabs(k) = fswpen*(exp(-kappav*hilyr*(k-1)) - exp(-kappav*hilyr*k)) (F90:862-880; the layer_absorbed_shortwave law of cice_templates.esm inlined at the layer boundaries), [W/m2]"
+     "description": "ice bottom temperature, the ocean freezing temperature at sss under tfrz_option = 'mushy' (frzmlt_bottom_lateral sets Tbot = Tf, icepack_therm_vertical.F90:650; the Assur-1958 liquidus of icepack_sea_freezing_temperature, icepack_therm_shared.F90:404-406), [C]"
     },
     "Qsfc": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/kg",
      "description": "saturated surface specific humidity over ice (surface_heat_flux, icepack_therm_shared.F90:152-154), [kg/kg]"
     },
     "fsensn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "description": "downward sensible heat flux fsensn = shcoef*(potT - TsfK) (F90:161), [W/m2]"
     },
     "flatn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "description": "downward latent heat flux flatn = lhcoef*(Qa - Qsfc) (F90:162), [W/m2]"
     },
     "flwoutn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "description": "upward longwave flux flwoutn = -emissivity*stefan_boltzmann*TsfK^4 (F90:158), [W/m2]"
     },
     "fsurfn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "description": "net flux to the top surface excluding fcondtopn (surface_heat_flux, F90:147-165), [W/m2]"
     },
     "ustar": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
      "description": "skin friction velocity for the ocean heat flux, ustar = max(sqrt(sqrt(strocnxT^2 + strocnyT^2)/rhow), ustar_min) (frzmlt_bottom_lateral, icepack_therm_vertical.F90:665-666; ustar_min = 0.005, icepack_parameters.F90:99), [m/s]"
     },
     "fbot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "description": "heat flux from the ocean to the ice bottom (frzmlt_bottom_lateral, F90:662-678; 0.006 transfer coefficient F90:674), [W/m2]"
     },
     "fcondtopn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
-     "description": "downward conductive flux at the top surface fcondtopn = kh(1)*(Tsfc - zTsn(1)) (icepack_therm_bl99.F90:401-404), [W/m2]"
+     "description": "downward conductive flux at the top surface fcondtopn = kh(1)*(Tsfc - zTsn(1)) taken against the TOP snow layer (fcondtop = 2*ks(1)*(Tsf - zTsn(1))/hslyr, icepack_therm_mushy.F90:1677; icepack_therm_bl99.F90:401-404), [W/m2]"
     },
     "fcondbotn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
-     "description": "downward conductive flux at the bottom surface fcondbotn = kh(1+nslyr+nilyr)*(zTin(nilyr) - Tbot), [W/m2]"
+     "description": "downward conductive flux at the bottom surface fcondbotn = kh(1+nslyr+nilyr)*(zTin(nilyr) - Tbot) (fcondbot = 2*km(nilyr)*(zTin(nilyr) - Tbot)/hilyr, F90:1660), [W/m2]"
     },
     "esub": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^2",
      "description": "energy available for sublimation esub = max(-flatn*dt, 0) (thickness_changes, icepack_therm_vertical.F90:1333-1334), [J/m2]"
     },
     "econ": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^2",
      "description": "energy available for condensation econ = min(-flatn*dt, 0) (F90:1335), [J/m2]"
     },
     "etop_mlt": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^2",
      "description": "energy available for top melt etop_mlt = max((fsurfn - fcondtopn)*dt, 0) (F90:1337-1338), [J/m2]"
     },
     "ebot_mlt": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^2",
      "description": "energy available for bottom melt ebot_mlt = max((fcondbotn - fbot)*dt, 0) (F90:1340-1341), [J/m2]"
     },
     "ebot_gro": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^2",
      "description": "energy available for bottom growth ebot_gro = min((fcondbotn - fbot)*dt, 0) (F90:1342), [J/m2]"
     },
+    "qbotm": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "enthalpy of the congelation ice forming at the bottom, qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) (icepack_therm_vertical.F90:1413, the congel_freeze = 'one-step' branch; icepack_mushy_physics.F90:293-307), [J/m3]"
+    },
+    "qbotw": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "J/m^3",
+     "description": "enthalpy of the brine rejected to the ocean during congelation, qbotw = enthalpy_brine(sst) (F90:1414; icepack_mushy_physics.F90:330-342), [J/m3]"
+    },
     "qbot": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "J/m^3",
-     "description": "enthalpy of new congelation ice growing at the bottom (F90:1432-1443; congelation_enthalpy template), [J/m3]"
+     "description": "enthalpy of new congelation ice growing at the bottom qbot = qbotm - qbotw (F90:1415-1416, the one-step denominator), [J/m3]"
     },
     "congel": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
      "description": "basal ice growth rate congel = ebot_gro/qbot per step (F90:1444), in continuous rate form /dt, [m/s]"
     },
     "meltb": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
-     "description": "basal ice melt rate, the bottom-melt closure dhi = ebot_mlt/qm(nilyr) (F90:1589-1603 with qm = zqin for ktherm = 1, F90:1281-1287), in continuous rate form; the Fortran cascades the energy bottom-up over the layers with the min(-dzi, ...) clamps, [m/s]"
+     "description": "basal ice melt rate, the bottom-melt closure dhi = ebot_mlt/qm(nilyr) (F90:1589-1603 with qm = zqin - qmlt, F90:1287), in continuous rate form; the Fortran cascades the energy bottom-up over the layers with the min(-dzi, ...) clamps, [m/s]"
     },
     "meltt": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
-     "description": "top ice melt rate, the top-melt closure dhi = etop_mlt/qm(1) (F90:1565-1581 with qm = zqin for ktherm = 1); the Fortran first melts the snow with etop_mlt (F90:1523-1544) and cascades the remainder over the ice layers, [m/s]"
+     "description": "top ice melt rate, the top-melt closure dhi = etop_mlt/qm(1) (F90:1565-1581 with qm = zqin - qmlt); the Fortran first melts the snow with etop_mlt (F90:1523-1544) and cascades the remainder over the ice layers, [m/s]"
     },
     "melts": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
      "description": "snow melt rate, the snow top-melt closure dhs = etop_mlt/zqsn(1) (F90:1527), in continuous rate form, [m/s]"
     },
     "evapn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
-     "description": "ice/snow mass sublimated (negative) or condensed (positive), evapn = esub/qsub per step with the vapor enthalpy qsub = zqsn - rhos*Lvap over snow or qm - rhoi*Lvap over ice (F90:1355-1403, 1502-1521, 1546-1559; Lvap = 2.501e6, icepack_parameters.F90:84), in continuous rate form, [kg/m2/s]"
+     "description": "ice/snow mass sublimated (negative) or condensed (positive), evapn = esub/qsub per step with the vapor enthalpy qsub = zqsn(1) - rhos*Lvap over snow or qm(1) - rhoi*Lvap over ice (F90:1355-1403, 1502-1521, 1546-1559; Lvap = 2.501e6, icepack_parameters.F90:84), in continuous rate form, [kg/m2/s]"
     },
     "evapsn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
      "description": "snow sublimation part of evapn (evapsn accumulates when snow is present, F90:1520-1521); the skeleton's split follows the snow-first cascade, [kg/m2/s]"
     },
     "evapin": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
      "description": "ice sublimation part of evapn (F90:1398-1399, 1557-1558), evapin = evapn - evapsn, [kg/m2/s]"
     },
+    "emlt_ocn": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "description": "total energy of the brine transferred to the ocean, in rate form emlt_ocn = -(qbotw*congel + qmlt(1)*(meltt + evapin/rhoi) + qmlt(nilyr)*meltb): the congelation rejection -qbotw*dhi (F90:1419), the condensation/melt-water -qmlt(1)*dhi of the vapor closures (F90:1401, 1559), and -max(zqin,qmlt)*dhi of the top and bottom melt closures (F90:1571, 1595; max(zqin,qmlt) = qmlt in the run regime since qm = zqin - qmlt < 0 at melt), all per-step energies divided by dt, [W/m2]"
+    },
     "freshn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
      "description": "fresh water flux to the ocean freshn = evapn - (rhoi*dhi + rhos*dhs)/dt with the net thickness changes dhi = congel + meltb - meltt - evapin/rhoi and dhs = fsnow/rhos - melts - evapsn/rhos (F90:510-513; hsn_new = fsnow*dt/rhos is the new snowfall, F90:1632-1660), [kg/m2/s]"
     },
     "fsaltn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
      "description": "salt flux to the ocean under saltflux_option = 'constant': fsaltn = -rhoi*dhi*ice_ref_salinity*0.001/dt (F90:521, ice_ref_salinity = 4, icepack_parameters.F90:87), [kg/m2/s]"
     },
     "fhocnn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
-     "description": "net heat flux to the ocean fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt, the ocean heat left after use by the ice (F90:1625-1630 with einex_sfc_flux = 0), [W/m2]"
+     "description": "net heat flux to the ocean fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt + emlt_ocn, the ocean heat left after use by the ice (F90:1625-1630 with einex_sfc_flux = 0 and vapor_flux_correction = .false., plus the ktherm = 2 brine-energy term emlt_ocn/dt of F90:1917), [W/m2]"
     },
-    "volpn": {
+    "snowfracn": {
      "type": "unknown",
-     "shape": ["ncat"],
-     "units": "m^3/m^2",
-     "description": "melt pond volume over the grid cell area volpn = hpnd*aicen*alvl*apnd (compute_ponds_lvl, icepack_meltpond_lvl.F90:120), [m3/m2]"
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "description": "horizontal snow fraction used for radiation, snowfracn = min(fs, 1 - apeffn) with fs from shortwave_dEdd_set_snow (icepack_shortwave.F90:3448-3454) and the pond-reduced fsn = min(fsn, 1 - fpn) of shortwave_dEdd_set_eff (F90:3632; run_dEdd F90:1185), [-]"
+    },
+    "apeffn": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "description": "effective pond area used for radiation, apeffn = fpn of shortwave_dEdd_set_eff (icepack_shortwave.F90:3495-3637, apeffn = fpn F90:3635) for the sea-level pond tracer under snwredist = 'none', [-]"
+    },
+    "albicen": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "description": "bare-ice component of the broadband albedo, albicen = awt*alvdrn/alidrn/alvdfn/alidfn over the ice-only area (the history albice of shortwave_dEdd, F90:1496-1498). With the D-class fs in {0,1} and apeffn = 0 the mask ifelse(snowfracn < 1, awt, 0) reproduces the Fortran's fi = 1 - fs - fp weighting exactly; fractional fs (not exercised by the run) would require the per-surface-type band albedos of the deferred delta-Eddington solve, [-]"
+    },
+    "albsnon": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "description": "snow component of the broadband albedo, albsnon = awt*alvdrn/alidrn/alvdfn/alidfn over the snow-covered area (the history albsno of shortwave_dEdd, F90:1544-1546), with the same fs in {0,1} exactness as albicen, [-]"
+    },
+    "albpndn": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "description": "pond component of the broadband albedo (the history albpnd of shortwave_dEdd, F90:1583-1585). Identically 0 in the D-class run: the set_eff branches (infiltration rp < p15, retained-meltwater remap, thin-pond mask) leave apeffn = 0 on every dumped row, so the ponded surface type never fires; the pond band albedos of the deferred delta-Eddington solve are unpinnable, [-]"
+    },
+    "swabs": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "description": "total shortwave absorbed by the category surface swabs = swvdr*(1-alvdrn) + swvdf*(1-alvdfn) + swidr*(1-alidrn) + swidf*(1-alidfn), the four-band conservation of the dEdd fluxes (fswabs, icepack_shortwave.F90:1491-1494, 1539-1542, 1578-1581 summed over surface types), [W/m2]"
+    },
+    "fswthru": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "description": "shortwave transmitted through the ice into the ocean, fswthru = fswthru_vdr + fswthru_vdf + fswthru_idr + fswthru_idf, the four-band sum of the dEdd penetration outputs (fswthrun, icepack_shortwave.F90:1208-1212), [W/m2]"
+    },
+    "fswint": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "description": "shortwave absorbed in the ice interior fswint = swabs - fswsfc - fswthru, the radiation conservation of shortwave_dEdd (fswint = fswabs - fswsfc - fswthru, icepack_shortwave.F90:1641-1643), [W/m2]"
     },
     "dvn": {
      "type": "unknown",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m^3/m^2",
-     "description": "change in melt pond volume per step, 'cesm' option (F90:154-174; meltpond_cesm_dvn template), in continuous rate form over dt, [m3/m2]"
+     "description": "change in melt pond volume per step, the 'hlid' sea-level option (compute_ponds_sealvl, icepack_meltpond_sealvl.F90:50-265; meltpond_sealvl_dvn template), following the meltpond_cesm_dvn convention of supplying meltt/melts as continuous rates; the output is diagnostic and not pinned by the stage-2 tests, [m3/m2]"
     },
     "Tsfc": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
      "default": 0.0,
-     "description": "ice/snow surface temperature. In the Fortran this is solved by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 with the Newton-linearized tridiagonal row (icepack_therm_bl99.F90:1116-1128) and the melting clamp Tsfc <= 0; the balance is transcendental in Tsfc (saturation-humidity exponential), so the skeleton carries it as a parameter fed by the coupled solve (stage-3 wiring), [C]"
+     "description": "ice/snow surface temperature. In the Fortran this is solved by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 with the Newton-linearized tridiagonal row (icepack_therm_mushy.F90:1674-1677) and the melting clamp Tsfc <= 0; the balance is transcendental in Tsfc (saturation-humidity exponential), so the skeleton carries it as a parameter fed by the coupled solve (stage-3 wiring), [C]"
     },
     "swvdr": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "downward visible direct shortwave (cap Faxa_swvdr), [W/m2]"
     },
     "swvdf": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "downward visible diffuse shortwave (cap Faxa_swvdf), [W/m2]"
     },
     "swidr": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "downward near-IR direct shortwave (cap Faxa_swndr), [W/m2]"
     },
     "swidf": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "downward near-IR diffuse shortwave (cap Faxa_swndf), [W/m2]"
     },
+    "alvdrn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "combined visible direct albedo of the dEdd scheme (the alvdr output of shortwave_dEdd, icepack_shortwave.F90:1491-1494 + 1539-1542 + 1578-1581 over the bare/snow/pond surface types). The delta-Eddington solve that produces the four band albedos is deferred (compute_dEdd_3bd, F90:1677-2936), so the band albedos are carried as parameters fed by the coupling or the tests, [-]"
+    },
+    "alidrn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "combined near-IR direct albedo of the dEdd scheme (see alvdrn for the deferred-solve note), [-]"
+    },
+    "alvdfn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "combined visible diffuse albedo of the dEdd scheme (see alvdrn for the deferred-solve note), [-]"
+    },
+    "alidfn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "combined near-IR diffuse albedo of the dEdd scheme (see alvdrn for the deferred-solve note), [-]"
+    },
+    "fswsfc": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "shortwave absorbed at the ice/snow surface fswsfc, the dEdd surface absorption of compute_dEdd_3bd (deferred; carried as a parameter), [W/m2]"
+    },
+    "fswthru_vdr": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "visible direct band of the shortwave transmitted to the ocean (fswthru_vdr of compute_dEdd_3bd, deferred), [W/m2]"
+    },
+    "fswthru_vdf": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "visible diffuse band of the shortwave transmitted to the ocean (deferred), [W/m2]"
+    },
+    "fswthru_idr": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "near-IR direct band of the shortwave transmitted to the ocean (deferred), [W/m2]"
+    },
+    "fswthru_idf": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "near-IR diffuse band of the shortwave transmitted to the ocean (deferred), [W/m2]"
+    },
+    "Iswabs": {
+     "type": "parameter",
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "shortwave absorbed in each ice layer, the Iswabs output of the deferred dEdd solve (compute_dEdd_3bd, icepack_shortwave.F90:1677-2936), consumed by the ice enthalpy ODE in place of the ktherm = 1 fswpen*exp(-kappav z) penetration law, [W/m2]"
+    },
+    "Sswabs": {
+     "type": "parameter",
+     "shape": [
+      "ncat",
+      "snow_layer"
+     ],
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "shortwave absorbed in each snow layer, the Sswabs output of the deferred dEdd solve (compute_dEdd_3bd), consumed by the snow enthalpy ODE, [W/m2]"
+    },
+    "dhsn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "snow depth difference between sea ice and pond ice, the persistent tracer of shortwave_dEdd_set_eff (dhsn = dhs, icepack_shortwave.F90:3591, 'constant until reset to 0'); carried as a parameter fed by the coupling (stage 3), [m]"
+    },
+    "ffracn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "fraction of fsurfn used to melt the refrozen pond lid, the ffrac output of compute_ponds_sealvl (icepack_meltpond_sealvl.F90:188-193) consumed by set_eff; carried as a parameter fed by the coupling (stage 3), unpinnable from the stage-1 dumps, [-]"
+    },
+    "ipnd": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "melt pond refrozen lid thickness (the ipnd tracer; ipnd = hlid under frzpnd = 'hlid', icepack_meltpond_sealvl.F90:261), carried as a parameter fed by the coupling (stage 3), [m]"
+    },
+    "Tair": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "K",
+     "default": 273.15,
+     "description": "air temperature (cap Sa_tbot; the pond freeze-up Stefan law consumes Tair, icepack_meltpond_sealvl.F90:173), [K]"
+    },
     "flw": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "downward longwave radiation (cap Faxa_lwdn), [W/m2]"
     },
     "potT": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "K",
      "default": 273.15,
      "description": "air potential temperature (cap Sa_ptem or pbot-derived, ice_import_export.F90:610-631), [K]"
     },
     "Qa": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/kg",
      "default": 0.0,
      "description": "air specific humidity (cap Sa_shum), [kg/kg]"
     },
     "rhoa": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^3",
      "default": 1.3,
      "description": "air density (cap Sa_dens or pbot-derived), [kg/m3]"
     },
     "shcoef": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2/K",
      "default": 0.0,
      "description": "transfer coefficient for sensible heat (atmo_boundary_const, icepack_atmo.F90:493; wired from the assembly's atmo scheme), [W/m2/K]"
     },
     "lhcoef": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "transfer coefficient for latent heat, per unit specific-humidity difference: lhcoef = latncoef*Lheat*rhoa*wind (atmo_boundary_const, icepack_atmo.F90:494), so flatn = lhcoef*(Qa - Qsfc) is W/m2; wired from the assembly's atmo scheme, [W/m2]"
     },
     "sst": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "degC",
      "default": -1.8,
      "description": "sea surface temperature (cap So_t), [C]"
     },
     "sss": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "ppt",
      "default": 34.0,
      "description": "sea surface salinity (cap So_s), [ppt]"
     },
     "frzmlt": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "W/m^2",
      "default": 0.0,
      "description": "freezing/melting potential from the ocean (cap Fioo_q), [W/m2]"
     },
     "frain": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m/s",
      "default": 0.0,
-     "description": "rain rate in m/s (cap Faxa_rain kg/m2/s divided by rhofresh, as consumed by the melt pond code, icepack_meltpond_lvl.F90:160), [m/s]"
+     "description": "rain rate in m/s (cap Faxa_rain kg/m2/s divided by rhofresh, as consumed by the melt pond code, icepack_meltpond_sealvl.F90:157), [m/s]"
     },
     "fsnow": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "kg/m^2/s",
+     "default": 0.0,
      "description": "snowfall rate (cap Faxa_snow); the new-snow thickness is hsn_new = fsnow*dt/rhos (thickness_changes, icepack_therm_vertical.F90:1632-1660), [kg/m2/s]"
+    },
+    "fsnow_dEdd": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "snowfall rate as consumed by the dEdd pond code: shortwave_dEdd_set_eff receives the coupled mass flux fsnow (kg/m2/s, F90:3511) but uses it numerically as a depth rate in dhs = hsnlvl - fsnow*dt (F90:3588) and fsnow*dt > hs_min, without the /rhos conversion; the .esm carries the same numeric value in an m/s parameter to reproduce the Fortran exactly (bugs.md #10), [m/s]"
     },
     "strocnxT": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "N/m^2",
      "default": 0.0,
      "description": "ice-ocean stress, x direction at T points (from the dynamics component; used for ustar, icepack_therm_vertical.F90:665), [N/m2]"
     },
     "strocnyT": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "N/m^2",
      "default": 0.0,
      "description": "ice-ocean stress, y direction at T points, [N/m2]"
     },
     "aicen": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "1",
      "default": 0.0,
-     "description": "ice area fraction per category (the coupled ice state; the column physics consumes it and the ITD/transport steps update it, update_state_vthermo, F90:2178-2234), [-]"
+     "description": "ice area fraction per category (the coupled ice state; the column physics consumes it and the ITD/transport steps update it), [-]"
     },
     "vicen": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
      "default": 0.0,
      "description": "ice volume per unit grid-cell area per category, [m]"
     },
     "vsnon": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
      "default": 0.0,
      "description": "snow volume per unit grid-cell area per category, [m]"
     },
     "zSin": {
      "type": "parameter",
-     "shape": ["ncat", "ice_layer"],
+     "shape": [
+      "ncat",
+      "ice_layer"
+     ],
      "units": "ppt",
      "default": 4.0,
-     "description": "ice layer bulk salinity, prescribed by the salinity profile module (icepack_salinity.F90; the default 'constant' profile); the l_brine thermodynamics uses it for the liquidus and the enthalpy, [ppt]"
+     "description": "ice layer bulk salinity, prescribed by the salinity profile module (icepack_salinity.F90; the default 'constant' profile); the mushy thermodynamics uses it for the liquidus, liquid fraction, and enthalpy, [ppt]"
     },
     "hpnd": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "m",
      "default": 0.0,
-     "description": "melt pond depth (icepack_meltpond_lvl.F90:120), [m]"
+     "description": "melt pond depth (the hpnd tracer of the sea-level pond scheme, icepack_meltpond_sealvl.F90:76), carried as a parameter fed by the coupling (stage 3), [m]"
     },
     "apnd": {
      "type": "parameter",
-     "shape": ["ncat"],
+     "shape": [
+      "ncat"
+     ],
      "units": "1",
      "default": 0.0,
-     "description": "melt pond area fraction of the ice area, [m]"
-    },
-    "alvl": {
-     "type": "parameter",
-     "shape": ["ncat"],
-     "units": "1",
-     "default": 1.0,
-     "description": "level ice area fraction of the ice area (the pond code weights by alvl, F90:120, 148), [-]"
-    },
-    "rfrac": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.85,
-     "description": "fraction of meltwater retained in ponds (namelist, default rfracmax = 0.85, icepack_parameters.F90:351), [-]"
-    },
-    "l_brine": {
-     "type": "parameter",
-     "units": "1",
-     "default": 1.0,
-     "description": "1 for the brine (l_brine) thermodynamics of BL99 (the default), 0 for fresh ice; selects the branches of calculate_Tin_from_qin and the congelation enthalpy, [-]"
+     "description": "melt pond area fraction of the ice area (the apnd tracer, F90:76), [-]"
     },
     "dt": {
      "type": "parameter",
      "units": "s",
      "default": 3600.0,
-     "description": "thermodynamics timestep (namelist dt; the per-step Fortran energies esub/etop_mlt/ebot_mlt/ebot_gro are converted to continuous rates by /dt), [s]"
+     "description": "thermodynamics timestep (namelist dt = 3600 in the D-class run; the per-step Fortran energies esub/etop_mlt/ebot_mlt/ebot_gro are converted to continuous rates by /dt), [s]"
     }
    },
    "equations": [
     {
      "lhs": "Tmlts",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "liquidus_temperature",
-       "bindings": { "Sin": "zSin" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "liquidus_temperature_mush",
+      "bindings": {
+       "Sbr": "zSin"
+      }
+     }
     },
     {
      "lhs": "zTin",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "ice_temperature_from_enthalpy",
-       "bindings": { "qin": "qicen", "Tmltk": "Tmlts", "l_brine": "l_brine" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "icepack_mushy_temperature_mush",
+      "bindings": {
+       "qin": "qicen",
+       "S": "zSin"
+      }
+     }
     },
     {
      "lhs": "zTsn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "snow_temperature_from_enthalpy",
-       "bindings": { "qsn": "qsnon" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "snow_temperature_from_enthalpy",
+      "bindings": {
+       "qsn": "qsnon"
+      }
+     }
     },
     {
      "lhs": "hi",
-     "rhs": { "op": "ifelse", "args": [
-       { "op": ">", "args": ["aicen", 1e-11] },
-       { "op": "/", "args": ["vicen", "aicen"] },
-       0.0 ] }
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "vicen",
+         "aicen"
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "hs",
-     "rhs": { "op": "ifelse", "args": [
-       { "op": ">", "args": ["aicen", 1e-11] },
-       { "op": "/", "args": ["vsnon", "aicen"] },
-       0.0 ] }
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "vsnon",
+         "aicen"
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "hilyr",
-     "rhs": { "op": "/", "args": ["hi", "N_ILYR"] }
+     "rhs": {
+      "op": "/",
+      "args": [
+       "hi",
+       "N_ILYR"
+      ]
+     }
     },
     {
      "lhs": "hslyr",
-     "rhs": { "op": "/", "args": ["hs", "N_SLYR"] }
+     "rhs": {
+      "op": "/",
+      "args": [
+       "hs",
+       "N_SLYR"
+      ]
+     }
     },
     {
      "lhs": "kilyr",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "ice_conductivity_bubbly",
-       "bindings": { "zTin": "zTin", "zSin": "zSin" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ice_conductivity_mush",
+      "bindings": {
+       "T": "zTin",
+       "S": "zSin"
+      }
+     }
     },
     {
      "lhs": "kslyr",
@@ -664,452 +1062,2489 @@
     },
     {
      "lhs": "kilyr_top",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["kilyr", "ncat", 1] },
-       "args": ["kilyr"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "kilyr",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "kilyr"
+      ]
+     }
     },
     {
      "lhs": "kilyr_bot",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["kilyr", "ncat", "N_ILYR"] },
-       "args": ["kilyr"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "kilyr",
+        "ncat",
+        "N_ILYR"
+       ]
+      },
+      "args": [
+       "kilyr"
+      ]
+     }
     },
     {
      "lhs": "zTin_top",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["zTin", "ncat", 1] },
-       "args": ["zTin"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "zTin",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "zTin"
+      ]
+     }
     },
     {
      "lhs": "zTin_bot",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["zTin", "ncat", "N_ILYR"] },
-       "args": ["zTin"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "zTin",
+        "ncat",
+        "N_ILYR"
+       ]
+      },
+      "args": [
+       "zTin"
+      ]
+     }
+    },
+    {
+     "lhs": "zTsn_top",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "zTsn",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "zTsn"
+      ]
+     }
     },
     {
      "lhs": "zTsn_bot",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["zTsn", "ncat", "N_SLYR"] },
-       "args": ["zTsn"] }
-    },
-    {
-     "lhs": "qicen_top",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["qicen", "ncat", 1] },
-       "args": ["qicen"] }
-    },
-    {
-     "lhs": "qicen_bot",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["qicen", "ncat", "N_ILYR"] },
-       "args": ["qicen"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "zTsn",
+        "ncat",
+        "N_SLYR"
+       ]
+      },
+      "args": [
+       "zTsn"
+      ]
+     }
     },
     {
      "lhs": "qsnon_top",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["qsnon", "ncat", 1] },
-       "args": ["qsnon"] }
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "qsnon",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "qsnon"
+      ]
+     }
     },
     {
-     "lhs": "Tmlts_bot",
-     "rhs": { "op": "faq", "output_idx": ["ncat"],
-       "ranges": { "ncat": { "from": "ncat" } },
-       "expr": { "op": "index", "args": ["Tmlts", "ncat", "N_ILYR"] },
-       "args": ["Tmlts"] }
+     "lhs": "qmlt",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "enthalpy_of_melting",
+      "bindings": {
+       "S": "zSin"
+      }
+     }
+    },
+    {
+     "lhs": "qm",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "qicen",
+       "qmlt"
+      ]
+     }
+    },
+    {
+     "lhs": "qm_top",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "qm",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "qm"
+      ]
+     }
+    },
+    {
+     "lhs": "qm_bot",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "qm",
+        "ncat",
+        "N_ILYR"
+       ]
+      },
+      "args": [
+       "qm"
+      ]
+     }
+    },
+    {
+     "lhs": "qmlt_top",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "qmlt",
+        "ncat",
+        1
+       ]
+      },
+      "args": [
+       "qmlt"
+      ]
+     }
+    },
+    {
+     "lhs": "qmlt_bot",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "qmlt",
+        "ncat",
+        "N_ILYR"
+       ]
+      },
+      "args": [
+       "qmlt"
+      ]
+     }
     },
     {
      "lhs": "kh_top",
-     "rhs": { "op": "/", "args": [
-       { "op": "*", "args": [2.0, "kslyr"] },
-       "hslyr" ] }
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         2.0,
+         "kslyr"
+        ]
+       },
+       "hslyr"
+      ]
+     }
     },
     {
      "lhs": "kh_snowice",
-     "rhs": { "op": "/", "args": [
-       { "op": "*", "args": [2.0, "kslyr", "kilyr_top"] },
-       { "op": "+", "args": [
-         { "op": "*", "args": ["kslyr", "hilyr"] },
-         { "op": "*", "args": ["kilyr_top", "hslyr"] } ] } ] }
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         2.0,
+         "kslyr",
+         "kilyr_top"
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "kslyr",
+           "hilyr"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "kilyr_top",
+           "hslyr"
+          ]
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "kh_bot",
-     "rhs": { "op": "/", "args": [
-       { "op": "*", "args": [2.0, "kilyr_bot"] },
-       "hilyr" ] }
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         2.0,
+         "kilyr_bot"
+        ]
+       },
+       "hilyr"
+      ]
+     }
     },
     {
      "lhs": "Tbot",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "sea_freezing_temperature",
-       "bindings": { "sss": "sss" } }
-    },
-    {
-     "lhs": "fh",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "thickness_albedo_factor",
-       "bindings": { "hi": "hi" } }
-    },
-    {
-     "lhs": "fT",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "surface_temperature_albedo_factor",
-       "bindings": { "Tsfcn": "Tsfc" } }
-    },
-    {
-     "lhs": "asnow",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "snow_cover_fraction",
-       "bindings": { "hs": "hs" } }
-    },
-    {
-     "lhs": "alvdfni",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "bare_ice_albedo",
-       "bindings": { "albice": 0.78, "dalb_mlt": -0.075, "fh": "fh", "fT": "fT" } }
-    },
-    {
-     "lhs": "alidfni",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "bare_ice_albedo",
-       "bindings": { "albice": 0.36, "dalb_mlt": -0.075, "fh": "fh", "fT": "fT" } }
-    },
-    {
-     "lhs": "alvdfns",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "snow_albedo",
-       "bindings": { "albsnow": 0.98, "dalb_mlt": -0.1, "fT": "fT" } }
-    },
-    {
-     "lhs": "alidfns",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "snow_albedo",
-       "bindings": { "albsnow": 0.7, "dalb_mlt": -0.15, "fT": "fT" } }
-    },
-    {
-     "lhs": "alvdfn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "area_weighted_albedo",
-       "bindings": { "al_ice": "alvdfni", "al_snow": "alvdfns", "asnow": "asnow" } }
-    },
-    {
-     "lhs": "alidfn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "area_weighted_albedo",
-       "bindings": { "al_ice": "alidfni", "al_snow": "alidfns", "asnow": "asnow" } }
-    },
-    {
-     "lhs": "alvdrn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "area_weighted_albedo",
-       "bindings": { "al_ice": "alvdfni", "al_snow": "alvdfns", "asnow": "asnow" } }
-    },
-    {
-     "lhs": "alidrn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "area_weighted_albedo",
-       "bindings": { "al_ice": "alidfni", "al_snow": "alidfns", "asnow": "asnow" } }
-    },
-    {
-     "lhs": "swabs",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "absorbed_shortwave",
-       "bindings": { "swvdr": "swvdr", "swvdf": "swvdf", "swidr": "swidr", "swidf": "swidf",
-         "alvdrni": "alvdfni", "alvdfni": "alvdfni", "alidrni": "alidfni", "alidfni": "alidfni",
-         "alvdrns": "alvdfns", "alvdfns": "alvdfns", "alidrns": "alidfns", "alidfns": "alidfns",
-         "asnow": "asnow" } }
-    },
-    {
-     "lhs": "fswpen",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "penetrating_shortwave",
-       "bindings": { "swvdr": "swvdr", "swvdf": "swvdf", "alvdrni": "alvdfni", "alvdfni": "alvdfni",
-         "asnow": "asnow" } }
-    },
-    {
-     "lhs": "fswsfc",
-     "rhs": { "op": "-", "args": ["swabs", "fswpen"] }
-    },
-    {
-     "lhs": "fswthru",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "shortwave_through_ice",
-       "bindings": { "fswpen": "fswpen", "kappav": 1.4, "hi": "hi" } }
-    },
-    {
-     "lhs": "Iswabs",
-     "rhs": { "op": "faq", "output_idx": ["ncat", "k"],
-       "ranges": { "ncat": { "from": "ncat" }, "k": { "from": "ice_layer" } },
-       "expr": { "op": "*", "args": [
-         { "op": "index", "args": ["fswpen", "ncat"] },
-         { "op": "-", "args": [
-           { "op": "exp", "args": [{ "op": "-", "args": [
-             { "op": "*", "args": [1.4, { "op": "index", "args": ["hilyr", "ncat"] },
-               { "op": "-", "args": ["k", 1] }] } ] }] },
-           { "op": "exp", "args": [{ "op": "-", "args": [
-             { "op": "*", "args": [1.4, { "op": "index", "args": ["hilyr", "ncat"] }, "k"] } ] }] } ] }] },
-       "args": ["fswpen", "hilyr"] }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "sea_freezing_temperature",
+      "bindings": {
+       "sss": "sss"
+      }
+     }
     },
     {
      "lhs": "Qsfc",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "saturation_specific_humidity_ice",
-       "bindings": { "Tsf": "Tsfc", "rhoa": "rhoa" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "saturation_specific_humidity_ice",
+      "bindings": {
+       "Tsf": "Tsfc",
+       "rhoa": "rhoa"
+      }
+     }
     },
     {
      "lhs": "fsensn",
-     "rhs": { "op": "*", "args": ["shcoef", { "op": "-", "args": [
-       "potT", { "op": "+", "args": ["Tsfc", 273.15] } ] }] }
+     "rhs": {
+      "op": "*",
+      "args": [
+       "shcoef",
+       {
+        "op": "-",
+        "args": [
+         "potT",
+         {
+          "op": "+",
+          "args": [
+           "Tsfc",
+           273.15
+          ]
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "flatn",
-     "rhs": { "op": "*", "args": ["lhcoef", { "op": "-", "args": ["Qa", "Qsfc"] }] }
+     "rhs": {
+      "op": "*",
+      "args": [
+       "lhcoef",
+       {
+        "op": "-",
+        "args": [
+         "Qa",
+         "Qsfc"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "flwoutn",
-     "rhs": { "op": "-", "args": [
-       { "op": "*", "args": [0.985, 5.67e-8,
-         { "op": "^", "args": [{ "op": "+", "args": ["Tsfc", 273.15] }, 4] }] } ] }
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         0.985,
+         5.67e-08,
+         {
+          "op": "^",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             "Tsfc",
+             273.15
+            ]
+           },
+           4
+          ]
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "fsurfn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "surface_heat_flux",
-       "bindings": { "Tsf": "Tsfc", "fswsfc": "fswsfc", "rhoa": "rhoa", "flw": "flw",
-         "potT": "potT", "Qa": "Qa", "shcoef": "shcoef", "lhcoef": "lhcoef" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "surface_heat_flux",
+      "bindings": {
+       "Tsf": "Tsfc",
+       "fswsfc": "fswsfc",
+       "rhoa": "rhoa",
+       "flw": "flw",
+       "potT": "potT",
+       "Qa": "Qa",
+       "shcoef": "shcoef",
+       "lhcoef": "lhcoef"
+      }
+     }
     },
     {
      "lhs": "ustar",
-     "rhs": { "op": "max", "args": [
-       { "op": "sqrt", "args": [
-         { "op": "sqrt", "args": [
-           { "op": "/", "args": [
-             { "op": "+", "args": [
-               { "op": "^", "args": ["strocnxT", 2] },
-               { "op": "^", "args": ["strocnyT", 2] } ] },
-             1026.0 ] } ] } ] },
-       0.005 ] }
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "sqrt",
+        "args": [
+         {
+          "op": "sqrt",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "^",
+                "args": [
+                 "strocnxT",
+                 2
+                ]
+               },
+               {
+                "op": "^",
+                "args": [
+                 "strocnyT",
+                 2
+                ]
+               }
+              ]
+             },
+             1026.0
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       0.005
+      ]
+     }
     },
     {
      "lhs": "fbot",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "ocean_heat_flux",
-       "bindings": { "sst": "sst", "Tf": "Tbot", "ustar": "ustar", "frzmlt": "frzmlt" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_heat_flux",
+      "bindings": {
+       "sst": "sst",
+       "Tf": "Tbot",
+       "ustar": "ustar",
+       "frzmlt": "frzmlt"
+      }
+     }
     },
     {
      "lhs": "fcondtopn",
-     "rhs": { "op": "*", "args": ["kh_top", { "op": "-", "args": ["Tsfc", "zTsn_bot"] }] }
+     "rhs": {
+      "op": "*",
+      "args": [
+       "kh_top",
+       {
+        "op": "-",
+        "args": [
+         "Tsfc",
+         "zTsn_top"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "fcondbotn",
-     "rhs": { "op": "*", "args": ["kh_bot", { "op": "-", "args": ["zTin_bot", "Tbot"] }] }
+     "rhs": {
+      "op": "*",
+      "args": [
+       "kh_bot",
+       {
+        "op": "-",
+        "args": [
+         "zTin_bot",
+         "Tbot"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "esub",
-     "rhs": { "op": "max", "args": [
-       { "op": "-", "args": [{ "op": "*", "args": ["flatn", "dt"] }] },
-       0.0 ] }
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "flatn",
+           "dt"
+          ]
+         }
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "econ",
-     "rhs": { "op": "min", "args": [
-       { "op": "-", "args": [{ "op": "*", "args": ["flatn", "dt"] }] },
-       0.0 ] }
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "flatn",
+           "dt"
+          ]
+         }
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "etop_mlt",
-     "rhs": { "op": "max", "args": [
-       { "op": "*", "args": [{ "op": "-", "args": ["fsurfn", "fcondtopn"] }, "dt"] },
-       0.0 ] }
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "fsurfn",
+           "fcondtopn"
+          ]
+         },
+         "dt"
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "ebot_mlt",
-     "rhs": { "op": "max", "args": [
-       { "op": "*", "args": [{ "op": "-", "args": ["fcondbotn", "fbot"] }, "dt"] },
-       0.0 ] }
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "fcondbotn",
+           "fbot"
+          ]
+         },
+         "dt"
+        ]
+       },
+       0.0
+      ]
+     }
     },
     {
      "lhs": "ebot_gro",
-     "rhs": { "op": "min", "args": [
-       { "op": "*", "args": [{ "op": "-", "args": ["fcondbotn", "fbot"] }, "dt"] },
-       0.0 ] }
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "fcondbotn",
+           "fbot"
+          ]
+         },
+         "dt"
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "qbotm",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "enthalpy_mush_liquid_fraction",
+      "bindings": {
+       "T": "Tbot",
+       "phi": 0.45
+      }
+     }
+    },
+    {
+     "lhs": "qbotw",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "enthalpy_brine",
+      "bindings": {
+       "T": "sst"
+      }
+     }
     },
     {
      "lhs": "qbot",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "congelation_enthalpy",
-       "bindings": { "Tbot": "Tbot", "Tmlts": "Tmlts_bot", "l_brine": "l_brine" } }
+     "rhs": {
+      "op": "-",
+      "args": [
+       "qbotm",
+       "qbotw"
+      ]
+     }
     },
     {
      "lhs": "congel",
-     "rhs": { "op": "/", "args": [
+     "rhs": {
+      "op": "/",
+      "args": [
        "ebot_gro",
-       { "op": "*", "args": ["qbot", "dt"] } ] }
+       {
+        "op": "*",
+        "args": [
+         "qbot",
+         "dt"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "meltb",
-     "rhs": { "op": "/", "args": [
+     "rhs": {
+      "op": "/",
+      "args": [
        "ebot_mlt",
-       { "op": "*", "args": ["qicen_bot", "dt"] } ] }
+       {
+        "op": "*",
+        "args": [
+         "qm_bot",
+         "dt"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "melts",
-     "rhs": { "op": "/", "args": [
+     "rhs": {
+      "op": "/",
+      "args": [
        "etop_mlt",
-       { "op": "*", "args": ["qsnon_top", "dt"] } ] }
+       {
+        "op": "*",
+        "args": [
+         "qsnon_top",
+         "dt"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "meltt",
-     "rhs": { "op": "/", "args": [
+     "rhs": {
+      "op": "/",
+      "args": [
        "etop_mlt",
-       { "op": "*", "args": ["qicen_top", "dt"] } ] }
+       {
+        "op": "*",
+        "args": [
+         "qm_top",
+         "dt"
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "evapn",
-     "rhs": { "op": "ifelse", "args": [
-       { "op": ">", "args": ["hs", 1e-11] },
-       { "op": "/", "args": [
-         { "op": "*", "args": ["esub", 330.0] },
-         { "op": "*", "args": [
-           { "op": "-", "args": ["qsnon_top", { "op": "*", "args": [330.0, 2501000.0] }] },
-           "dt" ] } ] },
-       { "op": "/", "args": [
-         { "op": "*", "args": ["esub", 917.0] },
-         { "op": "*", "args": [
-           { "op": "-", "args": ["qicen_top", { "op": "*", "args": [917.0, 2501000.0] }] },
-           "dt" ] } ] } ] }
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "hs",
+         1e-11
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "esub",
+           330.0
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "qsnon_top",
+             {
+              "op": "*",
+              "args": [
+               330.0,
+               2501000.0
+              ]
+             }
+            ]
+           },
+           "dt"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "esub",
+           917.0
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "qm_top",
+             {
+              "op": "*",
+              "args": [
+               917.0,
+               2501000.0
+              ]
+             }
+            ]
+           },
+           "dt"
+          ]
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "evapsn",
-     "rhs": { "op": "ifelse", "args": [
-       { "op": ">", "args": ["hs", 1e-11] },
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "hs",
+         1e-11
+        ]
+       },
        "evapn",
-       0.0 ] }
+       0.0
+      ]
+     }
     },
     {
      "lhs": "evapin",
-     "rhs": { "op": "-", "args": ["evapn", "evapsn"] }
+     "rhs": {
+      "op": "-",
+      "args": [
+       "evapn",
+       "evapsn"
+      ]
+     }
     },
     {
-     "lhs": "freshn",
-     "rhs": { "op": "+", "args": [
-       { "op": "*", "args": [2.0, "evapn"] },
-       { "op": "-", "args": [
-         { "op": "*", "args": [917.0, { "op": "-", "args": [
-           { "op": "+", "args": ["congel", "meltb"] }, "meltt" ] }] } ] },
-       { "op": "-", "args": ["fsnow"] },
-       { "op": "*", "args": [330.0, "melts"] } ] }
-    },
-    {
-     "lhs": "fsaltn",
-     "rhs": { "op": "/", "args": [
-       { "op": "-", "args": [
-         { "op": "*", "args": [917.0, 4.0, 0.001,
-           { "op": "-", "args": [
-             { "op": "+", "args": ["congel", "meltb"] },
-             { "op": "+", "args": ["meltt", { "op": "/", "args": ["evapin", 917.0] }] } ] }] } ] },
-       "dt" ] }
+     "lhs": "emlt_ocn",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "qbotw",
+           "congel"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "qmlt_top",
+           {
+            "op": "+",
+            "args": [
+             "meltt",
+             {
+              "op": "/",
+              "args": [
+               "evapin",
+               917.0
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "qmlt_bot",
+           "meltb"
+          ]
+         }
+        ]
+       }
+      ]
+     }
     },
     {
      "lhs": "fhocnn",
-     "rhs": { "op": "+", "args": [
+     "rhs": {
+      "op": "+",
+      "args": [
        "fbot",
-       { "op": "/", "args": [
-         { "op": "+", "args": ["esub", "etop_mlt", "ebot_mlt"] },
-         "dt" ] } ] }
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           "esub",
+           "etop_mlt",
+           "ebot_mlt"
+          ]
+         },
+         "dt"
+        ]
+       },
+       "emlt_ocn"
+      ]
+     }
     },
     {
-     "lhs": "volpn",
-     "rhs": { "op": "*", "args": ["hpnd", "aicen", "alvl", "apnd"] }
+     "lhs": "freshn",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         2.0,
+         "evapn"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           917.0,
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               "congel",
+               "meltb"
+              ]
+             },
+             "meltt"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         "fsnow"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         330.0,
+         "melts"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "fsaltn",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           917.0,
+           4.0,
+           0.001,
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               "congel",
+               "meltb"
+              ]
+             },
+             {
+              "op": "+",
+              "args": [
+               "meltt",
+               {
+                "op": "/",
+                "args": [
+                 "evapin",
+                 917.0
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "dt"
+      ]
+     }
+    },
+    {
+     "lhs": "snowfracn",
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "dEdd_snow_fraction",
+        "bindings": {
+         "aice": "aicen",
+         "vsno": "vsnon",
+         "hs0": 0.0
+        }
+       },
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "apeffn"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "apeffn",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_effective_pond",
+      "bindings": {
+       "aicen": "aicen",
+       "vsnon": "vsnon",
+       "apondn": "apnd",
+       "hpndn": "hpnd",
+       "ipndn": "ipnd",
+       "ffracn": "ffracn",
+       "fsnow": "fsnow_dEdd",
+       "dt": "dt",
+       "dhsn": "dhsn"
+      }
+     }
+    },
+    {
+     "lhs": "albicen",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<",
+        "args": [
+         "snowfracn",
+         1.0
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "shortwave_band_weights",
+        "bindings": {
+         "alvdr": "alvdrn",
+         "alidr": "alidrn",
+         "alvdf": "alvdfn",
+         "alidf": "alidfn"
+        }
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "albsnon",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "snowfracn",
+         0.0
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "shortwave_band_weights",
+        "bindings": {
+         "alvdr": "alvdrn",
+         "alidr": "alidrn",
+         "alvdf": "alvdfn",
+         "alidf": "alidfn"
+        }
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "albpndn",
+     "rhs": 0.0
+    },
+    {
+     "lhs": "swabs",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "swvdr",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "alvdrn"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "swvdf",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "alvdfn"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "swidr",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "alidrn"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "swidf",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "alidfn"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "fswthru",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "fswthru_vdr",
+       "fswthru_vdf",
+       "fswthru_idr",
+       "fswthru_idf"
+      ]
+     }
+    },
+    {
+     "lhs": "fswint",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "swabs",
+         "fswsfc"
+        ]
+       },
+       "fswthru"
+      ]
+     }
     },
     {
      "lhs": "dvn",
-     "rhs": { "op": "apply_expression_template", "args": [], "name": "meltpond_cesm_dvn",
-       "bindings": { "rfrac": "rfrac", "meltt": "meltt", "melts": "melts", "frain": "frain",
-         "dt": "dt", "aicen": "aicen", "volpn": "volpn", "Tsfcn": "Tsfc" } }
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "meltpond_sealvl_dvn",
+      "bindings": {
+       "meltt": "meltt",
+       "melts": "melts",
+       "frain": "frain",
+       "dt": "dt",
+       "Tair": "Tair",
+       "fsurfn": "fsurfn",
+       "aicen": "aicen",
+       "vicen": "vicen",
+       "vsnon": "vsnon",
+       "apnd": "apnd",
+       "hpnd": "hpnd",
+       "ipnd": "ipnd",
+       "dhsn": "dhsn"
+      }
+     }
     },
     {
-     "lhs": { "op": "D", "args": ["qsnon"], "wrt": "t" },
-     "rhs": { "op": "faq", "output_idx": ["ncat", "k"],
-       "ranges": { "ncat": { "from": "ncat" }, "k": { "from": "snow_layer" } },
-       "expr": { "op": "/", "args": [
-         { "op": "+", "args": [
-           { "op": "*", "args": [
-             { "op": "ifelse", "args": [
-               { "op": "==", "args": ["k", 1] },
-               { "op": "index", "args": ["kh_top", "ncat"] },
-               { "op": "/", "args": [
-                 { "op": "index", "args": ["kslyr", "ncat"] },
-                 { "op": "index", "args": ["hslyr", "ncat"] } ] }] },
-             { "op": "-", "args": [
-               { "op": "ifelse", "args": [
-                 { "op": "==", "args": ["k", 1] },
-                 { "op": "index", "args": ["Tsfc", "ncat"] },
-                 { "op": "index", "args": ["zTsn", "ncat", { "op": "-", "args": ["k", 1] }] } ] },
-               { "op": "index", "args": ["zTsn", "ncat", "k"] } ] }] },
-           { "op": "*", "args": [
-             { "op": "ifelse", "args": [
-               { "op": "==", "args": ["k", "N_SLYR"] },
-               { "op": "index", "args": ["kh_snowice", "ncat"] },
-               { "op": "/", "args": [
-                 { "op": "index", "args": ["kslyr", "ncat"] },
-                 { "op": "index", "args": ["hslyr", "ncat"] } ] }] },
-             { "op": "-", "args": [
-               { "op": "ifelse", "args": [
-                 { "op": "==", "args": ["k", "N_SLYR"] },
-                 { "op": "index", "args": ["zTin_top", "ncat"] },
-                 { "op": "index", "args": ["zTsn", "ncat", { "op": "+", "args": ["k", 1] }] } ] },
-               { "op": "index", "args": ["zTsn", "ncat", "k"] } ] }] }
-         ] },
-         { "op": "index", "args": ["hslyr", "ncat"] } ] },
-       "args": ["kh_top", "kslyr", "hslyr", "kh_snowice", "zTin_top", "Tsfc", "zTsn"] }
+     "lhs": {
+      "op": "D",
+      "args": [
+       "qsnon"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat",
+       "k"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       },
+       "k": {
+        "from": "snow_layer"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "==",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "kh_top",
+                "ncat"
+               ]
+              },
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "kslyr",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "hslyr",
+                  "ncat"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": "==",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "Tsfc",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTsn",
+                  "ncat",
+                  {
+                   "op": "-",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "zTsn",
+                "ncat",
+                "k"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "==",
+               "args": [
+                "k",
+                "N_SLYR"
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "kh_snowice",
+                "ncat"
+               ]
+              },
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "kslyr",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "hslyr",
+                  "ncat"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": "==",
+                 "args": [
+                  "k",
+                  "N_SLYR"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTin_top",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTsn",
+                  "ncat",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "zTsn",
+                "ncat",
+                "k"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "Sswabs",
+            "ncat",
+            "k"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "hslyr",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "kh_top",
+       "kslyr",
+       "hslyr",
+       "kh_snowice",
+       "zTin_top",
+       "Tsfc",
+       "zTsn",
+       "Sswabs"
+      ]
+     }
     },
     {
-     "lhs": { "op": "D", "args": ["qicen"], "wrt": "t" },
-     "rhs": { "op": "faq", "output_idx": ["ncat", "k"],
-       "ranges": { "ncat": { "from": "ncat" }, "k": { "from": "ice_layer" } },
-       "expr": { "op": "/", "args": [
-         { "op": "+", "args": [
-           { "op": "*", "args": [
-             { "op": "ifelse", "args": [
-               { "op": "==", "args": ["k", 1] },
-               { "op": "index", "args": ["kh_snowice", "ncat"] },
-               { "op": "/", "args": [
-                 { "op": "*", "args": [2.0,
-                   { "op": "index", "args": ["kilyr", "ncat", { "op": "-", "args": ["k", 1] }] },
-                   { "op": "index", "args": ["kilyr", "ncat", "k"] }] },
-                 { "op": "*", "args": [
-                   { "op": "+", "args": [
-                     { "op": "index", "args": ["kilyr", "ncat", { "op": "-", "args": ["k", 1] }] },
-                     { "op": "index", "args": ["kilyr", "ncat", "k"] } ] },
-                   { "op": "index", "args": ["hilyr", "ncat"] } ] } ]} ] },
-             { "op": "-", "args": [
-               { "op": "ifelse", "args": [
-                 { "op": "==", "args": ["k", 1] },
-                 { "op": "index", "args": ["zTsn_bot", "ncat"] },
-                 { "op": "index", "args": ["zTin", "ncat", { "op": "-", "args": ["k", 1] }] } ] },
-               { "op": "index", "args": ["zTin", "ncat", "k"] } ] }] },
-           { "op": "*", "args": [
-             { "op": "ifelse", "args": [
-               { "op": "==", "args": ["k", "N_ILYR"] },
-               { "op": "index", "args": ["kh_bot", "ncat"] },
-               { "op": "/", "args": [
-                 { "op": "*", "args": [2.0,
-                   { "op": "index", "args": ["kilyr", "ncat", "k"] },
-                   { "op": "index", "args": ["kilyr", "ncat", { "op": "+", "args": ["k", 1] }] }] },
-                 { "op": "*", "args": [
-                   { "op": "+", "args": [
-                     { "op": "index", "args": ["kilyr", "ncat", "k"] },
-                     { "op": "index", "args": ["kilyr", "ncat", { "op": "+", "args": ["k", 1] }] } ] },
-                   { "op": "index", "args": ["hilyr", "ncat"] } ] } ]} ] },
-             { "op": "-", "args": [
-               { "op": "ifelse", "args": [
-                 { "op": "==", "args": ["k", "N_ILYR"] },
-                 { "op": "index", "args": ["Tbot", "ncat"] },
-                 { "op": "index", "args": ["zTin", "ncat", { "op": "+", "args": ["k", 1] }] } ] },
-               { "op": "index", "args": ["zTin", "ncat", "k"] } ] }] },
-           { "op": "*", "args": [
-             { "op": "index", "args": ["fswpen", "ncat"] },
-             { "op": "-", "args": [
-               { "op": "exp", "args": [{ "op": "-", "args": [
-                 { "op": "*", "args": [1.4, { "op": "index", "args": ["hilyr", "ncat"] },
-                   { "op": "-", "args": ["k", 1] }] } ] }] },
-               { "op": "exp", "args": [{ "op": "-", "args": [
-                 { "op": "*", "args": [1.4, { "op": "index", "args": ["hilyr", "ncat"] }, "k"] } ] }] } ] }] }
-         ] },
-         { "op": "index", "args": ["hilyr", "ncat"] } ] },
-       "args": ["kh_snowice", "kilyr", "hilyr", "kh_bot", "zTsn_bot", "zTin", "Tbot", "fswpen"] }
+     "lhs": {
+      "op": "D",
+      "args": [
+       "qicen"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "ncat",
+       "k"
+      ],
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       },
+       "k": {
+        "from": "ice_layer"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "==",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "kh_snowice",
+                "ncat"
+               ]
+              },
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  2.0,
+                  {
+                   "op": "index",
+                   "args": [
+                    "kilyr",
+                    "ncat",
+                    {
+                     "op": "-",
+                     "args": [
+                      "k",
+                      1
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "kilyr",
+                    "ncat",
+                    "k"
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "index",
+                     "args": [
+                      "kilyr",
+                      "ncat",
+                      {
+                       "op": "-",
+                       "args": [
+                        "k",
+                        1
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "index",
+                     "args": [
+                      "kilyr",
+                      "ncat",
+                      "k"
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "hilyr",
+                    "ncat"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": "==",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTsn_bot",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTin",
+                  "ncat",
+                  {
+                   "op": "-",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "zTin",
+                "ncat",
+                "k"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "==",
+               "args": [
+                "k",
+                "N_ILYR"
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "kh_bot",
+                "ncat"
+               ]
+              },
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  2.0,
+                  {
+                   "op": "index",
+                   "args": [
+                    "kilyr",
+                    "ncat",
+                    "k"
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "kilyr",
+                    "ncat",
+                    {
+                     "op": "+",
+                     "args": [
+                      "k",
+                      1
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "index",
+                     "args": [
+                      "kilyr",
+                      "ncat",
+                      "k"
+                     ]
+                    },
+                    {
+                     "op": "index",
+                     "args": [
+                      "kilyr",
+                      "ncat",
+                      {
+                       "op": "+",
+                       "args": [
+                        "k",
+                        1
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "hilyr",
+                    "ncat"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": "==",
+                 "args": [
+                  "k",
+                  "N_ILYR"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "Tbot",
+                  "ncat"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "zTin",
+                  "ncat",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "zTin",
+                "ncat",
+                "k"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "Iswabs",
+            "ncat",
+            "k"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "hilyr",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "kh_snowice",
+       "kilyr",
+       "hilyr",
+       "kh_bot",
+       "zTsn_bot",
+       "zTin",
+       "Tbot",
+       "Iswabs"
+      ]
+     }
     }
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "thermo_dedd_snowfrac_bare_step1_cell2_4_ncat1",
+     "description": "Instantaneous pin of the dEdd snow fraction against cice_albedo.csv row (step 1, i=2, j=4, ncat 1): with vsnon = 0 the snow depth hs = vsnon/aicen = 0 < hs_min = 1e-4, so shortwave_dEdd_set_snow (icepack_shortwave.F90:3451-3454) leaves fs = 0 and the dumped snowfracn = 0. The apeffn input path is identically 0 (hpnd = apnd = 0), so snowfracn = min(fs, 1 - apeffn) = 0 exactly.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009852850608356705,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "snowfracn",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_snowfrac_snow_step1_cell2_4_ncat2",
+     "description": "Instantaneous pin of the dEdd snow fraction against cice_albedo.csv row (step 1, i=2, j=4, ncat 2): with aicen = 1.28555297132030844E-02 and vsnon = 1.97517430225683252E-03 the snow depth hs = 0.15364 >= hs_min = 1e-4, and with hs0 = 0.0 (<= puny) shortwave_dEdd_set_snow leaves fs = 1, matching the dumped snowfracn = 1. apeffn = 0 (no pond tracers), so snowfracn = min(1, 1) = 1 exactly.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.0,
+       0.012855529713203084,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.0,
+       0.0019751743022568325,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "snowfracn",
+       "time": 0.0,
+       "expected": 1.0,
+       "coords": {
+        "ncat": 2
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_apeffn_infiltrate_step3_cell7_6_ncat1",
+     "description": "Instantaneous pin of the dEdd effective pond area against cice_albedo.csv row (step 3, i=7, j=6, ncat 1): with apnd = 5.03027107307693205E-02, hpnd = 2.10714003437337651E-03, and snow depth hs = vsnon/aicen = 0.07977, the infiltration branch of shortwave_dEdd_set_eff (icepack_shortwave.F90:3611-3628) gives rp = rhofresh*hpnd/(rhofresh*hpnd + rhos*hs) = 0.0741 < p15 = 0.15, which zeroes the pond (fpn = 0, hpn = 0), and the thin-pond mask leaves apeffn = 0, matching the dump. ffracn = 0 and dhsn = 0 as dumped.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.2680781310648141,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.021386777787286797,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "apnd": [
+       0.05030271073076932,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "hpnd": [
+       0.0021071400343733765,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ipnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ffracn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "dhsn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "apeffn",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_apeffn_hypsometry_step3_cell3_5_ncat1",
+     "description": "Instantaneous pin of the dEdd effective pond area against cice_albedo.csv row (step 3, i=3, j=5, ncat 1): with apnd = 2.89909401451915565E-02, hpnd = 7.98261173865471804E-04, and hs = 0.01111, the infiltration branch gives rp = 0.1789 >= p15 and the retained-meltwater remap with hmx = hs*(rhofresh - rhos)/rhofresh = 7.445e-3 > hpnd sets tmp = 0, so hpn = hp_new*tmp = 0 and fpn = fpn*tmp = 0 (icepack_shortwave.F90:3621-3626); apeffn = 0, matching the dump. fsnow = 1.07878302619369422E-07 is the dumped snowfall (the dhs-init branch F90:3586-3588 does not fire: ipn = apnd*ipnd = 0).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.19468079824107934,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.002163188417473145,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "apnd": [
+       0.028990940145191556,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "hpnd": [
+       0.0007982611738654718,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ipnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fsnow_dEdd": [
+       1.0787830261936942e-07,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ffracn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "dhsn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "apeffn",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_apeffn_hpmin_step5_cell2_4_ncat1",
+     "description": "Instantaneous pin of the dEdd effective pond area against cice_albedo.csv row (step 5, i=2, j=4, ncat 1): with apnd = 1.74273410843299391E-08 and hpnd = 1.25542365657761714E-05, the infiltration branch keeps the pond (rp = 0.9951 >= p15, tmp = 1 since hpnd >= hmx), but the remapped depth hpn = 1.262e-5 stays below hpmin = 0.005, so the thin-pond mask of shortwave_dEdd_set_eff (F90:3630-3631) zeroes fpn and apeffn = 0, matching the dump (the snow fraction is also 0: hs = 1.875e-7 < hs_min).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009814440450442226,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       1.8401338757014625e-09,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "apnd": [
+       1.742734108432994e-08,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "hpnd": [
+       1.2554236565776171e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ipnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "ffracn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "dhsn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "apeffn",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_apeffn_taper_step2_cell2_8_ncat5",
+     "description": "Instantaneous pin of the dEdd effective pond area against cice_albedo.csv row (step 2, i=2, j=8, ncat 5): with aicen = 5.26977242739135252E-02, vsnon = 5.72463672523595840E-02, apnd = 6.55426774851445085E-03, hpnd = 7.59005202556602317E-03, ipnd = 1.09155196946559988E-03, dhsn = 1.08266728333167461E+00, and fsnow = 1.01345971876539391E-06, the snow-taper branch of shortwave_dEdd_set_eff fires (dhs = dhsn = 1.0827 > puny, spn = hs - dhs = 0.00362 >= puny, hs1 = 0.03 > puny; F90:3606-3609) giving asnow = min(spn/hs1, 1) = 0.1207, but the infiltration branch then gives rp = 0.0207 < p15 and zeroes the pond; apeffn = 0, matching the dump. The dhs-init condition (F90:3586-3588) does not fire (dhsn >= puny).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.052697724273913525
+      ],
+      "vsnon": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.057246367252359584
+      ],
+      "apnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.006554267748514451
+      ],
+      "hpnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.007590052025566023
+      ],
+      "ipnd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0010915519694655999
+      ],
+      "dhsn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0826672833316746
+      ],
+      "fsnow_dEdd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.013459718765394e-06
+      ],
+      "ffracn": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "apeffn",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 5
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_albice_awt_step1_cell2_4_ncat1",
+     "description": "Instantaneous pin of the bare-ice broadband albedo against cice_albedo.csv row (step 1, i=2, j=4, ncat 1): with the dumped band albedos alvdrn = 6.58507116920355906E-01, alidrn = 4.55458844294244547E-01, alvdfn = 4.91104619912652640E-01, alidfn = 2.94177308390793424E-01 and the snow-free state (snowfracn = 0), the band-weighted sum of shortwave_dEdd (icepack_shortwave.F90:1496-1498 with the awtvdr/awtidr/awtvdf/awtidf weights of icepack_parameters.F90:218-221) reproduces the dumped albicen = 4.20248950854524683E-01 to round-off.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009852850608356705,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdrn": [
+       0.6585071169203559,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidrn": [
+       0.45545884429424455,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdfn": [
+       0.49110461991265264,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidfn": [
+       0.2941773083907934,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "albicen",
+       "time": 0.0,
+       "expected": 0.4202489508545247,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_albsno_awt_step1_cell2_4_ncat2",
+     "description": "Instantaneous pin of the snow broadband albedo against cice_albedo.csv row (step 1, i=2, j=4, ncat 2): with the dumped band albedos alvdrn = 9.68654657545427455E-01, alidrn = 6.74789997005882380E-01, alvdfn = 9.52730045908935952E-01, alidfn = 5.89286477610263093E-01 and the fully snow-covered state (snowfracn = 1, hs = 0.1536 >= hs_min), the band-weighted sum of F90:1544-1546 reproduces the dumped albsnon = 8.20642843718523141E-01 to round-off; albicen = 0 for this row (the bare-ice mask does not fire), matching the dump.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.0,
+       0.012855529713203084,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.0,
+       0.0019751743022568325,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdrn": [
+       0.0,
+       0.9686546575454275,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidrn": [
+       0.0,
+       0.6747899970058824,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdfn": [
+       0.0,
+       0.952730045908936,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidfn": [
+       0.0,
+       0.5892864776102631,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "albsnon",
+       "time": 0.0,
+       "expected": 0.8206428437185231,
+       "coords": {
+        "ncat": 2
+       }
+      }
+     ]
+    },
+    {
+     "id": "thermo_dedd_conservation_step1_cell2_4_ncat1",
+     "description": "Instantaneous pins of the dEdd radiation conservation against cice_albedo.csv row (step 1, i=2, j=4, ncat 1): with the dumped bands swvdr = 5.99953817419757840E+01, swvdf = 5.14246129216935302E+01, swidr = 6.64234583571874850E+01, swidf = 3.64257674861995824E+01, the band albedos of the awt test above, the surface absorption fswsfc = 3.11630362094349209E+01, and the transmitted bands fswthru_vdr = 1.67092193670430120E+01, fswthru_vdf = 2.13986130195476036E+01, fswthru_idr = 1.05335662656325144E-01, fswthru_idf = 8.89321851031842914E-02, the model's swabs = sum(sw*(1-al)) = 108.5354 W/m2 and fswthru = sum of the four bands reproduce the dumped fswthru = 3.83021002343501280E+01, and fswint = swabs - fswsfc - fswthru reproduces the dumped fswintn = 3.90730474082125525E+01 to round-off (fswsfc + fswint + fswthru = swabs, the conservation of shortwave_dEdd F90:1641-1643).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009852850608356705,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "vsnon": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "swvdr": [
+       59.995381741975784,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "swvdf": [
+       51.42461292169353,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "swidr": [
+       66.42345835718749,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "swidf": [
+       36.42576748619958,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdrn": [
+       0.6585071169203559,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidrn": [
+       0.45545884429424455,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alvdfn": [
+       0.49110461991265264,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "alidfn": [
+       0.2941773083907934,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fswsfc": [
+       31.16303620943492,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fswthru_vdr": [
+       16.709219367043012,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fswthru_vdf": [
+       21.398613019547604,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fswthru_idr": [
+       0.10533566265632514,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fswthru_idf": [
+       0.08893218510318429,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswint",
+       "time": 0.0,
+       "expected": 39.07304740821255,
+       "coords": {
+        "ncat": 1
+       }
+      },
+      {
+       "variable": "fswthru",
+       "time": 0.0,
+       "expected": 38.30210023435013,
+       "coords": {
+        "ncat": 1
+       }
+      }
+     ]
+    }
+   ]
   }
  }
 }

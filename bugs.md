@@ -130,6 +130,14 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (tooling).
 - **Status:** open (recorded; workaround: keep buildnml's `groups` list in sync).
 
+## 10. CICE dEdd pond code subtracts the snowfall mass flux (kg/m2/s) from a snow depth (m)
+
+- **Location:** `components/cice/src/icepack/columnphysics/icepack_shortwave.F90:3587-3588` (`shortwave_dEdd_set_eff`).
+- **Description:** `fsnow` is documented "snowfall rate (kg/m^2 s)" (F90:3511) and is passed straight through from the coupler import (icedrv_flux `fsnow`, kg/m2/s). But the pond-lid snow-cover initialization computes `dhs = hsnlvl - fsnow*dt` (F90:3588) and tests `fsnow*dt > hs_min` (F90:3587), treating `fsnow*dt` as a snow **depth** (m). `hsnlvl` is a snow depth in m, so `fsnow*dt` has dimension kg/m2 — mixing units; the conversion `fsnow*dt/rhos` (as thickness_changes does at icepack_therm_vertical.F90:1632-1660) is missing. Numerically the code uses the kg/m2 value as if it were meters, overestimating the equivalent snowfall depth by the factor rhos (~330).
+- **Impact on results:** the branch fires when a refrozen pond lid exists (`ipn > puny`) with `dhs` (the dhsn tracer) below puny and `fsnow*dt > hs_min` — in the D-class run 92/1920 dumped (cell, category) rows meet the condition (fsnow ~ 0-1.05e-5 kg/m2/s, dt = 3600 s, so fsnow*dt up to ~0.038 against hs_min = 1e-4). Where it fires, `dhs` (and hence the snow-on-pond taper `asnow = min(spn/hs1, 1)` and the retained-meltwater remap) is computed from an over-large snowfall depth. The effect is usually masked because the trailing guard `if (ipn*spn < puny) dhs = c0` (F90:3590) zeroes `dhs` for small ponds, but for larger ponds the taper uses the inflated value.
+- **Reproduced/corrected in .esm:** the stage-2 dEdd template (`stage2/cice_templates.esm` `dEdd_effective_pond`, used by `stage2/cice_thermodynamics.esm` eq 55) reproduces the Fortran numerics exactly: the coupled mass flux is carried into the template through a dedicated `fsnow_dEdd` parameter declared in m/s, so `hsnlvl - fsnow*dt` types as length minus length and evaluates to the same number the Fortran produces (bugs.md #10 documented in the parameter description). The dEdd test pins (`thermo_dedd_apeffn_*`) pass to round-off against the dump.
+- **Status:** open (recorded; transcribed as-run in the .esm with the quirk documented).
+
 ## 9. CICE dump module: `trcr`/`trcrn` tracer reads swapped the j and tracer indices
 
 - **Location:** fork-only instrumentation `components/cice/src/cicecore/shared/ice_dump_mod.F90` (instrument/cice-dumps, `ced43eb`), `dump_thermo_state` (5 reads) and `dump_albedo` (5 reads, minus the corrected ones).

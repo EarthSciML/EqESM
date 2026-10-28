@@ -43,13 +43,13 @@
   },
   "N_ILYR": {
    "type": "integer",
-   "default": 7,
-   "description": "number of ice layers (namelist nilyr = 7), [-]"
+   "default": 8,
+   "description": "number of ice layers (D-class namelist nilyr = 8), [-]"
   },
   "N_SLYR": {
    "type": "integer",
-   "default": 1,
-   "description": "number of snow layers (namelist nslyr = 1), [-]"
+   "default": 3,
+   "description": "number of snow layers (D-class namelist nslyr = 3), [-]"
   }
  },
  "models": {

@@ -22,29 +22,33 @@ Sources: `stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/`
 `icepack_mechred.F90`, `icepack_mushy_physics.F90`, `icepack_flux.F90`,
 `icepack_parameters.F90`), and the boundary plan in `stage1/boundaries.md` (§1.3).
 
-Default configuration transcribed (namelist defaults): `shortwave = 'dEdd'`
-(albedo/shortwave laws of the ccsm3 branch — the delta-Eddington solver itself
-is deferred), `kdyn = 1` (EVP), `grid_ice = 'B'`, `ndtd = 1`, `ndte = 120`,
+Default configuration transcribed (the D-class reference run's namelist,
+`stage1/cime/cases/D_cice_inst/CaseDocs/ice_in`, unless noted): `shortwave = 'dEdd'`
+(albedo/shortwave laws — the delta-Eddington 3-band solver itself is deferred,
+its outputs carried as parameters), `kdyn = 1` (EVP), `grid_ice = 'B'`, `ndtd = 1`, `ndte = 120`,
 `revised_evp = .false.`, `elasticDamp = 0.36`, `Ktens = 0`,
 `e_yieldcurve = e_plasticpot = 2`, `capping = 1`, `u0 = 5e-5`, `cosw = 1`,
 `sinw = 0`, `kstrength = 1` (the Rothrock potential-energy strength is
 transcribed and dump-pinned in the coupling cap; the ridge redistribution
 itself is a stage-3 dynamics concern), `atmbndy = 'similarity'` (the
 Monin-Obukhov iteration is transcribed and dump-pinned in the coupling cap;
-the constant scheme remains for the assembly Control), `ktherm = 1` (BL99), `conduct = 'bubbly'`,
-`tfrz_option = 'mushy'`, `saltflux_option = 'constant'`, `frzpnd = 'cesm'`,
-`ncat = 5`, `nilyr = 7`, `nslyr = 1`, `l_brine = .true.`, `dt = 3600 s`.
+the constant scheme remains for the assembly Control), `ktherm = 2` (mushy), `conduct = 'MU71'`,
+`tfrz_option = 'mushy'`, `saltflux_option = 'constant'`, `frzpnd = 'hlid'`
+(sea-level ponds, `tr_pond_sealvl`), `snwredist = 'none'`, `hs0 = 0.0`,
+`phi_i_mushy = 0.45`, `congel_freeze = 'one-step'`, `emissivity = 0.95`
+(forcing_nml), `natmiter = 5`, `ncat = 5`, `nilyr = 8`, `nslyr = 3`,
+`l_brine = .true.`, `dt = 3600 s`.
 
 ## File map
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `cice_templates.esm` | Expression-template library (63 templates): snow cover / albedo / absorbed-penetrating shortwave | `icepack_shortwave.F90`: compute_albedos 466-597, absorbed_solar 701-896 |
-| | saturation humidity, surface heat flux, liquidus (linear + mushy), enthalpy↔temperature (BL99 brine quadratic, fresh, snow) | `icepack_therm_shared.F90`: surface_heat_flux 147-165, liquidus 383-418; `icepack_mushy_physics.F90`: 227-261; calculate_Tin_from_qin 68-101; snow temperature 470-484 |
-| | conductivity (bubbly Pringle 2007 / MU71) and interface conductances, congelation enthalpy, ocean heat flux, melt-pond volume change | `icepack_therm_bl99.F90`: conductivity 874-961; `icepack_therm_vertical.F90`: qbot 1432-1443, fbot 662-678; `icepack_meltpond_lvl.F90`: 154-174 |
+| `cice_templates.esm` | Expression-template library (76 templates): snow cover / albedo / absorbed-penetrating shortwave, the dEdd snow fraction and effective pond area | `icepack_shortwave.F90`: compute_albedos 466-597, absorbed_solar 701-896, shortwave_dEdd_set_snow 3448-3454, shortwave_dEdd_set_eff 3495-3637 |
+| | saturation humidity, surface heat flux, liquidus (linear + mushy), enthalpy↔temperature (BL99 brine quadratic, mushy quadratic, fresh, snow) | `icepack_therm_shared.F90`: surface_heat_flux 147-165, liquidus 383-418; `icepack_mushy_physics.F90`: liquidus_temperature_mush 227-261, icepack_mushy_temperature_mush 348-452, enthalpy_of_melting 264-286, liquid_fraction_mush 288-310; calculate_Tin_from_qin 68-101; snow temperature 470-484 |
+| | conductivity (bubbly Pringle 2007 / MU71 / mushy) and interface conductances, congelation enthalpy, ocean heat flux, melt-pond volume change (cesm and sea-level schemes) | `icepack_therm_bl99.F90`: conductivity 874-961 (MU71 911-916); `icepack_mushy_physics.F90`: conductivity_mush 455-485; `icepack_therm_vertical.F90`: qbot 1432-1443, fbot 662-678; `icepack_meltpond_lvl.F90`: 154-174; `icepack_meltpond_sealvl.F90`: 76, 157 |
 | | constant atmo boundary layer (tau, shcoef, lhcoef) and the similarity scheme (neutral drag, relative wind, stability parameter, stable/unstable psi, exchange coefficients, 2-m psix2, Tref/Qref/Uref) | `icepack_atmo.F90`: atmo_boundary_const 398-496 (460-464, 493-494); atmo_boundary_layer 52-389 (215, 176-210, 985-989, 1015-1075, 289-291, 364-378) |
 | | Hibler and Rothrock strength (cumulative distribution, exponential participation, ridge redistribution hrmin/hrexp/krdg, aksum, strength term), Delta invariant, viscosities/replacement pressure, classic-EVP stress maps, ocean-ice stress, seabed stress | `icepack_mechred.F90`: 1720, ridge_itd 848-1036, icepack_ice_strength 1660-1712; `ice_dyn_shared.F90`: strain_rates 2081-2161, visc_replpress 2444-2473, set_evp_parameters 451-484; stepu 923-964 |
-| `cice_thermodynamics.esm` | Model `Thermodynamics` — prep_radiation shortwave/albedo, step_therm1 vertical heat conduction + surface energy balance, step_therm2 growth/melt/ponds and ocean heat/fresh/salt fluxes; 67 equations over ncat × nilyr/nslyr | `icepack_step_mod.F90`/`icepack_therm_bl99.F90` (tridiagonal 1038-1210 as semi-discrete flux-divergence ODEs), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559) |
+| `cice_thermodynamics.esm` | Model `Thermodynamics` — the D-class column physics: prep_radiation dEdd shortwave/albedo, the mushy (ktherm = 2) vertical heat conduction and surface energy balance, growth/melt/ponds (frzpnd = hlid sea-level) and ocean heat/fresh/salt fluxes; 65 equations over ncat × nilyr/nslyr | `icepack_shortwave.F90` (step_radiation, dEdd set_eff/set_snow), `icepack_therm_mushy.F90` (two-stage mushy tridiagonal 1800-1985, semi-discrete flux-divergence ODEs), `icepack_mushy_physics.F90` (temperature/enthalpy inversions), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559), `icepack_meltpond_sealvl.F90` (compute_ponds_sealvl, dvn) |
 | `cice_dynamics.esm` | Model `Dynamics` — B-grid momentum balance (continuous limit of stepu) and classic-EVP stress relaxation ODEs, Hibler strength, viscosities; 34 equations over one cell | `ice_dyn_shared.F90`: stepu 923-964, dyn_prep2 815-833, dyn_finish 1345-1348, Tmass 540; `ice_dyn_evp.F90`: stress 1584-1609 |
 | `cice_transport.esm` | Model `Transport` — per-category conservative advection d(a)/dt + div(a·u) = 0 (and volume forms) as spatial-D rewrite targets; enthalpy-tracer statement documented, deferred to stage 3 | `ice_transport_driver.F90`: 251-700; `ice_transport_remap.F90`: 317-831 |
 | `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; the similarity atmo boundary layer (5-iteration unroll) with the aicen_init-weighted reference-height exports, and the Rothrock strength law as an algebraic probe of the dynamics physics; 154 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260; `icepack_atmo.F90`: atmo_boundary_layer 52-389; `icepack_mechred.F90`: ridge_itd 848-1036, icepack_ice_strength 1660-1712 |
@@ -128,11 +132,13 @@ descriptions. Representative transcriptions:
 | `thickness_albedo_factor` | `fh = min(atan(hi·4)/atan(ahmax·4), 1)` (F90:541-542) | `min(atan(hi·4)/atan(0.3·4), 1)` |
 | `layer_absorbed_shortwave` | `Iswabs = fswpen·(exp(−kappav·ztop) − exp(−kappav·zbot))` (F90:862-880) | `fswpen·(transmittance(ztop) − transmittance(zbot))`, calling `shortwave_transmittance` by reference |
 | `surface_heat_flux` | `fsurfn = fswsfc + ε·flw − ε·σ·TsfK⁴ + shcoef·(potT−TsfK) + lhcoef·(Qa−Qsfc)` (icepack_therm_shared.F90:147-165) | same, with `Qsfc` from `saturation_specific_humidity_ice` |
-| `ice_temperature_from_enthalpy` | brine quadratic `cp_ice·T² + ((cp_ocn−cp_ice)·Tmltk − qin/ρi − L)·T + L·Tmltk = 0` solved by the negative root (F90:68-101) | `ifelse(l_brine > 0.5, min((−bb1−√(bb1²−4·cp_ice·cc1))/(2·cp_ice), Tmltk), (L+qin/ρi)/cp_ice)`; the Fortran abort on a negative discriminant is a noted guard |
+| `ice_temperature_from_enthalpy` | brine quadratic `cp_ice·T² + ((cp_ocn−cp_ice)·Tmltk − qin/ρi − L)·T + L·Tmltk = 0` solved by the negative root (F90:68-101) | `ifelse(l_brine > 0.5, min((−bb1−√(bb1²−4·cp_ice·cc1))/(2·cp_ice), Tmltk), (L+qin/ρi)/cp_ice)`; the Fortran abort on a negative discriminant is a noted guard; the D-class run uses the mushy inversion instead (`icepack_mushy_temperature_mush`) |
 | `ice_conductivity_bubbly` | `k = max((2.11 − 0.011·T + 0.09·S/min(−puny,T))·ρi/917, kimin)` (icepack_therm_bl99.F90:918-924) | same with `min(−1e-11, T)` |
+| `ice_conductivity_mu71` | `k = max(rhoi·(1.88 + 0.0102·T) − 0.9e-3·T², kimin)` (icepack_therm_bl99.F90:911-916) | same; the D-class `conduct = 'MU71'` law |
+| `ice_conductivity_mush` | mushy two-stage `k = max(k1, k2)` with the solid-fraction weighted law (icepack_mushy_physics.F90:455-485) | same; used by the ktherm = 2 solver |
 | `congelation_enthalpy` | `qbot = −ρi·(cp_ice·(Tmlts−Tbot) + L·(1−Tmlts/Tbot) − cp_ocn·Tmlts)`, capped at `−0.5·ρi·L` (icepack_therm_vertical.F90:1432-1443) | same, `ifelse` brine/fresh, `min` cap |
 | `ocean_heat_flux` | `fbot = max(−cp_ocn·rhow·0.006·max(sst−Tf,0)·ustar, frzmlt)` (F90:662-678) | same; ustar floored at 0.005 in the model |
-| `meltpond_cesm_dvn` | `dvn = rfrac/rhofresh·(meltt·ρi + melts·ρs + frain·dt)·aicen − volpn·(1−exp(rexp·dTs/Tp))` (icepack_meltpond_lvl.F90:154-174) | same with `Tp = −2`, `rexp = 0.01`, `dTs = max(−2−Tsfcn, 0)` |
+| `meltpond_cesm_dvn` | `dvn = rfrac/rhofresh·(meltt·ρi + melts·ρs + frain·dt)·aicen − volpn·(1−exp(rexp·dTs/Tp))` (icepack_meltpond_lvl.F90:154-174) | same with `Tp = −2`, `rexp = 0.01`, `dTs = max(−2−Tsfcn, 0)`; the D-class run uses the sea-level scheme instead (`meltpond_sealvl_dvn`) |
 | `atmo_constant_tau/shcoef/lhcoef` | `tau = ρa·0.0012·wind`; `shcoef = 0.0012·1005·ρa·wind`; `lhcoef = 0.0015·Lheat·ρa·wind` (icepack_atmo.F90:460, 493-494) | identical, `Lheat = Lsub = 2.835e6` for ice |
 | `atmo_neutral_drag` | `rdn = vonkar/log(zref/iceruf)` (icepack_atmo.F90:215) | identical (`vonkar = 0.4`, `zref = 10`, `iceruf = 5e-4`) |
 | `atmo_stability_parameter` | `hol = vonkar·gravit·zlvl·(tstar/thva + qstar/(1/zvir+Qa))/ustar²`, clamped to |hol| ≤ 10 (F90:985-989) | identical (sign-preserving clamp via min/max) |
@@ -149,14 +155,16 @@ descriptions. Representative transcriptions:
 ## Documented divergences (all annotated in file metadata)
 
 1. **Heat conduction as semi-discrete ODEs.** The Fortran assembles and solves
-   an implicit backward-Euler tridiagonal for Tsfc and the layer temperatures
-   (icepack_therm_bl99.F90:1038-1210); the skeleton writes the equivalent
-   energy-conserving method-of-lines form
+   an implicit backward-Euler tridiagonal for Tsfc and the layer temperatures —
+   the mushy two-stage solver (icepack_therm_mushy.F90:1800-1985) under the
+   D-class ktherm = 2, with the kh conductances of the conductivity
+   subroutines (icepack_mushy_physics.F90:455-485) and the per-layer absorbed
+   shortwave of absorbed_solar (icepack_shortwave.F90:862-880). The .esm writes
+   the equivalent energy-conserving method-of-lines form
    `d(q_k)/dt = (kh_up·(T_up−T_k) + kh_dn·(T_dn−T_k) + Iswabs_k)/hilyr`
-   (volumetric-enthalpy balance, no ρ·cp factor), with the interface
-   conductances kh of the conductivity subroutine (F90:874-961) and the
-   per-layer absorbed shortwave of absorbed_solar (icepack_shortwave.F90:
-   862-880). The stage-3 integrator reproduces the backward-Euler trajectory.
+   (volumetric-enthalpy balance, no ρ·cp factor). The stage-3 integrator
+   reproduces the backward-Euler trajectory; the layer-energy and growth/melt
+   rates are pinned at stage 3 once the Tsfc implicit solve is coupled.
 2. **Tsfc is a parameter.** The implicit surface energy balance
    `fsurfn(Tsfc) + fcondtopn = 0` (icepack_therm_bl99.F90:1116-1128) is
    transcendental in Tsfc; esm 1.3.0 has no implicit equations, so Tsfc is a
@@ -207,6 +215,7 @@ descriptions. Representative transcriptions:
 |---|---|---|
 | 1 | `icepack_atmo.F90:463-464` (atmo_boundary_const) | `strx = tau·uatm` omits the `/wind` direction-cosine normalization — the vmag division is commented out at F90:328-329 and the active stress is dimensionally `kg/s³` (a 10 m/s wind gives a 10× stress). Transcribed as written (the stage-3 tests must pin the active code); the esm skeleton declares the honest `kg/s^3` dimension at Control.strairx/strairy and the dynamics consumes the same value with its N/m² momentum balance annotated. |
 | 2 | `icepack_therm_shared.F90:90-94` (calculate_Tin_from_qin) | The Fortran aborts on a negative discriminant of the brine quadratic; the .esm skeleton cannot express the abort and carries it as a documented guard for the stage-2 tests (a negative discriminant in a dump would expose a thermodynamics inconsistency upstream). |
+| 3 | `icepack_shortwave.F90:3587-3588` (shortwave_dEdd_set_eff) | `dhs = hsnlvl − fsnow·dt` subtracts the snowfall **mass flux** (kg/m²/s, F90:3511) from a snow **depth** (m) — the `/rhos` conversion is missing (bugs.md #10). The .esm reproduces the Fortran numerics by carrying the coupled flux in an m/s parameter (`fsnow_dEdd`); the branch fires in 92/1920 dumped rows but is usually masked by the `ipn·spn < puny` reset at F90:3590. |
 
 ## Testing
 
@@ -217,7 +226,7 @@ pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
 | `cice_coupling.esm` | 36 | 47 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), and the Rothrock strength law (2 dump rows) |
-| `cice_thermodynamics.esm` | 0 | 0 | none — the run's configuration (ktherm = 2 mushy, MU71, dEdd, nilyr = 8/nslyr = 3, hlid, similarity) exercises none of the transcribed laws (see coverage limits) |
+| `cice_thermodynamics.esm` | 9 | 10 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswint = swabs − fswsfc − fswthru; all to round-off (`rel 1e-12`) |
 | `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
 | `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
 | `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
@@ -232,7 +241,8 @@ uarea-weighted average of the U-point uvel) reproduces the run's T-point
 velocity only to ~1e-4 m/s, and Uref = |Uatm−U|·rd/rdn amplifies that
 difference by rd/rdn ≈ 8. The source of the residual is unidentified (the
 run-side value is consumed inside step_therm1, not dumped); the pin is kept at
-the observed precision rather than tightening past it.
+the observed precision rather than tightening past it. The 10 thermodynamics
+assertions (9 tests) likewise reproduce `cice_albedo.csv` to round-off.
 
 ### Derived inputs (the raw CMEPS fields are not dumped)
 
@@ -297,17 +307,20 @@ must reproduce the dumped value:
 
 ### Coverage limits (why the other files have no tests)
 
-- **Thermodynamics configuration mismatch.** The run
-   (stage1/cime/cases/D_cice_inst/run/ice_in) used ktherm = 2 (mushy) with
-   nilyr = 8/nslyr = 3, conduct = MU71, shortwave = dEdd, frzpnd = hlid,
-   kstrength = 1 (Rothrock), and atmbndy = similarity (the default); the
-   skeleton deliberately transcribes the icepack defaults (BL99 7/1, bubbly,
-   ccsm3 albedos, cesm pond). The dEdd albedos of `cice_albedo.csv` differ
-   from the ccsm3 analytic laws by up to ~10% (ncat 2, step 2: alvdfn = 0.9527
-   vs 0.8598) — so no dump value pins the transcribed thermodynamics equations.
-   The Rothrock strength and the similarity reference-height exports are
-   transcribed and pinned in the coupling cap (the D-class settings kstrength =
-   1, krdg_partic = krdg_redist = 1, mu_rdg = 4, natmiter = 5, highfreq).
+- **Thermodynamics re-transcribed to the D-class configuration.** The first
+   stage-2 skeleton transcribed the icepack namelist defaults (BL99 7/1,
+   bubbly, ccsm3 albedos, cesm pond), which the run does not exercise: the
+   D-class run (stage1/cime/cases/D_cice_inst/run/ice_in) used ktherm = 2
+   (mushy) with nilyr = 8/nslyr = 3, conduct = MU71, shortwave = dEdd,
+   frzpnd = hlid, kstrength = 1 (Rothrock), and atmbndy = similarity. The
+   thermodynamics model and templates now transcribe the D-class laws, and the
+   dEdd surface laws are dump-pinned. Remaining unpinned in this file: the
+   delta-Eddington 3-band solver itself (compute_dEdd_3bd, deferred — its
+   outputs alvdrn/alidrn/alvdfn/alidfn, fswsfcn, fswthru_* and Iswabs are
+   carried as parameters), the vertical conduction ODEs and the growth/melt
+   rates (depend on the Tsfc implicit solve, see the divergences), and the
+   mushy enthalpy↔temperature inversions (exercised by the conduction ODEs,
+   pinned at stage 3).
 - **Tsfc tracer (dump bug, now fixed).** The first instrumented run read
    the `nt_Tsfc`/`nt_qice`/`nt_qsno` tracers with the j and tracer indices
    swapped (`trcrn(i,nt,j,n,blk)` vs the declared `(i,j,nt,n,blk)`), so
@@ -343,7 +356,8 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
-assertions plus the 46 CICE coupling assertions with 0 failures and 0 errors.
+assertions plus the 57 CICE assertions (47 coupling + 10 thermodynamics) with
+0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)
 

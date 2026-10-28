@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_templates",
-  "description": "Expression-template library for the CICE sea-ice component (stage 2 of the EqESM project): the pointwise physical laws of cesm3_cice6_6_3_22 (checkout stage1/cesm/components/cice), transcribed exactly for use by the thermodynamics, dynamics, transport, and coupling subcomponents. The library carries (a) the shortwave/albedo family of icepack_shortwave.F90: the ccsm3 bare-ice and snow albedos of compute_albedos (F90:466-597) with the thickness factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (F90:541-542), the surface-temperature factor fT = min(Timelt-Tsfcn-1, 0) (F90:548-549), the fractional snow cover asnow = hs/(hs+snowpatch) (F90:575-579), and the absorbed/penetrating shortwave split of absorbed_solar (F90:701-896) with the visible-band extinction law fswpen*exp(-kappav*z) (F90:867) and i0vis = 0.70 (F90:769); (b) the thermodynamics family of icepack_therm_shared.F90 (surface_heat_flux F90:109-167, saturation humidity F90:152-154, liquidus Tmlt = -depressT*Sin F90:383-386, the Assur-1958 mushy liquidus of icepack_mushy_physics.F90:227-261 with the az1/az2 rational form and the Sb_liq break, the l_brine quadratic temperature-from-enthalpy F90:68-101, the fresh-ice and snow enthalpy inversions), of icepack_therm_bl99.F90 (the bubbly-brine Pringle et al. 2007 conductivity kilyr = max((2.11 - 0.011 T + 0.09 S/min(-puny,T)) rhoi/917, kimin) F90:918-924, the MU71 form F90:911-916, the interface conductances kh F90:927-959), of icepack_therm_vertical.F90 (the congelation enthalpy qbot F90:1432-1443, the ocean heat flux fbot of frzmlt_bottom_lateral F90:662-678 with the 0.006 transfer coefficient F90:674 and the Maykut-Perovich m1/m2 lateral law F90:637-640, 679-775), and of icepack_meltpond_lvl.F90 (the 'cesm' melt-pond volume change F90:154-174); (c) the atmosphere family of icepack_atmo.F90 (the constant boundary-layer scheme atmo_boundary_const F90:398-496: tau = rhoa*0.0012*wind F90:460, shcoef = senscoef cp_air rhoa wind and lhcoef = latncoef Lheat rhoa wind F90:493-494, ocean saturation humidity F90:483-484; and the similarity scheme atmo_boundary_layer F90:52-389: the neutral drag coefficient rdn = vonkar/log(zref/iceruf) F90:215, the high-frequency relative wind vmag = max(0.5, |Uatm-U|) F90:176-180 and 205-210, the stability parameter hol clamped to |hol| <= 10 F90:985-989, the unit stable step function F90:1015, the stable psi F90:1017-1019, the unstable momentum/scalar psi and capital_X F90:1040-1075, the exchange coefficients rd/rh/re F90:289-291, the 2-m psix2 correction F90:364-365, and the reference Tref/Qref/Uref F90:366-378; the do-while iteration of F90:269 is unrolled by the coupling component for the D-class natmiter = 5 with atmiter_conv = 0, which always runs the full 5 updates); and (d) the dynamics family of icepack_mechred.F90 (the Hibler 1979 ice strength P = Pstar vice exp(-Cstar (1-aice)) F90:1720; and the Rothrock 1975 potential-energy strength F90:1660-1712 with the ridge ITD of ridge_itd F90:779-1050: the cumulative distribution Gsum F90:848-889, the exponential participation function of krdg_partic = 1 F90:919-934, the exponential redistribution hrmin/hrexp/krdg of krdg_redist = 1 F90:1004-1010, and aksum F90:1031-1036, with the per-category strength sum h2rdg = hrmin^2 + 2 hrmin hrexp + 2 hrexp^2 F90:1697-1706), ice_dyn_shared.F90 (the strain-rate invariant Delta F90:2156-2159, the capped viscosity/replacement-pressure split of visc_replpress F90:2467-2471, the ocean-ice stress magnitude and seabed coefficient of stepu F90:931-937), and ice_dyn_evp.F90 (the classic-EVP stress relaxation maps for stressp, stressm, and stress12 F90:1584-1609). All templates are match-less pointwise laws invoked by name via apply_expression_template; the only shared-math dependencies are the two saturation-humidity laws and the shortwave attenuation law, which are factored and referenced by surface_heat_flux, shortwave_through_ice, layer_absorbed_shortwave, and sea_freezing_temperature (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). Constants are the icepack_parameters.F90 module values (rhoi = 917 F90:62, rhos = 330 F90:61, rhow = 1026 F90:65, rhofresh = 1000 F90:66, cp_ice = 2106 F90:74, cp_ocn = 4218 F90:75, Tffresh = 273.15 F90:82, Lsub = 2.835e6 F90:83, Lvap = 2.501e6 F90:84, Lfresh = Lsub - Lvap = 3.34e5 F90:74, depressT = 0.054 F90:77, kice = 2.03 F90:88, ksno = 0.30 F90:90, snowpatch = 0.02 F90:92, puny = 1e-11 F90:36, emissivity = 0.985 F90:156 (the D-class run overrides it to 0.95 in forcing_nml, which the coupling aggregation and the surface-heat balance use), stefan_boltzmann = 567e-10 F90:159, kappav = 1.4 F90:161, albocn = 0.06 F90:157, albicev = 0.78 F90:166, albicei = 0.36 F90:167, albsnowv = 0.98 F90:168, albsnowi = 0.70 F90:169, ahmax = 0.3 F90:170, ustar_min = 0.005 F90:99, Pstar = 2.75e4 F90:262, Cstar = 20 F90:264, cp_air = 1005 F90:281, qqqice = 11637800 F90:286, TTTice = 5897.8 F90:287, qqqocn = 627572.4 F90:288, TTTocn = 5107.4 F90:289, senscoef = 0.0012 F90:290, latncoef = 0.0015 F90:291, ice_ref_salinity = 4 F90:87, kimin = 0.10 and betak = 0.13 in icepack_therm_bl99.F90:34-35, and the melt-pond Td = 2, rexp = 0.01 in icepack_meltpond_lvl.F90:111-112), the dEdd shortwave tuning (dT_melt = 1, dalb_mlt = -0.075, dalb_mltv = -0.1, dalb_mlti = -0.15, i0vis = 0.70, icepack_shortwave.F90:511-518, 769), the similarity constants (vonkar = 0.4 F90:190, zref = 10 F90:284, iceruf = 0.0005 F90:285, zvir = 0.606 F90:283, cp_wv = 1.81e3 F90:282, gravit = 9.80616 F90:269, umin = 0.5 under highfreq = .true. F90:177, pih = pi/2 F90:80 and 2815), the Rothrock strength constants (Cf = 17 F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow F90:2814, Gstar = 0.15 and astar = 0.05 in icepack_mechred.F90:70-72, maxraft = 1 F90:74, and mu_rdg = 4 from the D-class ice_in namelist), and the Assur liquidus constants (az1_liq = -18.48, bz1_liq = 0, az2_liq = -10.3085, bz2_liq = 62.4, Sb_liq = 123.66702800276086, icepack_mushy_physics.F90:36-55)."
+  "description": "Expression-template library for the CICE sea-ice component (stage 2 of the EqESM project): the pointwise physical laws of cesm3_cice6_6_3_22 (checkout stage1/cesm/components/cice), transcribed exactly for use by the thermodynamics, dynamics, transport, and coupling subcomponents. The library carries (a) the shortwave/albedo family of icepack_shortwave.F90: the ccsm3 bare-ice and snow albedos of compute_albedos (F90:466-597) with the thickness factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (F90:541-542), the surface-temperature factor fT = min(Timelt-Tsfcn-1, 0) (F90:548-549), the fractional snow cover asnow = hs/(hs+snowpatch) (F90:575-579), and the absorbed/penetrating shortwave split of absorbed_solar (F90:701-896) with the visible-band extinction law fswpen*exp(-kappav*z) (F90:867) and i0vis = 0.70 (F90:769); (b) the thermodynamics family of icepack_therm_shared.F90 (surface_heat_flux F90:109-167, saturation humidity F90:152-154, liquidus Tmlt = -depressT*Sin F90:383-386, the Assur-1958 mushy liquidus of icepack_mushy_physics.F90:227-261 with the az1/az2 rational form and the Sb_liq break, the l_brine quadratic temperature-from-enthalpy F90:68-101, the fresh-ice and snow enthalpy inversions), of icepack_therm_bl99.F90 (the bubbly-brine Pringle et al. 2007 conductivity kilyr = max((2.11 - 0.011 T + 0.09 S/min(-puny,T)) rhoi/917, kimin) F90:918-924, the MU71 form F90:911-916, the interface conductances kh F90:927-959), of icepack_therm_vertical.F90 (the congelation enthalpy qbot F90:1432-1443, the ocean heat flux fbot of frzmlt_bottom_lateral F90:662-678 with the 0.006 transfer coefficient F90:674 and the Maykut-Perovich m1/m2 lateral law F90:637-640, 679-775), and of icepack_meltpond_lvl.F90 (the 'cesm' melt-pond volume change F90:154-174); (c) the atmosphere family of icepack_atmo.F90 (the constant boundary-layer scheme atmo_boundary_const F90:398-496: tau = rhoa*0.0012*wind F90:460, shcoef = senscoef cp_air rhoa wind and lhcoef = latncoef Lheat rhoa wind F90:493-494, ocean saturation humidity F90:483-484; and the similarity scheme atmo_boundary_layer F90:52-389: the neutral drag coefficient rdn = vonkar/log(zref/iceruf) F90:215, the high-frequency relative wind vmag = max(0.5, |Uatm-U|) F90:176-180 and 205-210, the stability parameter hol clamped to |hol| <= 10 F90:985-989, the unit stable step function F90:1015, the stable psi F90:1017-1019, the unstable momentum/scalar psi and capital_X F90:1040-1075, the exchange coefficients rd/rh/re F90:289-291, the 2-m psix2 correction F90:364-365, and the reference Tref/Qref/Uref F90:366-378; the do-while iteration of F90:269 is unrolled by the coupling component for the D-class natmiter = 5 with atmiter_conv = 0, which always runs the full 5 updates); and (d) the dynamics family of icepack_mechred.F90 (the Hibler 1979 ice strength P = Pstar vice exp(-Cstar (1-aice)) F90:1720; and the Rothrock 1975 potential-energy strength F90:1660-1712 with the ridge ITD of ridge_itd F90:779-1050: the cumulative distribution Gsum F90:848-889, the exponential participation function of krdg_partic = 1 F90:919-934, the exponential redistribution hrmin/hrexp/krdg of krdg_redist = 1 F90:1004-1010, and aksum F90:1031-1036, with the per-category strength sum h2rdg = hrmin^2 + 2 hrmin hrexp + 2 hrexp^2 F90:1697-1706), ice_dyn_shared.F90 (the strain-rate invariant Delta F90:2156-2159, the capped viscosity/replacement-pressure split of visc_replpress F90:2467-2471, the ocean-ice stress magnitude and seabed coefficient of stepu F90:931-937), and ice_dyn_evp.F90 (the classic-EVP stress relaxation maps for stressp, stressm, and stress12 F90:1584-1609). All templates are match-less pointwise laws invoked by name via apply_expression_template; the only shared-math dependencies are the two saturation-humidity laws and the shortwave attenuation law, which are factored and referenced by surface_heat_flux, shortwave_through_ice, layer_absorbed_shortwave, and sea_freezing_temperature (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). Constants are the icepack_parameters.F90 module values (rhoi = 917 F90:62, rhos = 330 F90:61, rhow = 1026 F90:65, rhofresh = 1000 F90:66, cp_ice = 2106 F90:74, cp_ocn = 4218 F90:75, Tffresh = 273.15 F90:82, Lsub = 2.835e6 F90:83, Lvap = 2.501e6 F90:84, Lfresh = Lsub - Lvap = 3.34e5 F90:74, depressT = 0.054 F90:77, kice = 2.03 F90:88, ksno = 0.30 F90:90, snowpatch = 0.02 F90:92, puny = 1e-11 F90:36, emissivity = 0.985 F90:156 (the D-class run overrides it to 0.95 in forcing_nml, which the coupling aggregation and the surface-heat balance use), stefan_boltzmann = 567e-10 F90:159, kappav = 1.4 F90:161, albocn = 0.06 F90:157, albicev = 0.78 F90:166, albicei = 0.36 F90:167, albsnowv = 0.98 F90:168, albsnowi = 0.70 F90:169, ahmax = 0.3 F90:170, ustar_min = 0.005 F90:99, Pstar = 2.75e4 F90:262, Cstar = 20 F90:264, cp_air = 1005 F90:281, qqqice = 11637800 F90:286, TTTice = 5897.8 F90:287, qqqocn = 627572.4 F90:288, TTTocn = 5107.4 F90:289, senscoef = 0.0012 F90:290, latncoef = 0.0015 F90:291, ice_ref_salinity = 4 F90:87, kimin = 0.10 and betak = 0.13 in icepack_therm_bl99.F90:34-35, and the melt-pond Td = 2, rexp = 0.01 in icepack_meltpond_lvl.F90:111-112), the dEdd shortwave tuning (dT_melt = 1, dalb_mlt = -0.075, dalb_mltv = -0.1, dalb_mlti = -0.15, i0vis = 0.70, icepack_shortwave.F90:511-518, 769), the similarity constants (vonkar = 0.4 F90:190, zref = 10 F90:284, iceruf = 0.0005 F90:285, zvir = 0.606 F90:283, cp_wv = 1.81e3 F90:282, gravit = 9.80616 F90:269, umin = 0.5 under highfreq = .true. F90:177, pih = pi/2 F90:80 and 2815), the Rothrock strength constants (Cf = 17 F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow F90:2814, Gstar = 0.15 and astar = 0.05 in icepack_mechred.F90:70-72, maxraft = 1 F90:74, and mu_rdg = 4 from the D-class ice_in namelist), and the Assur liquidus constants (az1_liq = -18.48, bz1_liq = 0, az2_liq = -10.3085, bz2_liq = 62.4, Sb_liq = 123.66702800276086, icepack_mushy_physics.F90:36-55); (e) the ktherm = 2 mushy-physics family of icepack_mushy_physics.F90 (the Assur liquidus pair liquidus_brine_salinity_mush F90:187-221 and liquidus_temperature_mush F90:227-261, the liquid fraction icepack_mushy_liquid_fraction F90:500-519, the enthalpy laws icepack_enthalpy_mush F90:267-288, enthalpy_mush_liquid_fraction F90:293-307, enthalpy_of_melting F90:313-325, and enthalpy_brine F90:330-342, the quadratic temperature-from-enthalpy icepack_mushy_temperature_mush F90:348-452 and temperature_mush_liquid_fraction F90:457-471, and the mush heat conductivity km = phi*(kb - ki) + ki with ki = 2.3 and kb = 0.5375 F90:476-494, 62-63); (f) the dEdd shortwave surface laws of icepack_shortwave.F90 (the snow fraction of shortwave_dEdd_set_snow F90:3448-3454 and the effective pond area of shortwave_dEdd_set_eff F90:3495-3637 with the infiltration, thin-pond, and snow-taper branches, plus the broadband band weights awtvdr/awtidr/awtvdf/awtidf of icepack_parameters.F90:218-221 used for the history albedos F90:1496-1498); and (g) the sea-level melt-pond volume law of icepack_meltpond_sealvl.F90 (compute_ponds_sealvl F90:50-265 with the 'hlid' Stefan lid growth/melt of frzpnd = 'hlid')."
  },
  "expression_templates": {
   "snow_cover_fraction": {
@@ -670,6 +670,2229 @@
          { "op": "^", "args": ["uvel", 2] },
          { "op": "^", "args": ["vvel", 2] } ] }] },
      "u0" ] }] }
+  },
+   "liquidus_brine_salinity_mush": {
+    "description": "Equilibrium brine salinity of the mushy thermodynamics (liquidus_brine_salinity_mush, icepack_mushy_physics.F90:187-221): Sbr = ((T + J1_liq)/(K1_liq*T + L1_liq))*t_high + ((T + J2_liq)/(K2_liq*T + L2_liq))*(1-t_high) with t_high = 1 for T > Tb_liq and the subzero mask lsubzero = 1 for T <= 0 (F90:213-219). J1_liq = bz1_liq/az1_liq = 0, K1_liq = c1/c1000 = 1e-3, L1_liq = (c1 + bz1p_liq)/az1_liq = -0.05411255411255411, J2_liq = bz2_liq/az2_liq = -6.053257020905078, K2_liq = 1e-3, L2_liq = (c1 + bz2p_liq)/az2_liq = -0.10306058107387107 (F90:36-55, 206-211); Tb_liq = -7.6362968855167352 (F90:47). The ifelse replaces the Fortran merges with the same selections; the T > 0 branch is masked to 0 by the subzero mask.",
+    "params": ["T"],
+    "body": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "<=",
+       "args": [
+        "T",
+        0.0
+       ]
+      },
+      {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">",
+         "args": [
+          "T",
+          -7.636296885516735
+         ]
+        },
+        {
+         "op": "/",
+         "args": [
+          "T",
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              0.001,
+              "T"
+             ]
+            },
+            -0.05411255411255411
+           ]
+          }
+         ]
+        },
+        {
+         "op": "/",
+         "args": [
+          {
+           "op": "+",
+           "args": [
+            "T",
+            -6.053257020905078
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              0.001,
+              "T"
+             ]
+            },
+            -0.10306058107387107
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      0.0
+     ]
+    }
+   },
+   "icepack_mushy_liquid_fraction": {
+    "description": "Liquid fraction of the mush (icepack_mushy_liquid_fraction, icepack_mushy_physics.F90:500-519): phi = zSin/max(Sbr, zSin) with the brine salinity Sbr = max(liquidus_brine_salinity_mush(zTin), puny) (F90:516-517); the inner max keeps the liquidus finite at the freezing point and the outer max keeps phi <= 1 for supersaturated layers. puny = 1e-11 (icepack_parameters.F90:36).",
+    "params": ["T", "S"],
+    "body": {
+     "op": "/",
+     "args": [
+      "S",
+      {
+       "op": "max",
+       "args": [
+        {
+         "op": "max",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "liquidus_brine_salinity_mush",
+           "bindings": {
+            "T": "T"
+           }
+          },
+          1e-11
+         ]
+        },
+        "S"
+       ]
+      }
+     ]
+    }
+   },
+   "icepack_enthalpy_mush": {
+    "description": "Enthalpy of the mush from temperature and bulk salinity (icepack_enthalpy_mush, icepack_mushy_physics.F90:267-288): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh with phi = icepack_mushy_liquid_fraction(zTin, zSin) (F90:283-286). cp_ocn*rhow = 4327668, cp_ice*rhoi = 1931202, rhoi*Lfresh = 306278000 (icepack_parameters.F90:62, 74-75, 84); the difference cp_ocn*rhow - cp_ice*rhoi = 2396466.",
+    "params": ["T", "S"],
+    "body": {
+     "op": "+",
+     "args": [
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "icepack_mushy_liquid_fraction",
+           "bindings": {
+            "T": "T",
+            "S": "S"
+           }
+          },
+          2396466.0,
+          "T"
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          1931202.0,
+          "T"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "-",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            {
+             "op": "apply_expression_template",
+             "args": [],
+             "name": "icepack_mushy_liquid_fraction",
+             "bindings": {
+              "T": "T",
+              "S": "S"
+             }
+            }
+           ]
+          },
+          306278000.0
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "enthalpy_mush_liquid_fraction": {
+    "description": "Enthalpy of the mush from temperature and liquid fraction (enthalpy_mush_liquid_fraction, icepack_mushy_physics.F90:293-307): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh (F90:304-305). Used for the congelation-ice enthalpy qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) (icepack_therm_vertical.F90:1413); phi_i_mushy = 0.45 in the D-class run (ice_in namelist, default 0.85 icepack_parameters.F90:139).",
+    "params": ["T", "phi"],
+    "body": {
+     "op": "+",
+     "args": [
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "phi",
+          2396466.0,
+          "T"
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          1931202.0,
+          "T"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "-",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            "phi"
+           ]
+          },
+          306278000.0
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "enthalpy_of_melting": {
+    "description": "Enthalpy of melting of the mush from bulk salinity (enthalpy_of_melting, icepack_mushy_physics.F90:313-325): qm = cp_ocn*rhow*liquidus_temperature_mush(zSin) (F90:323), the energy needed to fully melt the mush; cp_ocn*rhow = 4327668 J/m3/C. This is the ktherm = 2 qmlt of thickness_changes (icepack_therm_vertical.F90:1283), zero in the BL99 formulation.",
+    "params": ["S"],
+    "body": {
+     "op": "*",
+     "args": [
+      4327668.0,
+      {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "liquidus_temperature_mush",
+       "bindings": {
+        "Sbr": "S"
+       }
+      }
+     ]
+    }
+   },
+   "enthalpy_brine": {
+    "description": "Enthalpy of the brine (fully liquid) from temperature (enthalpy_brine, icepack_mushy_physics.F90:330-342): qbr = cp_ocn*rhow*zTin (F90:340); cp_ocn*rhow = 4327668 J/m3/C.",
+    "params": ["T"],
+    "body": {
+     "op": "*",
+     "args": [
+      4327668.0,
+      "T"
+     ]
+    }
+   },
+   "icepack_mushy_temperature_mush": {
+    "description": "Temperature of the mush from enthalpy and bulk salinity (icepack_mushy_temperature_mush, icepack_mushy_physics.F90:348-452): the piecewise quadratic of the Assur liquidus inverted against the enthalpy, zTin = (-B + sqrt(max(B^2 - 4 A C, puny)))/(2 A) (F90:447) with A, B, C the quadratic coefficients of the higher/lower temperature regions selected by the break enthalpy qb = D_liq*zSin + E_liq (F90:433-445), and the fully-melted branch zTin = zqin*I_liq when zqin exceeds the just-melted enthalpy q0 of the salinity-dependent rational F1/G1/H1/F2/G2/H2 form (F90:427-430, 450). Constants (computed from the az/bz liquidus parameters of F90:36-55 and the cp/rho values as in F90:388-424; verified against the Fortran numerically): AS1 = -44286.69168, AC1 = -35688612.96, BS1 = -3263551.44, BQ1 = 18.48, BC1 = 5660017440.0, CS1 = 306278000.0, CQ1 = 0.0, CC1 = 0.0; AS2 = -24703.969761, AC2 = -19907795.817, BS2 = -611261.2846, BQ2 = 10.3085, BC2 = 3277773767.8, CS2 = 325389747.2, CQ2 = -62.4, CC2 = -19111747200.0; D_liq = 2328655.2511112676, E_liq = -321025231.8179037; F1 = 234181168.83116883, G1 = -1000.0, H1 = 0.0; F2 = 419815492.06965125, G2 = -1000.0, H2 = 26196486.705146234; I_liq = 2.3107132987096054e-07; Tb_liq = -7.6362968855167352, Sb_liq = 123.66702800276086. The ifelse replaces the Fortran merges (S_low, q_melt, t_high) with the same selections; the discriminant guard max(B^2 - 4 A C, puny) keeps the sqrt real as in F90:447.",
+    "params": ["qin", "S"],
+    "body": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": ">",
+       "args": [
+        "qin",
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": "<",
+           "args": [
+            "S",
+            123.66702800276086
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                234181168.83116883,
+                "S"
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                -1000.0,
+                "S"
+               ]
+              }
+             ]
+            },
+            0.0
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                419815492.06965125,
+                "S"
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                -1000.0,
+                "S"
+               ]
+              }
+             ]
+            },
+            26196486.705146234
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        "qin",
+        2.3107132987096054e-07
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": ">",
+               "args": [
+                "qin",
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    2328655.2511112676,
+                    "S"
+                   ]
+                  },
+                  -321025231.8179037
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  -3263551.44,
+                  "S"
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  18.48,
+                  "qin"
+                 ]
+                },
+                5660017440.0
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  -611261.2846,
+                  "S"
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  10.3085,
+                  "qin"
+                 ]
+                },
+                3277773767.8
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "sqrt",
+           "args": [
+            {
+             "op": "max",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "^",
+                 "args": [
+                  {
+                   "op": "ifelse",
+                   "args": [
+                    {
+                     "op": ">",
+                     "args": [
+                      "qin",
+                      {
+                       "op": "+",
+                       "args": [
+                        {
+                         "op": "*",
+                         "args": [
+                          2328655.2511112676,
+                          "S"
+                         ]
+                        },
+                        -321025231.8179037
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        -3263551.44,
+                        "S"
+                       ]
+                      },
+                      {
+                       "op": "*",
+                       "args": [
+                        18.48,
+                        "qin"
+                       ]
+                      },
+                      5660017440.0
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        -611261.2846,
+                        "S"
+                       ]
+                      },
+                      {
+                       "op": "*",
+                       "args": [
+                        10.3085,
+                        "qin"
+                       ]
+                      },
+                      3277773767.8
+                     ]
+                    }
+                   ]
+                  },
+                  2
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  4.0,
+                  {
+                   "op": "ifelse",
+                   "args": [
+                    {
+                     "op": ">",
+                     "args": [
+                      "qin",
+                      {
+                       "op": "+",
+                       "args": [
+                        {
+                         "op": "*",
+                         "args": [
+                          2328655.2511112676,
+                          "S"
+                         ]
+                        },
+                        -321025231.8179037
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        -44286.69168,
+                        "S"
+                       ]
+                      },
+                      -35688612.96
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        -24703.969761,
+                        "S"
+                       ]
+                      },
+                      -19907795.817
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "ifelse",
+                   "args": [
+                    {
+                     "op": ">",
+                     "args": [
+                      "qin",
+                      {
+                       "op": "+",
+                       "args": [
+                        {
+                         "op": "*",
+                         "args": [
+                          2328655.2511112676,
+                          "S"
+                         ]
+                        },
+                        -321025231.8179037
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        306278000.0,
+                        "S"
+                       ]
+                      },
+                      {
+                       "op": "*",
+                       "args": [
+                        0.0,
+                        "qin"
+                       ]
+                      },
+                      0.0
+                     ]
+                    },
+                    {
+                     "op": "+",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        325389747.2,
+                        "S"
+                       ]
+                      },
+                      {
+                       "op": "*",
+                       "args": [
+                        -62.4,
+                        "qin"
+                       ]
+                      },
+                      -19111747200.0
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              1e-11
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          2.0,
+          {
+           "op": "ifelse",
+           "args": [
+            {
+             "op": ">",
+             "args": [
+              "qin",
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  2328655.2511112676,
+                  "S"
+                 ]
+                },
+                -321025231.8179037
+               ]
+              }
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                -44286.69168,
+                "S"
+               ]
+              },
+              -35688612.96
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                -24703.969761,
+                "S"
+               ]
+              },
+              -19907795.817
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "temperature_mush_liquid_fraction": {
+    "description": "Temperature of the mush from enthalpy and liquid fraction (temperature_mush_liquid_fraction, icepack_mushy_physics.F90:457-471): zTin = (zqin + (1-phi)*rhoi*Lfresh)/(phi*(cp_ocn*rhow - cp_ice*rhoi) + rhoi*cp_ice) (F90:468-469), the linear inverse of enthalpy_mush_liquid_fraction.",
+    "params": ["qin", "phi"],
+    "body": {
+     "op": "/",
+     "args": [
+      {
+       "op": "+",
+       "args": [
+        "qin",
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            "phi"
+           ]
+          },
+          306278000.0
+         ]
+        }
+       ]
+      },
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "phi",
+          2396466.0
+         ]
+        },
+        1931202.0
+       ]
+      }
+     ]
+    }
+   },
+   "ice_conductivity_mush": {
+    "description": "Mush heat conductivity (heat_conductivity, icepack_mushy_physics.F90:476-494): km = phi*(kb - ki) + ki with the liquid fraction phi = icepack_mushy_liquid_fraction(zTin, zSin) (F90:490-492), ki = 2.3 W/m/K the fresh-ice conductivity and kb = 0.5375 W/m/K the brine conductivity (F90:62-63). This is the ktherm = 2 law used by the mushy thermodynamics; the ktherm = 1 MU71/bubbly laws remain the ice_conductivity_mu71/ice_conductivity_bubbly templates.",
+    "params": ["T", "S"],
+    "body": {
+     "op": "+",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "icepack_mushy_liquid_fraction",
+         "bindings": {
+          "T": "T",
+          "S": "S"
+         }
+        },
+        {
+         "op": "-",
+         "args": [
+          0.5375,
+          2.3
+         ]
+        }
+       ]
+      },
+      2.3
+     ]
+    }
+   },
+   "dEdd_snow_fraction": {
+    "description": "Horizontal snow fraction of the dEdd shortwave scheme (shortwave_dEdd_set_snow, icepack_shortwave.F90:3448-3454): fs = 1 when the snow depth hs = vsno/aice >= hs_min, reduced to min(hs/hs0, 1) when hs0 > puny. hs_min = 1e-4 m (icepack_parameters.F90:123); hs0 is the namelist transition depth (default 0.03 m F90:345, overridden to 0.0 in the D-class run, which leaves fs in {0, 1}); puny = 1e-11 (F90:36).",
+    "params": ["aice", "vsno", "hs0"],
+    "body": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": ">=",
+       "args": [
+        {
+         "op": "/",
+         "args": [
+          "vsno",
+          "aice"
+         ]
+        },
+        0.0001
+       ]
+      },
+      {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">",
+         "args": [
+          "hs0",
+          1e-11
+         ]
+        },
+        {
+         "op": "min",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              "vsno",
+              "aice"
+             ]
+            },
+            "hs0"
+           ]
+          },
+          1.0
+         ]
+        },
+        1.0
+       ]
+      },
+      0.0
+     ]
+    }
+   },
+   "dEdd_effective_pond": {
+    "description": "Effective pond area of the dEdd shortwave scheme (shortwave_dEdd_set_eff, icepack_shortwave.F90:3495-3637) for the sea-level pond tracer (tr_pond_sealvl, apondn = apndn) under snwredist = 'none' (the bulk-redistribution branch F90:3554-3578 is not exercised in the D-class run): apeffn = fpn after (i) the meltwater-use reduction fpn = (1 - ffracn)*apondn (F90:3603), (ii) the pond-ice snow taper asnow = min(spn/hs1, 1) applied only when dhs > puny and spn >= puny (F90:3606-3609; hs1 = 0.03 F90:346 is always > puny), (iii) the snow-infiltration branch (F90:3611-3628): rp = rhofresh*hpndn/(rhofresh*hpndn + rhos*hs), which zeroes the pond for rp < p15, otherwise remaps the pond depth by the retained-meltwater fraction hmx = hs*(rhofresh - rhos)/rhofresh with tmp = 1 for hpndn >= hmx, and (iv) the thin-pond mask fpn = 0 for hpn < hpmin (F90:3630-3635). The dhs input is the persistent snow-depth-difference tracer of F90:3591 with the initialization F90:3586-3590: dhs = hs - fsnow*dt when the lid ipn = apondn*ipndn exists and dhs < puny and fsnow*dt > hs_min (F90:3586-3588), spn = hs - dhs (F90:3589), and dhs reset to 0 when ipn*spn < puny (F90:3590); the taper condition uses the possibly-reset dhs with the pre-reset spn, exactly as in the Fortran. Constants: rhofresh = 1000, rhos = 330 (icepack_parameters.F90:66, 61), p15 = 0.15 (F90:59), hpmin = 0.005 (F90:242), hs1 = 0.03 (F90:346), hs_min = 1e-4 (F90:123), puny = 1e-11 (F90:36).",
+    "params": ["aicen", "vsnon", "apondn", "hpndn", "ipndn", "ffracn", "fsnow", "dt", "dhsn"],
+    "body": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "<",
+       "args": [
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">",
+           "args": [
+            "hpndn",
+            1e-11
+           ]
+          },
+          {
+           "op": "ifelse",
+           "args": [
+            {
+             "op": "<",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  1000.0,
+                  "hpndn"
+                 ]
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    1000.0,
+                    "hpndn"
+                   ]
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    330.0,
+                    {
+                     "op": "/",
+                     "args": [
+                      "vsnon",
+                      "aicen"
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              0.15
+             ]
+            },
+            0.0,
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "*",
+                   "args": [
+                    1000.0,
+                    "hpndn"
+                   ]
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    330.0,
+                    {
+                     "op": "/",
+                     "args": [
+                      "vsnon",
+                      "aicen"
+                     ]
+                    },
+                    {
+                     "op": "ifelse",
+                     "args": [
+                      {
+                       "op": ">=",
+                       "args": [
+                        "hpndn",
+                        {
+                         "op": "*",
+                         "args": [
+                          {
+                           "op": "/",
+                           "args": [
+                            "vsnon",
+                            "aicen"
+                           ]
+                          },
+                          0.67
+                         ]
+                        }
+                       ]
+                      },
+                      1.0,
+                      0.0
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "-",
+                 "args": [
+                  1000.0,
+                  {
+                   "op": "*",
+                   "args": [
+                    330.0,
+                    {
+                     "op": "-",
+                     "args": [
+                      1.0,
+                      {
+                       "op": "ifelse",
+                       "args": [
+                        {
+                         "op": ">=",
+                         "args": [
+                          "hpndn",
+                          {
+                           "op": "*",
+                           "args": [
+                            {
+                             "op": "/",
+                             "args": [
+                              "vsnon",
+                              "aicen"
+                             ]
+                            },
+                            0.67
+                           ]
+                          }
+                         ]
+                        },
+                        1.0,
+                        0.0
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": ">=",
+                 "args": [
+                  "hpndn",
+                  {
+                   "op": "*",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      "vsnon",
+                      "aicen"
+                     ]
+                    },
+                    0.67
+                   ]
+                  }
+                 ]
+                },
+                1.0,
+                0.0
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          "hpndn"
+         ]
+        },
+        0.005
+       ]
+      },
+      0.0,
+      {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">",
+         "args": [
+          "hpndn",
+          1e-11
+         ]
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": "<",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                1000.0,
+                "hpndn"
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  1000.0,
+                  "hpndn"
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  330.0,
+                  {
+                   "op": "/",
+                   "args": [
+                    "vsnon",
+                    "aicen"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            0.15
+           ]
+          },
+          0.0,
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                1.0,
+                {
+                 "op": "ifelse",
+                 "args": [
+                  {
+                   "op": "and",
+                   "args": [
+                    {
+                     "op": ">",
+                     "args": [
+                      {
+                       "op": "ifelse",
+                       "args": [
+                        {
+                         "op": "<",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            {
+                             "op": "*",
+                             "args": [
+                              "apondn",
+                              "ipndn"
+                             ]
+                            },
+                            {
+                             "op": "-",
+                             "args": [
+                              {
+                               "op": "/",
+                               "args": [
+                                "vsnon",
+                                "aicen"
+                               ]
+                              },
+                              {
+                               "op": "ifelse",
+                               "args": [
+                                {
+                                 "op": "and",
+                                 "args": [
+                                  {
+                                   "op": ">",
+                                   "args": [
+                                    {
+                                     "op": "*",
+                                     "args": [
+                                      "apondn",
+                                      "ipndn"
+                                     ]
+                                    },
+                                    1e-11
+                                   ]
+                                  },
+                                  {
+                                   "op": "and",
+                                   "args": [
+                                    {
+                                     "op": "<",
+                                     "args": [
+                                      "dhsn",
+                                      1e-11
+                                     ]
+                                    },
+                                    {
+                                     "op": ">",
+                                     "args": [
+                                      {
+                                       "op": "*",
+                                       "args": [
+                                        "fsnow",
+                                        "dt"
+                                       ]
+                                      },
+                                      0.0001
+                                     ]
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                },
+                                {
+                                 "op": "-",
+                                 "args": [
+                                  {
+                                   "op": "/",
+                                   "args": [
+                                    "vsnon",
+                                    "aicen"
+                                   ]
+                                  },
+                                  {
+                                   "op": "*",
+                                   "args": [
+                                    "fsnow",
+                                    "dt"
+                                   ]
+                                  }
+                                 ]
+                                },
+                                "dhsn"
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          1e-11
+                         ]
+                        },
+                        0.0,
+                        {
+                         "op": "ifelse",
+                         "args": [
+                          {
+                           "op": "and",
+                           "args": [
+                            {
+                             "op": ">",
+                             "args": [
+                              {
+                               "op": "*",
+                               "args": [
+                                "apondn",
+                                "ipndn"
+                               ]
+                              },
+                              1e-11
+                             ]
+                            },
+                            {
+                             "op": "and",
+                             "args": [
+                              {
+                               "op": "<",
+                               "args": [
+                                "dhsn",
+                                1e-11
+                               ]
+                              },
+                              {
+                               "op": ">",
+                               "args": [
+                                {
+                                 "op": "*",
+                                 "args": [
+                                  "fsnow",
+                                  "dt"
+                                 ]
+                                },
+                                0.0001
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "op": "-",
+                           "args": [
+                            {
+                             "op": "/",
+                             "args": [
+                              "vsnon",
+                              "aicen"
+                             ]
+                            },
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            }
+                           ]
+                          },
+                          "dhsn"
+                         ]
+                        }
+                       ]
+                      },
+                      1e-11
+                     ]
+                    },
+                    {
+                     "op": ">=",
+                     "args": [
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          "vsnon",
+                          "aicen"
+                         ]
+                        },
+                        {
+                         "op": "ifelse",
+                         "args": [
+                          {
+                           "op": "and",
+                           "args": [
+                            {
+                             "op": ">",
+                             "args": [
+                              {
+                               "op": "*",
+                               "args": [
+                                "apondn",
+                                "ipndn"
+                               ]
+                              },
+                              1e-11
+                             ]
+                            },
+                            {
+                             "op": "and",
+                             "args": [
+                              {
+                               "op": "<",
+                               "args": [
+                                "dhsn",
+                                1e-11
+                               ]
+                              },
+                              {
+                               "op": ">",
+                               "args": [
+                                {
+                                 "op": "*",
+                                 "args": [
+                                  "fsnow",
+                                  "dt"
+                                 ]
+                                },
+                                0.0001
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "op": "-",
+                           "args": [
+                            {
+                             "op": "/",
+                             "args": [
+                              "vsnon",
+                              "aicen"
+                             ]
+                            },
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            }
+                           ]
+                          },
+                          "dhsn"
+                         ]
+                        }
+                       ]
+                      },
+                      1e-11
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "min",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          "vsnon",
+                          "aicen"
+                         ]
+                        },
+                        {
+                         "op": "ifelse",
+                         "args": [
+                          {
+                           "op": "and",
+                           "args": [
+                            {
+                             "op": ">",
+                             "args": [
+                              {
+                               "op": "*",
+                               "args": [
+                                "apondn",
+                                "ipndn"
+                               ]
+                              },
+                              1e-11
+                             ]
+                            },
+                            {
+                             "op": "and",
+                             "args": [
+                              {
+                               "op": "<",
+                               "args": [
+                                "dhsn",
+                                1e-11
+                               ]
+                              },
+                              {
+                               "op": ">",
+                               "args": [
+                                {
+                                 "op": "*",
+                                 "args": [
+                                  "fsnow",
+                                  "dt"
+                                 ]
+                                },
+                                0.0001
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "op": "-",
+                           "args": [
+                            {
+                             "op": "/",
+                             "args": [
+                              "vsnon",
+                              "aicen"
+                             ]
+                            },
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            }
+                           ]
+                          },
+                          "dhsn"
+                         ]
+                        }
+                       ]
+                      },
+                      0.03
+                     ]
+                    },
+                    1.0
+                   ]
+                  },
+                  0.0
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                1.0,
+                "ffracn"
+               ]
+              },
+              "apondn"
+             ]
+            },
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": ">=",
+               "args": [
+                "hpndn",
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "/",
+                   "args": [
+                    "vsnon",
+                    "aicen"
+                   ]
+                  },
+                  0.67
+                 ]
+                }
+               ]
+              },
+              1.0,
+              0.0
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "and",
+               "args": [
+                {
+                 "op": ">",
+                 "args": [
+                  {
+                   "op": "ifelse",
+                   "args": [
+                    {
+                     "op": "<",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        {
+                         "op": "*",
+                         "args": [
+                          "apondn",
+                          "ipndn"
+                         ]
+                        },
+                        {
+                         "op": "-",
+                         "args": [
+                          {
+                           "op": "/",
+                           "args": [
+                            "vsnon",
+                            "aicen"
+                           ]
+                          },
+                          {
+                           "op": "ifelse",
+                           "args": [
+                            {
+                             "op": "and",
+                             "args": [
+                              {
+                               "op": ">",
+                               "args": [
+                                {
+                                 "op": "*",
+                                 "args": [
+                                  "apondn",
+                                  "ipndn"
+                                 ]
+                                },
+                                1e-11
+                               ]
+                              },
+                              {
+                               "op": "and",
+                               "args": [
+                                {
+                                 "op": "<",
+                                 "args": [
+                                  "dhsn",
+                                  1e-11
+                                 ]
+                                },
+                                {
+                                 "op": ">",
+                                 "args": [
+                                  {
+                                   "op": "*",
+                                   "args": [
+                                    "fsnow",
+                                    "dt"
+                                   ]
+                                  },
+                                  0.0001
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            },
+                            {
+                             "op": "-",
+                             "args": [
+                              {
+                               "op": "/",
+                               "args": [
+                                "vsnon",
+                                "aicen"
+                               ]
+                              },
+                              {
+                               "op": "*",
+                               "args": [
+                                "fsnow",
+                                "dt"
+                               ]
+                              }
+                             ]
+                            },
+                            "dhsn"
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      1e-11
+                     ]
+                    },
+                    0.0,
+                    {
+                     "op": "ifelse",
+                     "args": [
+                      {
+                       "op": "and",
+                       "args": [
+                        {
+                         "op": ">",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            "apondn",
+                            "ipndn"
+                           ]
+                          },
+                          1e-11
+                         ]
+                        },
+                        {
+                         "op": "and",
+                         "args": [
+                          {
+                           "op": "<",
+                           "args": [
+                            "dhsn",
+                            1e-11
+                           ]
+                          },
+                          {
+                           "op": ">",
+                           "args": [
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            },
+                            0.0001
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          "vsnon",
+                          "aicen"
+                         ]
+                        },
+                        {
+                         "op": "*",
+                         "args": [
+                          "fsnow",
+                          "dt"
+                         ]
+                        }
+                       ]
+                      },
+                      "dhsn"
+                     ]
+                    }
+                   ]
+                  },
+                  1e-11
+                 ]
+                },
+                {
+                 "op": ">=",
+                 "args": [
+                  {
+                   "op": "-",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      "vsnon",
+                      "aicen"
+                     ]
+                    },
+                    {
+                     "op": "ifelse",
+                     "args": [
+                      {
+                       "op": "and",
+                       "args": [
+                        {
+                         "op": ">",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            "apondn",
+                            "ipndn"
+                           ]
+                          },
+                          1e-11
+                         ]
+                        },
+                        {
+                         "op": "and",
+                         "args": [
+                          {
+                           "op": "<",
+                           "args": [
+                            "dhsn",
+                            1e-11
+                           ]
+                          },
+                          {
+                           "op": ">",
+                           "args": [
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            },
+                            0.0001
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          "vsnon",
+                          "aicen"
+                         ]
+                        },
+                        {
+                         "op": "*",
+                         "args": [
+                          "fsnow",
+                          "dt"
+                         ]
+                        }
+                       ]
+                      },
+                      "dhsn"
+                     ]
+                    }
+                   ]
+                  },
+                  1e-11
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "min",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  {
+                   "op": "-",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      "vsnon",
+                      "aicen"
+                     ]
+                    },
+                    {
+                     "op": "ifelse",
+                     "args": [
+                      {
+                       "op": "and",
+                       "args": [
+                        {
+                         "op": ">",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            "apondn",
+                            "ipndn"
+                           ]
+                          },
+                          1e-11
+                         ]
+                        },
+                        {
+                         "op": "and",
+                         "args": [
+                          {
+                           "op": "<",
+                           "args": [
+                            "dhsn",
+                            1e-11
+                           ]
+                          },
+                          {
+                           "op": ">",
+                           "args": [
+                            {
+                             "op": "*",
+                             "args": [
+                              "fsnow",
+                              "dt"
+                             ]
+                            },
+                            0.0001
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          "vsnon",
+                          "aicen"
+                         ]
+                        },
+                        {
+                         "op": "*",
+                         "args": [
+                          "fsnow",
+                          "dt"
+                         ]
+                        }
+                       ]
+                      },
+                      "dhsn"
+                     ]
+                    }
+                   ]
+                  },
+                  0.03
+                 ]
+                },
+                1.0
+               ]
+              },
+              0.0
+             ]
+            }
+           ]
+          },
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            "ffracn"
+           ]
+          },
+          "apondn"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "shortwave_band_weights": {
+    "description": "Broadband albedo of the dEdd scheme from the four band albedos (the history albedos albice/albsno/albpnd of shortwave_dEdd, icepack_shortwave.F90:1496-1498, 1544-1546, 1583-1585): al = awtvdr*alvdr + awtidr*alidr + awtvdf*alvdf + awtidf*alidf with the band weights awtvdr = 0.00318 (visible, direct), awtidr = 0.00182 (near-IR, direct), awtvdf = 0.63282 (visible, diffuse), awtidf = 0.36218 (near-IR, diffuse) (icepack_parameters.F90:218-221).",
+    "params": ["alvdr", "alidr", "alvdf", "alidf"],
+    "body": {
+     "op": "+",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        0.00318,
+        "alvdr"
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        0.00182,
+        "alidr"
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        0.63282,
+        "alvdf"
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        0.36218,
+        "alidf"
+       ]
+      }
+     ]
+    }
+   },
+   "meltpond_sealvl_dvn": {
+    "description": "Change in the sea-level melt-pond volume of a category, 'hlid' pond option (compute_ponds_sealvl, icepack_meltpond_sealvl.F90:50-265): dvpondn = (meltt*rhoi + melts*rhos + frain*dt)/rhofresh (F90:157, the use_smliq_pnd = false branch) corrected by the refrozen-lid change dvpondn = dvpondn - dhlid*apnd*rhoi/rhofresh (F90:195). Under frzpnd = 'hlid' the lid starts at the existing lid thickness hlid = ipnd (F90:171): freeze-up (dvpondn = 0) grows the lid with the Stefan law bdt = -2*Ts*kice*dt/(rhoi*Lfresh) for Ts = Tair - Tffresh < 0, dhlid = 0.5*sqrt(bdt) over open water replaced by 0.5*bdt/hlid for extant ice (F90:176-178), capped by min(dhlid, hpnd*rhofresh/rhoi) (F90:179); melting (dvpondn != 0) shrinks the lid with dhlid = max(fsurfn*dt/(rhoi*Lfresh), 0) then dhlid = -min(dhlid, hlid) (F90:185-187). kice = 2.03 (icepack_parameters.F90:88), rhoi = 917, rhos = 330, rhofresh = 1000, Lfresh = 3.34e5, Tffresh = 273.15 (F90:62, 61, 66, 74, 82). The melt-branch ffrac computation (F90:188-193) does not feed dvpondn and the hypsometry/freeboard continuation with the tracer update apnd/hpnd/ipnd = hlid (F90:205-262) is done by the caller, so both are documented but not part of this template; following the meltpond_cesm_dvn convention, meltt/melts are supplied as continuous rates and the output is the per-step change (diagnostic, not pinned by the stage-2 tests).",
+    "params": ["meltt", "melts", "frain", "dt", "Tair", "fsurfn", "aicen", "vicen", "vsnon", "apnd", "hpnd", "ipnd", "dhsn"],
+    "body": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": ">",
+       "args": [
+        "aicen",
+        1e-11
+       ]
+      },
+      {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "<",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            "vicen",
+            "aicen"
+           ]
+          },
+          0.01
+         ]
+        },
+        0.0,
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                "meltt",
+                917.0
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                "melts",
+                330.0
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                "frain",
+                "dt"
+               ]
+              }
+             ]
+            },
+            1000.0
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "ifelse",
+             "args": [
+              {
+               "op": "==",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      "meltt",
+                      917.0
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      "melts",
+                      330.0
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      "frain",
+                      "dt"
+                     ]
+                    }
+                   ]
+                  },
+                  1000.0
+                 ]
+                },
+                0.0
+               ]
+              },
+              {
+               "op": "ifelse",
+               "args": [
+                {
+                 "op": "<",
+                 "args": [
+                  {
+                   "op": "-",
+                   "args": [
+                    "Tair",
+                    273.15
+                   ]
+                  },
+                  0.0
+                 ]
+                },
+                {
+                 "op": "min",
+                 "args": [
+                  {
+                   "op": "ifelse",
+                   "args": [
+                    {
+                     "op": ">",
+                     "args": [
+                      "ipnd",
+                      {
+                       "op": "*",
+                       "args": [
+                        0.5,
+                        {
+                         "op": "sqrt",
+                         "args": [
+                          {
+                           "op": "/",
+                           "args": [
+                            {
+                             "op": "*",
+                             "args": [
+                              {
+                               "op": "-",
+                               "args": [
+                                {
+                                 "op": "-",
+                                 "args": [
+                                  "Tair",
+                                  273.15
+                                 ]
+                                }
+                               ]
+                              },
+                              2.0,
+                              2.03,
+                              "dt"
+                             ]
+                            },
+                            306278000.0
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "/",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        0.5,
+                        {
+                         "op": "/",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            {
+                             "op": "-",
+                             "args": [
+                              {
+                               "op": "-",
+                               "args": [
+                                "Tair",
+                                273.15
+                               ]
+                              }
+                             ]
+                            },
+                            2.0,
+                            2.03,
+                            "dt"
+                           ]
+                          },
+                          306278000.0
+                         ]
+                        }
+                       ]
+                      },
+                      "ipnd"
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      0.5,
+                      {
+                       "op": "sqrt",
+                       "args": [
+                        {
+                         "op": "/",
+                         "args": [
+                          {
+                           "op": "*",
+                           "args": [
+                            {
+                             "op": "-",
+                             "args": [
+                              {
+                               "op": "-",
+                               "args": [
+                                "Tair",
+                                273.15
+                               ]
+                              }
+                             ]
+                            },
+                            2.0,
+                            2.03,
+                            "dt"
+                           ]
+                          },
+                          306278000.0
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    "hpnd",
+                    {
+                     "op": "/",
+                     "args": [
+                      1000.0,
+                      917.0
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                0.0
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "min",
+                 "args": [
+                  {
+                   "op": "max",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      {
+                       "op": "*",
+                       "args": [
+                        "fsurfn",
+                        "dt"
+                       ]
+                      },
+                      306278000.0
+                     ]
+                    },
+                    0.0
+                   ]
+                  },
+                  "ipnd"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            "apnd",
+            {
+             "op": "/",
+             "args": [
+              917.0,
+              1000.0
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      0.0
+     ]
+    }
+   }
   }
  }
-}
