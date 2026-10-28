@@ -51,7 +51,7 @@ the constant scheme remains for the assembly Control), `ktherm = 2` (mushy), `co
 | `cice_thermodynamics.esm` | Model `Thermodynamics` — the D-class column physics: prep_radiation dEdd shortwave/albedo, the mushy (ktherm = 2) vertical heat conduction and surface energy balance, growth/melt/ponds (frzpnd = hlid sea-level) and ocean heat/fresh/salt fluxes; 65 equations over ncat × nilyr/nslyr | `icepack_shortwave.F90` (step_radiation, dEdd set_eff/set_snow), `icepack_therm_mushy.F90` (two-stage mushy tridiagonal 1800-1985, semi-discrete flux-divergence ODEs), `icepack_mushy_physics.F90` (temperature/enthalpy inversions), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559), `icepack_meltpond_sealvl.F90` (compute_ponds_sealvl, dvn) |
 | `cice_dynamics.esm` | Model `Dynamics` — B-grid momentum balance (continuous limit of stepu) and classic-EVP stress relaxation ODEs, Hibler strength, viscosities; 34 equations over one cell | `ice_dyn_shared.F90`: stepu 923-964, dyn_prep2 815-833, dyn_finish 1345-1348, Tmass 540; `ice_dyn_evp.F90`: stress 1584-1609 |
 | `cice_transport.esm` | Model `Transport` — per-category conservative advection d(a)/dt + div(a·u) = 0 (and volume forms) as spatial-D rewrite targets; enthalpy-tracer statement documented, deferred to stage 3 | `ice_transport_driver.F90`: 251-700; `ice_transport_remap.F90`: 317-831 |
-| `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; the similarity atmo boundary layer (5-iteration unroll) with the aicen_init-weighted reference-height exports, and the Rothrock strength law as an algebraic probe of the dynamics physics; 154 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260; `icepack_atmo.F90`: atmo_boundary_layer 52-389; `icepack_mechred.F90`: ridge_itd 848-1036, icepack_ice_strength 1660-1712 |
+| `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; the similarity atmo boundary layer (5-iteration unroll) with the aicen_init-weighted reference-height exports, the Rothrock strength law, and the dynamics pointwise-law probes (EVP stress maps, strain invariant, viscosities/replacement pressure, stepu ocean-ice stress) as algebraic probes of the dynamics physics; 166 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260; `icepack_atmo.F90`: atmo_boundary_layer 52-389; `icepack_mechred.F90`: ridge_itd 848-1036, icepack_ice_strength 1660-1712 |
 | `cice.esm` | Top-level assembly: mounts the four subcomponents by reference + inline `Control` (dt_dyn subcycling, constant atmo boundary layer), 59 `variable_map` coupling entries, solver block | `CICE_RunMod.F90`: ice_step 109-369; `ice_step_mod.F90`: step_dyn_horiz 990-1074; `ice_forcing.F90`: prepare_forcing 1606-1825; `icepack_atmo.F90`: 398-496 |
 
 The PDEs are written as spatial-D rewrite targets
@@ -187,11 +187,21 @@ descriptions. Representative transcriptions:
    precision for Tref/Qref. The assembly `Control` still uses the constant
    scheme for the stresses (strairxT/strairyT stay parameters; the similarity
    stress wiring is a stage-3 concern).
-6. **Rothrock strength in the coupling cap.** The kstrength = 1 strength law
-   (icepack_mechred.F90:1660-1712) is transcribed and dump-pinned in `IceCap`
-   because the dynamics skeleton cannot compile tests (unlowered spatial D);
-   the `cice_ice_strength.csv` rows reproduce to rel 1e-9. The Hibler
-   kstrength ≠ 1 form stays available as `ice_strength_hibler`.
+6. **Dynamics physics in the coupling cap.** The kstrength = 1 Rothrock
+   strength law (icepack_mechred.F90:1660-1712) and the dynamics pointwise
+   laws — the EVP stress maps (`evp_stressp/m/12_update`,
+   ice_dyn_evp.F90:1584-1609), the strain invariant and
+   viscosities/replacement pressure (`strain_invariant_delta`,
+   `viscosity_scale`, `bulk_viscosity`, `shear_viscosity`,
+   `replacement_pressure`, ice_dyn_shared.F90:2156-2159, 2467-2471), and the
+   stepu ocean-ice stress (`ocean_ice_stress_magnitude`,
+   `seabed_stress_coefficient` plus the waterx/watery projections, F90:817-818,
+   931-937) — are transcribed and dump-pinned in `IceCap` because the dynamics
+   skeleton cannot compile tests (unlowered spatial D); the `cice_evp_stress.csv`
+   / `cice_evp_momentum.csv` / `cice_ice_strength.csv` rows reproduce to rel
+   1e-12 / 1e-9. The Hibler kstrength ≠ 1 form stays available as
+   `ice_strength_hibler`. The spatial-D-dependent ODEs and stencils of
+   `cice_dynamics.esm` remain stage-3 deferrals (see the coverage limits).
 7. **Enthalpy-tracer transport documented, not carried.** The conservative
    forms `d(vicen·qicen)/dt + div(vicen·qicen·u) = 0` are the Fortran's type-2
    tracer transport (ice_transport_driver.F90:98-102); the product-form LHS
@@ -225,25 +235,31 @@ pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
-| `cice_coupling.esm` | 36 | 47 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), and the Rothrock strength law (2 dump rows) |
+| `cice_coupling.esm` | 40 | 69 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), the Rothrock strength law (2 dump rows), the EVP stress pointwise laws Delta/zetax2/etax2/rep_prs and the newp/newm/new12 subcycle maps (2 dump rows, different cells/corners/ksub), and the stepu ocean-ice stress laws vrel/taux/tauy/Cb (2 dump rows) |
 | `cice_thermodynamics.esm` | 11 | 16 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswint = swabs − fswsfc − fswthru; plus the mushy enthalpy↔temperature inversions zTin/zTsn (eqs 1-2) against the `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns; all to round-off (`rel 1e-12`) |
 | `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
 | `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
 | `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
 
-All 32 original coupling assertions reproduce the dumped values to round-off
-(`rel 1e-12`); every expected value traces to a specific dump row (step, cell,
-ncat) cited in the test description. The 14 added assertions pin the
-similarity exports (Si_tref/Si_qref at `rel 1e-9`, machine precision) and the
-Rothrock strength (two dump rows at `rel 1e-9`); Si_u10 carries a documented
-`rel 1e-4` gap: the uvelT_icep reconstruction (ice_step_mod.F90:114-128, the
-uarea-weighted average of the U-point uvel) reproduces the run's T-point
-velocity only to ~1e-4 m/s, and Uref = |Uatm−U|·rd/rdn amplifies that
-difference by rd/rdn ≈ 8. The source of the residual is unidentified (the
-run-side value is consumed inside step_therm1, not dumped); the pin is kept at
-the observed precision rather than tightening past it. The 16 thermodynamics
-assertions (11 tests) likewise reproduce `cice_albedo.csv` and the
-`cice_thermo_state.csv` zTin/zTsn columns to round-off.
+All 47 pre-probe coupling assertions reproduce the dumped values at the
+tolerances documented per test: the imports/exports/aggregations at round-off
+(`rel 1e-12`, every expected value tracing to a specific dump row (step, cell,
+ncat) cited in the test description), the similarity exports (Si_tref/Si_qref
+at `rel 1e-9`, machine precision) and the Rothrock strength (two dump rows at
+`rel 1e-9`); Si_u10 carries a documented `rel 1e-4` gap: the uvelT_icep
+reconstruction (ice_step_mod.F90:114-128, the uarea-weighted average of the
+U-point uvel) reproduces the run's T-point velocity only to ~1e-4 m/s, and
+Uref = |Uatm−U|·rd/rdn amplifies that difference by rd/rdn ≈ 8. The source of
+the residual is unidentified (the run-side value is consumed inside
+step_therm1, not dumped); the pin is kept at the observed precision rather
+than tightening past it. The 22 dynamics-probe assertions (4 tests) reproduce
+`cice_evp_stress.csv` and `cice_evp_momentum.csv` to round-off (`rel 1e-12`):
+all probe inputs are bound from the dump rows, and a Python transcription of
+the templates' laws reproduces every asserted column over all 184,320 stress
+rows and 40,320 momentum rows (see "Transcription fixes found while writing
+the tests" for the e_factor/epp2i/capping/Ktens fit results). The 16
+thermodynamics assertions (11 tests) likewise reproduce `cice_albedo.csv` and
+the `cice_thermo_state.csv` zTin/zTsn columns to round-off.
 
 ### Derived inputs (the raw CMEPS fields are not dumped)
 
@@ -318,6 +334,28 @@ must reproduce the dumped value:
    coupling model's inline zvir/cp_air (eqs 68, 69, 75), and the `Control`
    Lheat binding (`cice.esm` eq 6, Lsub) now carry the run values, with the
    cap override cited in the template descriptions.
+5. **Dynamics probe pins — findings.** (a) The `cice_evp_stress.csv` corner
+   quantities are area-weighted (strain rate × corner area, m²/s); the dump
+   header's `zetax2 [kg/s]` is the Fortran variable's nominal unit — the
+   corner value is strength/max(Delta, DminTarea) = kg/(m²·s), and the area
+   factors cancel in the stress update so `zetax2·divu − rep_prs` closes as
+   N/m (the probe declares the honest kg/m²/s dimension, annotated). The
+   D-class constants were verified by fitting, not assumed: e_factor =
+   e_yieldcurve²/e_plasticpot⁴ = 0.25 reproduces the dumped Delta from
+   divu/tension/shear on all 184,320 rows, epp2i = 1/e_plasticpot² = 0.25
+   reproduces etax2/zetax2, and capping = 1/Ktens = 0 reproduces
+   zetax2/rep_prs — no constant mismatch found. (b) The
+   `cice_evp_momentum.csv` taux/tauy columns carry the **stepu partial
+   stresses** `taux = vrel·waterx`, `tauy = vrel·watery` (ice_dyn_shared.F90:
+   933-935, "NOTE this is not the entire ocn stress term"), not the
+   dyn_finish full form `vrel·((uocn−uvel)·cosw − …)` of F90:1345-1348 that
+   `cice_dynamics.esm` eqs 26-27 transcribe (the difference is the
+   −vrel·uvel term); the probe transposes the stepu form, with the
+   dyn_prep2 waterx/watery rotation (F90:817-818) and `sign(1,fm)` carried
+   as the `ocn_hemis` parameter (bound from the dumped fm; unobservable in
+   this run since sinw = 0). (c) `TbU = 0` in every traced row (no landfast
+   grounding in the traced region), so the Cb pins check the wiring with a
+   zero numerator; a nonzero-Cb pin needs a landfast cell from a later run.
 
 ### Coverage limits (why the other files have no tests)
 
@@ -355,12 +393,19 @@ must reproduce the dumped value:
    (`unlowered_operator: rewrite-target operator D reached evaluation without
    being lowered`), even for `{0,0}` tests asserting only non-D variables, so
    `cice_dynamics.esm`, `cice_transport.esm`, and `cice.esm` carry `tests: []`.
-   The EVP momentum/stress and ice-strength dumps (`cice_evp_momentum.csv`,
-   `cice_evp_stress.csv`, `cice_ice_strength.csv`, `cice_dyn_state.csv`,
-   `cice_transport_state.csv`) will be pinned once the EarthSciDiscretizations
-   lowering lands (stage 3); the ice-strength law itself is already pinned in
-   the coupling cap (see above), and `cice_dyn_state.csv` feeds the similarity
-   tests through the uvelT/vvelT reconstruction.
+   The dynamics **pointwise** laws are pinned in the coupling cap instead:
+   the EVP stress maps and viscosities (`cice_evp_stress.csv`) and the stepu
+   ocean-ice stress (`cice_evp_momentum.csv`), plus the Rothrock strength
+   (`cice_ice_strength.csv`) — all inputs are dumped, so the pins bind them
+   via `parameter_overrides` and assert the outputs to round-off. What stays
+   deferred to the stage-3 discretization lowering: the spatial-D-dependent
+   ODEs and stencils — the strain-rate corner stencils that feed
+   divu/tension/shear from the velocity field, the stress divergence
+   strintx/strinty, the momentum balance ODE, and the stress relaxation ODEs
+   (the stepu implicit-solve machinery cca/ccb/ab2/cc1/cc2 of
+   `cice_dynamics.esm` is documented there rather than transcribed).
+   `cice_dyn_state.csv` continues to feed the similarity tests through the
+   uvelT/vvelT reconstruction.
 - **fswthru merge timing.** `merge_fluxes` weights fswthrun by the mid-thermo
    aicen (icepack_therm_vertical.F90:3169), which is not a dumped state; a
    per-category fswthru pin misses the dump by 0.1-18%, so Fioi_swpen uses the
@@ -374,7 +419,7 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
-assertions plus the 63 CICE assertions (47 coupling + 16 thermodynamics) with
+assertions plus the 85 CICE assertions (69 coupling + 16 thermodynamics) with
 0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)

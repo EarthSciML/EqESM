@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_coupling",
-  "description": "CICE cap-boundary component (stage 2 of the EqESM project): the med<->ice field conversions and the export aggregation of ice_import_export.F90 (cesm3_cice6_6_3_22, cicecore/drivers/nuopc/cmeps/) as algebraic equations, per the stage1/boundaries.md 1.3 boundary table. Imports (med -> ice), exactly ice_import (F90:414-700): the ocean state So_t -> sst, So_s -> sss, So_u/So_v -> uocn/vocn, So_dhdx/So_dhdy -> ss_tltx/ss_tlty (F90:477-482, 610-624); the atmosphere state Sa_z -> zlvl, Sa_tbot -> Tair, Sa_shum -> Qa, Sa_u/Sa_v -> uatm/vatm (F90:487-501, 606-608); the potential-temperature branch Sa_ptem -> potT and Sa_dens -> rhoa when both are present, else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 and rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) with the Fortran's zero/1.2 fallbacks (F90:503-515, 655-681); the flux imports Fioo_q -> frzmlt, Faxa_swvdr/swndr/swvdf/swndf -> swvdr/swidr/swvdf/swidf, Faxa_lwdn -> flw, Faxa_rain -> frain, Faxa_snow -> fsnow, each multiplied by med2mod_areacor (F90:529-575) with frain converted kg/m2/s -> m/s by rhofresh for the melt-pond consumption (icepack_meltpond_lvl.F90:160). Exports (ice -> med), exactly ice_export (F90:1030-1317) and the merge_fluxes aggregation of icepack_flux.F90:180-260: the ice-fraction scaling ailohi = min(aice, 1) (F90:949) and the state fields Si_ifrac, Si_t = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; the trcr(:,nt_Tsfc) aggregate of icepack_aggregate), the merge_fluxes aggregations that scale_fluxes divides by the ice area aice (ice_flux.F90:1565-1592, so the coupled fields are per unit ice area) include Si_avsdr/anidr/avsdf/anidf = [sum_n(albedo*aicen)]/aice (the coupling_prep albedo aggregation, CICE_RunMod.F90:549-582; direct = diffuse under the ccsm3 shortwave scheme, icepack_shortwave.F90:568-572), Si_vice = sum_n vicen, Si_vsno = sum_n vsnon, Si_snowh = vsno/ailohi for ailohi > 0 (F90:1121-1129); the air-ice fluxes Faii_taux/tauy = strairxT/strairyT (the T-point atmo stress of the constant boundary-layer scheme, F90:962-964), Faii_lat/sen = [sum_n(flatn/fsensn*aicen)]/aice (icepack_flux.F90:204-206), Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice with the outgoing-longwave fix -stefan_boltzmann*(Tf+Tffresh)^4/ailohi where flwout > -puny (F90:213-215, 1149-1164), Faii_evap = [sum_n(evapn*aicen)]/aice, Faii_swnet = [sum_n(swabs*aicen)]/aice; and the ice-ocean fluxes Fioi_swpen = [sum_n(fswthru*aicen)]/aice (F90:247), Fioi_melth = [sum_n(fhocnn*aicen)]/aice, Fioi_meltw = [sum_n(freshn*aicen)]/aice, Fioi_salt = [sum_n(fsaltn*aicen)]/aice, Fioi_taux/tauy = -strocnxT/strocnyT (F90:966-968, the sign flip of the ice-into-ocean stress convention). All Faii_*/Fioi_* exports carry mod2med_areacor (state_setexport areacor, F90:1051-1317); the Si_* state exports do not. The wave (Si_thick, Si_floediam), aerosol (Fioi_bcpho/bcphi, Fioi_flxdst), isotope (Fioi_meltw_wiso, Faii_evap_wiso, Si_qref_wiso), and per-band penetration (Fioi_swpen_vdr/vdf/idr/idf) exports are deferred and carried as zero parameters; the reference-height exports Si_u10/Si_tref/Si_qref come from the transcribed similarity scheme (atmo_boundary_layer, icepack_atmo.F90:52-389): the atmbndy = 'default' similarity solve under the D-class natmiter = 5 and atmiter_conv = 0 (the do-while of F90:269 always runs 5 updates; unrolled here) with highfreq = .true. relative wind, and the merge_fluxes aicen_init weighting (icepack_flux.F90:180-260) divided by the post-thermo ice area in scale_fluxes (ice_flux.F90:1565-1592), so Si_tref = sum_n(Trefn*aicen_init)/sum_n(aicen) and likewise for Si_qref and Si_u10. The Rothrock ice strength (icepack_mechred.F90:1660-1712, kstrength = 1) is carried here as an algebraic probe of the dynamics physics, since the dynamics skeleton tests cannot compile on the single-cell geometry; the D-class ridge settings are krdg_partic = 1, krdg_redist = 1, mu_rdg = 4. The POP-grid rotation of tauxa/tauya/tauxo/tauyo (ANGLET, F90:962-968) and the tmask ocean-mask guards collapse to the identity on the single-cell skeleton and are documented in the descriptions. The Tf ocean freezing temperature is the import-side shr_frz_freezetemp law (share/shr_frz_mod.F90.in:94-105, the Assur-1958 liquidus clamped to >= -2 C; bugs.md #6) via the shared sea_freezing_temperature template. The tests block pins the imports, the freezing-temperature law, and the export aggregation (including the scale_fluxes /aice division) against the stage-1 dumps (stage1/dumps/cice/); see the test descriptions and stage2/README-cice.md. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90."
+  "description": "CICE cap-boundary component (stage 2 of the EqESM project): the med<->ice field conversions and the export aggregation of ice_import_export.F90 (cesm3_cice6_6_3_22, cicecore/drivers/nuopc/cmeps/) as algebraic equations, per the stage1/boundaries.md 1.3 boundary table. Imports (med -> ice), exactly ice_import (F90:414-700): the ocean state So_t -> sst, So_s -> sss, So_u/So_v -> uocn/vocn, So_dhdx/So_dhdy -> ss_tltx/ss_tlty (F90:477-482, 610-624); the atmosphere state Sa_z -> zlvl, Sa_tbot -> Tair, Sa_shum -> Qa, Sa_u/Sa_v -> uatm/vatm (F90:487-501, 606-608); the potential-temperature branch Sa_ptem -> potT and Sa_dens -> rhoa when both are present, else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 and rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) with the Fortran's zero/1.2 fallbacks (F90:503-515, 655-681); the flux imports Fioo_q -> frzmlt, Faxa_swvdr/swndr/swvdf/swndf -> swvdr/swidr/swvdf/swidf, Faxa_lwdn -> flw, Faxa_rain -> frain, Faxa_snow -> fsnow, each multiplied by med2mod_areacor (F90:529-575) with frain converted kg/m2/s -> m/s by rhofresh for the melt-pond consumption (icepack_meltpond_lvl.F90:160). Exports (ice -> med), exactly ice_export (F90:1030-1317) and the merge_fluxes aggregation of icepack_flux.F90:180-260: the ice-fraction scaling ailohi = min(aice, 1) (F90:949) and the state fields Si_ifrac, Si_t = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; the trcr(:,nt_Tsfc) aggregate of icepack_aggregate), the merge_fluxes aggregations that scale_fluxes divides by the ice area aice (ice_flux.F90:1565-1592, so the coupled fields are per unit ice area) include Si_avsdr/anidr/avsdf/anidf = [sum_n(albedo*aicen)]/aice (the coupling_prep albedo aggregation, CICE_RunMod.F90:549-582; direct = diffuse under the ccsm3 shortwave scheme, icepack_shortwave.F90:568-572), Si_vice = sum_n vicen, Si_vsno = sum_n vsnon, Si_snowh = vsno/ailohi for ailohi > 0 (F90:1121-1129); the air-ice fluxes Faii_taux/tauy = strairxT/strairyT (the T-point atmo stress of the constant boundary-layer scheme, F90:962-964), Faii_lat/sen = [sum_n(flatn/fsensn*aicen)]/aice (icepack_flux.F90:204-206), Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice with the outgoing-longwave fix -stefan_boltzmann*(Tf+Tffresh)^4/ailohi where flwout > -puny (F90:213-215, 1149-1164), Faii_evap = [sum_n(evapn*aicen)]/aice, Faii_swnet = [sum_n(swabs*aicen)]/aice; and the ice-ocean fluxes Fioi_swpen = [sum_n(fswthru*aicen)]/aice (F90:247), Fioi_melth = [sum_n(fhocnn*aicen)]/aice, Fioi_meltw = [sum_n(freshn*aicen)]/aice, Fioi_salt = [sum_n(fsaltn*aicen)]/aice, Fioi_taux/tauy = -strocnxT/strocnyT (F90:966-968, the sign flip of the ice-into-ocean stress convention). All Faii_*/Fioi_* exports carry mod2med_areacor (state_setexport areacor, F90:1051-1317); the Si_* state exports do not. The wave (Si_thick, Si_floediam), aerosol (Fioi_bcpho/bcphi, Fioi_flxdst), isotope (Fioi_meltw_wiso, Faii_evap_wiso, Si_qref_wiso), and per-band penetration (Fioi_swpen_vdr/vdf/idr/idf) exports are deferred and carried as zero parameters; the reference-height exports Si_u10/Si_tref/Si_qref come from the transcribed similarity scheme (atmo_boundary_layer, icepack_atmo.F90:52-389): the atmbndy = 'default' similarity solve under the D-class natmiter = 5 and atmiter_conv = 0 (the do-while of F90:269 always runs 5 updates; unrolled here) with highfreq = .true. relative wind, and the merge_fluxes aicen_init weighting (icepack_flux.F90:180-260) divided by the post-thermo ice area in scale_fluxes (ice_flux.F90:1565-1592), so Si_tref = sum_n(Trefn*aicen_init)/sum_n(aicen) and likewise for Si_qref and Si_u10. The Rothrock ice strength (icepack_mechred.F90:1660-1712, kstrength = 1) is carried here as an algebraic probe of the dynamics physics, and the dynamics pointwise laws (the EVP stress maps, the strain invariant, the viscosities/replacement pressure, and the stepu ocean-ice stress) are carried here as dump-pinned probes as well, since the dynamics skeleton tests cannot compile on the single-cell geometry; the D-class ridge settings are krdg_partic = 1, krdg_redist = 1, mu_rdg = 4. The POP-grid rotation of tauxa/tauya/tauxo/tauyo (ANGLET, F90:962-968) and the tmask ocean-mask guards collapse to the identity on the single-cell skeleton and are documented in the descriptions. The Tf ocean freezing temperature is the import-side shr_frz_freezetemp law (share/shr_frz_mod.F90.in:94-105, the Assur-1958 liquidus clamped to >= -2 C; bugs.md #6) via the shared sea_freezing_temperature template. The tests block pins the imports, the freezing-temperature law, and the export aggregation (including the scale_fluxes /aice division) against the stage-1 dumps (stage1/dumps/cice/); see the test descriptions and stage2/README-cice.md. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90."
  },
  "index_sets": {
   "ncat": {
@@ -1454,6 +1454,198 @@
      "units": "W/m^2",
      "default": 0.0,
      "description": "per-category shortwave transmitted through the ice into the ocean (the Fortran fswthrun, wired from the thermodynamics component), [W/m2]"
+    },
+    "evp_divu": {
+     "type": "parameter",
+     "units": "m^2/s",
+     "description": "area-weighted strain-rate divergence at the U corner (dump column divu of cice_evp_stress.csv; strain_rates, ice_dyn_shared.F90:2094-2105 - the B-grid corner strain rates enter the stress law as strain rate x area), [m2/s]",
+     "default": 0.0
+    },
+    "evp_tension": {
+     "type": "parameter",
+     "units": "m^2/s",
+     "description": "tension strain rate at the U corner (dump column tension; strain_rates, F90:2108-2119, x area), [m2/s]",
+     "default": 0.0
+    },
+    "evp_shear": {
+     "type": "parameter",
+     "units": "m^2/s",
+     "description": "shearing strain rate at the U corner (dump column shear; strain_rates, F90:2122-2133, x area), [m2/s]",
+     "default": 0.0
+    },
+    "evp_strength": {
+     "type": "parameter",
+     "units": "N/m",
+     "description": "ice strength P feeding the viscosities (dump column strength of cice_evp_stress.csv; the Rothrock strength of icepack_ice_strength, icepack_mechred.F90:1660-1712, pinned separately above), [N/m]",
+     "default": 0.0
+    },
+    "evp_DminTarea": {
+     "type": "parameter",
+     "units": "m^2/s",
+     "description": "minimum strain-rate denominator of the cell DminTarea = deltaminEVP*tarea (the DminArea input of visc_replpress, ice_dyn_shared.F90:2467-2468; deltaminEVP at ice_init.F90:454; dump column DminTarea), [m2/s]",
+     "default": 0.0
+    },
+    "evp_oldp": {
+     "type": "parameter",
+     "units": "N/m",
+     "description": "EVP sum stress stressp = sigma11 + sigma22 at the start of the subcycle (stressp_1 of stress, ice_dyn_evp.F90:1584-1591; dump column oldp), [N/m]",
+     "default": 0.0
+    },
+    "evp_oldm": {
+     "type": "parameter",
+     "units": "N/m",
+     "description": "EVP difference stress stressm = sigma11 - sigma22 at the start of the subcycle (stressm_1, F90:1593-1600; dump column oldm), [N/m]",
+     "default": 0.0
+    },
+    "evp_old12": {
+     "type": "parameter",
+     "units": "N/m",
+     "description": "EVP shear stress stress12 = sigma12 at the start of the subcycle (stress12_1, F90:1602-1609; dump column old12), [N/m]",
+     "default": 0.0
+    },
+    "evp_arlx1i": {
+     "type": "parameter",
+     "units": "1",
+     "description": "inverse elastic parameter arlx1i = 1/arlx = 1/(2*elasticDamp*ndte) (set_evp_parameters, ice_dyn_shared.F90:476; dump column arlx1i), [-]",
+     "default": 0.011574074074074073
+    },
+    "evp_revp": {
+     "type": "parameter",
+     "units": "1",
+     "description": "revised-EVP flag revp = 0 for classic EVP (set_evp_parameters, F90:473; dump column revp), [-]",
+     "default": 0.0
+    },
+    "evp_denom1": {
+     "type": "parameter",
+     "units": "1",
+     "description": "classic-EVP denominator denom1 = 1/(1+arlx1i) (set_evp_parameters, F90:478; dump column denom1), [-]",
+     "default": 0.988558352402746
+    },
+    "ocn_aiX": {
+     "type": "parameter",
+     "units": "1",
+     "description": "ice concentration at the U point (the aiX argument of stepu, ice_dyn_shared.F90:931; dump column aiX of cice_evp_momentum.csv), [-]",
+     "default": 0.0
+    },
+    "ocn_uold": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "x ice velocity at the start of the subcycle, the uold of stepu (F90:929-930; dump column uold), [m/s]",
+     "default": 0.0
+    },
+    "ocn_vold": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "y ice velocity at the start of the subcycle (dump column vold), [m/s]",
+     "default": 0.0
+    },
+    "ocn_uocn": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "x ocean surface current at the U point (stepu input uocn, F90:931; dump column uocn), [m/s]",
+     "default": 0.0
+    },
+    "ocn_vocn": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "y ocean surface current at the U point (dump column vocn), [m/s]",
+     "default": 0.0
+    },
+    "ocn_Cw": {
+     "type": "parameter",
+     "units": "1",
+     "description": "ocean-ice neutral drag coefficient Cdn_ocn (dragio = 0.00536, icepack_parameters.F90:266; dump column Cw), [-]",
+     "default": 0.00536
+    },
+    "ocn_TbU": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "description": "seabed stress factor (stepu, ice_dyn_shared.F90:937; zero in every traced row - no landfast grounding in the traced region), [N/m2]",
+     "default": 0.0
+    },
+    "ocn_cosw": {
+     "type": "parameter",
+     "units": "1",
+     "description": "cosine of the ocean-current rotation angle of the water stress (dyn_prep2, F90:817-818; the D-class run has cosw = 1), [-]",
+     "default": 1.0
+    },
+    "ocn_sinw": {
+     "type": "parameter",
+     "units": "1",
+     "description": "sine of the ocean-current rotation angle (dyn_prep2, F90:818; sinw = 0 in the D-class run), [-]",
+     "default": 0.0
+    },
+    "ocn_hemis": {
+     "type": "parameter",
+     "units": "1",
+     "description": "hemisphere factor sign(1,fm) of the water-stress rotation (F90:817-818); not a dump column - bound from the dumped fm of each row (unobservable in this run since sinw = 0), [-]",
+     "default": 1.0
+    },
+    "ocn_u0": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "velocity floor of the seabed stress denominator (namelist u0 = 5e-5 m/s; dump column u0), [m/s]",
+     "default": 5e-05
+    },
+    "evp_Delta": {
+     "type": "unknown",
+     "units": "m^2/s",
+     "description": "strain-rate invariant of the elliptical yield curve at the U corner, Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)) (strain_rates, ice_dyn_shared.F90:2156-2159; dump column Delta), [m2/s]"
+    },
+    "evp_tmpcalc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "shared scale of the viscosities and replacement pressure: capping*strength/max(Delta, DminArea) + (1-capping)*strength/(Delta + DminArea) (visc_replpress, ice_dyn_shared.F90:2467-2468; not a dump column - the internal tmpcalc of visc_replpress). The corner strain rates are area-weighted (m2/s), so the corner scale carries kg/(m2/s): the Fortran's nominal kg/s unit divides by the corner area (the area factors cancel in the stress update, where zetax2*divu closes as N/m), [kg/m2/s]"
+    },
+    "evp_zetax2": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "twice the bulk viscosity zetax2 = (1+Ktens)*tmpcalc (visc_replpress, F90:2469; dump column zetax2). Area-weighted corner value (kg/m2/s - the Fortran's nominal kg/s divides by the corner area, see evp_tmpcalc), [kg/m2/s]"
+    },
+    "evp_etax2": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "twice the shear viscosity etax2 = epp2i*zetax2 (visc_replpress, F90:2471; dump column etax2). Area-weighted corner value (kg/m2/s), [kg/m2/s]"
+    },
+    "evp_rep_prs": {
+     "type": "unknown",
+     "units": "N/m",
+     "description": "replacement pressure rep_prs = (1-Ktens)*tmpcalc*Delta (visc_replpress, F90:2470; dump column rep_prs), [N/m]"
+    },
+    "evp_newp": {
+     "type": "unknown",
+     "units": "N/m",
+     "description": "EVP sum stress after the subcycle update stressp_new = (stressp*(1-arlx1i*revp) + arlx1i*(zetax2*divu - rep_prs))*denom1 (stress, ice_dyn_evp.F90:1584-1591; dump column newp), [N/m]"
+    },
+    "evp_newm": {
+     "type": "unknown",
+     "units": "N/m",
+     "description": "EVP difference stress after the subcycle update (stress, F90:1593-1600; dump column newm), [N/m]"
+    },
+    "evp_new12": {
+     "type": "unknown",
+     "units": "N/m",
+     "description": "EVP shear stress after the subcycle update (stress, F90:1602-1609; dump column new12), [N/m]"
+    },
+    "ocn_vrel": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "relative ocean-ice current times the drag, vrel = aiX*rhow*Cw*|u_ocn - u| (stepu, ice_dyn_shared.F90:931-932; dump column vrel), [kg/m2/s]"
+    },
+    "ocn_taux": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "x partial ocean-ice stress of the momentum solve taux = vrel*waterx (stepu, F90:933-934; the code comments 'NOTE this is not the entire ocn stress term' - the dyn_finish full form F90:1345-1348 adds the -vrel*uvel term; dump column taux), [N/m2]"
+    },
+    "ocn_tauy": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "description": "y partial ocean-ice stress tauy = vrel*watery (stepu, F90:935; dump column tauy), [N/m2]"
+    },
+    "ocn_Cb": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "linear seabed (basal) stress coefficient Cb = TbU/(|u| + u0) (stepu, F90:937; dump column Cb), [kg/m2/s]"
     }
    },
    "equations": [
@@ -4259,6 +4451,209 @@
        "aksum"
       ]
      }
+    },
+    {
+     "lhs": "evp_Delta",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "strain_invariant_delta",
+      "bindings": {
+       "divu": "evp_divu",
+       "tension": "evp_tension",
+       "shear": "evp_shear",
+       "e_factor": 0.25
+      }
+     }
+    },
+    {
+     "lhs": "evp_tmpcalc",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "viscosity_scale",
+      "bindings": {
+       "capping": 1.0,
+       "strength": "evp_strength",
+       "Delta": "evp_Delta",
+       "DminArea": "evp_DminTarea"
+      }
+     }
+    },
+    {
+     "lhs": "evp_zetax2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "bulk_viscosity",
+      "bindings": {
+       "Ktens": 0.0,
+       "tmpcalc": "evp_tmpcalc"
+      }
+     }
+    },
+    {
+     "lhs": "evp_etax2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "shear_viscosity",
+      "bindings": {
+       "epp2i": 0.25,
+       "zetax2": "evp_zetax2"
+      }
+     }
+    },
+    {
+     "lhs": "evp_rep_prs",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "replacement_pressure",
+      "bindings": {
+       "Ktens": 0.0,
+       "tmpcalc": "evp_tmpcalc",
+       "Delta": "evp_Delta"
+      }
+     }
+    },
+    {
+     "lhs": "evp_newp",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "evp_stressp_update",
+      "bindings": {
+       "stressp": "evp_oldp",
+       "arlx1i": "evp_arlx1i",
+       "revp": "evp_revp",
+       "zetax2": "evp_zetax2",
+       "divu": "evp_divu",
+       "rep_prs": "evp_rep_prs",
+       "denom1": "evp_denom1"
+      }
+     }
+    },
+    {
+     "lhs": "evp_newm",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "evp_stressm_update",
+      "bindings": {
+       "stressm": "evp_oldm",
+       "arlx1i": "evp_arlx1i",
+       "revp": "evp_revp",
+       "etax2": "evp_etax2",
+       "tension": "evp_tension",
+       "denom1": "evp_denom1"
+      }
+     }
+    },
+    {
+     "lhs": "evp_new12",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "evp_stress12_update",
+      "bindings": {
+       "stress12": "evp_old12",
+       "arlx1i": "evp_arlx1i",
+       "revp": "evp_revp",
+       "etax2": "evp_etax2",
+       "shear": "evp_shear",
+       "denom1": "evp_denom1"
+      }
+     }
+    },
+    {
+     "lhs": "ocn_vrel",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_ice_stress_magnitude",
+      "bindings": {
+       "aiX": "ocn_aiX",
+       "rhow": 1026.0,
+       "Cw": "ocn_Cw",
+       "uocn": "ocn_uocn",
+       "vocn": "ocn_vocn",
+       "uvel": "ocn_uold",
+       "vvel": "ocn_vold"
+      }
+     }
+    },
+    {
+     "lhs": "ocn_taux",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "ocn_vrel",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "ocn_uocn",
+           "ocn_cosw"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "ocn_vocn",
+           "ocn_sinw",
+           "ocn_hemis"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ocn_tauy",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "ocn_vrel",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "ocn_vocn",
+           "ocn_cosw"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "ocn_uocn",
+           "ocn_sinw",
+           "ocn_hemis"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ocn_Cb",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "seabed_stress_coefficient",
+      "bindings": {
+       "TbU": "ocn_TbU",
+       "uvel": "ocn_uold",
+       "vvel": "ocn_vold",
+       "u0": "ocn_u0"
+      }
+     }
     }
    ],
    "tests": [
@@ -5511,6 +5906,224 @@
        "tolerance": {
         "rel": 1e-09
        }
+      }
+     ]
+    },
+    {
+     "id": "icecap_evp_stress_step1_cell2_4_corner1_ksub1",
+     "description": "Instantaneous pin of the EVP stress pointwise laws against cice_evp_stress.csv row (step 1, i=2, j=4, corner 1 = NE, ksub 1): the strain invariant Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)) (strain_rates, ice_dyn_shared.F90:2156-2159) with e_factor = e_yieldcurve^2/e_plasticpot^4 = 0.25 (set_evp_parameters, F90:465; the D-class e_yieldcurve = e_plasticpot = 2 - verified by fitting the dumped Delta column against divu/tension/shear on all 184320 rows); the capped viscosity scale tmpcalc = capping*strength/max(Delta, DminTarea) + (1-capping)*strength/(Delta + DminTarea) (visc_replpress, F90:2467-2468) with capping = 1 and Ktens = 0 (verified: zetax2 = strength/max(Delta, DminTarea) and rep_prs = strength*Delta/max(Delta, DminTarea) on every row); zetax2 = (1+Ktens)*tmpcalc, rep_prs = (1-Ktens)*tmpcalc*Delta, etax2 = epp2i*zetax2 with epp2i = 1/e_plasticpot^2 = 0.25 (F90:464, verified from the dumped etax2/zetax2 ratio); and the classic-EVP under-relaxed maps stressp_new = (stressp*(1-arlx1i*revp) + arlx1i*(zetax2*divu - rep_prs))*denom1, stressm_new = (stressm*(1-arlx1i*revp) + arlx1i*etax2*tension)*denom1, stress12_new = (stress12*(1-arlx1i*revp) + arlx1i*0.5*etax2*shear)*denom1 (stress, ice_dyn_evp.F90:1584-1609) with the dumped arlx1i, revp = 0 (classic EVP) and denom1. All inputs are bound from the dump row; the .esm reproduces the dumped Delta/zetax2/etax2/rep_prs/newp/newm/new12 to round-off.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "evp_divu": 20.907803428846478,
+      "evp_tension": 4.541672244273201,
+      "evp_shear": 24.03321850972089,
+      "evp_strength": 321248.8660482337,
+      "evp_DminTarea": 0.015253078080270946,
+      "evp_oldp": -162310.08205052456,
+      "evp_oldm": -33651.37177629694,
+      "evp_old12": 42746.51751297678,
+      "evp_arlx1i": 0.011574074074074075,
+      "evp_revp": 0.0,
+      "evp_denom1": 0.9885583524027459
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "evp_Delta",
+       "time": 0.0,
+       "expected": 24.221722459331474
+      },
+      {
+       "variable": "evp_zetax2",
+       "time": 0.0,
+       "expected": 13262.841508799132
+      },
+      {
+       "variable": "evp_etax2",
+       "time": 0.0,
+       "expected": 3315.710377199783
+      },
+      {
+       "variable": "evp_rep_prs",
+       "time": 0.0,
+       "expected": 321248.8660482337
+      },
+      {
+       "variable": "evp_newp",
+       "time": 0.0,
+       "expected": -160955.87038946955
+      },
+      {
+       "variable": "evp_newm",
+       "time": 0.0,
+       "expected": -33094.046357916224
+      },
+      {
+       "variable": "evp_new12",
+       "time": 0.0,
+       "expected": 42713.303308081115
+      }
+     ]
+    },
+    {
+     "id": "icecap_evp_stress_step1_cell2_5_corner3_ksub2",
+     "description": "Instantaneous pin of the EVP stress pointwise laws against cice_evp_stress.csv row (step 1, i=2, j=5, corner 3 = SW, ksub 2): the strain invariant Delta = sqrt(divu^2 + e_factor*(tension^2 + shear^2)) (strain_rates, ice_dyn_shared.F90:2156-2159) with e_factor = e_yieldcurve^2/e_plasticpot^4 = 0.25 (set_evp_parameters, F90:465; the D-class e_yieldcurve = e_plasticpot = 2 - verified by fitting the dumped Delta column against divu/tension/shear on all 184320 rows); the capped viscosity scale tmpcalc = capping*strength/max(Delta, DminTarea) + (1-capping)*strength/(Delta + DminTarea) (visc_replpress, F90:2467-2468) with capping = 1 and Ktens = 0 (verified: zetax2 = strength/max(Delta, DminTarea) and rep_prs = strength*Delta/max(Delta, DminTarea) on every row); zetax2 = (1+Ktens)*tmpcalc, rep_prs = (1-Ktens)*tmpcalc*Delta, etax2 = epp2i*zetax2 with epp2i = 1/e_plasticpot^2 = 0.25 (F90:464, verified from the dumped etax2/zetax2 ratio); and the classic-EVP under-relaxed maps stressp_new = (stressp*(1-arlx1i*revp) + arlx1i*(zetax2*divu - rep_prs))*denom1, stressm_new = (stressm*(1-arlx1i*revp) + arlx1i*etax2*tension)*denom1, stress12_new = (stress12*(1-arlx1i*revp) + arlx1i*0.5*etax2*shear)*denom1 (stress, ice_dyn_evp.F90:1584-1609) with the dumped arlx1i, revp = 0 (classic EVP) and denom1. All inputs are bound from the dump row; the .esm reproduces the dumped Delta/zetax2/etax2/rep_prs/newp/newm/new12 to round-off.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "evp_divu": -39.858108310696224,
+      "evp_tension": 64.43413635167755,
+      "evp_shear": -132.6714702865395,
+      "evp_strength": 87.09763709741893,
+      "evp_DminTarea": 0.01593032537954344,
+      "evp_oldp": -131.1390888910238,
+      "evp_oldm": 11.54012615466649,
+      "evp_old12": -17.652241518938407,
+      "evp_arlx1i": 0.011574074074074075,
+      "evp_revp": 0.0,
+      "evp_denom1": 0.9885583524027459
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "evp_Delta",
+       "time": 0.0,
+       "expected": 83.82743009869662
+      },
+      {
+       "variable": "evp_zetax2",
+       "time": 0.0,
+       "expected": 1.0390111804080362
+      },
+      {
+       "variable": "evp_etax2",
+       "time": 0.0,
+       "expected": 0.25975279510200905
+      },
+      {
+       "variable": "evp_rep_prs",
+       "time": 0.0,
+       "expected": 87.09763709741893
+      },
+      {
+       "variable": "evp_newp",
+       "time": 0.0,
+       "expected": -131.1090153025927
+      },
+      {
+       "variable": "evp_newm",
+       "time": 0.0,
+       "expected": 11.599586347603168
+      },
+      {
+       "variable": "evp_new12",
+       "time": 0.0,
+       "expected": -17.64742059330537
+      }
+     ]
+    },
+    {
+     "id": "icecap_evp_momentum_step1_cell2_4_ksub1",
+     "description": "Instantaneous pin of the stepu ocean-ice stress laws against cice_evp_momentum.csv row (step 1, i=2, j=4, ksub 1): vrel = aiX*rhow*Cw*sqrt((uocn-uold)^2 + (vocn-vold)^2) (stepu, ice_dyn_shared.F90:931-932, with the subcycle-entry velocities uold/vold and rhow = 1026, F90:65); the partial ocean-ice stresses taux = vrel*waterx, tauy = vrel*watery (F90:933-934; 'NOTE this is not the entire ocn stress term') with the rotated ocean current waterx = uocn*cosw - vocn*sinw*sign(1,fm), watery = vocn*cosw + uocn*sinw*sign(1,fm) (dyn_prep2, F90:817-818) - the dumped taux/tauy columns carry these stepu partials, so the pin transposes that form rather than the dyn_finish full stress of F90:1345-1348 that cice_dynamics.esm eqs 26-27 carry (the difference is the -vrel*uvel term; the full form is not in the dump); and the seabed stress coefficient Cb = TbU/(sqrt(uold^2 + vold^2) + u0) (F90:937). The traced cells have TbU = 0 (no landfast grounding in the traced region), so the Cb pin checks the wiring with a zero numerator. All inputs are bound from the dump row (including the run's Cw and u0); the .esm reproduces the dumped vrel/taux/tauy/Cb to round-off.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ocn_aiX": 0.8864531679460242,
+      "ocn_uold": 0.00020811424695413395,
+      "ocn_vold": 0.00031864840770188645,
+      "ocn_uocn": 1.5095414346433244e-05,
+      "ocn_vocn": -0.0009747150766391618,
+      "ocn_Cw": 0.005359999999999999,
+      "ocn_TbU": 0.0,
+      "ocn_cosw": 1.0,
+      "ocn_sinw": 0.0,
+      "ocn_hemis": -1.0,
+      "ocn_u0": 5e-05
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "ocn_vrel",
+       "time": 0.0,
+       "expected": 0.006374876324561105
+      },
+      {
+       "variable": "ocn_taux",
+       "time": 0.0,
+       "expected": 9.623139952651734e-08
+      },
+      {
+       "variable": "ocn_tauy",
+       "time": 0.0,
+       "expected": -6.213688065259756e-06
+      },
+      {
+       "variable": "ocn_Cb",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "icecap_evp_momentum_step1_cell2_5_ksub1",
+     "description": "Instantaneous pin of the stepu ocean-ice stress laws against cice_evp_momentum.csv row (step 1, i=2, j=5, ksub 1): vrel = aiX*rhow*Cw*sqrt((uocn-uold)^2 + (vocn-vold)^2) (stepu, ice_dyn_shared.F90:931-932, with the subcycle-entry velocities uold/vold and rhow = 1026, F90:65); the partial ocean-ice stresses taux = vrel*waterx, tauy = vrel*watery (F90:933-934; 'NOTE this is not the entire ocn stress term') with the rotated ocean current waterx = uocn*cosw - vocn*sinw*sign(1,fm), watery = vocn*cosw + uocn*sinw*sign(1,fm) (dyn_prep2, F90:817-818) - the dumped taux/tauy columns carry these stepu partials, so the pin transposes that form rather than the dyn_finish full stress of F90:1345-1348 that cice_dynamics.esm eqs 26-27 carry (the difference is the -vrel*uvel term; the full form is not in the dump); and the seabed stress coefficient Cb = TbU/(sqrt(uold^2 + vold^2) + u0) (F90:937). The traced cells have TbU = 0 (no landfast grounding in the traced region), so the Cb pin checks the wiring with a zero numerator. All inputs are bound from the dump row (including the run's Cw and u0); the .esm reproduces the dumped vrel/taux/tauy/Cb to round-off.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ocn_aiX": 0.7920360339173104,
+      "ocn_uold": -0.005690578514297262,
+      "ocn_vold": -0.0003624392479653095,
+      "ocn_uocn": 6.500557676421566e-05,
+      "ocn_vocn": -0.0015312496376901155,
+      "ocn_Cw": 0.00536,
+      "ocn_TbU": 0.0,
+      "ocn_cosw": 1.0,
+      "ocn_sinw": 0.0,
+      "ocn_hemis": -1.0,
+      "ocn_u0": 5e-05
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "ocn_vrel",
+       "time": 0.0,
+       "expected": 0.025581248187096586
+      },
+      {
+       "variable": "ocn_taux",
+       "time": 0.0,
+       "expected": 1.6629237927507597e-06
+      },
+      {
+       "variable": "ocn_tauy",
+       "time": 0.0,
+       "expected": -3.917127701815257e-05
+      },
+      {
+       "variable": "ocn_Cb",
+       "time": 0.0,
+       "expected": 0.0
       }
      ]
     }
