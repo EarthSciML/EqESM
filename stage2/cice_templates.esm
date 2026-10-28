@@ -2,17 +2,17 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_templates",
-  "description": "Expression-template library for the CICE sea-ice component (stage 2 of the EqESM project): the pointwise physical laws of cesm3_cice6_6_3_22 (checkout stage1/cesm/components/cice), transcribed exactly for use by the thermodynamics, dynamics, transport, and coupling subcomponents. The library carries (a) the shortwave/albedo family of icepack_shortwave.F90: the ccsm3 bare-ice and snow albedos of compute_albedos (F90:466-597) with the thickness factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (F90:541-542), the surface-temperature factor fT = min(Timelt-Tsfcn-1, 0) (F90:548-549), the fractional snow cover asnow = hs/(hs+snowpatch) (F90:575-579), and the absorbed/penetrating shortwave split of absorbed_solar (F90:701-896) with the visible-band extinction law fswpen*exp(-kappav*z) (F90:867) and i0vis = 0.70 (F90:769); (b) the thermodynamics family of icepack_therm_shared.F90 (surface_heat_flux F90:109-167, saturation humidity F90:152-154, liquidus Tmlt = -depressT*Sin F90:383-386, the Assur-1958 mushy liquidus of icepack_mushy_physics.F90:227-261 with the az1/az2 rational form and the Sb_liq break, the l_brine quadratic temperature-from-enthalpy F90:68-101, the fresh-ice and snow enthalpy inversions), of icepack_therm_bl99.F90 (the bubbly-brine Pringle et al. 2007 conductivity kilyr = max((2.11 - 0.011 T + 0.09 S/min(-puny,T)) rhoi/917, kimin) F90:918-924, the MU71 form F90:911-916, the interface conductances kh F90:927-959), of icepack_therm_vertical.F90 (the congelation enthalpy qbot F90:1432-1443, the ocean heat flux fbot of frzmlt_bottom_lateral F90:662-678 with the 0.006 transfer coefficient F90:674 and the Maykut-Perovich m1/m2 lateral law F90:637-640, 679-775), and of icepack_meltpond_lvl.F90 (the 'cesm' melt-pond volume change F90:154-174); (c) the atmosphere family of icepack_atmo.F90 (the constant boundary-layer scheme atmo_boundary_const F90:398-496: tau = rhoa*0.0012*wind F90:460, shcoef = senscoef cp_air rhoa wind and lhcoef = latncoef Lheat rhoa wind F90:493-494, ocean saturation humidity F90:483-484; and the similarity scheme atmo_boundary_layer F90:52-389: the neutral drag coefficient rdn = vonkar/log(zref/iceruf) F90:215, the high-frequency relative wind vmag = max(0.5, |Uatm-U|) F90:176-180 and 205-210, the stability parameter hol clamped to |hol| <= 10 F90:985-989, the unit stable step function F90:1015, the stable psi F90:1017-1019, the unstable momentum/scalar psi and capital_X F90:1040-1075, the exchange coefficients rd/rh/re F90:289-291, the 2-m psix2 correction F90:364-365, and the reference Tref/Qref/Uref F90:366-378; the do-while iteration of F90:269 is unrolled by the coupling component for the D-class natmiter = 5 with atmiter_conv = 0, which always runs the full 5 updates); and (d) the dynamics family of icepack_mechred.F90 (the Hibler 1979 ice strength P = Pstar vice exp(-Cstar (1-aice)) F90:1720; and the Rothrock 1975 potential-energy strength F90:1660-1712 with the ridge ITD of ridge_itd F90:779-1050: the cumulative distribution Gsum F90:848-889, the exponential participation function of krdg_partic = 1 F90:919-934, the exponential redistribution hrmin/hrexp/krdg of krdg_redist = 1 F90:1004-1010, and aksum F90:1031-1036, with the per-category strength sum h2rdg = hrmin^2 + 2 hrmin hrexp + 2 hrexp^2 F90:1697-1706), ice_dyn_shared.F90 (the strain-rate invariant Delta F90:2156-2159, the capped viscosity/replacement-pressure split of visc_replpress F90:2467-2471, the ocean-ice stress magnitude and seabed coefficient of stepu F90:931-937), and ice_dyn_evp.F90 (the classic-EVP stress relaxation maps for stressp, stressm, and stress12 F90:1584-1609). All templates are match-less pointwise laws invoked by name via apply_expression_template; the only shared-math dependencies are the two saturation-humidity laws and the shortwave attenuation law, which are factored and referenced by surface_heat_flux, shortwave_through_ice, layer_absorbed_shortwave, and sea_freezing_temperature (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). Constants are the icepack_parameters.F90 module values (rhoi = 917 F90:62, rhos = 330 F90:61, rhow = 1026 F90:65, rhofresh = 1000 F90:66, cp_ice = 2106 F90:74, cp_ocn = 4218 F90:75, Tffresh = 273.15 F90:82, Lsub = 2.835e6 F90:83, Lvap = 2.501e6 F90:84, Lfresh = Lsub - Lvap = 3.34e5 F90:74, depressT = 0.054 F90:77, kice = 2.03 F90:88, ksno = 0.30 F90:90, snowpatch = 0.02 F90:92, puny = 1e-11 F90:36, emissivity = 0.985 F90:156 (the D-class run overrides it to 0.95 in forcing_nml, which the coupling aggregation and the surface-heat balance use), stefan_boltzmann = 567e-10 F90:159, kappav = 1.4 F90:161, albocn = 0.06 F90:157, albicev = 0.78 F90:166, albicei = 0.36 F90:167, albsnowv = 0.98 F90:168, albsnowi = 0.70 F90:169, ahmax = 0.3 F90:170, ustar_min = 0.005 F90:99, Pstar = 2.75e4 F90:262, Cstar = 20 F90:264, cp_air = 1005 F90:281, qqqice = 11637800 F90:286, TTTice = 5897.8 F90:287, qqqocn = 627572.4 F90:288, TTTocn = 5107.4 F90:289, senscoef = 0.0012 F90:290, latncoef = 0.0015 F90:291, ice_ref_salinity = 4 F90:87, kimin = 0.10 and betak = 0.13 in icepack_therm_bl99.F90:34-35, and the melt-pond Td = 2, rexp = 0.01 in icepack_meltpond_lvl.F90:111-112), the dEdd shortwave tuning (dT_melt = 1, dalb_mlt = -0.075, dalb_mltv = -0.1, dalb_mlti = -0.15, i0vis = 0.70, icepack_shortwave.F90:511-518, 769), the similarity constants (vonkar = 0.4 F90:190, zref = 10 F90:284, iceruf = 0.0005 F90:285, zvir = 0.606 F90:283, cp_wv = 1.81e3 F90:282, gravit = 9.80616 F90:269, umin = 0.5 under highfreq = .true. F90:177, pih = pi/2 F90:80 and 2815), the Rothrock strength constants (Cf = 17 F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow F90:2814, Gstar = 0.15 and astar = 0.05 in icepack_mechred.F90:70-72, maxraft = 1 F90:74, and mu_rdg = 4 from the D-class ice_in namelist), and the Assur liquidus constants (az1_liq = -18.48, bz1_liq = 0, az2_liq = -10.3085, bz2_liq = 62.4, Sb_liq = 123.66702800276086, icepack_mushy_physics.F90:36-55); (e) the ktherm = 2 mushy-physics family of icepack_mushy_physics.F90 (the Assur liquidus pair liquidus_brine_salinity_mush F90:187-221 and liquidus_temperature_mush F90:227-261, the liquid fraction icepack_mushy_liquid_fraction F90:500-519, the enthalpy laws icepack_enthalpy_mush F90:267-288, enthalpy_mush_liquid_fraction F90:293-307, enthalpy_of_melting F90:313-325, and enthalpy_brine F90:330-342, the quadratic temperature-from-enthalpy icepack_mushy_temperature_mush F90:348-452 and temperature_mush_liquid_fraction F90:457-471, and the mush heat conductivity km = phi*(kb - ki) + ki with ki = 2.3 and kb = 0.5375 F90:476-494, 62-63); (f) the dEdd shortwave surface laws of icepack_shortwave.F90 (the snow fraction of shortwave_dEdd_set_snow F90:3448-3454 and the effective pond area of shortwave_dEdd_set_eff F90:3495-3637 with the infiltration, thin-pond, and snow-taper branches, plus the broadband band weights awtvdr/awtidr/awtvdf/awtidf of icepack_parameters.F90:218-221 used for the history albedos F90:1496-1498); and (g) the sea-level melt-pond volume law of icepack_meltpond_sealvl.F90 (compute_ponds_sealvl F90:50-265 with the 'hlid' Stefan lid growth/melt of frzpnd = 'hlid')."
+  "description": "Expression-template library for the CICE sea-ice component (stage 2 of the EqESM project): the pointwise physical laws of cesm3_cice6_6_3_22 (checkout stage1/cesm/components/cice), transcribed exactly for use by the thermodynamics, dynamics, transport, and coupling subcomponents. The library carries (a) the shortwave/albedo family of icepack_shortwave.F90: the ccsm3 bare-ice and snow albedos of compute_albedos (F90:466-597) with the thickness factor fh = min(atan(4 hi)/atan(4 ahmax), 1) (F90:541-542), the surface-temperature factor fT = min(Timelt-Tsfcn-1, 0) (F90:548-549), the fractional snow cover asnow = hs/(hs+snowpatch) (F90:575-579), and the absorbed/penetrating shortwave split of absorbed_solar (F90:701-896) with the visible-band extinction law fswpen*exp(-kappav*z) (F90:867) and i0vis = 0.70 (F90:769); (b) the thermodynamics family of icepack_therm_shared.F90 (surface_heat_flux F90:109-167, saturation humidity F90:152-154, liquidus Tmlt = -depressT*Sin F90:383-386, the Assur-1958 mushy liquidus of icepack_mushy_physics.F90:227-261 with the az1/az2 rational form and the Sb_liq break, the l_brine quadratic temperature-from-enthalpy F90:68-101, the fresh-ice and snow enthalpy inversions), of icepack_therm_bl99.F90 (the bubbly-brine Pringle et al. 2007 conductivity kilyr = max((2.11 - 0.011 T + 0.09 S/min(-puny,T)) rhoi/917, kimin) F90:918-924, the MU71 form F90:911-916, the interface conductances kh F90:927-959), of icepack_therm_vertical.F90 (the congelation enthalpy qbot F90:1432-1443, the ocean heat flux fbot of frzmlt_bottom_lateral F90:662-678 with the 0.006 transfer coefficient F90:674 and the Maykut-Perovich m1/m2 lateral law F90:637-640, 679-775), and of icepack_meltpond_lvl.F90 (the 'cesm' melt-pond volume change F90:154-174); (c) the atmosphere family of icepack_atmo.F90 (the constant boundary-layer scheme atmo_boundary_const F90:398-496: tau = rhoa*0.0012*wind F90:460, shcoef = senscoef cp_air rhoa wind and lhcoef = latncoef Lheat rhoa wind F90:493-494, ocean saturation humidity F90:483-484; and the similarity scheme atmo_boundary_layer F90:52-389: the neutral drag coefficient rdn = vonkar/log(zref/iceruf) F90:215, the high-frequency relative wind vmag = max(0.5, |Uatm-U|) F90:176-180 and 205-210, the stability parameter hol clamped to |hol| <= 10 F90:985-989, the unit stable step function F90:1015, the stable psi F90:1017-1019, the unstable momentum/scalar psi and capital_X F90:1040-1075, the exchange coefficients rd/rh/re F90:289-291, the 2-m psix2 correction F90:364-365, and the reference Tref/Qref/Uref F90:366-378; the do-while iteration of F90:269 is unrolled by the coupling component for the D-class natmiter = 5 with atmiter_conv = 0, which always runs the full 5 updates); and (d) the dynamics family of icepack_mechred.F90 (the Hibler 1979 ice strength P = Pstar vice exp(-Cstar (1-aice)) F90:1720; and the Rothrock 1975 potential-energy strength F90:1660-1712 with the ridge ITD of ridge_itd F90:779-1050: the cumulative distribution Gsum F90:848-889, the exponential participation function of krdg_partic = 1 F90:919-934, the exponential redistribution hrmin/hrexp/krdg of krdg_redist = 1 F90:1004-1010, and aksum F90:1031-1036, with the per-category strength sum h2rdg = hrmin^2 + 2 hrmin hrexp + 2 hrexp^2 F90:1697-1706), ice_dyn_shared.F90 (the strain-rate invariant Delta F90:2156-2159, the capped viscosity/replacement-pressure split of visc_replpress F90:2467-2471, the ocean-ice stress magnitude and seabed coefficient of stepu F90:931-937), and ice_dyn_evp.F90 (the classic-EVP stress relaxation maps for stressp, stressm, and stress12 F90:1584-1609). All templates are match-less pointwise laws invoked by name via apply_expression_template; the only shared-math dependencies are the two saturation-humidity laws and the shortwave attenuation law, which are factored and referenced by surface_heat_flux, shortwave_through_ice, layer_absorbed_shortwave, and sea_freezing_temperature (checked as an acyclic body-reference DAG at import, esm-spec 9.7.3). Constants are the icepack_parameters.F90 module values (rhoi = 917 F90:62, rhos = 330 F90:61, rhow = 1026 F90:65, rhofresh = 1000 F90:66, cp_ice = 2106 F90:74, cp_ocn = 4218 F90:75, Tffresh = 273.15 F90:82, Lsub = 2.835e6 F90:83, Lvap = 2.501e6 F90:84, Lfresh = Lsub - Lvap = 3.34e5 F90:74, depressT = 0.054 F90:77, kice = 2.03 F90:88, ksno = 0.30 F90:90, snowpatch = 0.02 F90:92, puny = 1e-11 F90:36, emissivity = 0.985 F90:156 (the D-class run overrides it to 0.95 in forcing_nml, which the coupling aggregation and the surface-heat balance use), stefan_boltzmann = 567e-10 F90:159, kappav = 1.4 F90:161, albocn = 0.06 F90:157, albicev = 0.78 F90:166, albicei = 0.36 F90:167, albsnowv = 0.98 F90:168, albsnowi = 0.70 F90:169, ahmax = 0.3 F90:170, ustar_min = 0.005 F90:99, Pstar = 2.75e4 F90:262, Cstar = 20 F90:264, cp_air = 1005 F90:281, qqqice = 11637800 F90:286, TTTice = 5897.8 F90:287, qqqocn = 627572.4 F90:288, TTTocn = 5107.4 F90:289, senscoef = 0.0012 F90:290, latncoef = 0.0015 F90:291, ice_ref_salinity = 4 F90:87, kimin = 0.10 and betak = 0.13 in icepack_therm_bl99.F90:34-35, and the melt-pond Td = 2, rexp = 0.01 in icepack_meltpond_lvl.F90:111-112), the dEdd shortwave tuning (dT_melt = 1, dalb_mlt = -0.075, dalb_mltv = -0.1, dalb_mlti = -0.15, i0vis = 0.70, icepack_shortwave.F90:511-518, 769), the similarity constants (vonkar = 0.4 F90:190, zref = 10 F90:284, iceruf = 0.0005 F90:285, zvir = 0.606 F90:283, cp_wv = 1.81e3 F90:282, gravit = 9.80616 F90:269, umin = 0.5 under highfreq = .true. F90:177, pih = pi/2 F90:80 and 2815), the Rothrock strength constants (Cf = 17 F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow F90:2814, Gstar = 0.15 and astar = 0.05 in icepack_mechred.F90:70-72, maxraft = 1 F90:74, and mu_rdg = 4 from the D-class ice_in namelist), and the Assur liquidus constants (az1_liq = -18.48, bz1_liq = 0, az2_liq = -10.3085, bz2_liq = 62.4, Sb_liq = 123.66702800276086, icepack_mushy_physics.F90:36-55); (e) the ktherm = 2 mushy-physics family of icepack_mushy_physics.F90 (the Assur liquidus pair liquidus_brine_salinity_mush F90:187-221 and liquidus_temperature_mush F90:227-261, the liquid fraction icepack_mushy_liquid_fraction F90:500-519, the enthalpy laws icepack_enthalpy_mush F90:267-288, enthalpy_mush_liquid_fraction F90:293-307, enthalpy_of_melting F90:313-325, and enthalpy_brine F90:330-342, the quadratic temperature-from-enthalpy icepack_mushy_temperature_mush F90:348-452 and temperature_mush_liquid_fraction F90:457-471, and the mush heat conductivity km = phi*(kb - ki) + ki with ki = 2.3 and kb = 0.5375 F90:476-494, 62-63); (f) the dEdd shortwave surface laws of icepack_shortwave.F90 (the snow fraction of shortwave_dEdd_set_snow F90:3448-3454 and the effective pond area of shortwave_dEdd_set_eff F90:3495-3637 with the infiltration, thin-pond, and snow-taper branches, plus the broadband band weights awtvdr/awtidr/awtvdf/awtidf of icepack_parameters.F90:218-221 used for the history albedos F90:1496-1498); and (g) the sea-level melt-pond volume law of icepack_meltpond_sealvl.F90 (compute_ponds_sealvl F90:50-265 with the 'hlid' Stefan lid growth/melt of frzpnd = 'hlid').\n\nConstants note (bugs.md #11): the D-class run is CESM-coupled, and the nuopc cap overrides a set of icepack parameters with CESM shared values at init (ice_comp_nuopc.F90:415-450): cp_ice = 2117.27 (SHR_CONST_CPICE), cp_ocn = 3996 (SHR_CONST_CPSW), cp_air = 1004.64 (SHR_CONST_CPDAIR), zvir = 0.6077930728241565 (SHR_CONST_ZVIR), Lsub = 2834700 (SHR_CONST_LATSUB), Lvap = 2501000 (unchanged), Lfresh = Lsub - Lvap = 333700 (vs the icepack defaults 2106/4218/1005/0.606/2835000/334000), snowpatch = 0.005, Tocnfrz = -1.836, rhoi/rhow/rhos/gravit/vonkar/stefan_boltzmann/cp_wv/Tffresh/pi unchanged (917/1026/330/9.80616/0.4/5.67e-8/1810/273.15). All templates below transcribe the RUN's values (as configured by the cap), not the icepack defaults, and the dump pins (thermo_state zTin/zTsn columns) verify them to round-off; the mushy quadratic constants embed cprho = cp_ocn*rhow = 4099896."
  },
  "expression_templates": {
   "snow_cover_fraction": {
-   "description": "Fractional area of snow cover asnow (compute_albedos, icepack_shortwave.F90:574-579): asnow = hs/(hs + snowpatch) when the snow depth hs > puny, else 0. snowpatch = 0.02 m and puny = 1e-11 (icepack_parameters.F90:92, 36).",
+   "description": "Fractional area of snow cover asnow (compute_albedos, icepack_shortwave.F90:574-579): asnow = hs/(hs + snowpatch) when the snow depth hs > puny, else 0. snowpatch = 0.005 m (the nuopc-cap override of the 0.02 m icepack default, ice_comp_nuopc.F90:415-450; bugs.md #11) and puny = 1e-11 (icepack_parameters.F90:36).",
    "params": ["hs"],
    "body": {
     "op": "ifelse",
     "args": [
      { "op": ">", "args": ["hs", 1e-11] },
-     { "op": "/", "args": ["hs", { "op": "+", "args": ["hs", 0.02] }] },
+     { "op": "/", "args": ["hs", { "op": "+", "args": ["hs", 0.005] }] },
      0.0
     ]
    }
@@ -219,7 +219,7 @@
    }
   },
   "ice_temperature_from_enthalpy": {
-   "description": "Internal ice temperature from enthalpy (calculate_Tin_from_qin, icepack_therm_shared.F90:68-101): with brine (l_brine) the quadratic cp_ice*Tin^2 + ((cp_ocn-cp_ice)*Tmltk - qin/rhoi - Lfresh)*Tin + Lfresh*Tmltk = 0 solved by Tin = min((-bb1 - sqrt(bb1^2 - 4*cp_ice*cc1))/(2*cp_ice), Tmltk); fresh ice (l_brine = 0) Tin = (Lfresh + qin/rhoi)/cp_ice (F90:97-98). cp_ice = 2106, cp_ocn = 4218, rhoi = 917 (icepack_parameters.F90:74-75, 62), Lfresh = Lsub - Lvap = 3.34e5 (F90:74, 83-84). The Fortran aborts on a negative discriminant (F90:90-94); the .esm skeleton cannot express the abort and notes it as a guard for the stage-2 tests.",
+   "description": "Internal ice temperature from enthalpy (calculate_Tin_from_qin, icepack_therm_shared.F90:68-101): with brine (l_brine) the quadratic cp_ice*Tin^2 + ((cp_ocn-cp_ice)*Tmltk - qin/rhoi - Lfresh)*Tin + Lfresh*Tmltk = 0 solved by Tin = min((-bb1 - sqrt(bb1^2 - 4*cp_ice*cc1))/(2*cp_ice), Tmltk); fresh ice (l_brine = 0) Tin = (Lfresh + qin/rhoi)/cp_ice (F90:97-98). cp_ice = 2117.27, cp_ocn = 3996, rhoi = 917 (icepack_parameters.F90:74-75, 62; the nuopc-cap overrides of the icepack defaults 2106/4218, ice_comp_nuopc.F90:415-450; bugs.md #11), Lfresh = Lsub - Lvap = 333700 (F90:74, 83-84). The Fortran aborts on a negative discriminant (F90:90-94); the .esm skeleton cannot express the abort and notes it as a guard for the stage-2 tests.",
    "params": ["qin", "Tmltk", "l_brine"],
    "body": {
     "op": "ifelse",
@@ -229,60 +229,60 @@
        { "op": "/", "args": [
          { "op": "-", "args": [
            { "op": "+", "args": [
-             334000.0,
+             333700.0,
              { "op": "/", "args": ["qin", 917.0] },
              { "op": "-", "args": [
-               { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmltk"] } ] }
+               { "op": "*", "args": [{ "op": "-", "args": [3996.0, 2117.27] }, "Tmltk"] } ] }
            ] },
            { "op": "sqrt", "args": [
              { "op": "-", "args": [
                { "op": "^", "args": [
                  { "op": "+", "args": [
-                   { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmltk"] },
+                   { "op": "*", "args": [{ "op": "-", "args": [3996.0, 2117.27] }, "Tmltk"] },
                    { "op": "-", "args": [{ "op": "/", "args": ["qin", 917.0] }] },
-                   { "op": "-", "args": [334000.0] } ] },
+                   { "op": "-", "args": [333700.0] } ] },
                  2 ] },
-               { "op": "*", "args": [4.0, 2106.0, 334000.0, "Tmltk"] } ] }] }
+               { "op": "*", "args": [4.0, 2117.27, 333700.0, "Tmltk"] } ] }] }
          ] },
-         { "op": "*", "args": [2.0, 2106.0] } ] },
+         { "op": "*", "args": [2.0, 2117.27] } ] },
        "Tmltk" ] },
      { "op": "/", "args": [
-       { "op": "+", "args": [334000.0, { "op": "/", "args": ["qin", 917.0] }] },
-       2106.0 ] }
+       { "op": "+", "args": [333700.0, { "op": "/", "args": ["qin", 917.0] }] },
+       2117.27 ] }
     ]
    }
   },
   "snow_temperature_from_enthalpy": {
-   "description": "Snow layer temperature from enthalpy (fresh snow, icepack_therm_vertical.F90:888): zTsn = (Lfresh + zqsn/rhos)/cp_ice. rhos = 330 (icepack_parameters.F90:61).",
+   "description": "Snow layer temperature from enthalpy (fresh snow, icepack_therm_vertical.F90:888): zTsn = (Lfresh + zqsn/rhos)/cp_ice. rhos = 330 (icepack_parameters.F90:61); cp_ice = 2117.27 and Lfresh = 333700 are the D-class CESM-coupled runtime values (bugs.md #11), overriding the icepack defaults 2106/334000 via the nuopc cap (ice_comp_nuopc.F90:430,436-437: SHR_CONST_CPICE and SHR_CONST_LATSUB - SHR_CONST_LATVAP = 2834700 - 2501000), verified against the dumped zTsn to round-off.",
    "params": ["qsn"],
    "body": { "op": "/", "args": [
-     { "op": "+", "args": [334000.0, { "op": "/", "args": ["qsn", 330.0] }] },
-     2106.0 ] }
+     { "op": "+", "args": [333700.0, { "op": "/", "args": ["qsn", 330.0] }] },
+     2117.27 ] }
   },
   "ice_enthalpy": {
-   "description": "Internal ice enthalpy from temperature, the inverse of calculate_Tin_from_qin (BL99 with brine, the functional form of the congelation enthalpy at icepack_therm_vertical.F90:1437-1439): qin = rhoi*(cp_ice*T - Lfresh + (cp_ocn-cp_ice)*Tmlts + Lfresh*Tmlts/T); fresh ice (l_brine = 0) qin = rhoi*(cp_ice*T - Lfresh). T in C, qin in J/m3.",
+   "description": "Internal ice enthalpy from temperature, the inverse of calculate_Tin_from_qin (BL99 with brine, the functional form of the congelation enthalpy at icepack_therm_vertical.F90:1437-1439): qin = rhoi*(cp_ice*T - Lfresh + (cp_ocn-cp_ice)*Tmlts + Lfresh*Tmlts/T); fresh ice (l_brine = 0) qin = rhoi*(cp_ice*T - Lfresh). T in C, qin in J/m3. Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
    "params": ["zTin", "Tmlts", "l_brine"],
    "body": {
     "op": "ifelse",
     "args": [
      { "op": ">", "args": ["l_brine", 0.5] },
      { "op": "*", "args": [917.0, { "op": "+", "args": [
-       { "op": "*", "args": [2106.0, "zTin"] },
-       { "op": "-", "args": [334000.0] },
-       { "op": "*", "args": [{ "op": "-", "args": [4218.0, 2106.0] }, "Tmlts"] },
-       { "op": "/", "args": [{ "op": "*", "args": [334000.0, "Tmlts"] }, "zTin"] } ] }] },
+       { "op": "*", "args": [2117.27, "zTin"] },
+       { "op": "-", "args": [333700.0] },
+       { "op": "*", "args": [{ "op": "-", "args": [3996.0, 2117.27] }, "Tmlts"] },
+       { "op": "/", "args": [{ "op": "*", "args": [333700.0, "Tmlts"] }, "zTin"] } ] }] },
      { "op": "*", "args": [917.0, { "op": "+", "args": [
-       { "op": "*", "args": [2106.0, "zTin"] },
-       { "op": "-", "args": [334000.0] } ] }] }
+       { "op": "*", "args": [2117.27, "zTin"] },
+       { "op": "-", "args": [333700.0] } ] }] }
     ]
    }
   },
   "snow_enthalpy": {
-   "description": "Snow layer enthalpy from temperature (inverse of snow_temperature_from_enthalpy; the snow enthalpy is qsn = rhos*(cp_ice*Tsn - Lfresh), consistent with icepack_therm_vertical.F90:888).",
+   "description": "Snow layer enthalpy from temperature (inverse of snow_temperature_from_enthalpy; the snow enthalpy is qsn = rhos*(cp_ice*Tsn - Lfresh), consistent with icepack_therm_vertical.F90:888). Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
    "params": ["zTsn"],
    "body": { "op": "*", "args": [330.0, { "op": "+", "args": [
-     { "op": "*", "args": [2106.0, "zTsn"] },
-     { "op": "-", "args": [334000.0] } ] }] }
+     { "op": "*", "args": [2117.27, "zTsn"] },
+     { "op": "-", "args": [333700.0] } ] }] }
   },
   "ice_conductivity_bubbly": {
    "description": "Thermal conductivity of saline ice, Pringle et al. (2007) 'bubbly brine' (conductivity, icepack_therm_bl99.F90:918-924): kilyr = max((2.11 - 0.011*T + 0.09*S/min(-puny,T))*rhoi/917, kimin). The Fortran multiplies by rhoi/917 (F90:922), unity for rhoi = 917 kg/m3 (icepack_parameters.F90:62); min(-puny, T) guards the S/T term as T approaches 0 (puny = 1e-11, F90:36), and kimin = 0.10 W/m/K (icepack_therm_bl99.F90:35). T in C, S in ppt.",
@@ -323,7 +323,7 @@
      { "op": "*", "args": [{ "op": "+", "args": ["k1", "k2"] }, "h"] } ] }
   },
   "congelation_enthalpy": {
-   "description": "Enthalpy of new ice growing at the bottom (thickness_changes, icepack_therm_vertical.F90:1432-1443): with brine, qbot = -rhoi*(cp_ice*(Tmlts-Tbot) + Lfresh*(1-Tmlts/Tbot) - cp_ocn*Tmlts) capped at qbotmax = -0.5*rhoi*Lfresh (F90:1436-1440); fresh ice, qbot = -rhoi*(-cp_ice*Tbot + Lfresh) (F90:1442). Tmlts = -depressT*zSin(nilyr) is the liquidus at the bottom layer (F90:1432).",
+   "description": "Enthalpy of new ice growing at the bottom (thickness_changes, icepack_therm_vertical.F90:1432-1443): with brine, qbot = -rhoi*(cp_ice*(Tmlts-Tbot) + Lfresh*(1-Tmlts/Tbot) - cp_ocn*Tmlts) capped at qbotmax = -0.5*rhoi*Lfresh (F90:1436-1440); fresh ice, qbot = -rhoi*(-cp_ice*Tbot + Lfresh) (F90:1442). Tmlts = -depressT*zSin(nilyr) is the liquidus at the bottom layer (F90:1432). Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
    "params": ["Tbot", "Tmlts", "l_brine"],
    "body": {
     "op": "ifelse",
@@ -332,25 +332,25 @@
      { "op": "min", "args": [
        { "op": "-", "args": [
          { "op": "*", "args": [917.0, { "op": "+", "args": [
-           { "op": "*", "args": [2106.0, { "op": "-", "args": ["Tmlts", "Tbot"] }] },
-           { "op": "*", "args": [334000.0, { "op": "-", "args": [1.0, { "op": "/", "args": ["Tmlts", "Tbot"] }] }] },
-           { "op": "-", "args": [{ "op": "*", "args": [4218.0, "Tmlts"] }] } ] }] } ] },
-       { "op": "*", "args": [-0.5, 917.0, 334000.0] } ] },
+           { "op": "*", "args": [2117.27, { "op": "-", "args": ["Tmlts", "Tbot"] }] },
+           { "op": "*", "args": [333700.0, { "op": "-", "args": [1.0, { "op": "/", "args": ["Tmlts", "Tbot"] }] }] },
+           { "op": "-", "args": [{ "op": "*", "args": [3996.0, "Tmlts"] }] } ] }] } ] },
+       { "op": "*", "args": [-0.5, 917.0, 333700.0] } ] },
      { "op": "-", "args": [
        { "op": "*", "args": [917.0, { "op": "+", "args": [
-         { "op": "*", "args": [-2106.0, "Tbot"] },
-         334000.0 ] }] } ] }
+         { "op": "*", "args": [-2117.27, "Tbot"] },
+         333700.0 ] }] } ] }
     ]
    }
   },
   "ocean_heat_flux": {
-   "description": "Heat flux from the ocean to the ice bottom fbot (frzmlt_bottom_lateral, icepack_therm_vertical.F90:662-678): fbot = max(-cp_ocn*rhow*0.006*max(sst-Tbot, 0)*ustar, frzmlt), the Maykut-McPhee (1995) boundary-layer form with the 0.006 transfer coefficient (F90:672-674; the 'Cdn_ocn' fbot_xfer_type branch F90:668-671 is deferred). ustar is the skin friction velocity, floored at ustar_min = 0.005 m/s (F90:665-666, icepack_parameters.F90:99).",
+   "description": "Heat flux from the ocean to the ice bottom fbot (frzmlt_bottom_lateral, icepack_therm_vertical.F90:662-678): fbot = max(-cp_ocn*rhow*0.006*max(sst-Tbot, 0)*ustar, frzmlt), the Maykut-McPhee (1995) boundary-layer form with the 0.006 transfer coefficient (F90:672-674; the 'Cdn_ocn' fbot_xfer_type branch F90:668-671 is deferred). ustar is the skin friction velocity, floored at ustar_min = 0.005 m/s (F90:665-666, icepack_parameters.F90:99). Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
    "params": ["sst", "Tf", "ustar", "frzmlt"],
    "body": {
     "op": "max",
     "args": [
      { "op": "-", "args": [
-       { "op": "*", "args": [4218.0, 1026.0, 0.006,
+       { "op": "*", "args": [3996.0, 1026.0, 0.006,
          { "op": "max", "args": [{ "op": "-", "args": ["sst", "Tf"] }, 0.0] },
          "ustar"] } ] },
      "frzmlt"
@@ -388,9 +388,9 @@
    "body": { "op": "*", "args": ["rhoa", 0.0012, "wind"] }
   },
   "atmo_constant_shcoef": {
-   "description": "Sensible-heat transfer coefficient of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:493): shcoef = senscoef*cp_air*rhoa*wind, with senscoef = 0.0012 (icepack_parameters.F90:290) and cp_air = 1005 J/kg/K (F90:281).",
+   "description": "Sensible-heat transfer coefficient of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:493): shcoef = senscoef*cp_air*rhoa*wind, with senscoef = 0.0012 (icepack_parameters.F90:290) and cp_air = 1004.64 J/kg/K (SHR_CONST_CPDAIR, the nuopc-cap override of icepack's 1005, ice_comp_nuopc.F90:415-450; bugs.md #11; icepack_parameters.F90:281).",
    "params": ["rhoa", "wind"],
-   "body": { "op": "*", "args": [0.0012, 1005.0, "rhoa", "wind"] }
+   "body": { "op": "*", "args": [0.0012, 1004.64, "rhoa", "wind"] }
   },
   "atmo_constant_lhcoef": {
    "description": "Latent-heat transfer coefficient of the constant boundary-layer scheme (atmo_boundary_const, icepack_atmo.F90:494): lhcoef = latncoef*Lheat*rhoa*wind, with latncoef = 0.0015 (icepack_parameters.F90:291) and Lheat = Lsub = 2.835e6 J/kg for ice, Lvap = 2.501e6 J/kg for ocean (icepack_atmo.F90:472-476, icepack_parameters.F90:83-84).",
@@ -416,14 +416,14 @@
    "body": { "op": "max", "args": [0.5, "vmag_rel"] }
   },
   "atmo_stability_parameter": {
-   "description": "Monin-Obukhov stability parameter (compute_stability_parameter, icepack_atmo.F90:985-989): hol = vonkar*gravit*zlvl*(tstar/thva + qstar/(1/zvir + Qa))/ustar^2, clamped to |hol| <= 10 by the sign-preserving bound sign(min(abs(hol),10),hol), with vonkar = 0.4, gravit = 9.80616, zvir = 0.606 (icepack_parameters.F90:190, 269, 283).",
+   "description": "Monin-Obukhov stability parameter (compute_stability_parameter, icepack_atmo.F90:985-989): hol = vonkar*gravit*zlvl*(tstar/thva + qstar/(1/zvir + Qa))/ustar^2, clamped to |hol| <= 10 by the sign-preserving bound sign(min(abs(hol),10),hol), with vonkar = 0.4, gravit = 9.80616 (icepack_parameters.F90:190, 269), and zvir = 0.6077930728241565 (SHR_CONST_ZVIR, the nuopc-cap override of icepack's 0.606, ice_comp_nuopc.F90:415-450; bugs.md #11; icepack_parameters.F90:283).",
    "params": ["zlvl", "thva", "ustar", "tstar", "qstar", "Qa"],
    "body": { "op": "min", "args": [
      { "op": "max", "args": [
        { "op": "/", "args": [
          { "op": "*", "args": [0.4, 9.80616, "zlvl", { "op": "+", "args": [
            { "op": "/", "args": ["tstar", "thva"] },
-           { "op": "/", "args": ["qstar", { "op": "+", "args": [{ "op": "/", "args": [1.0, 0.606] }, "Qa"] }] } ] }] },
+           { "op": "/", "args": ["qstar", { "op": "+", "args": [{ "op": "/", "args": [1.0, 0.6077930728241565] }, "Qa"] }] } ] }] },
          { "op": "^", "args": ["ustar", 2] }] },
        -10.0 ]},
      10.0 ]}
@@ -775,7 +775,7 @@
     }
    },
    "icepack_enthalpy_mush": {
-    "description": "Enthalpy of the mush from temperature and bulk salinity (icepack_enthalpy_mush, icepack_mushy_physics.F90:267-288): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh with phi = icepack_mushy_liquid_fraction(zTin, zSin) (F90:283-286). cp_ocn*rhow = 4327668, cp_ice*rhoi = 1931202, rhoi*Lfresh = 306278000 (icepack_parameters.F90:62, 74-75, 84); the difference cp_ocn*rhow - cp_ice*rhoi = 2396466.",
+    "description": "Enthalpy of the mush from temperature and bulk salinity (icepack_enthalpy_mush, icepack_mushy_physics.F90:267-288): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh with phi = icepack_mushy_liquid_fraction(zTin, zSin) (F90:283-286). cp_ocn*rhow = 4099896, cp_ice*rhoi = 1941536.59, rhoi*Lfresh = 306002900 (the nuopc-cap values, ice_comp_nuopc.F90:415-450; bugs.md #11; icepack_parameters.F90:62, 74-75, 84); the difference cp_ocn*rhow - cp_ice*rhoi = 2158359.41.",
     "params": ["T", "S"],
     "body": {
      "op": "+",
@@ -795,14 +795,14 @@
             "S": "S"
            }
           },
-          2396466.0,
+          2158359.41,
           "T"
          ]
         },
         {
          "op": "*",
          "args": [
-          1931202.0,
+          1941536.59,
           "T"
          ]
         }
@@ -829,7 +829,7 @@
             }
            ]
           },
-          306278000.0
+          306002900.0
          ]
         }
        ]
@@ -838,7 +838,7 @@
     }
    },
    "enthalpy_mush_liquid_fraction": {
-    "description": "Enthalpy of the mush from temperature and liquid fraction (enthalpy_mush_liquid_fraction, icepack_mushy_physics.F90:293-307): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh (F90:304-305). Used for the congelation-ice enthalpy qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) (icepack_therm_vertical.F90:1413); phi_i_mushy = 0.45 in the D-class run (ice_in namelist, default 0.85 icepack_parameters.F90:139).",
+    "description": "Enthalpy of the mush from temperature and liquid fraction (enthalpy_mush_liquid_fraction, icepack_mushy_physics.F90:293-307): zqin = phi*(cp_ocn*rhow - cp_ice*rhoi)*zTin + rhoi*cp_ice*zTin - (1-phi)*rhoi*Lfresh (F90:304-305). Used for the congelation-ice enthalpy qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) (icepack_therm_vertical.F90:1413); phi_i_mushy = 0.45 in the D-class run (ice_in namelist, default 0.85 icepack_parameters.F90:139). Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
     "params": ["T", "phi"],
     "body": {
      "op": "+",
@@ -850,14 +850,14 @@
          "op": "*",
          "args": [
           "phi",
-          2396466.0,
+          2158359.41,
           "T"
          ]
         },
         {
          "op": "*",
          "args": [
-          1931202.0,
+          1941536.59,
           "T"
          ]
         }
@@ -876,7 +876,7 @@
             "phi"
            ]
           },
-          306278000.0
+          306002900.0
          ]
         }
        ]
@@ -885,12 +885,12 @@
     }
    },
    "enthalpy_of_melting": {
-    "description": "Enthalpy of melting of the mush from bulk salinity (enthalpy_of_melting, icepack_mushy_physics.F90:313-325): qm = cp_ocn*rhow*liquidus_temperature_mush(zSin) (F90:323), the energy needed to fully melt the mush; cp_ocn*rhow = 4327668 J/m3/C. This is the ktherm = 2 qmlt of thickness_changes (icepack_therm_vertical.F90:1283), zero in the BL99 formulation.",
+    "description": "Enthalpy of melting of the mush from bulk salinity (enthalpy_of_melting, icepack_mushy_physics.F90:313-325): qm = cp_ocn*rhow*liquidus_temperature_mush(zSin) (F90:323), the energy needed to fully melt the mush; cp_ocn*rhow = 4099896 J/m3/C (the nuopc-cap value, ice_comp_nuopc.F90:415-450; bugs.md #11). This is the ktherm = 2 qmlt of thickness_changes (icepack_therm_vertical.F90:1283), zero in the BL99 formulation.",
     "params": ["S"],
     "body": {
      "op": "*",
      "args": [
-      4327668.0,
+      4099896.0,
       {
        "op": "apply_expression_template",
        "args": [],
@@ -903,18 +903,18 @@
     }
    },
    "enthalpy_brine": {
-    "description": "Enthalpy of the brine (fully liquid) from temperature (enthalpy_brine, icepack_mushy_physics.F90:330-342): qbr = cp_ocn*rhow*zTin (F90:340); cp_ocn*rhow = 4327668 J/m3/C.",
+    "description": "Enthalpy of the brine (fully liquid) from temperature (enthalpy_brine, icepack_mushy_physics.F90:330-342): qbr = cp_ocn*rhow*zTin (F90:340); cp_ocn*rhow = 4099896 J/m3/C (the nuopc-cap value, ice_comp_nuopc.F90:415-450; bugs.md #11).",
     "params": ["T"],
     "body": {
      "op": "*",
      "args": [
-      4327668.0,
+      4099896.0,
       "T"
      ]
     }
    },
    "icepack_mushy_temperature_mush": {
-    "description": "Temperature of the mush from enthalpy and bulk salinity (icepack_mushy_temperature_mush, icepack_mushy_physics.F90:348-452): the piecewise quadratic of the Assur liquidus inverted against the enthalpy, zTin = (-B + sqrt(max(B^2 - 4 A C, puny)))/(2 A) (F90:447) with A, B, C the quadratic coefficients of the higher/lower temperature regions selected by the break enthalpy qb = D_liq*zSin + E_liq (F90:433-445), and the fully-melted branch zTin = zqin*I_liq when zqin exceeds the just-melted enthalpy q0 of the salinity-dependent rational F1/G1/H1/F2/G2/H2 form (F90:427-430, 450). Constants (computed from the az/bz liquidus parameters of F90:36-55 and the cp/rho values as in F90:388-424; verified against the Fortran numerically): AS1 = -44286.69168, AC1 = -35688612.96, BS1 = -3263551.44, BQ1 = 18.48, BC1 = 5660017440.0, CS1 = 306278000.0, CQ1 = 0.0, CC1 = 0.0; AS2 = -24703.969761, AC2 = -19907795.817, BS2 = -611261.2846, BQ2 = 10.3085, BC2 = 3277773767.8, CS2 = 325389747.2, CQ2 = -62.4, CC2 = -19111747200.0; D_liq = 2328655.2511112676, E_liq = -321025231.8179037; F1 = 234181168.83116883, G1 = -1000.0, H1 = 0.0; F2 = 419815492.06965125, G2 = -1000.0, H2 = 26196486.705146234; I_liq = 2.3107132987096054e-07; Tb_liq = -7.6362968855167352, Sb_liq = 123.66702800276086. The ifelse replaces the Fortran merges (S_low, q_melt, t_high) with the same selections; the discriminant guard max(B^2 - 4 A C, puny) keeps the sqrt real as in F90:447.",
+    "description": "Temperature of the mush from enthalpy and bulk salinity (icepack_mushy_temperature_mush, icepack_mushy_physics.F90:348-452): the piecewise quadratic of the Assur liquidus inverted against the enthalpy, zTin = (-B + sqrt(max(B^2 - 4 A C, puny)))/(2 A) (F90:447) with A, B, C the quadratic coefficients of the higher/lower temperature regions selected by the break enthalpy qb = D_liq*zSin + E_liq (F90:433-445), and the fully-melted branch zTin = zqin*I_liq when zqin exceeds the just-melted enthalpy q0 of the salinity-dependent rational F1/G1/H1/F2/G2/H2 form (F90:427-430, 450). Constants (computed from the az/bz liquidus parameters of F90:36-55 and the D-class run cp/rho values as in F90:388-424, with cp_ocn = 3996, cp_ice = 2117.27, rhow = 1026, rhoi = 917, Lfresh = 333700, cprho = cp_ocn*rhow = 4099896 -- the nuopc-cap overrides of ice_comp_nuopc.F90:415-450, bugs.md #11; verified against the dumped zTin to round-off): AS1 = -39886.4818968, AC1 = -35879596.1832, BS1 = -3496574.182, BQ1 = 18.48, BC1 = 5654933592.0, CS1 = 306002900.0, CQ1 = 0.0, CC1 = 0.0; AS2 = -22249.447977985, AC2 = -20014329.938015003, BS2 = -861389.8574660001, BQ2 = 10.3085, BC2 = 3275582777.866, CS2 = 325097480.96, CQ2 = -62.4, CC2 = -19094580960.0; D_liq = 2341133.53765668, E_liq = -320829049.8153338; F1 = 221855844.15584415, G1 = -1000.0, H1 = 0.0; F2 = 397719939.8554591, G2 = -1000.0, H2 = 24817724.246980645; I_liq = 2.439086259749028e-07; Tb_liq = -7.6362968855167352, Sb_liq = 123.66702800276086. The ifelse replaces the Fortran merges (S_low, q_melt, t_high) with the same selections; the discriminant guard max(B^2 - 4 A C, puny) keeps the sqrt real as in F90:447.",
     "params": ["qin", "S"],
     "body": {
      "op": "ifelse",
@@ -942,7 +942,7 @@
               {
                "op": "*",
                "args": [
-                234181168.83116883,
+                221855844.15584415,
                 "S"
                ]
               },
@@ -967,7 +967,7 @@
               {
                "op": "*",
                "args": [
-                419815492.06965125,
+                397719939.8554591,
                 "S"
                ]
               },
@@ -980,7 +980,7 @@
               }
              ]
             },
-            26196486.705146234
+            24817724.246980645
            ]
           }
          ]
@@ -991,7 +991,7 @@
        "op": "*",
        "args": [
         "qin",
-        2.3107132987096054e-07
+        2.439086259749028e-07
        ]
       },
       {
@@ -1016,11 +1016,11 @@
                   {
                    "op": "*",
                    "args": [
-                    2328655.2511112676,
+                    2341133.53765668,
                     "S"
                    ]
                   },
-                  -321025231.8179037
+                  -320829049.8153338
                  ]
                 }
                ]
@@ -1031,7 +1031,7 @@
                 {
                  "op": "*",
                  "args": [
-                  -3263551.44,
+                  -3496574.182,
                   "S"
                  ]
                 },
@@ -1042,7 +1042,7 @@
                   "qin"
                  ]
                 },
-                5660017440.0
+                5654933592.0
                ]
               },
               {
@@ -1051,7 +1051,7 @@
                 {
                  "op": "*",
                  "args": [
-                  -611261.2846,
+                  -861389.8574660001,
                   "S"
                  ]
                 },
@@ -1062,7 +1062,7 @@
                   "qin"
                  ]
                 },
-                3277773767.8
+                3275582777.866
                ]
               }
              ]
@@ -1094,11 +1094,11 @@
                         {
                          "op": "*",
                          "args": [
-                          2328655.2511112676,
+                          2341133.53765668,
                           "S"
                          ]
                         },
-                        -321025231.8179037
+                        -320829049.8153338
                        ]
                       }
                      ]
@@ -1109,7 +1109,7 @@
                       {
                        "op": "*",
                        "args": [
-                        -3263551.44,
+                        -3496574.182,
                         "S"
                        ]
                       },
@@ -1120,7 +1120,7 @@
                         "qin"
                        ]
                       },
-                      5660017440.0
+                      5654933592.0
                      ]
                     },
                     {
@@ -1129,7 +1129,7 @@
                       {
                        "op": "*",
                        "args": [
-                        -611261.2846,
+                        -861389.8574660001,
                         "S"
                        ]
                       },
@@ -1140,7 +1140,7 @@
                         "qin"
                        ]
                       },
-                      3277773767.8
+                      3275582777.866
                      ]
                     }
                    ]
@@ -1165,11 +1165,11 @@
                         {
                          "op": "*",
                          "args": [
-                          2328655.2511112676,
+                          2341133.53765668,
                           "S"
                          ]
                         },
-                        -321025231.8179037
+                        -320829049.8153338
                        ]
                       }
                      ]
@@ -1180,11 +1180,11 @@
                       {
                        "op": "*",
                        "args": [
-                        -44286.69168,
+                        -39886.4818968,
                         "S"
                        ]
                       },
-                      -35688612.96
+                      -35879596.1832
                      ]
                     },
                     {
@@ -1193,11 +1193,11 @@
                       {
                        "op": "*",
                        "args": [
-                        -24703.969761,
+                        -22249.447977985,
                         "S"
                        ]
                       },
-                      -19907795.817
+                      -20014329.938015003
                      ]
                     }
                    ]
@@ -1215,11 +1215,11 @@
                         {
                          "op": "*",
                          "args": [
-                          2328655.2511112676,
+                          2341133.53765668,
                           "S"
                          ]
                         },
-                        -321025231.8179037
+                        -320829049.8153338
                        ]
                       }
                      ]
@@ -1230,7 +1230,7 @@
                       {
                        "op": "*",
                        "args": [
-                        306278000.0,
+                        306002900.0,
                         "S"
                        ]
                       },
@@ -1250,7 +1250,7 @@
                       {
                        "op": "*",
                        "args": [
-                        325389747.2,
+                        325097480.96,
                         "S"
                        ]
                       },
@@ -1261,7 +1261,7 @@
                         "qin"
                        ]
                       },
-                      -19111747200.0
+                      -19094580960.0
                      ]
                     }
                    ]
@@ -1294,11 +1294,11 @@
                 {
                  "op": "*",
                  "args": [
-                  2328655.2511112676,
+                  2341133.53765668,
                   "S"
                  ]
                 },
-                -321025231.8179037
+                -320829049.8153338
                ]
               }
              ]
@@ -1309,11 +1309,11 @@
               {
                "op": "*",
                "args": [
-                -44286.69168,
+                -39886.4818968,
                 "S"
                ]
               },
-              -35688612.96
+              -35879596.1832
              ]
             },
             {
@@ -1322,11 +1322,11 @@
               {
                "op": "*",
                "args": [
-                -24703.969761,
+                -22249.447977985,
                 "S"
                ]
               },
-              -19907795.817
+              -20014329.938015003
              ]
             }
            ]
@@ -1339,7 +1339,7 @@
     }
    },
    "temperature_mush_liquid_fraction": {
-    "description": "Temperature of the mush from enthalpy and liquid fraction (temperature_mush_liquid_fraction, icepack_mushy_physics.F90:457-471): zTin = (zqin + (1-phi)*rhoi*Lfresh)/(phi*(cp_ocn*rhow - cp_ice*rhoi) + rhoi*cp_ice) (F90:468-469), the linear inverse of enthalpy_mush_liquid_fraction.",
+    "description": "Temperature of the mush from enthalpy and liquid fraction (temperature_mush_liquid_fraction, icepack_mushy_physics.F90:457-471): zTin = (zqin + (1-phi)*rhoi*Lfresh)/(phi*(cp_ocn*rhow - cp_ice*rhoi) + rhoi*cp_ice) (F90:468-469), the linear inverse of enthalpy_mush_liquid_fraction. Constants as in the D-class CESM-coupled run (nuopc-cap overrides, ice_comp_nuopc.F90:415-450; bugs.md #11; see file description).",
     "params": ["qin", "phi"],
     "body": {
      "op": "/",
@@ -1358,7 +1358,7 @@
             "phi"
            ]
           },
-          306278000.0
+          306002900.0
          ]
         }
        ]
@@ -1370,10 +1370,10 @@
          "op": "*",
          "args": [
           "phi",
-          2396466.0
+          2158359.41
          ]
         },
-        1931202.0
+        1941536.59
        ]
       }
      ]
@@ -2576,7 +2576,7 @@
     }
    },
    "meltpond_sealvl_dvn": {
-    "description": "Change in the sea-level melt-pond volume of a category, 'hlid' pond option (compute_ponds_sealvl, icepack_meltpond_sealvl.F90:50-265): dvpondn = (meltt*rhoi + melts*rhos + frain*dt)/rhofresh (F90:157, the use_smliq_pnd = false branch) corrected by the refrozen-lid change dvpondn = dvpondn - dhlid*apnd*rhoi/rhofresh (F90:195). Under frzpnd = 'hlid' the lid starts at the existing lid thickness hlid = ipnd (F90:171): freeze-up (dvpondn = 0) grows the lid with the Stefan law bdt = -2*Ts*kice*dt/(rhoi*Lfresh) for Ts = Tair - Tffresh < 0, dhlid = 0.5*sqrt(bdt) over open water replaced by 0.5*bdt/hlid for extant ice (F90:176-178), capped by min(dhlid, hpnd*rhofresh/rhoi) (F90:179); melting (dvpondn != 0) shrinks the lid with dhlid = max(fsurfn*dt/(rhoi*Lfresh), 0) then dhlid = -min(dhlid, hlid) (F90:185-187). kice = 2.03 (icepack_parameters.F90:88), rhoi = 917, rhos = 330, rhofresh = 1000, Lfresh = 3.34e5, Tffresh = 273.15 (F90:62, 61, 66, 74, 82). The melt-branch ffrac computation (F90:188-193) does not feed dvpondn and the hypsometry/freeboard continuation with the tracer update apnd/hpnd/ipnd = hlid (F90:205-262) is done by the caller, so both are documented but not part of this template; following the meltpond_cesm_dvn convention, meltt/melts are supplied as continuous rates and the output is the per-step change (diagnostic, not pinned by the stage-2 tests).",
+    "description": "Change in the sea-level melt-pond volume of a category, 'hlid' pond option (compute_ponds_sealvl, icepack_meltpond_sealvl.F90:50-265): dvpondn = (meltt*rhoi + melts*rhos + frain*dt)/rhofresh (F90:157, the use_smliq_pnd = false branch) corrected by the refrozen-lid change dvpondn = dvpondn - dhlid*apnd*rhoi/rhofresh (F90:195). Under frzpnd = 'hlid' the lid starts at the existing lid thickness hlid = ipnd (F90:171): freeze-up (dvpondn = 0) grows the lid with the Stefan law bdt = -2*Ts*kice*dt/(rhoi*Lfresh) for Ts = Tair - Tffresh < 0, dhlid = 0.5*sqrt(bdt) over open water replaced by 0.5*bdt/hlid for extant ice (F90:176-178), capped by min(dhlid, hpnd*rhofresh/rhoi) (F90:179); melting (dvpondn != 0) shrinks the lid with dhlid = max(fsurfn*dt/(rhoi*Lfresh), 0) then dhlid = -min(dhlid, hlid) (F90:185-187). kice = 2.03 (icepack_parameters.F90:88), rhoi = 917, rhos = 330, rhofresh = 1000, Lfresh = 333700 (the nuopc-cap value, ice_comp_nuopc.F90:415-450; bugs.md #11), Tffresh = 273.15 (F90:62, 61, 66, 74, 82). The melt-branch ffrac computation (F90:188-193) does not feed dvpondn and the hypsometry/freeboard continuation with the tracer update apnd/hpnd/ipnd = hlid (F90:205-262) is done by the caller, so both are documented but not part of this template; following the meltpond_cesm_dvn convention, meltt/melts are supplied as continuous rates and the output is the per-step change (diagnostic, not pinned by the stage-2 tests).",
     "params": ["meltt", "melts", "frain", "dt", "Tair", "fsurfn", "aicen", "vicen", "vsnon", "apnd", "hpnd", "ipnd", "dhsn"],
     "body": {
      "op": "ifelse",
@@ -2740,7 +2740,7 @@
                               "dt"
                              ]
                             },
-                            306278000.0
+                            306002900.0
                            ]
                           }
                          ]
@@ -2779,7 +2779,7 @@
                             "dt"
                            ]
                           },
-                          306278000.0
+                          306002900.0
                          ]
                         }
                        ]
@@ -2817,7 +2817,7 @@
                             "dt"
                            ]
                           },
-                          306278000.0
+                          306002900.0
                          ]
                         }
                        ]
@@ -2863,7 +2863,7 @@
                         "dt"
                        ]
                       },
-                      306278000.0
+                      306002900.0
                      ]
                     },
                     0.0

@@ -226,7 +226,7 @@ pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
 | `cice_coupling.esm` | 36 | 47 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), and the Rothrock strength law (2 dump rows) |
-| `cice_thermodynamics.esm` | 9 | 10 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswint = swabs − fswsfc − fswthru; all to round-off (`rel 1e-12`) |
+| `cice_thermodynamics.esm` | 11 | 16 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswint = swabs − fswsfc − fswthru; plus the mushy enthalpy↔temperature inversions zTin/zTsn (eqs 1-2) against the `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns; all to round-off (`rel 1e-12`) |
 | `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
 | `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
 | `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
@@ -241,8 +241,9 @@ uarea-weighted average of the U-point uvel) reproduces the run's T-point
 velocity only to ~1e-4 m/s, and Uref = |Uatm−U|·rd/rdn amplifies that
 difference by rd/rdn ≈ 8. The source of the residual is unidentified (the
 run-side value is consumed inside step_therm1, not dumped); the pin is kept at
-the observed precision rather than tightening past it. The 10 thermodynamics
-assertions (9 tests) likewise reproduce `cice_albedo.csv` to round-off.
+the observed precision rather than tightening past it. The 16 thermodynamics
+assertions (11 tests) likewise reproduce `cice_albedo.csv` and the
+`cice_thermo_state.csv` zTin/zTsn columns to round-off.
 
 ### Derived inputs (the raw CMEPS fields are not dumped)
 
@@ -304,6 +305,19 @@ must reproduce the dumped value:
    (share/shr_frz_mod.F90.in:94-105, ice_import_export.F90:818-821; bugs.md
    #6). Updated the template; all 384 dumped rows match the coupled law to
    round-off (the −2 °C clamp is not exercised: the run's sss < 35.64 psu).
+4. **Nuopc-cap constant overrides (bugs.md #11).** The CESM nuopc cap
+   (`ice_comp_nuopc.F90:415-450`) overwrites ~20 icepack parameters with
+   SHR_CONST values at init: cp_ice = 2117.27 (SHR_CONST_CPICE), cp_ocn =
+   3996 (SHR_CONST_CPSW), cp_air = 1004.64 (SHR_CONST_CPDAIR), zvir =
+   0.6077930728241565, Lsub = 2,834,700, Lfresh = 333,700, snowpatch =
+   0.005, Tocnfrz = −1.836 (rhoi/rhow/rhos/gravit/vonkar/stefan/cp_wv/
+   Tffresh unchanged). The first zTin transcription used the icepack
+   defaults (cp_ice = 2106, Lfresh = 334000, …) and was off by 0.3–0.4%
+   against the new dump columns; with the run's constants all 8 mushy layers
+   reproduce the dumped zTin to round-off. The 16 affected templates, the
+   coupling model's inline zvir/cp_air (eqs 68, 69, 75), and the `Control`
+   Lheat binding (`cice.esm` eq 6, Lsub) now carry the run values, with the
+   cap override cited in the template descriptions.
 
 ### Coverage limits (why the other files have no tests)
 
@@ -318,9 +332,13 @@ must reproduce the dumped value:
    delta-Eddington 3-band solver itself (compute_dEdd_3bd, deferred — its
    outputs alvdrn/alidrn/alvdfn/alidfn, fswsfcn, fswthru_* and Iswabs are
    carried as parameters), the vertical conduction ODEs and the growth/melt
-   rates (depend on the Tsfc implicit solve, see the divergences), and the
-   mushy enthalpy↔temperature inversions (exercised by the conduction ODEs,
-   pinned at stage 3).
+   rates (depend on the Tsfc implicit solve, see the divergences). The mushy
+   enthalpy↔temperature inversions are pinned directly: `zTin =
+   icepack_mushy_temperature_mush(qicen, zSin)` (eq 1) and `zTsn =
+   snow_temperature_from_enthalpy(qsnon)` (eq 2) against the dumped
+   `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns (tests
+   `thermo_mushy_temperature_step1_cell2_4_ncat1`,
+   `thermo_mushy_snow_temperature_step1_cell2_4_ncat2`).
 - **Tsfc tracer (dump bug, now fixed).** The first instrumented run read
    the `nt_Tsfc`/`nt_qice`/`nt_qsno` tracers with the j and tracer indices
    swapped (`trcrn(i,nt,j,n,blk)` vs the declared `(i,j,nt,n,blk)`), so
@@ -356,7 +374,7 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
-assertions plus the 57 CICE assertions (47 coupling + 10 thermodynamics) with
+assertions plus the 63 CICE assertions (47 coupling + 16 thermodynamics) with
 0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)

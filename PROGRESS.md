@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-27.
+Last updated: 2026-10-28.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -395,6 +395,41 @@ In progress. See PLAN.md §4.1 for the playbook.
   (missing metadata close brace + surplus trailing braces), then the
   fsnow_dEdd binding and coords conversions. `esm test stage2/`:
   172P/0F/0E (115 MOSART + 57 CICE).
+- **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
+  ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
+  mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
+  zTsn_1..3 (icepack `6ce32d6` exposes `temperature_snow` via
+  icepack_intfc; cice `44d019e` adds the `nt_sice` query and the columns;
+  wrapper `8ef0fce`, superproject `80b0eef`; rerun job 11883231:
+  COMPLETED, solution-neutral — all 30 pre-existing columns bit-identical;
+  the new columns are physical: sice ∈ [0.10, 12.27] ppt, zTin ∈
+  [−7.0, −0.008] °C, zTsn ∈ [−10.45, 0] °C, with 31/3840 no-snow rows
+  dumping zTsn = +157.6 °C = Lfresh/cp_ice at qsn = 0 — dump guard note,
+  bugs.md #12). **Root cause found (bugs.md #11):** the CESM nuopc cap
+  (ice_comp_nuopc.F90:415-450, CESMCOUPLED) overrides ~20 icepack
+  constants with SHR_CONST values: cp_ice = 2117.27, cp_ocn = 3996,
+  cp_air = 1004.64, zvir = 0.6077930728241565, Lsub = 2,834,700,
+  Lfresh = 333,700, snowpatch = 0.005, Tocnfrz = −1.836 — the first
+  zTin/zTsn transcriptions used the icepack defaults (2106/4218/1005/
+  0.606/2835000/334000/0.02) and were off by 0.3-2.6% against the dump.
+  Fixed: all 16 affected templates in `cice_templates.esm` (incl. the
+  mushy quadratic constants with cprho = cp_ocn·rhow = 4,099,896, F1/G1/
+  H1/F2/G2/H2, D_liq/E_liq, I_liq), `cice_coupling.esm` inline zvir/
+  cp_air (eqs 68, 69, 75), `cice.esm` Control Lheat binding (Lsub);
+  descriptions cite the cap override. Validation: a Python transcription
+  of `icepack_mushy_temperature_mush` with the run constants reproduces
+  all 8 dumped zTin layers at rel 0.00e+00 (vs ~4e-3 with defaults), and
+  the patched template bodies reproduce zTin/zTsn at rel ≤ 5e-16. New
+  pins (`thermo_mushy_temperature_step1_cell2_4_ncat1` asserting zTin at
+  layers 1/4/8, `thermo_mushy_snow_temperature_step1_cell2_4_ncat2`
+  asserting zTsn at all 3 snow layers; qicen/qsnon via
+  `initial_conditions`, zSin/aicen/vicen/vsnon via `parameter_overrides`,
+  rel 1e-12; numbers from `extract_inversion_tests.py`, structure
+  hand-authored) added to `cice_thermodynamics.esm`; liquidus Tmlts not
+  directly pinnable (no dump column — the liquidus high-T branch is
+  pinned via Tf(sss) in the coupling cap and its constants are exercised
+  inside the zTin quadratic). `esm test stage2/`: 178P/0F/0E (115 MOSART
+  + 63 CICE).
 - **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
   `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
   (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
