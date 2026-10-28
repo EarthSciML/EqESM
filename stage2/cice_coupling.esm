@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_coupling",
-  "description": "CICE cap-boundary component (stage 2 of the EqESM project): the med<->ice field conversions and the export aggregation of ice_import_export.F90 (cesm3_cice6_6_3_22, cicecore/drivers/nuopc/cmeps/) as algebraic equations, per the stage1/boundaries.md 1.3 boundary table. Imports (med -> ice), exactly ice_import (F90:414-700): the ocean state So_t -> sst, So_s -> sss, So_u/So_v -> uocn/vocn, So_dhdx/So_dhdy -> ss_tltx/ss_tlty (F90:477-482, 610-624); the atmosphere state Sa_z -> zlvl, Sa_tbot -> Tair, Sa_shum -> Qa, Sa_u/Sa_v -> uatm/vatm (F90:487-501, 606-608); the potential-temperature branch Sa_ptem -> potT and Sa_dens -> rhoa when both are present, else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 and rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) with the Fortran's zero/1.2 fallbacks (F90:503-515, 655-681); the flux imports Fioo_q -> frzmlt, Faxa_swvdr/swndr/swvdf/swndf -> swvdr/swidr/swvdf/swidf, Faxa_lwdn -> flw, Faxa_rain -> frain, Faxa_snow -> fsnow, each multiplied by med2mod_areacor (F90:529-575) with frain converted kg/m2/s -> m/s by rhofresh for the melt-pond consumption (icepack_meltpond_lvl.F90:160). Exports (ice -> med), exactly ice_export (F90:1030-1317) and the merge_fluxes aggregation of icepack_flux.F90:180-260: the ice-fraction scaling ailohi = min(aice, 1) (F90:949) and the state fields Si_ifrac, Si_t = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; the trcr(:,nt_Tsfc) aggregate of icepack_aggregate), the merge_fluxes aggregations that scale_fluxes divides by the ice area aice (ice_flux.F90:1565-1592, so the coupled fields are per unit ice area) include Si_avsdr/anidr/avsdf/anidf = [sum_n(albedo*aicen)]/aice (the coupling_prep albedo aggregation, CICE_RunMod.F90:549-582; direct = diffuse under the ccsm3 shortwave scheme, icepack_shortwave.F90:568-572), Si_vice = sum_n vicen, Si_vsno = sum_n vsnon, Si_snowh = vsno/ailohi for ailohi > 0 (F90:1121-1129); the air-ice fluxes Faii_taux/tauy = strairxT/strairyT (the T-point atmo stress of the constant boundary-layer scheme, F90:962-964), Faii_lat/sen = [sum_n(flatn/fsensn*aicen)]/aice (icepack_flux.F90:204-206), Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice with the outgoing-longwave fix -stefan_boltzmann*(Tf+Tffresh)^4/ailohi where flwout > -puny (F90:213-215, 1149-1164), Faii_evap = [sum_n(evapn*aicen)]/aice, Faii_swnet = [sum_n(swabs*aicen)]/aice; and the ice-ocean fluxes Fioi_swpen = [sum_n(fswthru*aicen)]/aice (F90:247), Fioi_melth = [sum_n(fhocnn*aicen)]/aice, Fioi_meltw = [sum_n(freshn*aicen)]/aice, Fioi_salt = [sum_n(fsaltn*aicen)]/aice, Fioi_taux/tauy = -strocnxT/strocnyT (F90:966-968, the sign flip of the ice-into-ocean stress convention). All Faii_*/Fioi_* exports carry mod2med_areacor (state_setexport areacor, F90:1051-1317); the Si_* state exports do not. The wave (Si_thick, Si_floediam), aerosol (Fioi_bcpho/bcphi, Fioi_flxdst), isotope (Fioi_meltw_wiso, Faii_evap_wiso, Si_qref_wiso), and per-band penetration (Fioi_swpen_vdr/vdf/idr/idf) exports are deferred and carried as zero parameters; the reference-height exports Si_u10/Si_tref/Si_qref are zero under the transcribed constant atmbndy scheme (atmo_boundary_const does not compute Tref/Qref/Uref; the similarity scheme is deferred). The POP-grid rotation of tauxa/tauya/tauxo/tauyo (ANGLET, F90:962-968) and the tmask ocean-mask guards collapse to the identity on the single-cell skeleton and are documented in the descriptions. The Tf ocean freezing temperature is the import-side shr_frz_freezetemp law (share/shr_frz_mod.F90.in:94-105, the Assur-1958 liquidus clamped to >= -2 C; bugs.md #6) via the shared sea_freezing_temperature template. The tests block pins the imports, the freezing-temperature law, and the export aggregation (including the scale_fluxes /aice division) against the stage-1 dumps (stage1/dumps/cice/); see the test descriptions and stage2/README-cice.md. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90."
+  "description": "CICE cap-boundary component (stage 2 of the EqESM project): the med<->ice field conversions and the export aggregation of ice_import_export.F90 (cesm3_cice6_6_3_22, cicecore/drivers/nuopc/cmeps/) as algebraic equations, per the stage1/boundaries.md 1.3 boundary table. Imports (med -> ice), exactly ice_import (F90:414-700): the ocean state So_t -> sst, So_s -> sss, So_u/So_v -> uocn/vocn, So_dhdx/So_dhdy -> ss_tltx/ss_tlty (F90:477-482, 610-624); the atmosphere state Sa_z -> zlvl, Sa_tbot -> Tair, Sa_shum -> Qa, Sa_u/Sa_v -> uatm/vatm (F90:487-501, 606-608); the potential-temperature branch Sa_ptem -> potT and Sa_dens -> rhoa when both are present, else the Sa_pbot branch potT = Tair*(100000/pbot)^0.286 and rhoa = pbot/(287.058*(1+0.608*Qa)*Tair) with the Fortran's zero/1.2 fallbacks (F90:503-515, 655-681); the flux imports Fioo_q -> frzmlt, Faxa_swvdr/swndr/swvdf/swndf -> swvdr/swidr/swvdf/swidf, Faxa_lwdn -> flw, Faxa_rain -> frain, Faxa_snow -> fsnow, each multiplied by med2mod_areacor (F90:529-575) with frain converted kg/m2/s -> m/s by rhofresh for the melt-pond consumption (icepack_meltpond_lvl.F90:160). Exports (ice -> med), exactly ice_export (F90:1030-1317) and the merge_fluxes aggregation of icepack_flux.F90:180-260: the ice-fraction scaling ailohi = min(aice, 1) (F90:949) and the state fields Si_ifrac, Si_t = Tffresh + sum_n(Tsfc*aicen)/ailohi (F90:950-951; the trcr(:,nt_Tsfc) aggregate of icepack_aggregate), the merge_fluxes aggregations that scale_fluxes divides by the ice area aice (ice_flux.F90:1565-1592, so the coupled fields are per unit ice area) include Si_avsdr/anidr/avsdf/anidf = [sum_n(albedo*aicen)]/aice (the coupling_prep albedo aggregation, CICE_RunMod.F90:549-582; direct = diffuse under the ccsm3 shortwave scheme, icepack_shortwave.F90:568-572), Si_vice = sum_n vicen, Si_vsno = sum_n vsnon, Si_snowh = vsno/ailohi for ailohi > 0 (F90:1121-1129); the air-ice fluxes Faii_taux/tauy = strairxT/strairyT (the T-point atmo stress of the constant boundary-layer scheme, F90:962-964), Faii_lat/sen = [sum_n(flatn/fsensn*aicen)]/aice (icepack_flux.F90:204-206), Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice with the outgoing-longwave fix -stefan_boltzmann*(Tf+Tffresh)^4/ailohi where flwout > -puny (F90:213-215, 1149-1164), Faii_evap = [sum_n(evapn*aicen)]/aice, Faii_swnet = [sum_n(swabs*aicen)]/aice; and the ice-ocean fluxes Fioi_swpen = [sum_n(fswthru*aicen)]/aice (F90:247), Fioi_melth = [sum_n(fhocnn*aicen)]/aice, Fioi_meltw = [sum_n(freshn*aicen)]/aice, Fioi_salt = [sum_n(fsaltn*aicen)]/aice, Fioi_taux/tauy = -strocnxT/strocnyT (F90:966-968, the sign flip of the ice-into-ocean stress convention). All Faii_*/Fioi_* exports carry mod2med_areacor (state_setexport areacor, F90:1051-1317); the Si_* state exports do not. The wave (Si_thick, Si_floediam), aerosol (Fioi_bcpho/bcphi, Fioi_flxdst), isotope (Fioi_meltw_wiso, Faii_evap_wiso, Si_qref_wiso), and per-band penetration (Fioi_swpen_vdr/vdf/idr/idf) exports are deferred and carried as zero parameters; the reference-height exports Si_u10/Si_tref/Si_qref come from the transcribed similarity scheme (atmo_boundary_layer, icepack_atmo.F90:52-389): the atmbndy = 'default' similarity solve under the D-class natmiter = 5 and atmiter_conv = 0 (the do-while of F90:269 always runs 5 updates; unrolled here) with highfreq = .true. relative wind, and the merge_fluxes aicen_init weighting (icepack_flux.F90:180-260) divided by the post-thermo ice area in scale_fluxes (ice_flux.F90:1565-1592), so Si_tref = sum_n(Trefn*aicen_init)/sum_n(aicen) and likewise for Si_qref and Si_u10. The Rothrock ice strength (icepack_mechred.F90:1660-1712, kstrength = 1) is carried here as an algebraic probe of the dynamics physics, since the dynamics skeleton tests cannot compile on the single-cell geometry; the D-class ridge settings are krdg_partic = 1, krdg_redist = 1, mu_rdg = 4. The POP-grid rotation of tauxa/tauya/tauxo/tauyo (ANGLET, F90:962-968) and the tmask ocean-mask guards collapse to the identity on the single-cell skeleton and are documented in the descriptions. The Tf ocean freezing temperature is the import-side shr_frz_freezetemp law (share/shr_frz_mod.F90.in:94-105, the Assur-1958 liquidus clamped to >= -2 C; bugs.md #6) via the shared sea_freezing_temperature template. The tests block pins the imports, the freezing-temperature law, and the export aggregation (including the scale_fluxes /aice division) against the stage-1 dumps (stage1/dumps/cice/); see the test descriptions and stage2/README-cice.md. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/ice_import_export.F90."
  },
  "index_sets": {
   "ncat": {
@@ -198,7 +198,7 @@
     "flwout": {
      "type": "unknown",
      "units": "W/m^2",
-     "description": "aggregate outgoing longwave: flwout = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice (icepack_flux.F90:213-215; emissivity = 0.985; ice_flux.F90:1573), [W/m2]"
+     "description": "aggregate outgoing longwave: flwout = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)]/aice (icepack_flux.F90:213-215; emissivity = 0.95 from the D-class ice_in forcing_nml, so 1-emissivity = 0.05; ice_flux.F90:1573), [W/m2]"
     },
     "evap": {
      "type": "unknown",
@@ -513,6 +513,21 @@
      "default": 0.0,
      "description": "per-category ice volume per unit grid-cell area (wired from the transport component), [m]"
     },
+    "aicen_init": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "per-category ice area fraction at the start of the timestep (the Fortran aicen_init of ice_step_mod.F90:395-450, saved before the thermodynamics; the merge_fluxes call of icepack_therm_vertical.F90:3169 passes aicen_init to weight the per-category reference-height fluxes, icepack_flux.F90:180-260), [-]"
+    },
+    "aice0": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "open-water area fraction (ice_state%aice0; the aice0 input of the ridge distribution Gsum(0), icepack_mechred.F90:851-855), [-]"
+    },
     "vsnon": {
      "type": "parameter",
      "shape": [
@@ -594,6 +609,15 @@
      "default": 0.0,
      "description": "per-category outgoing longwave flux, [W/m2]"
     },
+    "Tsfcn": {
+     "type": "parameter",
+     "shape": [
+      "ncat"
+     ],
+     "units": "degC",
+     "default": 0.0,
+     "description": "per-category ice/snow surface temperature at the start of the timestep (the Fortran Tsfc of the atmosphere call, icepack_atmo.F90:234; the same trcr(:,nt_Tsfc) field as Tsfc but read before the thermodynamics update, wired from the thermodynamics component), [C]"
+    },
     "evapn": {
      "type": "parameter",
      "shape": [
@@ -636,6 +660,18 @@
      "default": 0.0,
      "description": "T-point x air-ice stress (wired from the assembly Control model, the atmo_boundary_const stress of icepack_atmo.F90:460-464 aggregated by aicen in merge_fluxes, icepack_flux.F90:187-189, and divided by aice in scale_fluxes, ice_flux.F90:1568), [N/m2]"
     },
+    "uvelT": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "x ice velocity at T points (the uvelT_icep reconstruction of ice_step_mod.F90:114-128, the uarea-weighted average of the U-point uvel used by the atmosphere calculation, icepack_atmo.F90:206; wired from the dynamics component), [m/s]"
+    },
+    "vvelT": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "y ice velocity at T points (the vvelT_icep reconstruction of ice_step_mod.F90:114-128, icepack_atmo.F90:207), [m/s]"
+    },
     "strairyT": {
      "type": "parameter",
      "units": "N/m^2",
@@ -661,22 +697,19 @@
      "description": "ocean mask sent to the mediator: Si_imask = ocn_gridcell_frac on the meshnc grid, else nint(hm) (F90:1047-1070); a grid field, deferred on the single-cell skeleton, [-]"
     },
     "Si_u10": {
-     "type": "parameter",
+     "type": "unknown",
      "units": "m/s",
-     "default": 0.0,
-     "description": "10-m atmosphere reference wind speed export (F90:1093-1094): not computed by the transcribed atmbndy = 'constant' scheme (atmo_boundary_const leaves Uref = 0); computed by the similarity scheme, deferred, [m/s]"
+     "description": "10-m atmosphere reference wind speed export (F90:1093-1094): the similarity-scheme Uref (atmo_boundary_layer, icepack_atmo.F90:374-378, the highfreq relative wind) aggregated by aicen_init in merge_fluxes (icepack_flux.F90:180-260) and divided by the post-thermo aice in scale_fluxes (ice_flux.F90:1565-1592), [m/s]"
     },
     "Si_tref": {
-     "type": "parameter",
+     "type": "unknown",
      "units": "K",
-     "default": 0.0,
-     "description": "2-m reference temperature export (F90:1097-1098): zero under the constant atmo scheme (Tref is an output of atmo_boundary_layer only), deferred with the similarity scheme, [K]"
+     "description": "2-m reference temperature export (F90:1097-1098): the similarity-scheme Tref (icepack_atmo.F90:366-369) aggregated by aicen_init and divided by the post-thermo aice, [K]"
     },
     "Si_qref": {
-     "type": "parameter",
+     "type": "unknown",
      "units": "kg/kg",
-     "default": 0.0,
-     "description": "2-m reference specific humidity export (F90:1101-1102): zero under the constant atmo scheme, deferred, [kg/kg]"
+     "description": "2-m reference specific humidity export (F90:1101-1102): the similarity-scheme Qref (icepack_atmo.F90:370-372) aggregated by aicen_init and divided by the post-thermo aice, [kg/kg]"
     },
     "Si_thick": {
      "type": "parameter",
@@ -749,6 +782,664 @@
      "units": "kg/kg",
      "default": 0.0,
      "description": "water-isotope reference humidity (F90:1317-1321), deferred, [kg/kg]"
+    },
+    "ustar_0": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at the neutral first guess ustar = rdn*vmag (icepack_atmo.F90:258), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_0": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at the neutral first guess ustar = rdn*vmag (icepack_atmo.F90:259), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_0": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at the neutral first guess ustar = rdn*vmag (icepack_atmo.F90:260), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ustar_1": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at iteration 1 (F90:294), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_1": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at iteration 1 (F90:295), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_1": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at iteration 1 (F90:296), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hol_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at iteration 1 (compute_stability_parameter, icepack_atmo.F90:985-989), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "stable_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category unit stability step at iteration 1 (F90:1015), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psimh_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum stability function at iteration 1 (F90:1030), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psixh_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category scalar stability function at iteration 1, [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rd_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum transfer coefficient at iteration 1 (F90:289), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rh_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category heat transfer coefficient at iteration 1 (F90:290), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "re_1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category humidity transfer coefficient at iteration 1 (F90:291), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ustar_2": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at iteration 2 (F90:294), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_2": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at iteration 2 (F90:295), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_2": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at iteration 2 (F90:296), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hol_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at iteration 2 (compute_stability_parameter, icepack_atmo.F90:985-989), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "stable_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category unit stability step at iteration 2 (F90:1015), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psimh_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum stability function at iteration 2 (F90:1030), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psixh_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category scalar stability function at iteration 2, [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rd_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum transfer coefficient at iteration 2 (F90:289), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rh_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category heat transfer coefficient at iteration 2 (F90:290), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "re_2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category humidity transfer coefficient at iteration 2 (F90:291), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ustar_3": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at iteration 3 (F90:294), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_3": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at iteration 3 (F90:295), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_3": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at iteration 3 (F90:296), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hol_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at iteration 3 (compute_stability_parameter, icepack_atmo.F90:985-989), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "stable_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category unit stability step at iteration 3 (F90:1015), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psimh_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum stability function at iteration 3 (F90:1030), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psixh_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category scalar stability function at iteration 3, [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rd_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum transfer coefficient at iteration 3 (F90:289), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rh_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category heat transfer coefficient at iteration 3 (F90:290), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "re_3": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category humidity transfer coefficient at iteration 3 (F90:291), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ustar_4": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at iteration 4 (F90:294), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_4": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at iteration 4 (F90:295), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_4": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at iteration 4 (F90:296), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hol_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at iteration 4 (compute_stability_parameter, icepack_atmo.F90:985-989), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "stable_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category unit stability step at iteration 4 (F90:1015), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psimh_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum stability function at iteration 4 (F90:1030), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psixh_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category scalar stability function at iteration 4, [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rd_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum transfer coefficient at iteration 4 (F90:289), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rh_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category heat transfer coefficient at iteration 4 (F90:290), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "re_4": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category humidity transfer coefficient at iteration 4 (F90:291), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ustar_5": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category turbulent scale velocity at iteration 5 (F90:294), [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "tstar_5": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category turbulent scale temperature at iteration 5 (F90:295), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qstar_5": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category turbulent scale humidity at iteration 5 (F90:296), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hol_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at iteration 5 (compute_stability_parameter, icepack_atmo.F90:985-989), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "stable_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category unit stability step at iteration 5 (F90:1015), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psimh_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum stability function at iteration 5 (F90:1030), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psixh_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category scalar stability function at iteration 5, [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rd_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category momentum transfer coefficient at iteration 5 (F90:289), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "rh_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category heat transfer coefficient at iteration 5 (F90:290), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "re_5": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category humidity transfer coefficient at iteration 5 (F90:291), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "vmag_rel": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "magnitude of the wind relative to the ice (atmo_boundary_layer, icepack_atmo.F90:206-207), [m/s]"
+    },
+    "vmag": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "high-frequency wind-ice speed difference vmag = max(0.5, vmag_rel) (icepack_atmo.F90:176-180, 205-210), [m/s]"
+    },
+    "rdn": {
+     "type": "unknown",
+     "units": "1",
+     "description": "neutral drag coefficient rdn = vonkar/log(zref/iceruf) (icepack_atmo.F90:215), [-]"
+    },
+    "al2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "log(zref/zTrf) height factor of the 2-m reference diagnostics (icepack_atmo.F90:168; zTrf = 2 m, F90:164), [-]"
+    },
+    "alzm": {
+     "type": "unknown",
+     "units": "1",
+     "description": "log(zlvl/zref) height factor at the lowest model level (icepack_atmo.F90:241), [-]"
+    },
+    "alzs": {
+     "type": "unknown",
+     "units": "1",
+     "description": "log(zlvl/zref) height factor at the surface (alzs = alzm in the absence of the zlvs input, icepack_atmo.F90:242-246), [-]"
+    },
+    "thva": {
+     "type": "unknown",
+     "units": "K",
+     "description": "virtual potential temperature thva = potT*(1 + zvir*Qa) (icepack_atmo.F90:239), [K]"
+    },
+    "cpvir": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cp_wv/cp_air - 1 = 0.801 (icepack_atmo.F90:174; icepack_parameters.F90:281-282), [-]"
+    },
+    "TsfK": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category surface temperature in Kelvin TsfK = Tsfcn + Tffresh (icepack_atmo.F90:234), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "delt": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category potential-temperature difference delt = potT - TsfK (icepack_atmo.F90:235), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "qsat": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "per-category saturation humidity over ice qsat = qqqice*exp(-TTTice/TsfK) (icepack_atmo.F90:201-202, 236), [kg/m3]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "ssq": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category saturation surface humidity ssq = qsat/rhoa (icepack_atmo.F90:237), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "delq": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category specific-humidity difference delq = Qa - ssq (icepack_atmo.F90:240), [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "cp": {
+     "type": "unknown",
+     "units": "J/kg/K",
+     "description": "per-category specific heat of air at constant pressure cp = cp_air*(1 + cpvir*ssq) (icepack_atmo.F90:247), [J/kg/K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hols": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category stability parameter at the 2-m reference height hols = hol*zTrf/zlvl (icepack_atmo.F90:364), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "psix2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category 2-m scalar stability function correction (icepack_atmo.F90:365), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "Trefn": {
+     "type": "unknown",
+     "units": "K",
+     "description": "per-category 2-m reference temperature (icepack_atmo.F90:366-369), masked to 0 for negligible categories (the Fortran merge over aicen > puny of the merge_fluxes call, icepack_flux.F90:190-202), [K]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "Qrefn": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "per-category 2-m reference specific humidity (icepack_atmo.F90:370-372), masked to 0 for negligible categories, [kg/kg]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "Urefn": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "per-category 10-m reference wind speed (icepack_atmo.F90:374-378), masked to 0 for negligible categories, [m/s]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "Tref_merged": {
+     "type": "unknown",
+     "units": "K",
+     "description": "aicen_init-weighted sum of the per-category reference temperatures sum_n(Trefn*aicen_init) (merge_fluxes, icepack_flux.F90:180-202), [K]"
+    },
+    "Qref_merged": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "aicen_init-weighted sum of the per-category reference humidities sum_n(Qrefn*aicen_init), [kg/kg]"
+    },
+    "Uref_merged": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "aicen_init-weighted sum of the per-category reference wind speeds sum_n(Urefn*aicen_init), [m/s]"
+    },
+    "gsum0": {
+     "type": "unknown",
+     "units": "1",
+     "description": "open-water term of the ridge cumulative distribution Gsum(0) = aice0 for aice0 > puny else 0 (ridge_itd, icepack_mechred.F90:851-855), [-]"
+    },
+    "gsum": {
+     "type": "unknown",
+     "units": "1",
+     "description": "unnormalized cumulative thickness distribution Gsum(n) (ridge_itd, icepack_mechred.F90:858-880), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "gsum_total": {
+     "type": "unknown",
+     "units": "1",
+     "description": "total participating area Gsum(ncat) (F90:884), [-]"
+    },
+    "work": {
+     "type": "unknown",
+     "units": "1",
+     "description": "normalization work = 1/Gsum(ncat) for Gsum(ncat) > 0, else 0 (F90:884-885), [-]"
+    },
+    "gsum_norm": {
+     "type": "unknown",
+     "units": "1",
+     "description": "normalized cumulative distribution Gsum(n)*work (F90:886-888), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "gsum0_norm": {
+     "type": "unknown",
+     "units": "1",
+     "description": "normalized open-water term Gsum(0)*work (F90:886-888), [-]"
+    },
+    "apartic0": {
+     "type": "unknown",
+     "units": "1",
+     "description": "participation function of open water apartic(0) (ridge_itd, icepack_mechred.F90:929-933), [-]"
+    },
+    "apartic": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category participation function apartic(n) = [exp(-Gsum(n-1)/astar) - exp(-Gsum(n)/astar)]/(1 - exp(-astari)) (F90:929-933), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hi_rdg": {
+     "type": "unknown",
+     "units": "m",
+     "description": "per-category thickness of the ridging ice hi = max(vicen/aicen, puny) for aicen > puny else 0 (F90:1006-1007), [m]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hrmin": {
+     "type": "unknown",
+     "units": "m",
+     "description": "per-category minimum ridge thickness hrmin = min(2*hi, hi + maxraft) (F90:1008), [m]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "hrexp": {
+     "type": "unknown",
+     "units": "m",
+     "description": "per-category ridge e-folding thickness hrexp = mu_rdg*sqrt(hi) (F90:1009), [m]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "krdg": {
+     "type": "unknown",
+     "units": "1",
+     "description": "per-category mean ridge thickness over the thickness of ridging ice krdg = (hrmin + hrexp)/hi, else the krdg = 1 default (F90:863, 1010), [-]",
+     "shape": [
+      "ncat"
+     ]
+    },
+    "aksum": {
+     "type": "unknown",
+     "units": "1",
+     "description": "net ice area removed over the total area participating aksum = apartic(0) + sum_n(apartic(n)*(1 - 1/krdg(n))) (F90:1031-1036), [-]"
+    },
+    "strength": {
+     "type": "unknown",
+     "units": "N/m",
+     "description": "Rothrock ice strength strength = Cf*Cp*sum_n(dh2rdg(n)*apartic(n))/aksum (icepack_ice_strength, icepack_mechred.F90:1660-1712; Cf = 17, F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow, F90:2814), [N/m]"
     },
     "fswthru": {
      "type": "unknown",
@@ -1487,7 +2178,7 @@
             {
              "op": "*",
              "args": [
-              0.015,
+              0.05,
               "flw"
              ]
             }
@@ -1968,6 +2659,1604 @@
          "mod2med_areacor"
         ]
        }
+      ]
+     }
+    },
+    {
+     "lhs": "vmag_rel",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_relative_wind",
+      "bindings": {
+       "uatm": "uatm",
+       "vatm": "vatm",
+       "uvel": "uvelT",
+       "vvel": "vvelT"
+      }
+     }
+    },
+    {
+     "lhs": "vmag",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_highfreq_vmag",
+      "bindings": {
+       "vmag_rel": "vmag_rel"
+      }
+     }
+    },
+    {
+     "lhs": "rdn",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_neutral_drag",
+      "bindings": {}
+     }
+    },
+    {
+     "lhs": "al2",
+     "rhs": {
+      "op": "log",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         10.0,
+         2.0
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "alzm",
+     "rhs": {
+      "op": "log",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         "zlvl",
+         10.0
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "alzs",
+     "rhs": "alzm"
+    },
+    {
+     "lhs": "thva",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "potT",
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           0.606,
+           "Qa"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "cpvir",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         1810.0,
+         1005.0
+        ]
+       },
+       1.0
+      ]
+     }
+    },
+    {
+     "lhs": "TsfK",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "Tsfcn",
+       273.15
+      ]
+     }
+    },
+    {
+     "lhs": "delt",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "potT",
+       "TsfK"
+      ]
+     }
+    },
+    {
+     "lhs": "qsat",
+     "rhs": {
+      "op": "*",
+      "args": [
+       11637800.0,
+       {
+        "op": "exp",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             5897.8,
+             "TsfK"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ssq",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "qsat",
+       "rhoa"
+      ]
+     }
+    },
+    {
+     "lhs": "delq",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "Qa",
+       "ssq"
+      ]
+     }
+    },
+    {
+     "lhs": "cp",
+     "rhs": {
+      "op": "*",
+      "args": [
+       1005.0,
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           "cpvir",
+           "ssq"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ustar_0",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rdn",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_0",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rdn",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_0",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rdn",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hol_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stability_parameter",
+      "bindings": {
+       "zlvl": "zlvl",
+       "thva": "thva",
+       "ustar": "ustar_0",
+       "tstar": "tstar_0",
+       "qstar": "qstar_0",
+       "Qa": "Qa"
+      }
+     }
+    },
+    {
+     "lhs": "stable_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stable",
+      "bindings": {
+       "hol": "hol_1"
+      }
+     }
+    },
+    {
+     "lhs": "psimh_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_momentum",
+      "bindings": {
+       "hol": "hol_1",
+       "stable": "stable_1"
+      }
+     }
+    },
+    {
+     "lhs": "psixh_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_scalar",
+      "bindings": {
+       "hol": "hol_1",
+       "stable": "stable_1"
+      }
+     }
+    },
+    {
+     "lhs": "rd_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzm",
+       "psi": "psimh_1"
+      }
+     }
+    },
+    {
+     "lhs": "rh_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_1"
+      }
+     }
+    },
+    {
+     "lhs": "re_1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_1"
+      }
+     }
+    },
+    {
+     "lhs": "ustar_1",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rd_1",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_1",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rh_1",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_1",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "re_1",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hol_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stability_parameter",
+      "bindings": {
+       "zlvl": "zlvl",
+       "thva": "thva",
+       "ustar": "ustar_1",
+       "tstar": "tstar_1",
+       "qstar": "qstar_1",
+       "Qa": "Qa"
+      }
+     }
+    },
+    {
+     "lhs": "stable_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stable",
+      "bindings": {
+       "hol": "hol_2"
+      }
+     }
+    },
+    {
+     "lhs": "psimh_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_momentum",
+      "bindings": {
+       "hol": "hol_2",
+       "stable": "stable_2"
+      }
+     }
+    },
+    {
+     "lhs": "psixh_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_scalar",
+      "bindings": {
+       "hol": "hol_2",
+       "stable": "stable_2"
+      }
+     }
+    },
+    {
+     "lhs": "rd_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzm",
+       "psi": "psimh_2"
+      }
+     }
+    },
+    {
+     "lhs": "rh_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_2"
+      }
+     }
+    },
+    {
+     "lhs": "re_2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_2"
+      }
+     }
+    },
+    {
+     "lhs": "ustar_2",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rd_2",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_2",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rh_2",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_2",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "re_2",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hol_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stability_parameter",
+      "bindings": {
+       "zlvl": "zlvl",
+       "thva": "thva",
+       "ustar": "ustar_2",
+       "tstar": "tstar_2",
+       "qstar": "qstar_2",
+       "Qa": "Qa"
+      }
+     }
+    },
+    {
+     "lhs": "stable_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stable",
+      "bindings": {
+       "hol": "hol_3"
+      }
+     }
+    },
+    {
+     "lhs": "psimh_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_momentum",
+      "bindings": {
+       "hol": "hol_3",
+       "stable": "stable_3"
+      }
+     }
+    },
+    {
+     "lhs": "psixh_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_scalar",
+      "bindings": {
+       "hol": "hol_3",
+       "stable": "stable_3"
+      }
+     }
+    },
+    {
+     "lhs": "rd_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzm",
+       "psi": "psimh_3"
+      }
+     }
+    },
+    {
+     "lhs": "rh_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_3"
+      }
+     }
+    },
+    {
+     "lhs": "re_3",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_3"
+      }
+     }
+    },
+    {
+     "lhs": "ustar_3",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rd_3",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_3",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rh_3",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_3",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "re_3",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hol_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stability_parameter",
+      "bindings": {
+       "zlvl": "zlvl",
+       "thva": "thva",
+       "ustar": "ustar_3",
+       "tstar": "tstar_3",
+       "qstar": "qstar_3",
+       "Qa": "Qa"
+      }
+     }
+    },
+    {
+     "lhs": "stable_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stable",
+      "bindings": {
+       "hol": "hol_4"
+      }
+     }
+    },
+    {
+     "lhs": "psimh_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_momentum",
+      "bindings": {
+       "hol": "hol_4",
+       "stable": "stable_4"
+      }
+     }
+    },
+    {
+     "lhs": "psixh_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_scalar",
+      "bindings": {
+       "hol": "hol_4",
+       "stable": "stable_4"
+      }
+     }
+    },
+    {
+     "lhs": "rd_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzm",
+       "psi": "psimh_4"
+      }
+     }
+    },
+    {
+     "lhs": "rh_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_4"
+      }
+     }
+    },
+    {
+     "lhs": "re_4",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_4"
+      }
+     }
+    },
+    {
+     "lhs": "ustar_4",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rd_4",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_4",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rh_4",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_4",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "re_4",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hol_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stability_parameter",
+      "bindings": {
+       "zlvl": "zlvl",
+       "thva": "thva",
+       "ustar": "ustar_4",
+       "tstar": "tstar_4",
+       "qstar": "qstar_4",
+       "Qa": "Qa"
+      }
+     }
+    },
+    {
+     "lhs": "stable_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_stable",
+      "bindings": {
+       "hol": "hol_5"
+      }
+     }
+    },
+    {
+     "lhs": "psimh_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_momentum",
+      "bindings": {
+       "hol": "hol_5",
+       "stable": "stable_5"
+      }
+     }
+    },
+    {
+     "lhs": "psixh_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psi_scalar",
+      "bindings": {
+       "hol": "hol_5",
+       "stable": "stable_5"
+      }
+     }
+    },
+    {
+     "lhs": "rd_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzm",
+       "psi": "psimh_5"
+      }
+     }
+    },
+    {
+     "lhs": "rh_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_5"
+      }
+     }
+    },
+    {
+     "lhs": "re_5",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_exchange_coefficient",
+      "bindings": {
+       "rdn": "rdn",
+       "alz": "alzs",
+       "psi": "psixh_5"
+      }
+     }
+    },
+    {
+     "lhs": "ustar_5",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rd_5",
+       "vmag"
+      ]
+     }
+    },
+    {
+     "lhs": "tstar_5",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "rh_5",
+       "delt"
+      ]
+     }
+    },
+    {
+     "lhs": "qstar_5",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "re_5",
+       "delq"
+      ]
+     }
+    },
+    {
+     "lhs": "hols",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "hol_5",
+       {
+        "op": "/",
+        "args": [
+         2.0,
+         "zlvl"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psix2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "atmo_psix2",
+      "bindings": {
+       "hols": "hols",
+       "stable": "stable_5"
+      }
+     }
+    },
+    {
+     "lhs": "Trefn",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen_init",
+         1e-11
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "atmo_reference_temperature",
+        "bindings": {
+         "potT": "potT",
+         "delt": "delt",
+         "rh": "rh_5",
+         "alzs": "alzs",
+         "al2": "al2",
+         "psixh": "psixh_5",
+         "psix2": "psix2"
+        }
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "Qrefn",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen_init",
+         1e-11
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "atmo_reference_humidity",
+        "bindings": {
+         "Qa": "Qa",
+         "delq": "delq",
+         "re": "re_5",
+         "alzs": "alzs",
+         "al2": "al2",
+         "psixh": "psixh_5",
+         "psix2": "psix2"
+        }
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "Urefn",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen_init",
+         1e-11
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "atmo_reference_wind",
+        "bindings": {
+         "vmag_rel": "vmag_rel",
+         "rd": "rd_5",
+         "rdn": "rdn"
+        }
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "Tref_merged",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "Trefn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen_init",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "Trefn",
+       "aicen_init"
+      ]
+     }
+    },
+    {
+     "lhs": "Qref_merged",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "Qrefn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen_init",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "Qrefn",
+       "aicen_init"
+      ]
+     }
+    },
+    {
+     "lhs": "Uref_merged",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "ncat": {
+        "from": "ncat"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "Urefn",
+          "ncat"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "aicen_init",
+          "ncat"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "Urefn",
+       "aicen_init"
+      ]
+     }
+    },
+    {
+     "lhs": "Si_tref",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "Tref_merged",
+       {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "ranges": {
+         "ncat": {
+          "from": "ncat"
+         }
+        },
+        "expr": {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        },
+        "args": [
+         "aicen"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Si_qref",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "Qref_merged",
+       {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "ranges": {
+         "ncat": {
+          "from": "ncat"
+         }
+        },
+        "expr": {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        },
+        "args": [
+         "aicen"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Si_u10",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "Uref_merged",
+       {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "ranges": {
+         "ncat": {
+          "from": "ncat"
+         }
+        },
+        "expr": {
+         "op": "index",
+         "args": [
+          "aicen",
+          "ncat"
+         ]
+        },
+        "args": [
+         "aicen"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "gsum0",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aice0",
+         1e-11
+        ]
+       },
+       "aice0",
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "gsum",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ridge_cumulative_area",
+      "bindings": {
+       "aice0": "aice0",
+       "aicen": "aicen"
+      }
+     }
+    },
+    {
+     "lhs": "gsum_total",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "aice0",
+           1e-11
+          ]
+         },
+         "aice0",
+         0.0
+        ]
+       },
+       {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "ranges": {
+         "ncat": {
+          "from": "ncat"
+         }
+        },
+        "expr": {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "aicen",
+              "ncat"
+             ]
+            },
+            1e-11
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "aicen",
+            "ncat"
+           ]
+          },
+          0.0
+         ]
+        },
+        "args": [
+         "aicen"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "work",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "gsum_total",
+         0.0
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         1.0,
+         "gsum_total"
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "gsum_norm",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "gsum",
+       "work"
+      ]
+     }
+    },
+    {
+     "lhs": "gsum0_norm",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "gsum0",
+       "work"
+      ]
+     }
+    },
+    {
+     "lhs": "apartic0",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ridge_participation_exponential",
+      "bindings": {
+       "Gprev": 0.0,
+       "G": "gsum0_norm"
+      }
+     }
+    },
+    {
+     "lhs": "apartic",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ridge_participation_exponential",
+      "bindings": {
+       "Gprev": {
+        "op": "-",
+        "args": [
+         "gsum_norm",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": ">",
+              "args": [
+               "aicen",
+               1e-11
+              ]
+             },
+             "aicen",
+             0.0
+            ]
+           },
+           "work"
+          ]
+         }
+        ]
+       },
+       "G": "gsum_norm"
+      }
+     }
+    },
+    {
+     "lhs": "hi_rdg",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "vicen",
+           "aicen"
+          ]
+         },
+         1e-11
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "hrmin",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           2.0,
+           "hi_rdg"
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           "hi_rdg",
+           1.0
+          ]
+         }
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "hrexp",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         4.0,
+         {
+          "op": "sqrt",
+          "args": [
+           "hi_rdg"
+          ]
+         }
+        ]
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "krdg",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "aicen",
+         1e-11
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           "hrmin",
+           "hrexp"
+          ]
+         },
+         "hi_rdg"
+        ]
+       },
+       1.0
+      ]
+     }
+    },
+    {
+     "lhs": "aksum",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "apartic0",
+       {
+        "op": "faq",
+        "output_idx": [],
+        "reduce": "+",
+        "ranges": {
+         "ncat": {
+          "from": "ncat"
+         }
+        },
+        "expr": {
+         "op": "*",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "apartic",
+            "ncat"
+           ]
+          },
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            {
+             "op": "/",
+             "args": [
+              1.0,
+              {
+               "op": "index",
+               "args": [
+                "krdg",
+                "ncat"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "args": [
+         "apartic",
+         "krdg"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "strength",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         17.0,
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             9.80616,
+             2.0
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             1026.0,
+             917.0
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             917.0,
+             1026.0
+            ]
+           }
+          ]
+         },
+         {
+          "op": "faq",
+          "output_idx": [],
+          "reduce": "+",
+          "ranges": {
+           "ncat": {
+            "from": "ncat"
+           }
+          },
+          "expr": {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "ridge_strength_term",
+           "bindings": {
+            "aicen": {
+             "op": "index",
+             "args": [
+              "aicen",
+              "ncat"
+             ]
+            },
+            "vicen": {
+             "op": "index",
+             "args": [
+              "vicen",
+              "ncat"
+             ]
+            },
+            "apartic": {
+             "op": "index",
+             "args": [
+              "apartic",
+              "ncat"
+             ]
+            },
+            "hrmin": {
+             "op": "index",
+             "args": [
+              "hrmin",
+              "ncat"
+             ]
+            },
+            "hrexp": {
+             "op": "index",
+             "args": [
+              "hrexp",
+              "ncat"
+             ]
+            },
+            "krdg": {
+             "op": "index",
+             "args": [
+              "krdg",
+              "ncat"
+             ]
+            }
+           }
+          },
+          "args": [
+           "aicen",
+           "vicen",
+           "apartic",
+           "hrmin",
+           "hrexp",
+           "krdg"
+          ]
+         }
+        ]
+       },
+       "aksum"
       ]
      }
     }
@@ -2511,7 +4800,7 @@
     },
     {
      "id": "icecap_export_lwup_step1_cell2_4",
-     "description": "Instantaneous pin of the outgoing-longwave export Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)/aice]*mod2med_areacor (merge_fluxes, icepack_flux.F90:213-215; emissivity = 0.985; the /aice division of scale_fluxes, ice_flux.F90:1573; the fix branch -stefan_boltzmann*(Tf+Tffresh)^4/ailohi of F90:1149-1164 is inactive - flwout < -puny on the ice-covered cell) against cice_run_exports.csv row (step 1, i=2, j=4). The per-category flwoutn are not dumped; the uniform value flwoutn = -2.75181079660698799e+02 W/m2 = exit flwout + (1-emissivity)*flw is derived so the aicen-weighted sum reproduces the dumped cice_flux.csv exit flwout = -2.78429407910382906e+02 (flw = 2.16555216645606578e+02 from the import dump, driven by Faxa_lwdn = 2.16483751552076626e+02 and med2mod_areacor = 1.00033011758627421e+00, both from the import dump). The .esm reproduces Faii_lwup = -2.78337523798856921e+02 to round-off.",
+     "description": "Instantaneous pin of the outgoing-longwave export Faii_lwup = [sum_n((flwoutn-(1-emissivity)*flw)*aicen)/aice]*mod2med_areacor (merge_fluxes, icepack_flux.F90:213-215; emissivity = 0.95 from the D-class ice_in forcing_nml, so 1-emissivity = 0.05; the /aice division of scale_fluxes, ice_flux.F90:1573; the fix branch -stefan_boltzmann*(Tf+Tffresh)^4/ailohi of F90:1149-1164 is inactive - flwout < -puny on the ice-covered cell) against cice_run_exports.csv row (step 1, i=2, j=4). The per-category flwoutn are not dumped; the uniform value flwoutn = -2.67601647078102577e+02 W/m2 = exit flwout + 0.05*flw is derived so the aicen-weighted sum reproduces the dumped cice_flux.csv exit flwout = -2.78429407910382906e+02 (flw = 2.16555216645606578e+02 from the import dump, driven by Faxa_lwdn = 2.16483751552076626e+02 and med2mod_areacor = 1.00033011758627421e+00, both from the import dump). The .esm reproduces Faii_lwup = -2.78337523798856921e+02 to round-off.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -2526,11 +4815,11 @@
       ],
       "mod2med_areacor": 0.999669991355383,
       "flwoutn": [
-       -275.1810796606988,
-       -275.1810796606988,
-       -275.1810796606988,
-       -275.1810796606988,
-       -275.1810796606988
+       -267.6016470781026,
+       -267.6016470781026,
+       -267.6016470781026,
+       -267.6016470781026,
+       -267.6016470781026
       ],
       "Faxa_lwdn": 216.48375155207663,
       "med2mod_areacor": 1.0003301175862742
@@ -2892,6 +5181,336 @@
        "variable": "Faii_tauy",
        "time": 0.0,
        "expected": 0.0025863821763146694
+      }
+     ]
+    },
+    {
+     "id": "icecap_similarity_step1_cell3_5",
+     "description": "Instantaneous pin of the similarity-scheme reference-height exports at cell (3,5) step 1 (Si_tref/Si_qref rel 1e-9, Si_u10 rel 1e-4) against cice_run_exports.csv row (step 1, i=3, j=5). The .esm runs the full 5-iteration unroll of atmo_boundary_layer (icepack_atmo.F90:52-389; natmiter = 5 and atmiter_conv = 0 make the do-while of F90:269 always run 5 updates), with highfreq = .true. relative wind (F90:176-180, 205-210), and aggregates the per-category Trefn/Qrefn/Urefn by aicen_init (merge_fluxes, icepack_flux.F90:180-260; the merge call passes aicen_init, icepack_therm_vertical.F90:3169) then divides by the post-thermo aice (scale_fluxes, ice_flux.F90:1565-1592). The uvelT/vvelT inputs are the uarea-weighted U-point reconstruction of ice_step_mod.F90:114-128. Si_u10 is pinned to rel 1e-4 because the uvelT_icep reconstruction carries a ~1e-4 m/s gap against the run (documented in README-cice.md).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "Sa_u": 0.16233199134639076,
+      "Sa_v": 1.7327887040729173,
+      "Sa_ptem": 271.7722275908215,
+      "Sa_shum": 0.0026901922647386382,
+      "Sa_dens": 1.2698312342884206,
+      "Sa_z": 10.0,
+      "uvelT": -0.002803880136886027,
+      "vvelT": 0.0009521308125247686,
+      "Tsfcn": [
+       -6.784874175790558,
+       -12.085742880755069,
+       -12.613846333591283,
+       -13.468772178695012,
+       -14.690937704627775
+      ],
+      "aicen_init": [
+       0.1951085551827879,
+       0.1910280359125852,
+       0.19874841183265093,
+       0.08526761670201817,
+       0.10443127310912911
+      ],
+      "aicen": [
+       0.19509920997698144,
+       0.19102973190363176,
+       0.19874352490657504,
+       0.08527745905757382,
+       0.10446119777225216
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "Si_tref",
+       "time": 0.0,
+       "expected": 268.389768602136,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_qref",
+       "time": 0.0,
+       "expected": 0.002306501955484177,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_u10",
+       "time": 0.0,
+       "expected": 0.6263536773790229,
+       "tolerance": {
+        "rel": 0.0001
+       }
+      }
+     ]
+    },
+    {
+     "id": "icecap_similarity_step2_cell3_5",
+     "description": "Instantaneous pin of the similarity-scheme reference-height exports at cell (3,5) step 2 (Si_tref/Si_qref rel 1e-9, Si_u10 rel 1e-4) against cice_run_exports.csv row (step 2, i=3, j=5). The .esm runs the full 5-iteration unroll of atmo_boundary_layer (icepack_atmo.F90:52-389; natmiter = 5 and atmiter_conv = 0 make the do-while of F90:269 always run 5 updates), with highfreq = .true. relative wind (F90:176-180, 205-210), and aggregates the per-category Trefn/Qrefn/Urefn by aicen_init (merge_fluxes, icepack_flux.F90:180-260; the merge call passes aicen_init, icepack_therm_vertical.F90:3169) then divides by the post-thermo aice (scale_fluxes, ice_flux.F90:1565-1592). The uvelT/vvelT inputs are the uarea-weighted U-point reconstruction of ice_step_mod.F90:114-128. Si_u10 is pinned to rel 1e-4 because the uvelT_icep reconstruction carries a ~1e-4 m/s gap against the run (documented in README-cice.md).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "Sa_u": 0.3588003756344395,
+      "Sa_v": 1.4403804517905865,
+      "Sa_ptem": 272.50986762040054,
+      "Sa_shum": 0.002672284834163213,
+      "Sa_dens": 1.2664351386463166,
+      "Sa_z": 10.0,
+      "uvelT": -0.002294032840018533,
+      "vvelT": 0.0010374519272243238,
+      "Tsfcn": [
+       -3.3169979477736833,
+       -4.7441798211437485,
+       -4.423696077342284,
+       -4.018506505755441,
+       -3.0354007265937515
+      ],
+      "aicen_init": [
+       0.19509920997698144,
+       0.19102973190363176,
+       0.19874352490657504,
+       0.08527745905757382,
+       0.10446119777225216
+      ],
+      "aicen": [
+       0.1948814864561205,
+       0.19107776591178488,
+       0.19861808015743235,
+       0.08526598898361806,
+       0.10446354614446451
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "Si_tref",
+       "time": 0.0,
+       "expected": 271.4738721845051,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_qref",
+       "time": 0.0,
+       "expected": 0.0027170017327940135,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_u10",
+       "time": 0.0,
+       "expected": 0.5345052120434555,
+       "tolerance": {
+        "rel": 0.0001
+       }
+      }
+     ]
+    },
+    {
+     "id": "icecap_similarity_step1_cell3_6",
+     "description": "Instantaneous pin of the similarity-scheme reference-height exports at cell (3,6) step 1 (Si_tref/Si_qref rel 1e-9, Si_u10 rel 1e-4) against cice_run_exports.csv row (step 1, i=3, j=6). The .esm runs the full 5-iteration unroll of atmo_boundary_layer (icepack_atmo.F90:52-389; natmiter = 5 and atmiter_conv = 0 make the do-while of F90:269 always run 5 updates), with highfreq = .true. relative wind (F90:176-180, 205-210), and aggregates the per-category Trefn/Qrefn/Urefn by aicen_init (merge_fluxes, icepack_flux.F90:180-260; the merge call passes aicen_init, icepack_therm_vertical.F90:3169) then divides by the post-thermo aice (scale_fluxes, ice_flux.F90:1565-1592). The uvelT/vvelT inputs are the uarea-weighted U-point reconstruction of ice_step_mod.F90:114-128. Si_u10 is pinned to rel 1e-4 because the uvelT_icep reconstruction carries a ~1e-4 m/s gap against the run (documented in README-cice.md).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "Sa_u": 0.5936218983660015,
+      "Sa_v": 0.8042636384108163,
+      "Sa_ptem": 272.68821412122486,
+      "Sa_shum": 0.003041075136324154,
+      "Sa_dens": 1.265176701724083,
+      "Sa_z": 10.0,
+      "uvelT": -0.005355237959061165,
+      "vvelT": 0.005799480119396538,
+      "Tsfcn": [
+       -8.08718063677509,
+       -11.763846376836845,
+       -12.25355106328962,
+       -13.040937207939145,
+       -13.875145202591531
+      ],
+      "aicen_init": [
+       0.2665650105082223,
+       0.2729552906269476,
+       0.16782709550233882,
+       0.05190494974759436,
+       0.045590900958074214
+      ],
+      "aicen": [
+       0.2665298255694812,
+       0.2729006570477799,
+       0.16778864231529517,
+       0.05189257221180012,
+       0.04558044632846786
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "Si_tref",
+       "time": 0.0,
+       "expected": 269.239584343193,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_qref",
+       "time": 0.0,
+       "expected": 0.002559542678647623,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_u10",
+       "time": 0.0,
+       "expected": 0.3594421313465572,
+       "tolerance": {
+        "rel": 0.0001
+       }
+      }
+     ]
+    },
+    {
+     "id": "icecap_similarity_step1_cell4_6",
+     "description": "Instantaneous pin of the similarity-scheme reference-height exports at cell (4,6) step 1 (Si_tref/Si_qref rel 1e-9, Si_u10 rel 1e-4) against cice_run_exports.csv row (step 1, i=4, j=6). The .esm runs the full 5-iteration unroll of atmo_boundary_layer (icepack_atmo.F90:52-389; natmiter = 5 and atmiter_conv = 0 make the do-while of F90:269 always run 5 updates), with highfreq = .true. relative wind (F90:176-180, 205-210), and aggregates the per-category Trefn/Qrefn/Urefn by aicen_init (merge_fluxes, icepack_flux.F90:180-260; the merge call passes aicen_init, icepack_therm_vertical.F90:3169) then divides by the post-thermo aice (scale_fluxes, ice_flux.F90:1565-1592). The uvelT/vvelT inputs are the uarea-weighted U-point reconstruction of ice_step_mod.F90:114-128. Si_u10 is pinned to rel 1e-4 because the uvelT_icep reconstruction carries a ~1e-4 m/s gap against the run (documented in README-cice.md).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "Sa_u": 0.7380477128266603,
+      "Sa_v": 0.45505320851051023,
+      "Sa_ptem": 273.0265434450146,
+      "Sa_shum": 0.003044734709515831,
+      "Sa_dens": 1.2635093716946606,
+      "Sa_z": 10.0,
+      "uvelT": -0.004303182797437944,
+      "vvelT": 0.010727121454501366,
+      "Tsfcn": [
+       -8.67286130365449,
+       -12.093617264877656,
+       -12.58295647748278,
+       -13.369752775218103,
+       -14.188849746616368
+      ],
+      "aicen_init": [
+       0.293731361151834,
+       0.2767248383597799,
+       0.1542216731264217,
+       0.047162892029043633,
+       0.04080763501316767
+      ],
+      "aicen": [
+       0.2936476965493385,
+       0.27663678612600096,
+       0.15417825363337812,
+       0.04715026122523659,
+       0.04079790528181482
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "Si_tref",
+       "time": 0.0,
+       "expected": 269.39930618942464,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_qref",
+       "time": 0.0,
+       "expected": 0.0025495223020029797,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      },
+      {
+       "variable": "Si_u10",
+       "time": 0.0,
+       "expected": 0.311577952756512,
+       "tolerance": {
+        "rel": 0.0001
+       }
+      }
+     ]
+    },
+    {
+     "id": "icecap_strength_rothrock_step1_cell2_4",
+     "description": "Instantaneous pin of the Rothrock ice strength (row 1: step 1, i=2, j=4) against cice_ice_strength.csv. The .esm transcribes icepack_ice_strength (icepack_mechred.F90:1660-1712) with the D-class settings kstrength = 1, krdg_partic = 1, krdg_redist = 1, mu_rdg = 4: the cumulative distribution Gsum (F90:848-889), the exponential participation function (F90:919-934), the exponential redistribution hrmin/hrexp/krdg (F90:1004-1010), aksum (F90:1031-1036), and strength = Cf*Cp*sum(apartic*dh2rdg)/aksum (F90:1697-1710; Cf = 17, icepack_parameters.F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow, F90:2814).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009853548870050664,
+       0.012856324595003365,
+       0.029676941490770437,
+       0.16811440592585572,
+       0.7737911360216866
+      ],
+      "vicen": [
+       0.0033680184834617927,
+       0.015542052227473355,
+       0.06637765750622569,
+       0.590810760871143,
+       21.61213381468219
+      ],
+      "aice0": 0.005707643096633186
+     },
+     "assertions": [
+      {
+       "variable": "strength",
+       "time": 0.0,
+       "expected": 321248.8660482337,
+       "tolerance": {
+        "rel": 1e-09
+       }
+      }
+     ]
+    },
+    {
+     "id": "icecap_strength_rothrock_step1_cell2_5",
+     "description": "Instantaneous pin of the Rothrock ice strength (row 4: step 1, i=2, j=5) against cice_ice_strength.csv. The .esm transcribes icepack_ice_strength (icepack_mechred.F90:1660-1712) with the D-class settings kstrength = 1, krdg_partic = 1, krdg_redist = 1, mu_rdg = 4: the cumulative distribution Gsum (F90:848-889), the exponential participation function (F90:919-934), the exponential redistribution hrmin/hrexp/krdg (F90:1004-1010), aksum (F90:1031-1036), and strength = Cf*Cp*sum(apartic*dh2rdg)/aksum (F90:1697-1710; Cf = 17, icepack_parameters.F90:261, Cp = 0.5 gravit (rhow-rhoi) rhoi/rhow, F90:2814).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.19517590526067544,
+       0.17517092814581073,
+       0.20299967624466317,
+       0.09250674814792506,
+       0.12164352345239411
+      ],
+      "vicen": [
+       0.03492051855887914,
+       0.1881462069722783,
+       0.3803456398502473,
+       0.32465543818502113,
+       1.449938023658202
+      ],
+      "aice0": 0.2125032187485315
+     },
+     "assertions": [
+      {
+       "variable": "strength",
+       "time": 0.0,
+       "expected": 87.09763709741893,
+       "tolerance": {
+        "rel": 1e-09
+       }
       }
      ]
     }
