@@ -441,8 +441,8 @@
     {
      "lhs": "m",
      "rhs": { "op": "+", "args": [
-       { "op": "*", "args": [917.0, "vice"] },
-       { "op": "*", "args": [330.0, "vsno"] } ] }
+       { "op": "*", "args": [{"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}, "vice"] },
+       { "op": "*", "args": [{"op": "const", "args": [], "value": 330.0, "units": "kg/m^3"}, "vsno"] } ] }
     },
     {
      "lhs": "strength",
@@ -559,7 +559,7 @@
     {
      "lhs": "vrel",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "ocean_ice_stress_magnitude",
-       "bindings": { "aiX": "aice", "rhow": 1026.0, "Cw": "Cw", "uocn": "uocn", "vocn": "vocn",
+       "bindings": { "aiX": "aice", "rhow": {"op": "const", "args": [], "value": 1026.0, "units": "kg/m^3"}, "Cw": "Cw", "uocn": "uocn", "vocn": "vocn",
          "uvel": "uvel", "vvel": "vvel" } }
     },
     {

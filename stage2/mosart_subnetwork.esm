@@ -133,7 +133,7 @@
              { "op": "*", "args": [
                { "op": "+", "args": ["etin", "etout_manning"] },
                "localdelt" ] } ] },
-           1.0e-14 ] },
+           {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3"} ] },
          { "op": "-", "args": [
            { "op": "+", "args": ["etin", { "op": "/", "args": ["wt", "localdelt"] }] } ] },
          "etout_manning"
@@ -152,7 +152,7 @@
                { "op": "*", "args": [
                  { "op": "+", "args": ["etin", "etout_manning"] },
                  "localdelt" ] } ] },
-             1.0e-14 ] },
+             {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3"} ] },
            { "op": ">", "args": ["mt", 0.0] } ] } ] },
        { "op": "/", "args": [
          { "op": "-", "args": ["etout"] },

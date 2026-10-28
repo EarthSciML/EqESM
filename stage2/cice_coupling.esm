@@ -1573,7 +1573,7 @@
          "med2mod_areacor"
         ]
        },
-       1000.0
+       {"op": "const", "args": [], "value": 1000.0, "units": "kg/m^3"}
       ]
      }
     },
@@ -1630,7 +1630,7 @@
                {
                 "op": "/",
                 "args": [
-                 100000.0,
+                 {"op": "const", "args": [], "value": 100000.0, "units": "Pa"},
                  "Sa_pbot"
                 ]
                },
@@ -1688,7 +1688,7 @@
              {
               "op": "*",
               "args": [
-               287.058,
+               {"op": "const", "args": [], "value": 287.058, "units": "m^2/(K*s^2)"},
                {
                 "op": "+",
                 "args": [
@@ -1707,10 +1707,10 @@
              }
             ]
            },
-           1.2
+           {"op": "const", "args": [], "value": 1.2, "units": "kg/m^3"}
           ]
          },
-         1.2
+         {"op": "const", "args": [], "value": 1.2, "units": "kg/m^3"}
         ]
        }
       ]
@@ -1811,7 +1811,7 @@
      "rhs": {
       "op": "+",
       "args": [
-       273.15,
+       {"op": "const", "args": [], "value": 273.15, "units": "K"},
        {
         "op": "/",
         "args": [
@@ -2532,7 +2532,7 @@
           "op": ">",
           "args": [
            "flwout",
-           -1e-11
+           {"op": "const", "args": [], "value": -1e-11, "units": "W/m^2"}
           ]
          },
          {
@@ -2544,7 +2544,7 @@
              {
               "op": "*",
               "args": [
-               5.67e-08,
+               {"op": "const", "args": [], "value": 5.67e-08, "units": "kg/(K^4*s^3)"},
                {
                 "op": "^",
                 "args": [
@@ -2552,7 +2552,7 @@
                   "op": "+",
                   "args": [
                    "Tf",
-                   273.15
+                   {"op": "const", "args": [], "value": 273.15, "units": "degC"}
                   ]
                  },
                  4
@@ -2720,7 +2720,7 @@
         "op": "/",
         "args": [
          "zlvl",
-         10.0
+         {"op": "const", "args": [], "value": 10.0, "units": "m"}
         ]
        }
       ]
@@ -2774,7 +2774,7 @@
       "op": "+",
       "args": [
        "Tsfcn",
-       273.15
+       {"op": "const", "args": [], "value": 273.15, "units": "K"}
       ]
      }
     },
@@ -2793,7 +2793,7 @@
      "rhs": {
       "op": "*",
       "args": [
-       11637800.0,
+       {"op": "const", "args": [], "value": 11637800.0, "units": "kg/m^3"},
        {
         "op": "exp",
         "args": [
@@ -2803,7 +2803,7 @@
            {
             "op": "/",
             "args": [
-             5897.8,
+             {"op": "const", "args": [], "value": 5897.8, "units": "K"},
              "TsfK"
             ]
            }
@@ -2839,7 +2839,7 @@
      "rhs": {
       "op": "*",
       "args": [
-       1005.0,
+       {"op": "const", "args": [], "value": 1005.0, "units": "J/kg/K"},
        {
         "op": "+",
         "args": [
@@ -3495,7 +3495,7 @@
        {
         "op": "/",
         "args": [
-         2.0,
+         {"op": "const", "args": [], "value": 2.0, "units": "m"},
          "zlvl"
         ]
        }
@@ -3999,7 +3999,7 @@
            "aicen"
           ]
          },
-         1e-11
+         {"op": "const", "args": [], "value": 1e-11, "units": "m"}
         ]
        },
        0.0
@@ -4032,7 +4032,7 @@
           "op": "+",
           "args": [
            "hi_rdg",
-           1.0
+           {"op": "const", "args": [], "value": 1.0, "units": "m"}
           ]
          }
         ]
@@ -4056,7 +4056,7 @@
        {
         "op": "*",
         "args": [
-         4.0,
+         {"op": "const", "args": [], "value": 4.0, "units": "m^(1/2)"},
          {
           "op": "sqrt",
           "args": [

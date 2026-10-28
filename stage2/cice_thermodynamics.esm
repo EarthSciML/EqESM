@@ -1058,7 +1058,7 @@
     },
     {
      "lhs": "kslyr",
-     "rhs": 0.3
+     "rhs": {"op": "const", "args": [], "value": 0.3, "units": "W/m/K"}
     },
     {
      "lhs": "kilyr_top",
@@ -1460,7 +1460,7 @@
           "op": "+",
           "args": [
            "Tsfc",
-           273.15
+           {"op": "const", "args": [], "value": 273.15, "units": "K"}
           ]
          }
         ]
@@ -1563,14 +1563,14 @@
                }
               ]
              },
-             1026.0
+             {"op": "const", "args": [], "value": 1026.0, "units": "kg^2/m^6"}
             ]
            }
           ]
          }
         ]
        },
-       0.005
+       {"op": "const", "args": [], "value": 0.005, "units": "m/s"}
       ]
      }
     },
@@ -1834,7 +1834,7 @@
         "op": ">",
         "args": [
          "hs",
-         1e-11
+         {"op": "const", "args": [], "value": 1e-11, "units": "m"}
         ]
        },
        {
@@ -1844,7 +1844,7 @@
           "op": "*",
           "args": [
            "esub",
-           330.0
+           {"op": "const", "args": [], "value": 330.0, "units": "kg/m^3"}
           ]
          },
          {
@@ -1854,13 +1854,7 @@
             "op": "-",
             "args": [
              "qsnon_top",
-             {
-              "op": "*",
-              "args": [
-               330.0,
-               2501000.0
-              ]
-             }
+             {"op": "const", "args": [], "value": 825330000.0, "units": "J/m^3"}
             ]
            },
            "dt"
@@ -1875,7 +1869,7 @@
           "op": "*",
           "args": [
            "esub",
-           917.0
+           {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}
           ]
          },
          {
@@ -1885,13 +1879,7 @@
             "op": "-",
             "args": [
              "qm_top",
-             {
-              "op": "*",
-              "args": [
-               917.0,
-               2501000.0
-              ]
-             }
+             {"op": "const", "args": [], "value": 2293417000.0, "units": "J/m^3"}
             ]
            },
            "dt"
@@ -1911,7 +1899,7 @@
         "op": ">",
         "args": [
          "hs",
-         1e-11
+         {"op": "const", "args": [], "value": 1e-11, "units": "m"}
         ]
        },
        "evapn",
@@ -1956,7 +1944,7 @@
               "op": "/",
               "args": [
                "evapin",
-               917.0
+               {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}
               ]
              }
             ]
@@ -2017,7 +2005,7 @@
          {
           "op": "*",
           "args": [
-           917.0,
+           {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"},
            {
             "op": "-",
             "args": [
@@ -2044,7 +2032,7 @@
        {
         "op": "*",
         "args": [
-         330.0,
+         {"op": "const", "args": [], "value": 330.0, "units": "kg/m^3"},
          "melts"
         ]
        }
