@@ -395,6 +395,29 @@ In progress. See PLAN.md §4.1 for the playbook.
   (missing metadata close brace + surplus trailing braces), then the
   fsnow_dEdd binding and coords conversions. `esm test stage2/`:
   172P/0F/0E (115 MOSART + 57 CICE).
+- **CICE dynamics pointwise laws pinned in the coupling cap** ✅
+  (2026-10-28) — worktree `wt/cice-dynpins` (branch `wt/cice-dynpins`):
+  the compile block was confirmed empirically first (a trivial `{0,0}`
+  `zetax2` test in `cice_dynamics.esm` fails whole-file compilation with
+  `unlowered_operator: rewrite-target operator 'D' reached evaluation
+  without being lowered`, esm-spec §4.2/§9.6.8 — reverted), so the
+  dynamics pointwise laws were pinned in `IceCap` as algebraic probes
+  (12 probe equations, 166 total): the classic-EVP stress maps
+  (newp/newm/new12, ice_dyn_evp.F90:1584-1609), the strain invariant
+  Delta and viscosities/replacement pressure (zetax2/etax2/rep_prs,
+  ice_dyn_shared.F90:2156-2159, 2467-2471), and the stepu ocean-ice
+  stress (vrel/taux/tauy/Cb, F90:817-818, 931-937) via the existing
+  templates. Constants verified from the dump fit, not assumed: e_factor =
+  e_yieldcurve²/e_plasticpot⁴ = 0.25 (all 184,320 stress rows),
+  epp2i = 0.25, capping = 1, Ktens = 0 — no mismatch. Findings: the
+  dumped taux/tauy are the stepu partials vrel·waterx/y (not the
+  dyn_finish full form of `cice_dynamics.esm` eqs 26-27); the corner
+  strain rates are area-weighted (m²/s) so the corner viscosities carry
+  kg/(m²·s) (nominal kg/s in the Fortran); TbU = 0 in every traced row
+  (Cb pins are wiring checks). 4 tests/22 assertions at rel 1e-12, all
+  inputs bound via `parameter_overrides`, numbers from
+  `extract_dynamics_tests.py`. `esm test stage2/`: 200P/0F/0E (115 MOSART
+  + 85 CICE).
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
