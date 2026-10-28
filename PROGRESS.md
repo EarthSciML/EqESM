@@ -350,6 +350,51 @@ In progress. See PLAN.md §4.1 for the playbook.
   shr_frz_freezetemp form (bugs.md #6). Manager added the Si_t export
   pin (`c8db84a`) after the dump fix; README-cice.md Testing section
   rewritten. `esm test stage2/`: 148P/0F/0E (115 MOSART + 33 CICE).
+- **CICE similarity atmo + Rothrock strength** ✅ (2026-10-28, merged
+  `20d305f`) — worktree `wt/cice-atmo` (branch `wt/cice-atmo`): the
+  Monin-Obukhov similarity boundary layer transcribed into
+  `cice_templates.esm` as 18 atmo templates (neutral drag, relative wind,
+  stability parameter, stable/unstable psi, exchange coefficients, 2-m
+  psix2, Tref/Qref/Uref) with the 5-iteration unroll for the D-class
+  natmiter = 5, plus the Rothrock strength chain (cumulative distribution,
+  exponential participation, hrmin/hrexp/krdg, strength term). Coupling
+  tests extended to 36 tests/47 assertions (Si_tref/Si_qref at rel 1e-9,
+  Si_u10 with a documented rel 1e-4 gap from the uvelT_icep
+  reconstruction, strength at rel 1e-9); emissivity fixed to the D-class
+  0.95. `esm test stage2/`: 162P/0F/0E.
+- **CICE thermodynamics re-transcribed to the D-class config** ✅
+  (2026-10-28, merged `dfe2671`) — worktree `wt/cice-thermo` (branch
+  `wt/cice-thermo`): the thermodynamics skeleton transcribed the icepack
+  namelist defaults (BL99 7/1, bubbly, ccsm3, cesm pond), which the
+  D-class run does not exercise; re-transcribed `cice_thermodynamics.esm`
+  + `cice_templates.esm` to the run config: ktherm = 2 mushy
+  (nilyr = 8/nslyr = 3), conduct = MU71, shortwave = dEdd,
+  frzpnd = hlid sea-level ponds, snwredist = 'none', hs0 = 0,
+  phi_i_mushy = 0.45, tfrz_option = mushy, congel_freeze = one-step.
+  Thermodynamics model: mushy enthalpy states qicen/qsnon as unknowns
+  with defaults (MOSART wr precedent), vertical conduction as
+  semi-discrete flux-divergence ODEs, dEdd surface laws (snow fraction,
+  effective pond area, band-weighted ice/snow albedos, absorbed/
+  penetrating shortwave conservation), sea-level melt-pond volume change.
+  Templates 63 → 76 (mushy liquidus/temperature-from-enthalpy/
+  conductivity/enthalpy-of-melting/brine/liquid-fraction, dEdd laws).
+  9 tests/10 assertions pin the dEdd surface laws against
+  `cice_albedo.csv` to round-off (rel 1e-12): snow fraction on bare ice
+  and snow, apeffn through the infiltration/hypsometry/hpmin/taper
+  branches, ice and snow broadband albedos, shortwave conservation
+  fswint = swabs − fswsfc − fswthru. Findings: (a) assertion syntax —
+  the runner materializes shaped unknowns only under `coords`
+  (element names `u[1]` are not found); (b) Fortran unit bug at
+  icepack_shortwave.F90:3587-3588 — `dhs = hsnlvl − fsnow·dt` subtracts
+  the snowfall mass flux (kg/m²/s) from a snow depth (m); the .esm
+  reproduces the numerics via a dedicated m/s parameter `fsnow_dEdd`
+  (bugs.md #10); (c) cice_transport.esm/cice.esm metaparameters moved
+  to nilyr = 8/nslyr = 3 so the assembly's index-set merge stays
+  deep-equal. Worktree had been left mid-write by the worker (compaction
+  failure): file truncated to invalid JSON — repaired by the manager
+  (missing metadata close brace + surplus trailing braces), then the
+  fsnow_dEdd binding and coords conversions. `esm test stage2/`:
+  172P/0F/0E (115 MOSART + 57 CICE).
 - **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
   `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
   (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
