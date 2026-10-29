@@ -48,7 +48,7 @@ the constant scheme remains for the assembly Control), `ktherm = 2` (mushy), `co
 | | conductivity (bubbly Pringle 2007 / MU71 / mushy) and interface conductances, congelation enthalpy, ocean heat flux, melt-pond volume change (cesm and sea-level schemes) | `icepack_therm_bl99.F90`: conductivity 874-961 (MU71 911-916); `icepack_mushy_physics.F90`: conductivity_mush 455-485; `icepack_therm_vertical.F90`: qbot 1432-1443, fbot 662-678; `icepack_meltpond_lvl.F90`: 154-174; `icepack_meltpond_sealvl.F90`: 76, 157 |
 | | constant atmo boundary layer (tau, shcoef, lhcoef) and the similarity scheme (neutral drag, relative wind, stability parameter, stable/unstable psi, exchange coefficients, 2-m psix2, Tref/Qref/Uref) | `icepack_atmo.F90`: atmo_boundary_const 398-496 (460-464, 493-494); atmo_boundary_layer 52-389 (215, 176-210, 985-989, 1015-1075, 289-291, 364-378) |
 | | Hibler and Rothrock strength (cumulative distribution, exponential participation, ridge redistribution hrmin/hrexp/krdg, aksum, strength term), Delta invariant, viscosities/replacement pressure, classic-EVP stress maps, ocean-ice stress, seabed stress | `icepack_mechred.F90`: 1720, ridge_itd 848-1036, icepack_ice_strength 1660-1712; `ice_dyn_shared.F90`: strain_rates 2081-2161, visc_replpress 2444-2473, set_evp_parameters 451-484; stepu 923-964 |
-| `cice_thermodynamics.esm` | Model `Thermodynamics` — the D-class column physics: prep_radiation dEdd shortwave/albedo, the mushy (ktherm = 2) vertical heat conduction and surface energy balance, growth/melt/ponds (frzpnd = hlid sea-level) and ocean heat/fresh/salt fluxes; 65 equations over ncat × nilyr/nslyr | `icepack_shortwave.F90` (step_radiation, dEdd set_eff/set_snow), `icepack_therm_mushy.F90` (two-stage mushy tridiagonal 1800-1985, semi-discrete flux-divergence ODEs), `icepack_mushy_physics.F90` (temperature/enthalpy inversions), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559), `icepack_meltpond_sealvl.F90` (compute_ponds_sealvl, dvn) |
+| `cice_thermodynamics.esm` | Model `Thermodynamics` — the D-class column physics: prep_radiation dEdd shortwave/albedo, the mushy (ktherm = 2) vertical heat conduction and surface energy balance, growth/melt/ponds (frzpnd = hlid sea-level) and ocean heat/fresh/salt fluxes, plus the cell-level merged aggregates of icepack_flux.F90:196-257 (aice, fsurf, fcondtop, fhocn, fresh, fsalt, flwout, fsens, flat, evap, fswabs, fswthru, fswint, congel, meltb, meltt, melts, dsnow); 84 equations over ncat × nilyr/nslyr (82 algebraic pointwise laws + 2 enthalpy PDEs) | `icepack_shortwave.F90` (step_radiation, prep_radiation 3893-3922, dEdd set_eff/set_snow), `icepack_therm_mushy.F90` (two-stage mushy tridiagonal 1800-1985, semi-discrete flux-divergence ODEs), `icepack_mushy_physics.F90` (temperature/enthalpy inversions), `icepack_therm_vertical.F90` (thickness changes, freshn/fsaltn 510-522, fhocnn 1625-1630, sublimation 1355-1403, 1502-1559), `icepack_flux.F90` (merge_fluxes 180-260), `icepack_meltpond_sealvl.F90` (compute_ponds_sealvl, dvn) |
 | `cice_dynamics.esm` | Model `Dynamics` — B-grid momentum balance (continuous limit of stepu) and classic-EVP stress relaxation ODEs, Hibler strength, viscosities; 34 equations over one cell | `ice_dyn_shared.F90`: stepu 923-964, dyn_prep2 815-833, dyn_finish 1345-1348, Tmass 540; `ice_dyn_evp.F90`: stress 1584-1609 |
 | `cice_transport.esm` | Model `Transport` — per-category conservative advection d(a)/dt + div(a·u) = 0 (and volume forms) as spatial-D rewrite targets; enthalpy-tracer statement documented, deferred to stage 3 | `ice_transport_driver.F90`: 251-700; `ice_transport_remap.F90`: 317-831 |
 | `cice_coupling.esm` | Model `IceCap` — med↔ice cap renames, areacor scaling, Sa_pbot potT/rhoa branch, export aggregation (ailohi, Tsrf, merge_fluxes sums), Faii_lwup fix; the similarity atmo boundary layer (5-iteration unroll) with the aicen_init-weighted reference-height exports, the Rothrock strength law, and the dynamics pointwise-law probes (EVP stress maps, strain invariant, viscosities/replacement pressure, stepu ocean-ice stress) as algebraic probes of the dynamics physics; 166 equations | `ice_import_export.F90`: ice_import 414-700, ice_export 1030-1317; `icepack_flux.F90`: merge_fluxes 180-260; `icepack_atmo.F90`: atmo_boundary_layer 52-389; `icepack_mechred.F90`: ridge_itd 848-1036, icepack_ice_strength 1660-1712 |
@@ -97,8 +97,18 @@ mm/s of water).
   heat inside the coefficient.
 - `evapn` requires the ρ in the numerator: the Fortran
   `evapn += dhs·rhos` (icepack_therm_vertical.F90:1502-1521) is transcribed as
-  the continuous rate `evapn = esub·rhos/((qsn − rhos·Lvap)·dt)`; `fsaltn`
-  divides by dt (`fsaltn = −rhoi·dhi·ice_ref_salinity·0.001/dt`, F90:521).
+  the continuous rate `evapn = esub·rhos/((qsn − rhos·Lvap)·dt)`; `fsaltn` is
+  the rate form `fsaltn = −rhoi·dhi·ice_ref_salinity·0.001` with the same net
+  thickness change `dhi = congeln + meltbn + melttn + evapin/rhoi` as freshn
+  (F90:513, 521; the per-step dt divides out of both rate forms).
+- `freshn` in rate form: the Fortran's `freshn = evapn − (rhoi·dhi +
+  rhos·dhs)/dt` (F90:510-513, per-step) cancels the sublimation/condensation
+  and new-snowfall terms exactly — `evapn = evapin + evapsn` and
+  `dhs = −meltsn − evapsn/rhos` with `hsn_new` added back to dzs(1) before
+  hin/hsn are summed (F90:1641-1672) — leaving
+  `freshn = −(rhoi·(congeln + meltbn + melttn) + rhos·meltsn)`; the rain is
+  added at the cell level (`fresh = fresh + frain·aice`,
+  icepack_therm_itd.F90:2043, with the model's m/s frain × rhofresh).
 - All icepack module constants are inlined as bare literals inside the
   templates; the unit checker treats bare literals as dimension-Unknown and
   skips products/comparisons containing them, which is how the many
@@ -236,7 +246,7 @@ pattern). Run `./esm test stage2/` for the full suite (115 MOSART + CICE):
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
 | `cice_coupling.esm` | 40 | 69 | the import laws (areacor scaling, frain/rhofresh, potT/rhoa branch wiring), the freezing-temperature law, the export state fields, the per-category albedo aggregation, the scale_fluxes `/aice` flux aggregation, the air-ice stress exports, the similarity reference-height exports Si_tref/Si_qref/Si_u10 (4 cells × 2 steps), the Rothrock strength law (2 dump rows), the EVP stress pointwise laws Delta/zetax2/etax2/rep_prs and the newp/newm/new12 subcycle maps (2 dump rows, different cells/corners/ksub), and the stepu ocean-ice stress laws vrel/taux/tauy/Cb (2 dump rows) |
-| `cice_thermodynamics.esm` | 11 | 16 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswint = swabs − fswsfc − fswthru; plus the mushy enthalpy↔temperature inversions zTin/zTsn (eqs 1-2) against the `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns; all to round-off (`rel 1e-12`) |
+| `cice_thermodynamics.esm` | 14 | 22 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswintn = swabs − fswsfc − fswthrun; the mushy enthalpy↔temperature inversions zTin/zTsn (eqs 1-2) against the `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns (all `rel 1e-12`); the step-1 surface energy-block aggregates flwout/fsens against `cice_thermo_flux.csv` (the similarity-driven shcoef/lhcoef at the entry Tsfcn, fluxes at the exit Tsfcn, ε = 0.95; `rel 1e-9`, ITD-weighting residual); and the step-2 radiation aggregates fswabs/fswthru testing the prep_radiation rescale `albedo_dump(1) × netsw(2)/netsw(1)` (icepack_shortwave.F90:3893-3922; `rel 1e-12`, cells (3,5) and (4,5)) |
 | `cice_dynamics.esm` | 0 | 0 | none — unlowered spatial-D stencils block compilation of any test (see coverage limits) |
 | `cice_transport.esm` | 0 | 0 | none — same spatial-D compile block |
 | `cice.esm` | 0 | 0 | none — the assembly inherits the dynamics/transport compile block |
@@ -257,9 +267,11 @@ than tightening past it. The 22 dynamics-probe assertions (4 tests) reproduce
 all probe inputs are bound from the dump rows, and a Python transcription of
 the templates' laws reproduces every asserted column over all 184,320 stress
 rows and 40,320 momentum rows (see "Transcription fixes found while writing
-the tests" for the e_factor/epp2i/capping/Ktens fit results). The 16
-thermodynamics assertions (11 tests) likewise reproduce `cice_albedo.csv` and
-the `cice_thermo_state.csv` zTin/zTsn columns to round-off.
+the tests" for the e_factor/epp2i/capping/Ktens fit results). The 22
+thermodynamics assertions (14 tests) likewise reproduce `cice_albedo.csv`,
+the `cice_thermo_state.csv` zTin/zTsn columns, and the `cice_thermo_flux.csv`
+flwout/fsens (step 1, cell (3,5), `rel 1e-9`) and fswabs/fswthru (step 2,
+cells (3,5) and (4,5), `rel 1e-12`) to the documented tolerances.
 
 ### Derived inputs (the raw CMEPS fields are not dumped)
 
@@ -356,6 +368,45 @@ must reproduce the dumped value:
    this run since sinw = 0). (c) `TbU = 0` in every traced row (no landfast
    grounding in the traced region), so the Cb pins check the wiring with a
    zero numerator; a nonzero-Cb pin needs a landfast cell from a later run.
+6. **emissivity 0.985 → 0.95.** The `surface_heat_flux` template body (both
+   the `ε·flw` absorption and the `ε·σ·TsfK⁴` emission terms) and the model's
+   `flwoutn` equation transcribed the icepack default emissivity = 0.985
+   (icepack_parameters.F90:156), but the D-class forcing_nml overrides it to
+   0.95 — the value the coupling aggregation already assumed (the cap's
+   flwout sum uses `(1−ε)·flw` = 0.05·flw, icepack_flux.F90:209-211).
+   Dump-proven: with ε = 0.985 the step-1 (3,5) flwout aggregate misses the
+   dump by rel 3.3e-3; with ε = 0.95 it reproduces it to 6e-11. Fixed in the
+   template body and description, the model's flwoutn, and the model
+   metadata (the template library's constants note already recorded the
+   D-class 0.95 override).
+7. **freshn/fsaltn corrected rate forms.** The skeleton's `freshn` carried
+   the ktherm = 1 form `2·evapn − ρi·(congel+meltb−meltt) − fsnow − ρs·melts`
+   (per-step, with /dt), but the F90:510-513 law cancels the sublimation and
+   new-snowfall terms exactly: `freshn = evapn − (ρi·dhi + ρs·dhs)/dt` with
+   `dhi = hin − worki` (which includes −evapin/ρi) and `dhs = hsn − works −
+   hsn_new` (the hsn_new snowfall cancels), leaving the rate form
+   `freshn = −(ρi·(congeln + meltbn + melttn) + ρs·meltsn)`, and
+   `fsaltn = −ρi·dhi·ice_ref_salinity·0.001` with the same dhi (F90:513, 521;
+   no separate /dt — the per-step dt divides out). Dump-proven: at step-1
+   (3,5), `Σ aicen·freshn + frain·aice` reproduces the dumped fresh to
+   3e-17 (the rain term is the "let rain drain through to the ocean" line of
+   icepack_therm_itd.F90:2043, with the model's m/s frain × rhofresh), and
+   `Σ aicen·fsaltn` reproduces the dumped fsalt exactly (ratio 1.0;
+   evapin = 0 at step 1, all sublimation from snow). The per-category
+   `dsnown = fsnow/ρs − meltsn + evapsn/ρs` rate law is added alongside.
+8. **prep_radiation scale factor.** The step-S (S ≥ 2) thermo consumes the
+   STORED step-S−1 dEdd outputs rescaled by
+   `scale_factor = netsw(S)/netsw(S−1)` (icepack_shortwave.F90:3893-3922),
+   with `netsw = Σ sw·(1 − al_band_ai)` computed from the grid-box-mean
+   albedos `al_band_ai = Σ aicen·al_bandn` **per unit grid area** (the quirky
+   aggregation of F90:3902-3922 — NOT divided by aice) and with netsw(S−1)
+   the step's coupling_prep "Save net shortwave" value (the cice_flux exit
+   scale_factor of CICE_RunMod.F90:618-624). Only the fswsfcn/fswintn/
+   fswthrun (+ fswthrun_*) outputs are rescaled — the incoming bands and the
+   albedos are not. The step-2 radiation pins reproduce the merged
+   fswabs/fswthru to 1.5e-16 by feeding the model the step-1 bands × ratio
+   with the unchanged step-1 albedos (the dEdd solve is linear in the input
+   bands) and aggregating with the entry aicen(2) = albedo_dump(1) aicen.
 
 ### Coverage limits (why the other files have no tests)
 
@@ -366,17 +417,28 @@ must reproduce the dumped value:
    (mushy) with nilyr = 8/nslyr = 3, conduct = MU71, shortwave = dEdd,
    frzpnd = hlid, kstrength = 1 (Rothrock), and atmbndy = similarity. The
    thermodynamics model and templates now transcribe the D-class laws, and the
-   dEdd surface laws are dump-pinned. Remaining unpinned in this file: the
-   delta-Eddington 3-band solver itself (compute_dEdd_3bd, deferred — its
-   outputs alvdrn/alidrn/alvdfn/alidfn, fswsfcn, fswthru_* and Iswabs are
-   carried as parameters), the vertical conduction ODEs and the growth/melt
-   rates (depend on the Tsfc implicit solve, see the divergences). The mushy
-   enthalpy↔temperature inversions are pinned directly: `zTin =
+   dEdd surface laws are dump-pinned. Pinned in this file: the dEdd surface
+   laws (snow fraction, effective pond area, broadband albedos, radiation
+   conservation), the mushy enthalpy↔temperature inversions `zTin =
    icepack_mushy_temperature_mush(qicen, zSin)` (eq 1) and `zTsn =
    snow_temperature_from_enthalpy(qsnon)` (eq 2) against the dumped
-   `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns (tests
-   `thermo_mushy_temperature_step1_cell2_4_ncat1`,
-   `thermo_mushy_snow_temperature_step1_cell2_4_ncat2`).
+   `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns, the step-1 surface
+   energy-block aggregates flwout/fsens (test
+   `thermo_surface_fluxes_step1_cell3_5`), and the step-2 radiation
+   aggregates fswabs/fswthru through the prep_radiation rescale (tests
+   `thermo_radiation_scale_step2_cell3_5`, `..._cell4_5`). Remaining
+   unpinnable from the stage-1 dumps: the delta-Eddington 3-band solver
+   itself (compute_dEdd_3bd, deferred — its outputs
+   alvdrn/alidrn/alvdfn/alidfn, fswsfcn, fswthru_* and Iswabs are carried as
+   parameters), the vertical conduction ODEs and the growth/melt rates
+   (depend on the Tsfc implicit solve, see the divergences), and the merged
+   ocean flux aggregates fhocn/fresh/fsalt/evap and fsurf/fcondtop (the
+   step-1 fsurf residual is ~6e-8 and the step-2 surface fluxes carry the
+   ~1e-6..1e-3 growth/melt residuals of the unpinned closures; the fresh
+   rain term of icepack_therm_itd.F90:2043 is verified numerically to 3e-17
+   but the freshn/fsaltn laws are pinned only as documented rate forms —
+   their dump agreement at step 1 is exact by construction of the
+   cancellation, see transcription-fix 7).
 - **Tsfc tracer (dump bug, now fixed).** The first instrumented run read
    the `nt_Tsfc`/`nt_qice`/`nt_qsno` tracers with the j and tracer indices
    swapped (`trcrn(i,nt,j,n,blk)` vs the declared `(i,j,nt,n,blk)`), so
@@ -419,7 +481,7 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file; `esm test stage2/` runs the 115 MOSART
-assertions plus the 85 CICE assertions (69 coupling + 16 thermodynamics) with
+assertions plus the 91 CICE assertions (69 coupling + 22 thermodynamics) with
 0 failures and 0 errors.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)
