@@ -169,15 +169,15 @@
    }
   },
   "surface_heat_flux": {
-   "description": "Net flux to the top surface excluding the conductive flux fsurfn (surface_heat_flux, icepack_therm_shared.F90:147-165): fsurfn = fswsfc + emissivity*flw - emissivity*stefan_boltzmann*TsfK^4 + shcoef*(potT - TsfK) + lhcoef*(Qa - Qsfc), with TsfK = Tsf + Tffresh and Qsfc the ice saturation humidity (saturation_specific_humidity_ice). emissivity = 0.985, stefan_boltzmann = 567e-10 (icepack_parameters.F90:156, 159).",
+   "description": "Net flux to the top surface excluding the conductive flux fsurfn (surface_heat_flux, icepack_therm_shared.F90:147-165): fsurfn = fswsfc + emissivity*flw - emissivity*stefan_boltzmann*TsfK^4 + shcoef*(potT - TsfK) + lhcoef*(Qa - Qsfc), with TsfK = Tsf + Tffresh and Qsfc the ice saturation humidity (saturation_specific_humidity_ice). emissivity = 0.95, the D-class run's forcing_nml value (the nuopc override of the 0.985 icepack default, icepack_parameters.F90:156; bugs.md #11), stefan_boltzmann = 567e-10 (F90:159).",
    "params": ["Tsf", "fswsfc", "rhoa", "flw", "potT", "Qa", "shcoef", "lhcoef"],
    "body": {
     "op": "+",
     "args": [
      "fswsfc",
-     { "op": "*", "args": [0.985, "flw"] },
+     { "op": "*", "args": [0.95, "flw"] },
      { "op": "-", "args": [
-       { "op": "*", "args": [0.985, 5.67e-8,
+       { "op": "*", "args": [0.95, 5.67e-8,
          { "op": "^", "args": [{ "op": "+", "args": ["Tsf", 273.15] }, 4] }] } ] },
      { "op": "*", "args": ["shcoef", { "op": "-", "args": ["potT", { "op": "+", "args": ["Tsf", 273.15] }] }] },
      { "op": "*", "args": ["lhcoef", { "op": "-", "args": ["Qa",
