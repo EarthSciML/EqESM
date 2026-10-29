@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-28.
+Last updated: 2026-10-29.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -418,6 +418,47 @@ In progress. See PLAN.md §4.1 for the playbook.
   inputs bound via `parameter_overrides`, numbers from
   `extract_dynamics_tests.py`. `esm test stage2/`: 200P/0F/0E (115 MOSART
   + 85 CICE).
+- **CICE thermodynamics flux-law pins** ✅ (2026-10-29, worktree
+  `wt/cice-thermoflux`, branch `wt/cice-thermoflux`) — pinned the
+  pinnable thermodynamics flux laws of `cice_thermo_flux.csv` into
+  `cice_thermodynamics.esm` (3 new tests / 6 assertions):
+  `thermo_surface_fluxes_step1_cell3_5` pins the cell-level aggregates
+  flwout/fsens (step 1, cell (3,5)) at rel 1e-9 — the similarity-derived
+  shcoef/lhcoef at the ENTRY Tsfcn (the atmo boundary layer runs before
+  the Tsfc solve), the fluxes at the EXIT Tsfcn, the exit-aicen
+  aggregation of icepack_flux.F90:204/209-211; the 1e-9 tolerance covers
+  the ITD-weighting residual (~1e-10) of the merged dump values.
+  `thermo_radiation_scale_step2_cell3_5`/`..._cell4_5` pin fswabs/fswthru
+  (step 2) at rel 1e-12 through the prep_radiation rescale: the step-2
+  thermo consumes the stored step-1 dEdd outputs × netsw(2)/netsw(1)
+  (icepack_shortwave.F90:3893-3922), netsw(1) = the step-1 cice_flux exit
+  scale_factor ("Save net shortwave", CICE_RunMod.F90:618-624), netsw(2)
+  from the step-2 bands and the step-1 albedo state with the quirky
+  per-unit-grid-area Σ aicen·al aggregation (NOT /aice); reproduced to
+  1.5e-16. Model fixes: emissivity 0.985 → 0.95 in the
+  `surface_heat_flux` template body/description and the model's flwoutn
+  (ε = 0.95 is the D-class forcing_nml value the cap's 0.05·flw
+  correction already assumed; ε = 0.985 misses the dump by 3.3e-3);
+  freshn/fsaltn rewritten to the corrected rate laws — the F90:510-513
+  evapn and new-snowfall terms cancel exactly, leaving
+  freshn = −(ρi·(congeln+meltbn+melttn) + ρs·meltsn) and
+  fsaltn = −ρi·dhi·ice_ref_salinity·0.001 with
+  dhi = congeln+meltbn+melttn+evapin/ρi (no separate /dt); the rain
+  drainage fresh = fresh + frain·aice (icepack_therm_itd.F90:2043) and
+  the per-category dsnown = fsnow/ρs − meltsn + evapsn/ρs added, the
+  merged fresh verified to 3e-17 and fsalt exactly at step-1 (3,5).
+  Per-category meltt/meltb/congel/melts/fswthru/fswint renamed to
+  melttn/meltbn/congeln/meltsn/fswthrun/fswintn (the cice.esm
+  `Thermodynamics.fswthru → IceCap.fswthrun` variable_map updated), and
+  18 cell-level merged aggregates added (aice, fsurf, fcondtop, fhocn,
+  fresh, fsalt, flwout, fsens, flat, evap, fswabs, fswthru, fswint,
+  congel, meltb, meltt, melts, dsnow — faq sums WITHOUT /aice, matching
+  the F90 merges). Unpinnable laws documented in README-cice.md with
+  residuals (flat ~6e-8 step 1; the step-2 surface fluxes and the
+  growth/melt closures ~1e-6..1e-3; fhocn/fresh/fsalt/evap not pinnable).
+  Numbers from `extract_thermoflux_tests.py` (hand-authored structure,
+  in-script verification of every expected value). `esm test stage2/`:
+  206P/0F/0E (115 MOSART + 91 CICE).
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
