@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-30.
+Last updated: 2026-10-31.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -504,6 +504,61 @@ In progress. See PLAN.md §4.1 for the playbook.
   `extract_fluxchains_tests.py` (`/scratch.local/ctessum`, hand-authored,
   %.17g, entry/exit dual-state verification to stderr). The (3,5)
   description was corrected to the entry-weighting framing.
+- **CICE Tsfc surface-energy-balance pin** ✅ (2026-10-31, worktree
+  `wt/cice-tsfc`, branch `wt/cice-tsfc`) — landed milestone-2 part (a):
+  the per-category surface energy balance residual of the implicit Tsfc
+  solve, as the diagnostic equation `fsurf_bal = fsurfn − fcondtopn`
+  (eq 85; 84 → 85 equations, 83 algebraic + 2 enthalpy PDEs) pinned at
+  the step-2 exit state of cell (2,4) (1 new test / 4 assertions, cats
+  2-5, `abs 2e-2`). Key finding: the balance is `fsurfn − fcondtopn = 0`
+  (the converged solve has fsurfn = fcondtopn, SAME sign — the
+  downward-positive conductive flux enters the surface heat budget as
+  −fcondtopn; the two-stage consistency checks `fcondtop − fsurfn <
+  ferrmax`, icepack_therm_mushy.F90:535/588/834/892, and the etop_mlt
+  closure F90:1337-1338). The earlier worker's ~−29 W/m² "residual" was
+  the WRONG sum fsurfn + fcondtopn ≈ 2×fcondtopn; the difference closes
+  to 6.8e-4..6.7e-3 W/m² at the exit state (the ferrmax = 1e-3 solve
+  tolerance plus the step-2 bottom-melt regrid shifts, meltb(2) =
+  8.76e-4 m; the dumped merged solve residual is fsurf − fcondtop =
+  −3.3e-10). The measured residuals sit at 6.8e-4 (cat 2), 6.7e-3 (cat
+  3), 2.0e-3 (cat 4), 8.8e-4 (cat 5); abs tolerance 2e-2 ≈ 3× the max.
+  Test inputs: EXIT Tsfcn/zTsn (via exit qicen/qsnon + zSin) with ENTRY
+  aicen/vicen/vsnon, fswsfc(2) = albedo_dump(1) × netsw(2)/netsw(1) =
+  ×0.8451509697 (the prep_radiation rescale chain, pinned to round-off
+  by the thermo_radiation_scale_* tests), similarity shcoef/lhcoef at the
+  ENTRY Tsfcn with the uarea-weighted ice_ic uvelT. Cat 1 excluded:
+  vsnon = 0 exactly at entry (bare ice) where the .esm kh_top =
+  2·kslyr/hslyr diverges (the Fortran switches to the bare-ice branch
+  kcstar(1) = km(1), calc_intercell_conductivity F90:2038-2051).
+  Transcription fix #13: the file description and the Tsfc parameter
+  description stated the balance as `fsurfn + fcondtopn = 0` (the
+  equations were always correct); fixed with the dump proof (merged
+  fsurf = fcondtop to round-off at steps 1-3; the step-2 per-category
+  sum would read 2×fcondtopn ≈ −29 W/m²). Part (b), the conduction ODE
+  trajectory test, remains BLOCKED and documented as such: the per-layer
+  Iswabs/Sswabs are never dumped, and all 384 traced rows are daytime
+  (coszen 0.158..0.536, fswintn ~4..39 W/m² comparable to the conduction
+  fluxes), so no zero-shortwave conduction-only trajectory exists to
+  compare; the step-1 balance is also unpinnable (the step-1 thermo
+  consumed the init-time dEdd solve, init_shortwave CICE_InitMod.F90:
+  192-201, not dumped; the albedo-dump shortwave leaves the residual at
+  ~−15 W/m²). Unblock list: (i) extend the stage-1 dumps with the
+  per-layer Iswabs/Sswabs (or transcribe the dEdd 3-band solve), and
+  (ii) trace a night step or otherwise zero the shortwave, for the
+  conduction-only trajectory; plus (iii) the esm-spec implicit-equation
+  construct or an EarthSciIntegrator-side nonlinear solve for the Tsfc
+  coupling at stage 3. Harness probe (milestone-1 item 3, scratch
+  `time_span {0,3600}` runs): the default bdf solver integrates the
+  55-state enthalpy ODE system over a full step when every category has
+  a finite kh (the state evolves ~1.8e6 J/m³ in the top ice layer), but
+  collapses to step size ~0 on the bare-category kh_top = 2·kslyr/hslyr
+  ≈ 6e14 stiffness (vsnon ≈ 0; the Fortran's bare-ice branch
+  kcstar(1) = km(1) avoids it) — transcribing the lsnow guard into the
+  .esm kh_top/fcondtopn is a prerequisite for any ODE-trajectory test.
+  `esm test stage2/`: 214P/0F/0E (115 MOSART + 99 CICE). Numbers from
+  `extract_tsfc_tests.py` (`/scratch.local/ctessum`, hand-authored,
+  %.17g; the balance-residual diagnosis, similarity coefficients, and
+  the fswsfc chain verified in-script).
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
