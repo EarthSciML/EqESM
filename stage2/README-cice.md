@@ -534,9 +534,10 @@ must reproduce the dumped value:
    (compute_dEdd_3bd, deferred — its outputs alvdrn/alidrn/alvdfn/alidfn,
    fswsfcn, fswthru_* and Iswabs are carried as parameters), the vertical
    conduction ODE trajectories (blocked: the per-layer Iswabs/Sswabs are
-   never dumped and every traced row is daytime — coszen 0.158..0.536,
-   fswintn ~4..39 W/m² comparable to the conduction fluxes — so no step has
-   a zero-shortwave conduction-only trajectory to compare; the growth/melt
+   never dumped and every traced row is daytime — coszen 0.158..0.572,
+   fswintn 2..106 W/m² (cice_albedo.csv) comparable to the conduction
+   fluxes — so no step has a zero-shortwave conduction-only trajectory to
+   compare; the growth/melt
    rates likewise depend on the solve-internal zTin(8)), the merged ocean
    flux aggregates fhocn/fresh/fsalt (the step-2 cells are contaminated by
    lateral melt, icepack_therm_itd.F90:1016-1127, and congel/meltbn depend
