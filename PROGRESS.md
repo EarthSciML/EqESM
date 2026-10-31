@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-30.
+Last updated: 2026-10-31.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -505,55 +505,61 @@ In progress. See PLAN.md §4.1 for the playbook.
   %.17g, entry/exit dual-state verification to stderr). The (3,5)
   description was corrected to the entry-weighting framing.
 - **CICE Tsfc surface-energy-balance pin** ✅ (2026-10-31, worktree
-  `wt/cice-tsfc`, branch `wt/cice-tsfc`) — pinned the implicit surface
-  energy balance residual at the converged exit state (1 new test / 4
-  assertions; `thermo_surface_balance_step2_cell2_4`): the model carries
-  the algebraic diagnostic `fsurf_bal = fsurfn − fcondtopn` (eq 85,
-  surface_heat_flux icepack_therm_shared.F90:147-165 vs fcondtop =
-  2·ks(1)·(Tsf − zTsn(1))/hslyr icepack_therm_mushy.F90:1677, 2042) and
-  the test asserts it ≈ 0 per category (cats 2-5, `abs 2e-2`) at the
-  (2,4) step-2 EXIT state with fswsfc(2) = fswsfcn(albedo s1) ×
-  netsw(2)/netsw(1) (the prep_radiation rescale, pinned to round-off by
-  the radiation-scale tests) and the similarity shcoef/lhcoef at the
-  entry Tsfcn; measured residuals 6.8e-4..6.7e-3 W m-2 (the ferrmax =
-  1e-3 solve tolerance plus the step-2 bottom-melt regrid shifts; the
-  merged dump residual is fsurf − fcondtop = −3.3e-10 W m-2). Harness
-  probe (Milestone 1, reported): the default test solver is bdf (options
-  bdf/sdirk/erk, Rust runner integrates with diffsol) and implicit
-  algebraic constraints are NOT supported by the Rust `esm test` runner —
-  the esm 1.3.0 spec does express implicit algebraic unknowns (expression
-  LHS), but any implicit equation is refused at compile
-  (`implicit_equation_refusal`, "this runtime has no algebraic solve" →
-  `unsupported_construct`, simulate_array/compile.rs:908-912) and the DAE
-  classifier only eliminates trivial algebraics `var ~ expr`
-  (E_NONTRIVIAL_DAE otherwise; full DAE support exists only in the Julia
-  binding) — so Tsfc stays a parameter, documented in README divergence 2.
-  Sign-convention discovery (README transcription fix #13): the converged
-  balance is fsurfn = fcondtopn with the SAME sign (the downward-positive
-  conductive flux enters the surface budget as −fcondtopn; the merged
-  dump fsurf/fcondtop are equal to round-off at (2,4) steps 1-3,
-  −2.1211666/−4.020587/−4.241307 W m-2; the "6.9e-9 residual" cited in
-  the task is the merged fsurf − fcondtop = −6.88e-9 at step 1), NOT
-  fsurfn + fcondtopn = 0 — the two description texts carried the wrong
-  sign and were corrected. Step 1 is unpinnable (the step-1 thermo
+  `wt/cice-tsfc`, branch `wt/cice-tsfc`) — landed milestone-2 part (a):
+  the per-category surface energy balance residual of the implicit Tsfc
+  solve, as the diagnostic equation `fsurf_bal = fsurfn − fcondtopn`
+  (eq 85; 84 → 85 equations, 83 algebraic + 2 enthalpy PDEs) pinned at
+  the step-2 exit state of cell (2,4) (1 new test / 4 assertions, cats
+  2-5, `abs 2e-2`). Key finding: the balance is `fsurfn − fcondtopn = 0`
+  (the converged solve has fsurfn = fcondtopn, SAME sign — the
+  downward-positive conductive flux enters the surface heat budget as
+  −fcondtopn; the two-stage consistency checks `fcondtop − fsurfn <
+  ferrmax`, icepack_therm_mushy.F90:535/588/834/892, and the etop_mlt
+  closure F90:1337-1338). The earlier worker's ~−29 W/m² "residual" was
+  the WRONG sum fsurfn + fcondtopn ≈ 2×fcondtopn; the difference closes
+  to 6.8e-4..6.7e-3 W/m² at the exit state (the ferrmax = 1e-3 solve
+  tolerance plus the step-2 bottom-melt regrid shifts, meltb(2) =
+  8.76e-4 m; the dumped merged solve residual is fsurf − fcondtop =
+  −3.3e-10). The measured residuals sit at 6.8e-4 (cat 2), 6.7e-3 (cat
+  3), 2.0e-3 (cat 4), 8.8e-4 (cat 5); abs tolerance 2e-2 ≈ 3× the max.
+  Test inputs: EXIT Tsfcn/zTsn (via exit qicen/qsnon + zSin) with ENTRY
+  aicen/vicen/vsnon, fswsfc(2) = albedo_dump(1) × netsw(2)/netsw(1) =
+  ×0.8451509697 (the prep_radiation rescale chain, pinned to round-off
+  by the thermo_radiation_scale_* tests), similarity shcoef/lhcoef at the
+  ENTRY Tsfcn with the uarea-weighted ice_ic uvelT. Cat 1 excluded:
+  vsnon = 0 exactly at entry (bare ice) where the .esm kh_top =
+  2·kslyr/hslyr diverges (the Fortran switches to the bare-ice branch
+  kcstar(1) = km(1), calc_intercell_conductivity F90:2038-2051).
+  Transcription fix #13: the file description and the Tsfc parameter
+  description stated the balance as `fsurfn + fcondtopn = 0` (the
+  equations were always correct); fixed with the dump proof (merged
+  fsurf = fcondtop to round-off at steps 1-3; the step-2 per-category
+  sum would read 2×fcondtopn ≈ −29 W/m²). Part (b), the conduction ODE
+  trajectory test, remains BLOCKED and documented as such: the per-layer
+  Iswabs/Sswabs are never dumped, and all 384 traced rows are daytime
+  (coszen 0.158..0.572, fswintn 2..106 W/m² comparable to the
+  conduction fluxes), so no zero-shortwave conduction-only trajectory
+  exists to
+  compare; the step-1 balance is also unpinnable (the step-1 thermo
   consumed the init-time dEdd solve, init_shortwave CICE_InitMod.F90:
-  192-201, which the dumps do not contain; the step-1 albedo-dump
-  shortwave leaves the residual at ~−15 W m-2) and cat 1 is skipped
-  (bare at step 2, vsnon = 0: the .esm kh_top = 2·kslyr/hslyr diverges
-  where the Fortran switches to the bare-ice branch kcstar(1) = km(1),
-  calc_intercell_conductivity F90:2038-2051). **Trajectory pin verdict:
-  not honestly pinnable** — the conduction ODE trajectory over
-  [0,3600] would need the per-layer Sswabs/Iswabs, which are never
-  dumped (only the aggregates fswsfcn/fswintn/fswthrun), and every one
-  of the 12 traced steps is sunlit (coszen 0.158..0.572, fswintn 2..106
-  W/m², comparable to the conduction fluxes) so no zero-shortwave
-  conduction-only step exists; unblock list: dump per-layer
-  Sswabsn/Iswabsn in the instrumented fork (or a night step), plus the
-  bare-ice kh branch (documented in README coverage limits). Numbers
-  from `balance_check.py`/`tsfc_survey.py` (`/scratch.local/ctessum`),
-  hand-authored structure, %.17g, dump-row verified. `esm test stage2/`:
-  214P/0F/0E (115 MOSART + 99 CICE; thermodynamics 17 tests/30
-  assertions).
+  192-201, not dumped; the albedo-dump shortwave leaves the residual at
+  ~−15 W/m²). Unblock list: (i) extend the stage-1 dumps with the
+  per-layer Iswabs/Sswabs (or transcribe the dEdd 3-band solve), and
+  (ii) trace a night step or otherwise zero the shortwave, for the
+  conduction-only trajectory; plus (iii) the esm-spec implicit-equation
+  construct or an EarthSciIntegrator-side nonlinear solve for the Tsfc
+  coupling at stage 3. Harness probe (milestone-1 item 3, scratch
+  `time_span {0,3600}` runs): the default bdf solver integrates the
+  55-state enthalpy ODE system over a full step when every category has
+  a finite kh (the state evolves ~1.8e6 J/m³ in the top ice layer), but
+  collapses to step size ~0 on the bare-category kh_top = 2·kslyr/hslyr
+  ≈ 6e14 stiffness (vsnon ≈ 0; the Fortran's bare-ice branch
+  kcstar(1) = km(1) avoids it) — transcribing the lsnow guard into the
+  .esm kh_top/fcondtopn is a prerequisite for any ODE-trajectory test.
+  `esm test stage2/`: 214P/0F/0E (115 MOSART + 99 CICE). Numbers from
+  `extract_tsfc_tests.py` (`/scratch.local/ctessum`, hand-authored,
+  %.17g; the balance-residual diagnosis, similarity coefficients, and
+  the fswsfc chain verified in-script).
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /

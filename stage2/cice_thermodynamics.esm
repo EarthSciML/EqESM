@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_thermodynamics",
-  "description": "CICE column thermodynamics (stage 2 of the EqESM project): the per-category vertical heat conduction, surface energy balance, and growth/melt closures of the D-class run configuration of cesm3_cice6_6_3_22 (ktherm = 2 mushy, shortwave = 'dEdd', frzpnd = 'hlid' sea-level ponds, nilyr = 8, nslyr = 3, phi_i_mushy = 0.45, hs0 = 0.0, snwredist = 'none', use_smliq_pnd = .false., congel_freeze = 'one-step', saltflux_option = 'constant', tfrz_option = 'mushy', conduct = 'MU71', dpscale = 1e-3, vapor_flux_correction = .false.), written over the ncat thickness categories and the nilyr/nslyr layer axes. The Fortran state is the layer enthalpy (zqin, zqsn; icepack_therm_vertical.F90:1155-1156) with temperatures recovered by icepack_mushy_temperature_mush (icepack_mushy_physics.F90:348-452) for the ice and icepack_enthalpy_snow/temperature_snow (F90:145-179) for the snow; this model carries qicen/qsnon as states and recovers zTin/zTsn through the same laws. Heat conduction: the Fortran assembles and solves an implicit backward-Euler tridiagonal for the surface and layer temperatures (the mushy two-stage solver, icepack_therm_mushy.F90:1800-1985 with the kh conductances F90:1928-2061); this model writes the equivalent energy-conserving semi-discrete (method-of-lines) form d(q_k)/dt = (kh_up*(T_up - T_k) + kh_dn*(T_dn - T_k) + Iswabs_k)/hilyr with the interface conductances kh of the mushy conductance block (F90:1989-2061: kh_top = 2*kslyr/hslyr F90:2042, kh_snowice = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) F90:2046-2048, kh_bot = 2*kilyr(nilyr)/hilyr F90:2060, interior harmonic means F90:2052-2054) and the per-layer absorbed shortwave of the dEdd solver (Iswabs/Sswabs, deferred to the delta-Eddington rewrite, carried as parameters), i.e. the continuous PDE rho*cp*dT/dt = d/dz(k dT/dz) + S in enthalpy form; the layer conductivity is the mush law km = phi*(kb - ki) + ki of heat_conductivity (icepack_mushy_physics.F90:476-494; the ktherm = 1 MU71/bubbly laws remain as alternates in cice_templates.esm and are not used here). The surface temperature Tsfc is solved in the Fortran by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 (icepack_therm_mushy.F90:1674-1677); the balance is transcendental in Tsfc (the saturation-humidity exponential), so the skeleton carries Tsfc as a parameter fed by the coupled solve (stage-3 wiring). Growth/melt closures of thickness_changes (icepack_therm_vertical.F90): the melt enthalpies qmlt = enthalpy_of_melting(zSin) and qm = zqin - qmlt (F90:1283-1287), the congelation enthalpy qbot = qbotm - qbotw with qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) and qbotw = enthalpy_brine(sst) under congel_freeze = 'one-step' (F90:1413-1416), the top/basal melt closures dhi = etop_mlt/qm(1) and ebot_mlt/qm(nilyr) (F90:1565-1581, 1589-1603), the snow/ice sublimation-condensation closures with qsub = zqsn(1) - rhos*Lvap over snow and qm(1) - rhoi*Lvap over ice (F90:1355-1403, 1502-1559), and the ocean heat flux fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt + emlt_ocn/dt with emlt_ocn = -(qbotw*congeln + qmlt(1)*(melttn + evapin/rhoi) + qmlt(nilyr)*meltbn) (F90:1419, 1401, 1571, 1595, 1630, 1917; max(zqin, qmlt) = qmlt in the run regime since qm < 0 at melt). Radiation: the dEdd surface laws of icepack_shortwave.F90 - the snow fraction of shortwave_dEdd_set_snow (F90:3448-3454, hs0 = 0.0 so fs in {0,1}), the effective pond area of shortwave_dEdd_set_eff for tr_pond_sealvl (F90:3495-3637), the band albedos alvdrn/alidrn/alvdfn/alidfn (outputs of the deferred compute_dEdd_3bd solve, F90:1677-2936, carried as parameters), the component albedos albicen/albsnon/albpndn of F90:1496-1498 (the band-weighted sums of the awtvdr/awtidr/awtvdf/awtidf weights, icepack_parameters.F90:218-221; exact for the run's fs in {0,1} and apeffn = 0 surface-type masks), and the conservation fswintn = swabs - fswsfc - fswthrun with swabs = sum(sw*(1-al)) and fswthrun = sum of the four band transmissions. Melt ponds: the 'hlid' sea-level scheme of compute_ponds_sealvl (icepack_meltpond_sealvl.F90:50-265) with the Stefan lid growth/melt; dvn carries the per-step dvpondn and the pond tracers apnd/hpnd/ipnd/dhsn/ffracn are carried as parameters fed by the coupling (stage 3), with only the set_eff apeffn law pinned by tests. The surface-flux block (surface_heat_flux, icepack_therm_shared.F90:109-167; frzmlt_bottom_lateral, F90:637-678) is unchanged from the ktherm = 1 skeleton, with the run's emissivity = 0.95 (forcing_nml override, bugs.md #11). The ocean flux laws are the corrected rate forms of F90:510-521: freshn = -(rhoi*(congeln + meltbn + melttn) + rhos*meltsn) and fsaltn = -rhoi*dhi*ice_ref_salinity*0.001 with dhi = congeln + meltbn + melttn + evapin/rhoi (the evapn and new-snowfall terms of freshn = evapn - (rhoi*dhi + rhos*dhs) cancel exactly, F90:510-513, 1641-1672), the per-category snow thickness rate dsnown = fsnow/rhos - meltsn + evapsn/rhos, and the cell-level merged aggregates of icepack_flux.F90:196-257 (aice, fsurf, fcondtop, fhocn, fresh, fsalt, flwout, fsens, flat, evap, fswabs, fswthru, fswint, congel, meltb, meltt, melts, dsnow as sum_n(aicen*xn), with the flwout emissivity correction flwout = sum_n((flwoutn - 0.05*flw)*aicen) of F90:209-211 and the rain drainage fresh = fresh + frain*aice of icepack_therm_itd.F90:2043). The delta-Eddington solver (compute_dEdd_3bd, icepack_shortwave.F90:1677-3389) and the mushy enthalpy/T inversion pinning are deferred; see stage2/README-cice.md for the coverage table."
+  "description": "CICE column thermodynamics (stage 2 of the EqESM project): the per-category vertical heat conduction, surface energy balance, and growth/melt closures of the D-class run configuration of cesm3_cice6_6_3_22 (ktherm = 2 mushy, shortwave = 'dEdd', frzpnd = 'hlid' sea-level ponds, nilyr = 8, nslyr = 3, phi_i_mushy = 0.45, hs0 = 0.0, snwredist = 'none', use_smliq_pnd = .false., congel_freeze = 'one-step', saltflux_option = 'constant', tfrz_option = 'mushy', conduct = 'MU71', dpscale = 1e-3, vapor_flux_correction = .false.), written over the ncat thickness categories and the nilyr/nslyr layer axes. The Fortran state is the layer enthalpy (zqin, zqsn; icepack_therm_vertical.F90:1155-1156) with temperatures recovered by icepack_mushy_temperature_mush (icepack_mushy_physics.F90:348-452) for the ice and icepack_enthalpy_snow/temperature_snow (F90:145-179) for the snow; this model carries qicen/qsnon as states and recovers zTin/zTsn through the same laws. Heat conduction: the Fortran assembles and solves an implicit backward-Euler tridiagonal for the surface and layer temperatures (the mushy two-stage solver, icepack_therm_mushy.F90:1800-1985 with the kh conductances F90:1928-2061); this model writes the equivalent energy-conserving semi-discrete (method-of-lines) form d(q_k)/dt = (kh_up*(T_up - T_k) + kh_dn*(T_dn - T_k) + Iswabs_k)/hilyr with the interface conductances kh of the mushy conductance block (F90:1989-2061: kh_top = 2*kslyr/hslyr F90:2042, kh_snowice = 2*kslyr*kilyr(1)/(kslyr*hilyr + kilyr(1)*hslyr) F90:2046-2048, kh_bot = 2*kilyr(nilyr)/hilyr F90:2060, interior harmonic means F90:2052-2054) and the per-layer absorbed shortwave of the dEdd solver (Iswabs/Sswabs, deferred to the delta-Eddington rewrite, carried as parameters), i.e. the continuous PDE rho*cp*dT/dt = d/dz(k dT/dz) + S in enthalpy form; the layer conductivity is the mush law km = phi*(kb - ki) + ki of heat_conductivity (icepack_mushy_physics.F90:476-494; the ktherm = 1 MU71/bubbly laws remain as alternates in cice_templates.esm and are not used here). The surface temperature Tsfc is solved in the Fortran by the implicit surface energy balance fsurfn(Tsfc) - fcondtopn = 0 (the convergence checks fcondtop - fsurfn < ferrmax of the mushy two-stage solver, icepack_therm_mushy.F90:535/588/834/892, with fcondtop = 2*ks(1)*(Tsf - zTsn(1))/hslyr of F90:1674-1680 and the top-melt closure etop_mlt = max((fsurfn - fcondtopn)*dt, 0) of icepack_therm_vertical.F90:1337-1338; the downward-positive fcondtopn enters the surface heat budget as -fcondtopn, so the converged solve has fsurfn = fcondtopn); the balance is transcendental in Tsfc (the saturation-humidity exponential), so the skeleton carries Tsfc as a parameter fed by the coupled solve (stage-3 wiring). Growth/melt closures of thickness_changes (icepack_therm_vertical.F90): the melt enthalpies qmlt = enthalpy_of_melting(zSin) and qm = zqin - qmlt (F90:1283-1287), the congelation enthalpy qbot = qbotm - qbotw with qbotm = enthalpy_mush_liquid_fraction(Tbot, phi_i_mushy) and qbotw = enthalpy_brine(sst) under congel_freeze = 'one-step' (F90:1413-1416), the top/basal melt closures dhi = etop_mlt/qm(1) and ebot_mlt/qm(nilyr) (F90:1565-1581, 1589-1603), the snow/ice sublimation-condensation closures with qsub = zqsn(1) - rhos*Lvap over snow and qm(1) - rhoi*Lvap over ice (F90:1355-1403, 1502-1559), and the ocean heat flux fhocnn = fbot + (esub + etop_mlt + ebot_mlt)/dt + emlt_ocn/dt with emlt_ocn = -(qbotw*congeln + qmlt(1)*(melttn + evapin/rhoi) + qmlt(nilyr)*meltbn) (F90:1419, 1401, 1571, 1595, 1630, 1917; max(zqin, qmlt) = qmlt in the run regime since qm < 0 at melt). Radiation: the dEdd surface laws of icepack_shortwave.F90 - the snow fraction of shortwave_dEdd_set_snow (F90:3448-3454, hs0 = 0.0 so fs in {0,1}), the effective pond area of shortwave_dEdd_set_eff for tr_pond_sealvl (F90:3495-3637), the band albedos alvdrn/alidrn/alvdfn/alidfn (outputs of the deferred compute_dEdd_3bd solve, F90:1677-2936, carried as parameters), the component albedos albicen/albsnon/albpndn of F90:1496-1498 (the band-weighted sums of the awtvdr/awtidr/awtvdf/awtidf weights, icepack_parameters.F90:218-221; exact for the run's fs in {0,1} and apeffn = 0 surface-type masks), and the conservation fswintn = swabs - fswsfc - fswthrun with swabs = sum(sw*(1-al)) and fswthrun = sum of the four band transmissions. Melt ponds: the 'hlid' sea-level scheme of compute_ponds_sealvl (icepack_meltpond_sealvl.F90:50-265) with the Stefan lid growth/melt; dvn carries the per-step dvpondn and the pond tracers apnd/hpnd/ipnd/dhsn/ffracn are carried as parameters fed by the coupling (stage 3), with only the set_eff apeffn law pinned by tests. The surface-flux block (surface_heat_flux, icepack_therm_shared.F90:109-167; frzmlt_bottom_lateral, F90:637-678) is unchanged from the ktherm = 1 skeleton, with the run's emissivity = 0.95 (forcing_nml override, bugs.md #11). The ocean flux laws are the corrected rate forms of F90:510-521: freshn = -(rhoi*(congeln + meltbn + melttn) + rhos*meltsn) and fsaltn = -rhoi*dhi*ice_ref_salinity*0.001 with dhi = congeln + meltbn + melttn + evapin/rhoi (the evapn and new-snowfall terms of freshn = evapn - (rhoi*dhi + rhos*dhs) cancel exactly, F90:510-513, 1641-1672), the per-category snow thickness rate dsnown = fsnow/rhos - meltsn + evapsn/rhos, and the cell-level merged aggregates of icepack_flux.F90:196-257 (aice, fsurf, fcondtop, fhocn, fresh, fsalt, flwout, fsens, flat, evap, fswabs, fswthru, fswint, congel, meltb, meltt, melts, dsnow as sum_n(aicen*xn), with the flwout emissivity correction flwout = sum_n((flwoutn - 0.05*flw)*aicen) of F90:209-211 and the rain drainage fresh = fresh + frain*aice of icepack_therm_itd.F90:2043). The delta-Eddington solver (compute_dEdd_3bd, icepack_shortwave.F90:1677-3389) and the mushy enthalpy/T inversion pinning are deferred; see stage2/README-cice.md for the coverage table."
  },
  "index_sets": {
   "ncat": {
@@ -341,6 +341,14 @@
      "units": "W/m^2",
      "description": "downward conductive flux at the top surface fcondtopn = kh(1)*(Tsfc - zTsn(1)) taken against the TOP snow layer (fcondtop = 2*ks(1)*(Tsf - zTsn(1))/hslyr, icepack_therm_mushy.F90:1677; icepack_therm_bl99.F90:401-404), [W/m2]"
     },
+    "fsurf_bal": {
+     "type": "unknown",
+     "shape": [
+      "ncat"
+     ],
+     "units": "W/m^2",
+     "description": "surface energy balance residual fsurf_bal = fsurfn - fcondtopn: the converged implicit solve of the mushy two-stage solver has fsurfn = fcondtopn (same sign) to within ferrmax = 1e-3 W m-2, the consistency checks fcondtop - fsurfn < ferrmax of icepack_therm_mushy.F90:535/588/834/892 and the top-melt closure etop_mlt = max((fsurfn - fcondtopn)*dt, 0) of icepack_therm_vertical.F90:1337-1338 (downward-positive fcondtopn enters as -fcondtopn in the surface heat budget); a diagnostic for the balance pins (the .esm carries Tsfc as a parameter, so the residual is measured, not solved), [W/m2]"
+    },
     "fcondbotn": {
      "type": "unknown",
      "shape": [
@@ -678,7 +686,7 @@
      ],
      "units": "degC",
      "default": 0.0,
-     "description": "ice/snow surface temperature. In the Fortran this is solved by the implicit surface energy balance fsurfn(Tsfc) + fcondtopn = 0 with the Newton-linearized tridiagonal row (icepack_therm_mushy.F90:1674-1677) and the melting clamp Tsfc <= 0; the balance is transcendental in Tsfc (saturation-humidity exponential), so the skeleton carries it as a parameter fed by the coupled solve (stage-3 wiring), [C]"
+     "description": "ice/snow surface temperature. In the Fortran this is solved by the implicit surface energy balance fsurfn(Tsfc) - fcondtopn = 0 with the Newton-linearized tridiagonal row (the fcondtop - fsurfn < ferrmax consistency checks, icepack_therm_mushy.F90:535/588/834/892) and the melting clamp Tsfc <= 0; the balance is transcendental in Tsfc (saturation-humidity exponential), so the skeleton carries it as a parameter fed by the coupled solve (stage-3 wiring), [C]"
     },
     "swvdr": {
      "type": "parameter",
@@ -1699,6 +1707,16 @@
          "zTsn_top"
         ]
        }
+      ]
+     }
+    },
+    {
+     "lhs": "fsurf_bal",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "fsurfn",
+       "fcondtopn"
       ]
      }
     },
@@ -5039,6 +5057,265 @@
        "variable": "dsnow",
        "time": 0.0,
        "expected": 7.8782234486014576e-10
+      }
+     ]
+    }
+,
+    {
+     "id": "thermo_surface_balance_step2_cell2_4",
+     "description": "Instantaneous pins of the surface energy balance residual fsurf_bal = fsurfn - fcondtopn per category against the implicit solve of the mushy two-stage solver (cell (2,4), step 2). The Fortran converges the implicit surface balance to fsurfn = fcondtopn (same sign; the fcondtop - fsurfn < ferrmax consistency checks of icepack_therm_mushy.F90:535/588/834/892 with ferrmax = 1e-3 W m-2, icepack_therm_shared.F90:42), which the model reproduces as the algebraic diagnostic fsurf_bal = fsurfn - fcondtopn with fsurfn = fswsfc + emissivity*flw - emissivity*sigma*TsfK^4 + shcoef*(potT - TsfK) + lhcoef*(Qa - Qsfc) (surface_heat_flux, icepack_therm_shared.F90:147-165) and fcondtopn = kh_top*(Tsfc - zTsn(1)) = 2*kslyr/hslyr*(Tsfc - zTsn(1)) (F90:1677, 2042). The state is the dumped EXIT state (the exit dump runs after step_therm2 + update_state, CICE_RunMod.F90:267-273, so the residual measures the solve closure plus the post-solve bottom-melt regrid shifts; meltb(2) = 8.76e-4 m), with the EXIT Tsfcn and the ENTRY aicen/vicen/vsnon (the merge weights and the hs = vsnon/aicen snow depth of the conductance). The shortwave is the step-2 consumed dEdd surface absorption fswsfc(2) = fswsfcn(albedo dump step 1) * netsw(2)/netsw(1) (the prep_radiation rescale, icepack_shortwave.F90:3893-3922, pinned to round-off by the thermo_radiation_scale_* tests; netsw(1) = the step-1 cice_flux exit scale_factor saved by coupling_prep, CICE_RunMod.F90:618-624), and shcoef/lhcoef are the similarity atmo_boundary_layer coefficients at the ENTRY Tsfcn with the uarea-weighted ice_ic uvelT (grid_average_X2YA, ice_step_mod.F90:114-128; the ice velocity ~1e-4 m/s is negligible against the wind ~2.7 m/s). Cat 1 is skipped: vsnon = 0 exactly at entry (bare ice), where the .esm kh_top = 2*kslyr/hslyr diverges (hslyr = 0) while the Fortran switches to the bare-ice branch kcstar(1) = km(1) (calc_intercell_conductivity, icepack_therm_mushy.F90:2038-2051). Measured residuals at the exit state: 6.8e-4 (cat 2), 6.7e-3 (cat 3), 2.0e-3 (cat 4), 8.8e-4 (cat 5) W m-2 - the ferrmax solve tolerance plus the step-2 bottom-melt regrid shifts (the dumped merged solve residual is fsurf - fcondtop = -3.3e-10 W m-2, cice_thermo_flux.csv); the absolute tolerance 2e-2 is ~3x the largest measured. The step-1 balance is NOT pinned: the step-1 thermo consumed the init-time dEdd solve (init_shortwave, CICE_InitMod.F90:192-201) which the dumps do not contain, and the step-1 albedo-dump shortwave leaves the residual at ~-15 W m-2.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "qicen": [
+       [
+        -251082226.20953155,
+        -238350325.9709547,
+        -234863879.48167574,
+        -238259381.42711994,
+        -243227465.97755775,
+        -246287115.67760175,
+        -247053403.8021046,
+        -247001568.64394647
+       ],
+       [
+        -295678997.5905382,
+        -294659035.0351751,
+        -293456048.9515101,
+        -292331875.93890274,
+        -290929558.02317107,
+        -287350246.01145446,
+        -274017922.07958007,
+        -240483622.51913753
+       ],
+       [
+        -282977763.93326885,
+        -292217379.2066601,
+        -294309994.6651529,
+        -297354461.27071893,
+        -299030345.7268103,
+        -298268841.4906273,
+        -287497056.30381745,
+        -238943812.4596206
+       ],
+       [
+        -278916468.1170113,
+        -291404296.18868524,
+        -295529419.88398373,
+        -296799919.4416314,
+        -296085678.707709,
+        -296619374.7001019,
+        -286033919.3241029,
+        -232183439.2931055
+       ],
+       [
+        -300942587.5645896,
+        -199422650.65841994,
+        -144833693.14079192,
+        -124164453.28799489,
+        -112092853.09594242,
+        -104828130.13875663,
+        -100576773.38690585,
+        -97499845.1520029
+       ]
+      ],
+      "qsnon": [
+       [
+        -110121000.0,
+        -110121000.0,
+        -110121000.0
+       ],
+       [
+        -115547223.14300194,
+        -114317888.84674099,
+        -113347733.37013437
+       ],
+       [
+        -114892129.45824364,
+        -113782763.42510378,
+        -112578828.5956272
+       ],
+       [
+        -114463883.88314268,
+        -113292187.58623554,
+        -112249734.36480126
+       ],
+       [
+        -113171440.58766906,
+        -116570181.69484799,
+        -114076964.55092418
+       ]
+      ]
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009852850608356705,
+       0.012855529713203084,
+       0.02967522239569254,
+       0.16810878906591015,
+       0.7737677729487741
+      ],
+      "vicen": [
+       0.003367779812266007,
+       0.01554109629578779,
+       0.06637380864748238,
+       0.5907909709038863,
+       21.611477507853053
+      ],
+      "vsnon": [
+       0.0,
+       0.0019751743022568325,
+       0.02041996777347029,
+       0.18230923273106475,
+       3.4177127644477934
+      ],
+      "zSin": [
+       [
+        4.256878947746822,
+        3.8391057802497044,
+        3.5870882777862194,
+        3.4933855569553773,
+        3.6214450333573716,
+        4.057882601496716,
+        4.84475396929279,
+        5.938542805024608
+       ],
+       [
+        3.8138273307853017,
+        3.4484806556528547,
+        3.0801201512988654,
+        2.7413017288512784,
+        2.4794736581207575,
+        2.4719805013136744,
+        3.3492450219457286,
+        6.069228473541785
+       ],
+       [
+        4.055935761548788,
+        2.6399340789847803,
+        2.26514499589204,
+        1.7318214493334316,
+        1.3682377543317323,
+        1.2860913928197943,
+        2.1381611572599013,
+        5.947021071435032
+       ],
+       [
+        4.101156071979926,
+        2.2941141880959965,
+        1.5222983539737573,
+        1.0721956504353578,
+        0.8244255134769154,
+        0.5647772181435973,
+        0.9268515823331461,
+        4.8929583298726635
+       ],
+       [
+        0.5230635312386245,
+        0.10002537981873008,
+        0.10000100853465059,
+        0.10000075054696816,
+        0.10000059474431723,
+        0.10180348281192816,
+        0.5312353707368612,
+        4.192629794879333
+       ]
+      ],
+      "Tsfc": [
+       -2.5677472448285044,
+       -8.988224853103711,
+       -9.714335430328784,
+       -9.931960737094617,
+       -10.550885973599135
+      ],
+      "fswsfc": [
+       26.337470270754803,
+       27.23483966810922,
+       29.213756559864134,
+       29.21376277898081,
+       29.213813947852255
+      ],
+      "shcoef": [
+       6.282990138122703,
+       1.8718926390690416,
+       1.9026528251822103,
+       1.9051644530479324,
+       1.888513916508174
+      ],
+      "lhcoef": [
+       14868.165356513487,
+       2456.169594905323,
+       2542.7240541168,
+       2549.7913789057175,
+       2502.939375656232
+      ],
+      "Qa": [
+       0.0023480793625158107,
+       0.0023480793625158107,
+       0.0023480793625158107,
+       0.0023480793625158107,
+       0.0023480793625158107
+      ],
+      "rhoa": [
+       1.2727498096079075,
+       1.2727498096079075,
+       1.2727498096079075,
+       1.2727498096079075,
+       1.2727498096079075
+      ],
+      "flw": [
+       217.0586440016378,
+       217.0586440016378,
+       217.0586440016378,
+       217.0586440016378,
+       217.0586440016378
+      ],
+      "potT": [
+       271.260937929761,
+       271.260937929761,
+       271.260937929761,
+       271.260937929761,
+       271.260937929761
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.02
+     },
+     "assertions": [
+      {
+       "variable": "fsurf_bal",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 2
+       }
+      },
+      {
+       "variable": "fsurf_bal",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 3
+       }
+      },
+      {
+       "variable": "fsurf_bal",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 4
+       }
+      },
+      {
+       "variable": "fsurf_bal",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "ncat": 5
+       }
       }
      ]
     }
