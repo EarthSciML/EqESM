@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-29.
+Last updated: 2026-10-30.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -459,6 +459,51 @@ In progress. See PLAN.md §4.1 for the playbook.
   Numbers from `extract_thermoflux_tests.py` (hand-authored structure,
   in-script verification of every expected value). `esm test stage2/`:
   206P/0F/0E (115 MOSART + 91 CICE).
+- **CICE thermodynamics flux-law pins, part 2 — latent heat +
+  sublimation/condensation** ✅ (2026-10-30, worktree `wt/cice-fluxchains`,
+  branch `wt/cice-fluxchains`) — extended the `cice_thermo_flux.csv` pins
+  to flat/evap/dsnow (2 new tests / 4 assertions):
+  `thermo_surface_fluxes_step1_cell2_4` pins flwout (rel 1e-8 observed
+  2.6e-9) and flat (rel 1e-6 observed 1.0e-7) at cell (2,4) step 1;
+  `thermo_sublimation_condensation_step1_cell2_4` pins evap and dsnow
+  (rel 1e-6, observed 1.2e-7/1.1e-7; dsnow expected = dump/dt = 7.88e-10
+  m/s since the dump volume tendency is [m/step]). `esm test stage2/`:
+  210P/0F/0E (115 MOSART + 95 CICE). Findings (all dump-proven, README
+  transcription fixes #9-#12): (a) **evapn condensation branch was
+  missing** — the Fortran adds the condensation `dhs = econ/qsub`
+  (icepack_therm_vertical.F90:1355-1399) to the same evapn accumulator as
+  the sublimation `dhs = esub/qsub` (F90:1502-1521), so the closure is
+  `evapn = (esub + econ)/qsub = −flatn·dt/qsub`; the esub-only model gave
+  −5.6e-8 vs the dump +2.04e-7 kg/m²/s at (2,4) (net condensation; the
+  `econ` law was dead code). Fixed in both branches. (b) **The merged
+  flux aggregates are ENTRY-aicen weighted** — merge_fluxes sums
+  `aicen_init·xn` (F90:3169, save_init ice_step_mod.F90:80), correcting
+  the earlier exit-aicen assumption of the (3,5) pin (harmless there:
+  remap ≤ 1.8e-5, exit weighting approximates the merge to ~1e-10;
+  dump-proven at (2,4) where aicen remaps up to 3.7e-4: entry-weighting
+  residuals 2.6e-9/1.0e-7 vs exit-weighting 4e-6/9.9e-5). (c) **The
+  residual mechanism for all surface-flux columns**: merged values are
+  evaluated at the converged-solve Tsfc, and the exit-dump Tsfc differs
+  by ~1e-7..3e-6 K (linear_itd tracer remap) — this, not the weighting,
+  sets the 1e-6 tolerances. (d) **dsnow dump units are [m/step]** — the
+  rate-law expected values divide by dt (documented in Units). (e)
+  **meltsn bare-ice guard added** — kh_top = 2·kslyr/hslyr diverges for
+  the bare-ice cat (hslyr → 0) and the model's unconverged etop_mlt
+  poisoned dsnown; the Fortran clamps `dhs = max(−dzs, etop_mlt/zqsn)`
+  (F90:1530) so the .esm now guards with the hs > puny branch (0 for
+  bare ice). The evap/dsnow closures evaluate qsub with the post-solve
+  state, so the test carries the EXIT qicen/qsnon (initial_conditions)
+  and EXIT zSin (parameter) as the solved-state proxy (entry state:
+  evap rel 1.4e-4). Unpinnable and documented: fsurf/fcondtop
+  (solve-internal zTsn(1)/Tsfc; reconstructed fswsfc fails fsurf by rel
+  0.78), congel/meltb/meltt (every dumped zTin > Tbot; meltt = solver
+  residual 3.35e-20), melts (no dump column), fresh/fsalt/fhocn
+  (lateral-melt contamination at step 2), step-2 flat (history-file
+  uvel vs actual, rel 17%), dsnow at (2,6)-(2,8) (solve did not
+  converge there: dump fsurf − fcondtop ≈ +0.3 W/m²). Numbers from
+  `extract_fluxchains_tests.py` (`/scratch.local/ctessum`, hand-authored,
+  %.17g, entry/exit dual-state verification to stderr). The (3,5)
+  description was corrected to the entry-weighting framing.
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
