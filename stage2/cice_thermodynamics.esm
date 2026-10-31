@@ -443,7 +443,7 @@
       "ncat"
      ],
      "units": "m/s",
-     "description": "snow melt rate, the snow top-melt closure dhs = etop_mlt/zqsn(1) (F90:1527), in continuous rate form, [m/s]"
+     "description": "snow melt rate, the snow top-melt closure dhs = etop_mlt/zqsn(1) (F90:1527), in continuous rate form; the hs > puny guard mirrors the snow-first cascade of the condensation/sublimation closures (F90:1338-1340) -- a category with no snow (hs <= puny) has dzs(1) ~ 0 and the Fortran clamp dhs = max(-dzs(1), etop_mlt/zqsn(1)) (F90:1530) pins its melt to ~0, [m/s]"
     },
     "dsnown": {
      "type": "unknown",
@@ -459,7 +459,7 @@
       "ncat"
      ],
      "units": "kg/m^2/s",
-     "description": "ice/snow mass sublimated (negative) or condensed (positive), evapn = esub/qsub per step with the vapor enthalpy qsub = zqsn(1) - rhos*Lvap over snow or qm(1) - rhoi*Lvap over ice (F90:1355-1403, 1502-1521, 1546-1559; Lvap = 2.501e6, icepack_parameters.F90:84), in continuous rate form, [kg/m2/s]"
+     "description": "ice/snow mass sublimated (negative) or condensed (positive), evapn = (esub + econ)/qsub per step with the vapor enthalpy qsub = zqsn(1) - rhos*Lvap over snow or qm(1) - rhoi*Lvap over ice: the Fortran condensation closure dhs = econ/qsub adds econ = -flatn*dt to the same evapn accumulator as the sublimation closure dhs = esub/qsub (F90:1355-1403, 1502-1521, 1546-1559; Lvap = 2.501e6, icepack_parameters.F90:84), so the net is evapn = -flatn*dt/qsub = -flatn/qsub in rate form; in continuous rate form, [kg/m2/s]"
     },
     "evapsn": {
      "type": "unknown",
@@ -1894,16 +1894,29 @@
     {
      "lhs": "meltsn",
      "rhs": {
-      "op": "/",
+      "op": "ifelse",
       "args": [
-       "etop_mlt",
        {
-        "op": "*",
+        "op": ">",
         "args": [
-         "qsnon_top",
-         "dt"
+         "hs",
+         1e-11
         ]
-       }
+       },
+       {
+        "op": "/",
+        "args": [
+         "etop_mlt",
+         {
+          "op": "*",
+          "args": [
+           "qsnon_top",
+           "dt"
+          ]
+         }
+        ]
+       },
+       0.0
       ]
      }
     },
@@ -1969,7 +1982,13 @@
          {
           "op": "*",
           "args": [
-           "esub",
+           {
+            "op": "+",
+            "args": [
+             "esub",
+             "econ"
+            ]
+           },
            330.0
           ]
          },
@@ -2000,7 +2019,13 @@
          {
           "op": "*",
           "args": [
-           "esub",
+           {
+            "op": "+",
+            "args": [
+             "esub",
+             "econ"
+            ]
+           },
            917.0
           ]
          },
@@ -4610,7 +4635,7 @@
     },
     {
      "id": "thermo_surface_fluxes_step1_cell3_5",
-     "description": "Instantaneous pins of the step-1 surface energy-block aggregates against cice_thermo_flux.csv row (step 1, i=3, j=5): the model's per-category flwoutn = -emissivity*stefan_boltzmann*(Tsfc+273.15)^4 with the D-class run's emissivity = 0.95 (forcing_nml override, bugs.md #11) and fsensn = shcoef*(potT - (Tsfc+273.15)), aggregated by the cell-level laws flwout = sum_n((flwoutn - 0.05*flw)*aicen) and fsens = sum_n(fsensn*aicen) (icepack_flux.F90:204, 209-211). The transfer coefficients shcoef/lhcoef are the similarity chain of the coupling cap's atmo_boundary_layer (icepack_atmo.F90:52-389, the natmiter = 5 unroll) driven by the ENTRY Tsfcn and the d_entr uvelT/vvelT of the uarea-weighted U-point reconstruction (grid_average_X2YA, ice_step_mod.F90:126); the fluxes are then evaluated at the EXIT Tsfcn (the converged implicit surface-energy solve), with flw/potT/Qa/rhoa from cice_run_imports.csv. The tolerance is 1e-9 rather than 1e-12 because the merged dump values are the icepack_flux.F90 sums over the thickness distribution taken at the flux merge, which the exit-aicen aggregation reproduces only to ~1e-10 (ITD-weighting residual; the step-1 fswsfc is unpinnable, albedo_dump(0) does not exist).",
+     "description": "Instantaneous pins of the step-1 surface energy-block aggregates against cice_thermo_flux.csv row (step 1, i=3, j=5): the model's per-category flwoutn = -emissivity*stefan_boltzmann*(Tsfc+273.15)^4 with the D-class run's emissivity = 0.95 (forcing_nml override, bugs.md #11) and fsensn = shcoef*(potT - (Tsfc+273.15)), aggregated by the cell-level laws flwout = sum_n((flwoutn - 0.05*flw)*aicen) and fsens = sum_n(fsensn*aicen) (icepack_flux.F90:204, 209-211). The transfer coefficients shcoef/lhcoef are the similarity chain of the coupling cap's atmo_boundary_layer (icepack_atmo.F90:52-389, the natmiter = 5 unroll) driven by the ENTRY Tsfcn and the d_entr uvelT/vvelT of the uarea-weighted U-point reconstruction (grid_average_X2YA, ice_step_mod.F90:126); the fluxes are then evaluated at the EXIT Tsfcn (the converged implicit surface-energy solve), with flw/potT/Qa/rhoa from cice_run_imports.csv. The tolerance is 1e-9 rather than 1e-12 because the merged dump values are the icepack_flux.F90 sums over the thickness distribution taken at the flux merge with the ENTRY aicen (merge_fluxes, icepack_therm_vertical.F90:3169, aicen_init), while this test aggregates with the exit aicen: at (3,5) the linear_itd remap changes aicen by <= 1.8e-5, so the exit-weighting approximates the dump to ~1e-10 (the solve-vs-exit Tsfc residual is ~1e-7..3e-6 K, which also contributes; the step-1 fswsfc is unpinnable, albedo_dump(0) does not exist).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -4687,6 +4712,333 @@
        "variable": "fsens",
        "time": 0.0,
        "expected": 2.9762746884344025
+      }
+     ]
+    }
+,
+    {
+     "id": "thermo_surface_fluxes_step1_cell2_4",
+     "description": "Instantaneous pins of the step-1 surface energy-block aggregates flwout and flat against cice_thermo_flux.csv row (step 1, i=2, j=4): the model's per-category flwoutn = -emissivity*stefan_boltzmann*(Tsfc+273.15)^4 (emissivity = 0.95, forcing_nml override, bugs.md #11) and flatn = lhcoef*(Qa - Qsfc_ice(Tsfc, rhoa)) (the latent heat flux of the coupling cap's surface_heat_flux, icepack_therm_shared.F90:147-165), aggregated by the cell-level laws flwout = sum_n((flwoutn - 0.05*flw)*aicen) and flat = sum_n(flatn*aicen) (icepack_flux.F90:204, 209-211, 218). The merged dump values are the icepack_flux.F90 sums evaluated at the flux merge with the ENTRY aicen (merge_fluxes, icepack_therm_vertical.F90:3169, aicen_init) at the converged implicit surface-energy solve; this test evaluates at the EXIT Tsfcn (the exit-dump Tsfc differs from the solve Tsfc by ~1e-7..3e-6 K, the linear_itd tracer-remap residual, so the fluxes carry a ~1e-9..1e-7 relative residual -- observed 2.6e-9 for flwout, 1.0e-7 for flat). The transfer coefficients shcoef/lhcoef are the similarity chain of the coupling cap's atmo_boundary_layer (icepack_atmo.F90:52-389, the natmiter = 5 unroll) driven by the ENTRY Tsfcn and the d_entr uvelT/vvelT of the uarea-weighted U-point reconstruction of the ice_ic field (grid_average_X2YA, ice_step_mod.F90:126), with flw/potT/Qa/rhoa from cice_run_imports.csv. Tolerance 1e-6 covers the solve-vs-exit Tsfc residual for flat (observed 1.0e-7); the same Si_u10-relaxation rationale as the cice_coupling.esm surface-flux pins. (The cell-level fsurf/fcondtop remain unpinnable: they need the solve-internal zTsn(1)/Tsfc; the model's fswsfc = 0 default makes fsurfn miss the dump by rel 0.78.)",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009857209542872574,
+       0.012856324595003365,
+       0.029669234430968083,
+       0.16811978724566323,
+       0.7737934617616814
+      ],
+      "vicen": [
+       0.0033709080523284217,
+       0.015543706269209626,
+       0.06636134795976042,
+       0.5908374017207015,
+       21.612173098721648
+      ],
+      "vsnon": [
+       2.8197424076868617e-15,
+       0.001975256551262012,
+       0.020412722959830713,
+       0.18231264026251304,
+       3.417825083055858
+      ],
+      "Tsfc": [
+       -2.204076622364284,
+       -7.904279462851774,
+       -7.620446351134973,
+       -7.59834737860677,
+       -7.747853219310066
+      ],
+      "shcoef": [
+       7.656758715168836,
+       1.86759094269783,
+       1.817674606392547,
+       1.8176255341639598,
+       1.8175268992440285
+      ],
+      "lhcoef": [
+       18736.793821726882,
+       2444.9995598746264,
+       2304.7522765851727,
+       2304.7522765851727,
+       2304.7522765851727
+      ],
+      "Qa": [
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456
+      ],
+      "rhoa": [
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229
+      ],
+      "flw": [
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658
+      ],
+      "potT": [
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-6,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "flwout",
+       "time": 0.0,
+       "expected": -276.83126897519287
+      },
+      {
+       "variable": "flat",
+       "time": 0.0,
+       "expected": 0.5841876208514185
+      }
+     ]
+    }
+,
+    {
+     "id": "thermo_sublimation_condensation_step1_cell2_4",
+     "description": "Instantaneous pins of the step-1 sublimation/condensation aggregates evap and dsnow against cice_thermo_flux.csv row (step 1, i=2, j=4): the model's per-category evapn = (esub + econ)/qsub with esub = max(-flatn*dt, 0) and econ = min(-flatn*dt, 0) (the Fortran condensation closure dhs = econ/qsub accumulates into the same evapn as the sublimation closure dhs = esub/qsub, icepack_therm_vertical.F90:1355-1403, 1502-1521, 1546-1559, so the net is evapn = -flatn*dt/qsub) and the vapor enthalpy qsub = zqsn(1) - rhos*Lvap over snow or qm(1) - rhoi*Lvap over ice; evapsn = evapn over the snow branch and 0 over bare ice, and dsnown = fsnow/rhos - meltsn + evapsn/rhos (meltsn = 0 here: the top melt energy etop_mlt vanishes at the converged solve since fsurfn < fcondtopn, and the hs <= puny bare-ice category is guarded, F90:1530). The dump values are merged with the ENTRY aicen (merge_fluxes, F90:3169) and the closures are evaluated with the state AFTER the implicit surface-energy solve (thickness_changes runs post-solve), so this test carries the EXIT qicen/qsnon as initial_conditions and the EXIT zSin as a parameter override (the solved-state proxy; the entry state leaves evap rel 1.4e-4) with the EXIT Tsfcn and entry aicen/vicen/vsnon. The volume tendency dsnow is dumped per step [m], so the expected value is dump/dt = 7.8782234486014576e-10 m/s against the model's rate law [m/s]. Observed residuals: evap 1.2e-7, dsnow 1.1e-7, tolerance 1e-6 (the solve-vs-exit state/Tsfc residuals of the linear_itd remap; the Si_u10-relaxation rationale of cice_coupling.esm). Cell (2,4) step 1 is chosen because its remap melts thin ice rather than mixing tracers, giving the smallest solve-vs-exit residual of the dump cells; cats 2-5 are condensing (flatn > 0, dump evap = +2.0e-7 kg/m2/s) and cat 1 is a bare-ice sublimator (vsnon 2.8e-15, the ice-branch closure).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "qicen": [
+       [
+        -249524132.3181043,
+        -237461863.922854,
+        -234381559.8618152,
+        -237996038.1584323,
+        -243053546.1324978,
+        -246117817.74535424,
+        -246842272.8530051,
+        -246727433.30043224
+       ],
+       [
+        -295665902.9607433,
+        -294664691.92804575,
+        -293444790.2713439,
+        -292318565.9451438,
+        -290917073.8233154,
+        -287324746.1639578,
+        -273920231.5763165,
+        -240164985.85570967
+       ],
+       [
+        -282961716.3858239,
+        -292220950.04912317,
+        -294313577.1856867,
+        -297362316.4230785,
+        -299040151.0454864,
+        -298274479.38575435,
+        -287479028.449537,
+        -238784891.3611559
+       ],
+       [
+        -278910355.10025185,
+        -291419239.8263896,
+        -295547946.3779937,
+        -296816486.2357909,
+        -296099013.3735309,
+        -296630366.9012521,
+        -286022477.5594729,
+        -232097993.27949715
+       ],
+       [
+        -300941832.9327936,
+        -199418415.7893715,
+        -144829807.62275958,
+        -124162234.66361885,
+        -112091131.22619016,
+        -104826833.93533158,
+        -100575798.36018391,
+        -97498175.06828517
+       ]
+      ],
+      "qsnon": [
+       [
+        -110121000.0,
+        -110121000.0,
+        -110121000.0
+       ],
+       [
+        -115464824.42006685,
+        -114281970.1110222,
+        -113312151.33922547
+       ],
+       [
+        -114865291.88535711,
+        -113795078.16454047,
+        -112581969.09290294
+       ],
+       [
+        -114457539.64746131,
+        -113292451.77880104,
+        -112249486.71454114
+       ],
+       [
+        -113173782.24456352,
+        -116574398.40206668,
+        -114078570.45212546
+       ]
+      ]
+     },
+     "parameter_overrides": {
+      "aicen": [
+       0.009857209542872574,
+       0.012856324595003365,
+       0.029669234430968083,
+       0.16811978724566323,
+       0.7737934617616814
+      ],
+      "vicen": [
+       0.0033709080523284217,
+       0.015543706269209626,
+       0.06636134795976042,
+       0.5908374017207015,
+       21.612173098721648
+      ],
+      "vsnon": [
+       2.8197424076868617e-15,
+       0.001975256551262012,
+       0.020412722959830713,
+       0.18231264026251304,
+       3.417825083055858
+      ],
+      "zSin": [
+       [
+        4.258294283569556,
+        3.8398150345553983,
+        3.58749443283667,
+        3.4941108743702975,
+        3.623631896410928,
+        4.063295979578769,
+        4.855184601266969,
+        5.954881801271479
+       ],
+       [
+        3.815386521264936,
+        3.4498023954108623,
+        3.0812514788855143,
+        2.7422644906750175,
+        2.4804856739758407,
+        2.4741004164315195,
+        3.3565910218603947,
+        6.089990027003365
+       ],
+       [
+        4.058438651407415,
+        2.640814443829316,
+        2.266305885031691,
+        1.732441418400096,
+        1.3687196619956905,
+        1.28705627924062,
+        2.141923014510234,
+        5.960678122240417
+       ],
+       [
+        4.103343230948146,
+        2.294440474151696,
+        1.5222118131359748,
+        1.07209680452571,
+        0.8243574195635262,
+        0.5646383732840861,
+        0.9274349906276504,
+        4.9004396810103135
+       ],
+       [
+        0.5230628148184162,
+        0.100011093726184,
+        0.10000075375820357,
+        0.10000056082170065,
+        0.10000044395752809,
+        0.1018142174687731,
+        0.5313816676758828,
+        4.193966099481509
+       ]
+      ],
+      "Tsfc": [
+       -2.204076622364284,
+       -7.904279462851774,
+       -7.620446351134973,
+       -7.59834737860677,
+       -7.747853219310066
+      ],
+      "shcoef": [
+       7.656758715168836,
+       1.86759094269783,
+       1.817674606392547,
+       1.8176255341639598,
+       1.8175268992440285
+      ],
+      "lhcoef": [
+       18736.793821726882,
+       2444.9995598746264,
+       2304.7522765851727,
+       2304.7522765851727,
+       2304.7522765851727
+      ],
+      "Qa": [
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456,
+       0.0023659940618028456
+      ],
+      "rhoa": [
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229,
+       1.277110844060229
+      ],
+      "flw": [
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658,
+       216.55521664560658
+      ],
+      "potT": [
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277,
+       270.3398252181277
+      ]
+     },
+     "tolerance": {
+      "rel": 1e-6,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": 2.039175050216096e-07
+      },
+      {
+       "variable": "dsnow",
+       "time": 0.0,
+       "expected": 7.8782234486014576e-10
       }
      ]
     }
