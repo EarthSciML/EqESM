@@ -41,49 +41,6 @@ The model is DeepSeek V4 Flash, run locally by llama.cpp on one 8-GPU
 
 As a general rule of the thumb, the local deepseek model might be able to implement a geoscientific model component within 24 hours. Check jobs.json for previous examples of how long different tasks took to complete and the level of success was achieved.
 
-
-## Writing a task
-
-Task size is the most important decision.
-
-- **One deliverable, checkable by a command.** "Pin the CICE albedo
-  diagnostic against dump X so that `./esm test stage2/cice.esm` passes
-  with N new assertions" is a good task. "Implement CICE thermodynamics"
-  is not.
-- **Aim for 1–4 hours of worker time.** Set `--time` to about 1.5× your
-  estimate, plus 10 minutes for startup. Use `jobs.json` run times from
-  similar past tasks to calibrate. Prefer several short tasks in a row
-  over one long one: you can course-correct between them, and a failure
-  costs less.
-- **Do the exploration for them.** Give exact file paths, Fortran routines
-  with line ranges, dump file locations, the relevant `PROGRESS.md`
-  decisions, and existing `.esm` files to use as models. Every file the
-  worker has to find or read in full costs it minutes. Never tell it to
-  "read the whole module".
-- **Write the prompt as a self-contained brief** (`--prompt-file`), using
-  these sections:
-  - **Goal**: one or two sentences, and why it matters.
-  - **Context**: the facts and decisions it needs, with paths and line
-    ranges.
-  - **Steps**: the order to work in, if it matters.
-  - **Acceptance criteria**: the exact commands to run and their expected
-    results (`./esm test …` counts, `./esm validate`).
-  - **Out of scope**: what not to touch, especially shared files like
-    `stage2/README.md` or templates other lanes depend on.
-  - **Report**: anything specific you want in the final report.
-
-  The dispatcher adds a footer covering the worktree, the time budget,
-  committing often, not pushing, not editing `PROGRESS.md`/`jobs.json`,
-  recording C++ bugs in `bugs.md`, and the report format. Don't repeat
-  those points.
-- **Keep the prompts.** Save each prompt as
-  `.slurm-agents/prompts/<name>.md`, which is gitignored. Copying the run
-  dir's `prompt.md` also works, but `cleanup` deletes that.
-- **Parallel jobs must not collide.** Workers branch from `main` at
-  submission time. Two jobs editing the same file will conflict at merge
-  time, so run those one after another, or base the second on the first's
-  branch (`--base wt/<first>`).
-
 ## Commands
 
 ```
@@ -105,12 +62,10 @@ draft the next prompts.
 
 ## Reviewing and merging
 
-Treat the worker's report as a claim to check:
 
-1. Read `result.md`, then the actual diff: `git -C ../EqESM-wt-<name> log`
+1. Review the results without running any tests or acceptance commands in the login node. Only rerun the tests or acceptance commands if something seems suspicious, and if so submit a slurm job instead of running anything on the login node.
+2. Read `result.md`, then the actual diff: `git -C ../EqESM-wt-<name> log`
    and `git diff main...wt/<name>`.
-2. **Re-run the acceptance commands yourself** in the worktree. Then run
-   the tests of every `.esm` file that imports the changed ones.
 3. Check the diff against the `AGENTS.md` rules:
    - equations read as math (integrals and PDEs, not aggregate/einsum forms)
    - logic is factored and imported by reference, not repeated
