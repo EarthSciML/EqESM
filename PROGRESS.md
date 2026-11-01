@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-10-31.
+Last updated: 2026-11-01.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -560,6 +560,76 @@ In progress. See PLAN.md §4.1 for the playbook.
   `extract_tsfc_tests.py` (`/scratch.local/ctessum`, hand-authored,
   %.17g; the balance-residual diagnosis, similarity coefficients, and
   the fswsfc chain verified in-script).
+- **CICE B-grid spatial-D lowering (dynamics + transport)** ✅ (2026-11-01,
+  worktrees `EarthSciDiscretizations-wt-lowering` / `EqESM-wt-cice-lowering`)
+  — the milestone that unblocks the dynamics/transport/assembly tests:
+  EarthSciDiscretizations gains `grids/cice_bgrid` (ESD commit `11fe246`,
+  unpushed): the 2-D B-grid with the strain-rate rules
+  (`strain_rates_divu/tension/shear` lowering `D(u,x)+D(v,y)`,
+  `D(u,x)−D(v,y)`, `D(u,y)+D(v,x)` to the four-corner staggered combinations
+  of strain_rates, ice_dyn_shared.F90:2094-2175), the stress-divergence rules
+  (`stress_divergence_strintx/strinty` lowering `D(σ11,x)+D(σ12,y)` /
+  `D(σ12,x)+D(σ22,y)` to the stepu `uarear·(str1−str2+str3−str4)` integrals,
+  ice_dyn_evp.F90:1698-1765, 958-961), and the conservative flux-divergence
+  rule (`transport_flux_divergence` lowering `D(c·u,x)+D(c·v,y)` to the mass
+  update `mm − w1·tarear`, ice_transport_remap.F90:3586-3590, with the
+  centered edgearea_e/n reconstruction F90:658-666), all transcribed with
+  line citations and six ast conformance fixtures (N_I = N_J = 4, NCAT = 2)
+  whose goldens all five bindings reproduce byte-identically (54/54).
+  Consumer (EqESM worktree): `cice_dynamics.esm` rewritten to the 3×5 traced
+  subdomain (local N_I/N_J/NCAT meta + i/j/corner/ncat index sets, 34
+  equations, four-corner stresses on a corner axis — no corner collapse),
+  importing the 5 rules by reference via `${ESD_ROOT}`; `cice_transport.esm`
+  rewritten to 3×5 with the flux-divergence rule, 3 algebraic div_flux
+  unknowns (per-tracer: div_flux 1/s for aicen, div_flux_v/div_flux_s m/s
+  for vicen/vsnon — a shared div_flux failed unit validation) + 3 continuity
+  D-t equations; the assembly description updated (the unlowered-D block is
+  gone; the assembly tests stay deferred to the shape-mismatched edges). New
+  tests: dynamics 1 test/19 assertions (`time_span {0,0}`, rel 1e-12 —
+  corner strain rates at T (3,5), strintx/strinty at U(2,4), Hibler P =
+  546804.85434316727, full dyn_finish vrel/taux/tauy/Cb with the dump's
+  aiX/uocn/vocn), transport 2 tests/16 assertions (integrated [0,3600]
+  continuity trace to the t_exit state at (3,7): aicen ≤ 3.04e-5 / vicen ≤
+  3.33e-5 / vsnon ≤ 1.78e-4 relative, per-assertion tols 1e-4/1e-4/2e-4 —
+  the centered-reconstruction-vs-incremental-remap scheme difference
+  O(C·Δc); plus the uniform-field instantaneous div_flux pin = 1.1240e-7
+  1/s, rel 1e-12, integrator-independent after the bdf-vs-Euler
+  exp(−D·t) vs (1−D·dt) restructuring). **`esm test stage2/`: 249P/0F/0E**
+  (115 MOSART + 134 CICE = 69 coupling + 30 thermo + 19 dynamics + 16
+  transport). README-cice.md rewritten (testing table, ESD_ROOT prerequisite,
+  units, divergences 4/6, coverage limits, Fortran-bug table rows 4-8).
+  Bugs and findings from this milestone (see also bugs.md #13-#19):
+  (a) **5 Fortran stencil asymmetries** transcribed exactly — strain_rates
+  shear corners 2/3/4 (ice_dyn_shared.F90:2170-2175) carry sign-inconsistent
+  v/u terms vs corner 1 (F90:2168-2169) and the stress() str_dy k7/k8 atoms
+  (ice_dyn_evp.F90:1760-1765) weight the p/m pair sums west-dominant
+  (`p333·ssigpw + p166·ssigpe`) while k5/k6 (F90:1748-1749) are
+  east-dominant; a symmetric transcription fails the pins; (b) **esm CLI
+  RangeSpec bug**: CLI 0.4.0 AND 0.6.0 fail with "JSON parse error: data did
+  not match any variant of untagged enum RangeSpec" whenever a faq range
+  contains a string metaparameter ref (`[2, "N_I"]`) AND any template-library
+  import carries bindings — both `esm validate` and `esm test` fail;
+  workaround: declare the metaparameters/index_sets locally and import ONLY
+  the rules (no grid.esm, no bindings) via `${ESD_ROOT}` refs (env expansion
+  works when exported); (c) **extractor bug (fixed)**: the transport
+  uvel/vvel pins were read from the MOMENTUM dump (m1) instead of the
+  transport dump's t_entr phase — fixed with `source="transport"` and the
+  pins file regenerated (only the uvel/vvel sections changed); (d) builder
+  index() bug in the scratch extractor tooling (fixed; the uniform-field test
+  is hand-authored, not injected); (e) **retracted the earlier claim of rel
+  6.3e-4 agreement between the Hibler transcription and the dumped P** — the
+  dump's P is the kstrength = 1 Rothrock form (321248.866048), not Hibler
+  (546804.85434316727); the Hibler pin is a formulation pin, the Rothrock
+  strength is pinned in the coupling cap; (f) the ocean-ice stress consumes
+  the dump's **aiX = the cap's aice_init-based concentration**
+  (ice_dyn_shared.F90:928-930) — deriving aiX from the model aicen's 4-cell
+  U-point average misses the cap value by up to 2.6e-3, so aiX stays a dump
+  parameter; (g) **U(4,4)-vs-uold RESOLVED**: the momentum IC convention —
+  the dump cell U(4,4) = (0,0) velocity, and the stress-dump uvel column
+  equals the momentum uold at U(i,j) exactly at every overlapping point; no
+  discrepancy. Native compiler note: hand-written mixed-rank faqs are refused
+  ("combine: array operand boxes differ") — rule-fired faqs and plain
+  equations broadcast mixed ranks fine, so tmpcalc & co. are plain equations.
 - **CICE mushy/snow temperature-inversion pins + nuopc-cap constants fix**
   ✅ (2026-10-28) — dump extension: the instrumented fork now dumps the
   mushy layer salinities sice_1..8 and the inversion outputs zTin_1..8 /
