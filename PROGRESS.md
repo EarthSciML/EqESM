@@ -23,6 +23,9 @@ Last updated: 2026-10-31.
   `test` / `units --check` on a trivial document.
 - **Workflow check** ✅ — manager-worker arrangement with worktree
   subagents established (AGENTS.md); worktrees from `main`, up to 3 workers.
+  2026-11-01: manager instructions moved to `CLAUDE.md`; workers are now
+  DeepSeek V4 Flash opencode slurm jobs (`tools/slurm-agent/`), tracked in
+  `jobs.json`.
 
 ## Milestone 1 — CESM source access + build; reference runs; boundary catalog
 

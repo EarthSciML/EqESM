@@ -15,3 +15,6 @@ stage1/inputdata/
 # Logs and scratch
 *.log
 .DS_Store
+
+# slurm subagent run dirs (tools/slurm-agent/dispatch.py)
+.slurm-agents/

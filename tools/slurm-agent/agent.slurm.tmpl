@@ -1,0 +1,105 @@
+#!/bin/bash
+# Template for a headless opencode subagent running as a slurm job.
+# Filled in by dispatch.py: every double-brace placeholder is substituted before submission.
+#
+# The job: starts its own llama-server on this node (launch-server.sh), waits
+# for it to be healthy, runs `opencode run` on the task prompt inside the
+# worktree, writes the agent's final message to result.md, and exits.
+#
+# opencode keeps its sqlite DB, service file and locks under XDG_DATA_HOME /
+# XDG_STATE_HOME, which default to the NFS-shared home directory. Two jobs on
+# different nodes would fight over them, so each job points those at
+# node-local scratch and copies the DB back to the run dir when it finishes.
+#SBATCH --partition={{PARTITION}}
+#SBATCH --account={{ACCOUNT}}
+#SBATCH --time={{TIME}}
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node={{NTASKS}}
+#SBATCH --mem={{MEM}}
+#SBATCH --gres={{GRES}}
+#SBATCH --job-name={{JOB_NAME}}
+#SBATCH --output={{RUN_DIR}}/slurm.out
+
+set -u
+RUN_DIR={{RUN_DIR}}
+WORKDIR={{WORKDIR}}
+LLM_VARIANT={{LLM_VARIANT}}
+OC_MODEL={{OC_MODEL}}
+TIME_SECONDS={{TIME_SECONDS}}
+GRACE_SECONDS={{GRACE_SECONDS}}
+SERVER_TIMEOUT={{SERVER_TIMEOUT}}
+LAUNCH_SERVER=/projects/illinois/eng/cee/ctessum/ctessum/llm/launch-server.sh
+PORT=8000   # ~/.config/opencode/opencode.json points the "local" provider here
+
+DEADLINE=$(( $(date +%s) + TIME_SECONDS - GRACE_SECONDS ))
+export PATH=$HOME/.local/bin:$HOME/.opencode/bin:$PATH
+
+status() { echo "$1" > "$RUN_DIR/status"; echo "[$(date '+%F %T')] status: $1"; }
+status starting
+echo "node: $(hostname -s)  job: $SLURM_JOB_ID  workdir: $WORKDIR"
+
+# --- node-local opencode state ---
+OC_HOME=/scratch.local/$USER/slurm-agents/$SLURM_JOB_ID
+export XDG_DATA_HOME=$OC_HOME/data XDG_STATE_HOME=$OC_HOME/state XDG_CACHE_HOME=$OC_HOME/cache
+mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+# Seed the cache (provider packages, models.json) so nothing is re-downloaded.
+[ -d "$HOME/.cache/opencode" ] && cp -r "$HOME/.cache/opencode" "$XDG_CACHE_HOME/"
+
+SERVER_PID=""
+AGENT_PID=""
+cleanup() {
+    [ -n "$AGENT_PID" ] && kill "$AGENT_PID" 2>/dev/null
+    [ -n "$SERVER_PID" ] && { pkill -P "$SERVER_PID" 2>/dev/null; kill "$SERVER_PID" 2>/dev/null; }
+    pkill -u "$USER" -f "llama-server.*--port $PORT" 2>/dev/null
+    # Keep the session DB + logs so the run can be inspected or continued later.
+    if [ -d "$XDG_DATA_HOME/opencode" ]; then
+        rm -rf "$RUN_DIR/opencode-data"
+        cp -r "$XDG_DATA_HOME/opencode" "$RUN_DIR/opencode-data" 2>/dev/null
+    fi
+    rm -rf "$OC_HOME"
+}
+trap cleanup EXIT
+trap 'status cancelled; exit 143' TERM INT
+
+# --- llama-server ---
+if (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
+    status "failed: port $PORT already in use on $(hostname -s)"; exit 1
+fi
+PORT=$PORT setsid "$LAUNCH_SERVER" "$LLM_VARIANT" > "$RUN_DIR/server.log" 2>&1 &
+SERVER_PID=$!
+status loading-model
+t0=$(date +%s)
+until curl -sf "http://127.0.0.1:$PORT/health" > /dev/null; do
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        status "failed: llama-server exited (see server.log)"; exit 1
+    fi
+    if (( $(date +%s) - t0 > SERVER_TIMEOUT )); then
+        status "failed: llama-server not healthy after ${SERVER_TIMEOUT}s"; exit 1
+    fi
+    sleep 10
+done
+echo "llama-server ready after $(( $(date +%s) - t0 ))s"
+
+# --- agent ---
+AGENT_SECONDS=$(( DEADLINE - $(date +%s) ))
+if (( AGENT_SECONDS < 60 )); then status "failed: no time left for the agent"; exit 1; fi
+status running
+echo "agent time budget: ${AGENT_SECONDS}s"
+cd "$WORKDIR"
+timeout --signal=INT --kill-after=60 "$AGENT_SECONDS" \
+    opencode run --standalone --auto --format json \
+        -m "$OC_MODEL" --title "{{JOB_NAME}}" \
+        "$(cat "$RUN_DIR/prompt.md")" \
+    > "$RUN_DIR/opencode.jsonl" 2> "$RUN_DIR/opencode.err" &
+AGENT_PID=$!
+wait "$AGENT_PID"
+rc=$?
+AGENT_PID=""
+echo "$rc" > "$RUN_DIR/exit_code"
+
+python3 "{{TOOL_DIR}}/dispatch.py" extract "$RUN_DIR" > "$RUN_DIR/result.md" 2>> "$RUN_DIR/opencode.err"
+
+if (( rc == 124 || rc == 137 )); then status "timeout (agent killed after ${AGENT_SECONDS}s)"
+elif (( rc == 0 )); then status done
+else status "failed: opencode exit code $rc"
+fi

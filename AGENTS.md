@@ -18,7 +18,7 @@ Always, the equations in the .esm files should like like math rather than einsum
 
 Some components may already have implementations in EarthSciModels. If so, add additional tests from the instrumented C++ or FORTRAN to ensure the existing .esm implementations match their C++ counterparts.
 
-Keep a centralized list of any bugs or errors that are found in the C++ code.
+Keep a centralized list of any bugs or errors that are found in the C++ code in `bugs.md` (see its template).
 
 Do not store anything large in /tmp, as it is backed by RAM rather than hard drive and can cause an OOM.
 
@@ -26,10 +26,8 @@ Do not put "Co-Authored-By: Claude ..." in any commit messages, or any other cla
 
 Do not put files directly in /projects/.../ctessum, that is a shared directory with other people. Store files that should be persistent over a medium horizon but not checked into git in a .gitignored subdirectory of your working directory. Store temporary files in /scratch.local/ctessum; these might disappear between sessions.
 
-Keep track of progress in PROGRESS.md
+Key files: `PLAN.md` is the implementation plan (CESM inventory, stage playbooks, milestones); `PROGRESS.md` records what has been done, what was decided, and what is next; `bugs.md` is the centralized CESM bug list.
 
-Perform work in a manager-worker arrangment, with the manager dispatching up to three subagents at a time to perform tasks (working on worktrees), then checking, merging, and cleaning up the subagents' work as they complete.
-
-For examples of other work using a similar workflow, see:
+For examples of other projects following the same approach, see:
 	* github.com/earthsciml/eqwefic
 	* github.com/earthsciml/eqice
