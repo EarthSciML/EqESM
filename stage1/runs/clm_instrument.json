@@ -1,0 +1,65 @@
+{
+  "component": "clm",
+  "reference_commit": "ctsm5.4.063 (ESCOMP/CTSM be1aff2f2) + instrument/clm-dumps: clm src ac5192b7d (001bd2f1d -> c907ec2e5 -> ac5192b7d) / superproject 4181331 (51f5671 -> a8184a4 -> 4181331), branch instrument/clm-dumps in stage1/EqESM-cesm-ctsm",
+  "type": "instantaneous_derivative_and_boundary_state",
+  "description": "CTSM (CLM) boundary traces from an instrumented I-class CESM run (compset I2000Clm60Sp = 2000_DATM%GSWP3v1_CLM60%SP_SICE_SOCN_MOSART_DGLC%NOEVOLVE_SWAV). Default-gated by dump_clm=.false. and enabled in this run only. FIRST SLICE, prioritizing the urban (CLMU) / radiation / surface-energy path so the existing (unverified) EarthSciModels CLMU can be checked against real CESM: (a) D-boundary pointwise laws - the saturation specific humidity law QSat(T,p); the urban albedo law (UrbanAlbedo: per-surface reflected/absorbed solar + albedos); the urban longwave canyon law (UrbanRadiation/net_longwave: net+upward longwave per roof/road/wall); the urban canyon turbulent-transfer boundary (UrbanFluxes exit); the ground surface albedo (SurfaceAlbedo: soil/snow/ground albedo); the two-stream absorbed/reflected shortwave partition (SurfaceRadiation); the bare-ground turbulent-flux boundary (BareGroundFluxes); and the soil/surface energy-balance boundary (SoilFluxes). PET 0 only, first dump_first_cols points of each filter x first dump_first_steps steps, OMP-critical writes, EqIce-style CSV headers.",
+  "regenerate": {
+    "command": "source stage1/runs/env.sh && python3 stage1/cesm/cime/scripts/create_newcase --case stage1/cime/cases/I2000Clm60Sp_clm_inst --compset I2000Clm60Sp --res f19_f19_mg17 --machine illinois --run-unsupported --srcroot $PWD/stage1/EqESM-cesm-ctsm && cd stage1/cime/cases/I2000Clm60Sp_clm_inst && printf '\\ndump_clm = .true.\\ndump_dir = \"<repo>/stage1/dumps/clm/\"\\ndump_first_cols = 16\\ndump_first_steps = 12\\n' >> user_nl_clm && ./xmlchange STOP_OPTION=ndays,STOP_N=1,JOB_WALLCLOCK_TIME=02:00:00,NTASKS_ATM=36,NTASKS_LND=36,NTASKS_ROF=36,NTASKS_ICE=36,NTASKS_OCN=36,NTASKS_CPL=36,NTASKS_GLC=36,NTASKS_WAV=36 && ./case.setup && ./case.build && env -u SLURM_MEM_PER_NODE -u SLURM_MEM_PER_CPU -u SLURM_MEM_PER_GPU ./case.submit",
+    "note": "Model source root is the fork worktree stage1/EqESM-cesm-ctsm (branch instrument/clm-dumps; clm submodule @ac5192b7d, all other submodules at the stage1/runs/README.md pinned tags). CIME scripts come from the pristine checkout stage1/cesm/cime. Dump CSVs land in stage1/dumps/clm/ (set by dump_dir in user_nl_clm). Full dumps are gitignored and regenerable. CLM is built via Filepath + the CIME Makefile, which globs src/main/*.F90, so clm_dump_mod.F90 needs no CMakeLists.txt edit (the src/*/CMakeLists.txt files are unit-test-only). Incremental build (after the format/header fixes) was 20.5 s."
+  },
+  "run": {
+    "case": "I2000Clm60Sp_clm_inst",
+    "job_id": "11961132 (final, clean CSVs). Earlier: 11949875 COMPLETED 8:58 with the two CSV defects below; 11961003 COMPLETED 8:17 with the urbalb fix only; 11949847 CANCELLED to add the energy hooks; 11949848/11949876/11961005/11961133 = case.st_archive (afterok).",
+    "result": "COMPLETED exit 0:0, case.run success, model execution success (JobID 11961132.0 cesm.exe COMPLETED 0:0, 36 tasks on 1 node)",
+    "wall_time": "00:08:24 job (00:08:13 cesm.exe); ~4 min pending queue before start",
+    "compset": "2000_DATM%GSWP3v1_CLM60%SP_SICE_SOCN_MOSART_DGLC%NOEVOLVE_SWAV (I2000Clm60Sp)",
+    "grid": "a%1.9x2.5_l%1.9x2.5_oi%null_r%r05_g%gris4_w%null_z%null_m%gx1v7 (f19_f19_mg17)",
+    "dates": "start 2000-01-01, STOP_OPTION=ndays STOP_N=1 (one day; 48 CLM steps of 1800 s)",
+    "coupling": "ATM_NCPL default (30 min); CLM land step = 1800 s",
+    "pes": "TOTALPES=36 on 1 node (NTASKS_ATM=LND=ROF=ICE=OCN=CPL=GLC=WAV=36; dumps from PET 0 / CLM masterproc only)",
+    "precision": "real64 everywhere (CESM default)",
+    "machine": "illinois (ctessum partition, SLURM), gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0; launcher srun --mpi=pmix",
+    "surface_dataset": "lnd/clm2/surfdata_esmf/ctsm5.4.0/surfdata_1.9x2.5_hist_2000_78pfts_c251022.nc (contains urban landunits: PCT_URBAN > 0 over populated gridcells, so UrbanAlbedo/UrbanRadiation/UrbanFluxes run)",
+    "namelist_deltas": {
+      "user_nl_clm": "dump_clm=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/dumps/clm/, dump_first_cols=16, dump_first_steps=12",
+      "xmlchange": "STOP_OPTION=ndays, STOP_N=1, JOB_WALLCLOCK_TIME=02:00:00, NTASKS_ATM=NTASKS_LND=NTASKS_ROF=NTASKS_ICE=NTASKS_OCN=NTASKS_CPL=NTASKS_GLC=NTASKS_WAV=36",
+      "note": "dump_clm defaults to .false., so the default build/run is bit-identical to un-instrumented CTSM (all dump calls are behind dump_enabled(), which is false when dump_clm is false; no physics/state is modified). dump_first_cols=16 / dump_first_steps=12 matches the MOSART instrumented dump (16x12)."
+    }
+  },
+  "dump_files": {
+    "clm_qsat.csv": "step,ymd,tod,T,p,qs,es,qsdT,esdT - QSat(T,p) saturation specific humidity law (QSatMod); subsampled to at most dump_first_cols=16 rows per step (QSat has no natural point index). 192 rows = 16 x 12 steps.",
+    "clm_urbalb.csv": "step,ymd,tod,l,c,ctype,coszen,canyon_hwr,albd_vis,albd_nir,albi_vis,albi_nir,albgrd_vis,albgrd_nir,albgri_vis,albgri_nir,sabs_roof_dir,sabs_sunwall_dir,sabs_shadewall_dir,sabs_improad_dir,sabs_perroad_dir - CLM urban albedo law (UrbanAlbedo exit), one row per urban column (ctype 71=roof,72=sunwall,73=shadewall,74=road_perv,75=road_imperv). 176 rows = 16 urban columns x 11 radiation steps (SurfaceAlbedo/UrbanAlbedo run only when doalb; steps 2..12).",
+    "clm_urban_lw.csv": "step,ymd,tod,l,canyon_hwr,lwdown,t_roof,t_improad,t_perroad,t_sunwall,t_shadewall,lwnet_roof,lwnet_improad,lwnet_perroad,lwnet_sunwall,lwnet_shadewall,lwnet_canyon,lwup_roof,lwup_improad,lwup_perroad,lwup_sunwall,lwup_shadewall,lwup_canyon - CLM urban longwave law (UrbanRadiation/net_longwave exit), one row per urban landunit. 192 rows = 16 urban landunits (l=252..267) x 12 steps.",
+    "clm_urban_rad.csv": "step,ymd,tod,p,c,ctype,ptype,forc_solad_vis,forc_solad_nir,forc_solai_vis,forc_solai_nir,sabg,sabv,fsa,fsa_u,eflx_lwrad_out,eflx_lwrad_net - CLM urban radiation boundary (UrbanRadiation exit), one row per urban patch. 192 rows = 16 urban patches x 12 steps.",
+    "clm_surfalbedo.csv": "step,ymd,tod,kind,c,ctype,coszen,frac_sno_albedo,albsod_vis,albsod_nir,albsoi_vis,albsoi_nir,albgrd_vis,albgrd_nir,albgri_vis,albgri_nir - CLM ground surface albedo (SurfaceAlbedo exit); kind=nourban|urban selects the column filter. 352 rows = (16 nourban + 16 urban) x 11 radiation steps (steps 2..12).",
+    "clm_surfrad.csv": "step,ymd,tod,p,c,ctype,ptype,coszen,forc_solad_vis,forc_solad_nir,forc_solai_vis,forc_solai_nir,sabv,sabg,sabg_soil,sabg_snow,fsa,fsr,parveg - CLM two-stream absorbed/reflected shortwave boundary (SurfaceRadiation exit), one row per non-urban patch. 192 rows = 16 non-urban patches x 12 steps.",
+    "clm_bareground.csv": "step,ymd,tod,p,c,ctype,ptype,forc_t,forc_q,forc_u,forc_v,forc_pbot,forc_rho,t_grnd,qg,thm,z0mg,ram1,beta,soilbeta,eflx_sh_grnd,eflx_sh_soil,eflx_sh_snow,eflx_sh_h2osfc,taux,tauy,cgrnds,cgrndl,qflx_ev_soil,qflx_ev_snow,qflx_evap_soi,t_ref2m,q_ref2m - CLM bare-ground turbulent-flux boundary (BareGroundFluxes exit), one row per non-exposed-vegetation patch. 192 rows = 16 patches x 12 steps.",
+    "clm_soilfluxes.csv": "step,ymd,tod,p,c,ctype,ptype,t_grnd,t_soisno_1,t_soisno_2,t_soisno_3,eflx_soil_grnd,eflx_lh_grnd,eflx_sh_grnd,eflx_lwrad_net,eflx_sh_veg,eflx_sh_tot,eflx_lh_tot,qflx_evap_soi,cgrnds,cgrndl,t_skin - CLM soil/surface energy-balance boundary (SoilFluxes exit), one row per non-lake patch. 192 rows = 16 patches x 12 steps. NOTE: with dump_first_cols=16 the traced non-lake filter is all soil patches on PET 0 (ctype=1); urban road/roof patches are not among the first 16 points, so this file carries no urban rows in this run."
+  },
+  "traced_domain": {
+    "pet": "0 only (masterproc && dump_clm gate)",
+    "points": "first dump_first_cols=16 points of each call's filter (landunit / column / patch), on PET 0",
+    "steps": "first dump_first_steps=12 model steps (dump_enabled uses get_nstep() <= 12); the run is 1 day = 48 steps. QSat/UrbanFlux-less calls run every step (steps 1..12); SurfaceAlbedo/UrbanAlbedo/UrbanRadiation run only on radiation steps (doalb), so their files hold 11 distinct steps (2..12).",
+    "indices": "each row carries the CLM subgrid coordinates (landunit l / column c / patch p) and itype (ltype/ctype/ptype) so stage-2 tests can select the regime (soil vs crop vs urban vs lake vs glacier); kind=nourban|urban selects the surface-albedo column filter"
+  },
+  "urban_evidence": {
+    "urbalb_ctypes": "ctype counts over 176 rows: 71 roof = 44 (=11 steps x 4 roof columns), 72 sunwall = 33, 73 shadewall = 33, 74 road_perv = 33, 75 road_imperv = 33 (11 steps x 3 each); urban landunits traced l = 252,253,254,255",
+    "urban_lw_landunits": "l = 252..267 (16 urban landunits), 12 steps each",
+    "urban_rad_ctypes": "ctype 71/72/73/74/75 present, 16 urban patches (p=780..795), 12 steps each",
+    "surfalbedo_urban": "kind=urban rows have ctype 71/72/73/74/75 (44/33/33/33/33), 176 rows; kind=nourban rows have ctype=1",
+    "solar": "shortwave is live: clm_surfrad forc_solad_vis ~ 141-145 W/m2 on the first non-urban patch; clm_urban_rad shows sunlit urban patches with sabg up to ~271 W/m2, and nighttime urban patches with sabg=0. Urban longwave is nonzero and varying (e.g. l=252 step1 lwup_roof=447.2, lwnet_roof=25.7 W/m2)."
+  },
+  "checks": {
+    "qsat_law": "qs = 0.622*es/(p-0.378*es) holds to round-off on all sampled rows (max relative deviation 2.2e-16 over the qsat rows); es is the phase-aware saturation vapor pressure.",
+    "csv_structure": "all 8 files: every data row is a single physical line; field count = header column count + 1 (trailing comma); zero blank lines. urbalb rows=176 nf=22, surfalbedo rows=352 nf=17, etc.",
+    "namelist_gating": "dump_clm reached run/lnd_in (with dump_dir/dump_first_cols/dump_first_steps); default .false. verified in bld/namelist_files/namelist_defaults_ctsm.xml",
+    "build": "CLM compiled clean with clm_dump_mod.F90 (auto-globbed from src/main via Filepath; clm_dump_mod appears in the lnd bldlog 3x), BareGroundFluxesMod, SoilFluxesMod, QSatMod, UrbanAlbedoMod, UrbanRadiationMod, SurfaceAlbedoMod, SurfaceRadiationMod, controlMod, clm_varctl; cesm.exe linked. Incremental build 20.5 s.",
+    "solution_neutrality": "All dump calls are behind dump_enabled(); dump_clm=.false. makes dump_enabled() false and the only added statements are non-mutating writes + one directory create on PET 0, so a default build/run is bit-identical to un-instrumented CTSM. Cheap confirmation path (NOT run here): rebuild/rerun with dump_clm=.false. and compare restart files to the reference run I2000Clm60Sp_f19 (the reference run exists in stage1/cime/cases/)."
+  },
+  "changelog": {
+    "initial": "clm 001bd2f1d (clm_dump_mod + urban/radiation dumps) and c907ec2e5 (BareGroundFluxes/SoilFluxes energy hooks) on instrument/clm-dumps; superproject 51f5671/a8184a4. Job 11949875 produced the first CSVs.",
+    "ac5192b7d": "Instrumentation CSV defects found in the first run and fixed: (1) dump_urbalb wrote 15 real values with only 13 es26.17 descriptors, so Fortran format reversion split every row across two physical lines (broke CSV parsing); widened to 15. (2) dump_surfalbedo '# columns' header listed 'kind' first while the data emits step,ymd,tod first; reordered the header to step,ymd,tod,kind,c,ctype,... . Superproject pointer 4181331. Rebuilt (20.5 s) and rerun as job 11961132 (COMPLETED, 8:24).",
+    "minor_note": "clm_surfalbedo kind is written with an a8 descriptor, so the value appears space-padded ('   urban' / ' nourban'); CSV consumers should trim whitespace."
+  },
+  "bugs_found": "No bugs in the CLM/CTSM Fortran physics so far (no candidate bugs.md entries). The two defects listed above were in this project's own dump instrumentation (dump_urbalb format descriptor count, dump_surfalbedo header order) and are fixed in clm ac5192b7d."
+}

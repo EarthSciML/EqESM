@@ -724,3 +724,39 @@ In progress (tests from dumps). See PLAN.md §4.2–4.3 and §10.
   (zeroed in .esm; no discrepancy). `mosart_templates.esm` untouched.
   README gains a Testing section (test table, derived-input conversions,
   scheme gaps, coverage limits).
+
+## CTSM lane (parallel to CICE; M5) — see `stage1/runs/CTSM_LANE.md`
+
+Started 2026-10-31 as a second, non-overlapping lane alongside the peer
+agent's CICE work. Scope: **all of CTSM**, with the explicit stance that the
+existing EarthSciModels land/urban corpus is **presumptively unverified**.
+
+- **Recon** ✅ (2026-10-31) — reports in `/scratch.local/ctessum/`:
+  `clm_source_map.md`, `land_reuse_audit.md`, `ctsm_harness_recon.md`.
+  Findings: CLM driver is `src/main/clm_driver.F90` (`Biogeophysics1/2/3` no
+  longer exist); ~20 dump targets at file:line; urban is **on by default for
+  clm6_0** and grid-driven (the global `I2000Clm60Sp_f19` run already
+  exercises urban); `1x1_mexicocityMEX`/`urbanc_alpha` single-point runs need
+  missing DATM inputdata (`urbanc_alpha` also a known upstream setup fail).
+- **Reuse/trust audit** ✅ (2026-10-31) — `urban_canopy/` = 44 files, esm
+  1.0.0, **0/44 cite a CESM `*.F90` line**: migrated from `UrbanCanopy.jl`
+  (a Julia reimplementation of Oleson et al. 2010). It has tests (392/1032,
+  green) but **none are CESM-grounded**; 2/44 fail `./esm validate`
+  (`urban_canopy_model.esm` 63 eq / 0 unknowns; `urban_radiation.esm` θ_0
+  units). Green tests ≠ CLM-correct.
+- **CLM instrumentation (W1a)** ✅ (2026-10-31) — fork `stage1/EqESM-cesm-ctsm`
+  (branch `instrument/clm-dumps`), `clm_dump_mod.F90` (559 lines) + namelist
+  gating (`dump_clm`) + 7 wiring sites (additive dump calls only →
+  solution-neutral). superproject `4181331`, clm submodule `ac5192b7d`.
+- **Instrumented run** ✅ (2026-10-31) — case `I2000Clm60Sp_clm_inst`
+  (I2000Clm60Sp/f19_f19_mg17, 36 tasks, 1 day), job `11961132` COMPLETED
+  8:24. 8 CSVs in `stage1/dumps/clm/` (urban-radiation/albedo + surfrad +
+  bareground + soilfluxes + qsat), one row per line, urban rows present
+  (ctypes 71–75, l=252). Two dump-code defects fixed en route (urbalb format
+  arity split rows; surfalbedo header order). Run record
+  `stage1/runs/clm_instrument.json`.
+- **Next (W2)** — extract tuples and **independently verify CLMU**:
+  `urban_radiation.esm` against `clm_urbalb`/`clm_urban_rad`/`clm_urban_lw`,
+  then the temps/ and hydro/ files; where the dump disagrees the Fortran is
+  the reference. Then the remaining CTsm slices + `stage2/clm_*.esm`
+  skeletons (W1b, `wt/stage2-clm`).
