@@ -87,7 +87,7 @@ status running
 echo "agent time budget: ${AGENT_SECONDS}s"
 cd "$WORKDIR"
 timeout --signal=INT --kill-after=60 "$AGENT_SECONDS" \
-    opencode run --standalone --auto --format json \
+    opencode run --standalone --format json \
         -m "$OC_MODEL" --title "{{JOB_NAME}}" \
         "$(cat "$RUN_DIR/prompt.md")" \
     > "$RUN_DIR/opencode.jsonl" 2> "$RUN_DIR/opencode.err" &
