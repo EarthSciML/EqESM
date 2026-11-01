@@ -162,15 +162,6 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (instrumentation note; the extraction script picks a snow-present row).
 - **Status:** open (recorded; harmless for tests, documented in the extraction script).
 
-## 19. CLM urban canyon longwave/shortwave multiple-reflection solvers stop at a loose absolute tolerance, leaving ~1e-5 relative error
-
-- **Location:** `components/clm/src/biogeophys/UrbanRadiationMod.F90:596-674` (`net_longwave`, `crit = max(road_a, sunwall_a, shadewall_a); if (crit < .001_r8) exit`); same pattern in `UrbanAlbedoMod.F90:1109-1250` (`net_solar`, `errcrit = .00001_r8`).
-- **Description:** the CLM urban canyon multiple-reflection exchange is solved by fixed-point iteration with a per-iteration *absolute* convergence test on the absorbed flux (0.001 W/m² for longwave, 1e-5 per-unit-incident-flux for solar). Because the absorbed flux shrinks by a factor of only ~0.05-0.08 per iteration but the test is on the raw increment (not normalised), the iteration exits several orders of magnitude before machine convergence. The physically exact solution is a closed-form matrix inverse, so the dumped `lwnet_*`/`sabs_*` values carry a systematic truncation error relative to the exact law.
-- **Impact on results:** measured against the exact linear-system solution of the same equations, the CLM dump `lwnet_sunwall`/`lwnet_shadewall`/`lwnet_canyon` for the traced urban rows are off by up to ~1.0e-4 W/m² (2.6e-5 W/m² on a 2.49 W/m² net, i.e. ~1e-5 relative); tight-converging the iteration to 1e-12 reproduces the exact values to <1e-14. This is a precision artefact, not a logic error — it is largely below history-file significance — but it must be accounted for when pinning `*.esm` against these dumps.
-- **Reproduced/corrected in .esm:** `components/urban_canopy/urban_radiation.esm` (EarthSciModels `clmu-verify` branch) computes the exact closed-form solution (`det_lw`, `det_dir_*` and the `band_*` expression templates are the analytic inverse of `(I - T·A)`), so it is *more* accurate than the dumped values. The CESM-dump tests `cesm_dump_canyon_longwave_hwr1p4`/`_hwr4p8` therefore assert with an absolute tolerance of 0.001 W/m² (the Fortran cutoff) rather than machine precision; the `net_solar` comparison uses the exact system solve.
-- **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
-- **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
-
 ## 13. CICE strain_rates shear corner 2 sign asymmetry (ice_dyn_shared.F90:2170-2171)
 
 - **Location:** `components/cice/src/cicecore/cicedyn/dynamics/ice_dyn_shared.F90:2170-2171` (`strain_rates`, the shear corner-2 combination).
@@ -218,3 +209,13 @@ Format template:
 - **Impact on results:** none on the model (tooling); the uniform-field test is hand-authored rather than builder-injected.
 - **Reproduced/corrected in .esm:** n/a (tooling). Fixed in the script.
 - **Status:** fixed (2026-11-01).
+
+## 19. CLM urban canyon longwave/shortwave multiple-reflection solvers stop at a loose absolute tolerance, leaving ~1e-5 relative error
+
+- **Location:** `components/clm/src/biogeophys/UrbanRadiationMod.F90:596-674` (`net_longwave`, `crit = max(road_a, sunwall_a, shadewall_a); if (crit < .001_r8) exit`); same pattern in `UrbanAlbedoMod.F90:1109-1250` (`net_solar`, `errcrit = .00001_r8`).
+- **Description:** the CLM urban canyon multiple-reflection exchange is solved by fixed-point iteration with a per-iteration *absolute* convergence test on the absorbed flux (0.001 W/m² for longwave, 1e-5 per-unit-incident-flux for solar). Because the absorbed flux shrinks by a factor of only ~0.05-0.08 per iteration but the test is on the raw increment (not normalised), the iteration exits several orders of magnitude before machine convergence. The physically exact solution is a closed-form matrix inverse, so the dumped `lwnet_*`/`sabs_*` values carry a systematic truncation error relative to the exact law.
+- **Impact on results:** measured against the exact linear-system solution of the same equations, the CLM dump `lwnet_sunwall`/`lwnet_shadewall`/`lwnet_canyon` for the traced urban rows are off by up to ~1.0e-4 W/m² (2.6e-5 W/m² on a 2.49 W/m² net, i.e. ~1e-5 relative); tight-converging the iteration to 1e-12 reproduces the exact values to <1e-14. This is a precision artefact, not a logic error — it is largely below history-file significance — but it must be accounted for when pinning `*.esm` against these dumps.
+- **Reproduced/corrected in .esm:** `components/urban_canopy/urban_radiation.esm` (EarthSciModels `clmu-verify` branch) computes the exact closed-form solution (`det_lw`, `det_dir_*` and the `band_*` expression templates are the analytic inverse of `(I - T·A)`), so it is *more* accurate than the dumped values. The CESM-dump tests `cesm_dump_canyon_longwave_hwr1p4`/`_hwr4p8` therefore assert with an absolute tolerance of 0.001 W/m² (the Fortran cutoff) rather than machine precision; the `net_solar` comparison uses the exact system solve.
+- **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
+- **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
+
