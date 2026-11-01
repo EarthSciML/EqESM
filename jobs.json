@@ -1,1 +1,25 @@
-[]
+[
+  {
+    "name": "esm070-regress",
+    "jobid": 11967589,
+    "purpose": "Regression-check stage2/ validate+test under esm CLI 0.7.0; fix only real .esm defects",
+    "milestone": "M0/toolchain",
+    "parent": null,
+    "branch": "wt/esm070-regress",
+    "workdir": "/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM-wt-esm070-regress",
+    "base_commit": "658c529",
+    "time_limit": "03:00:00",
+    "llm": "v4",
+    "prompt_chars": 2679,
+    "submitted": "2026-11-01 17:57:21",
+    "started": null,
+    "ended": null,
+    "wait_minutes": null,
+    "run_minutes": null,
+    "slurm_state": null,
+    "agent_status": null,
+    "outcome": "pending",
+    "merge_commit": null,
+    "notes": ""
+  }
+]
