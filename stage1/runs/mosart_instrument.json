@@ -1,0 +1,51 @@
+{
+  "component": "mosart",
+  "reference_commit": "mosart1.1.13 (a6f6e90) + instrument/mosart-dumps f9a19d1",
+  "type": "integrated_trajectory_and_instantaneous_derivative",
+  "description": "MOSART boundary traces from an instrumented I-class CESM run (PLAN.md 4.3 M2): (a) pointwise D-boundary laws - hillslope overland flow (CREHT_nosqrt), tributary and main-channel Manning velocities (CRVRMAN_nosqrt), and the subnetwork/main-channel geometry chains (GRMR/GRHT/GRPT/GRRR and GRMR/GRHR/GRPR/GRRR), one row per Euler call/substep with (step, ns, m, nt, nr, gindex) context and dry-cell-clamp flags; (b) I boundaries - Euler substep entry/exit state and flux traces (wt, wr, wh; qsur/qsub/qgwl; ehout/etin/etout/erout/erlat_avg/flow) and per-coupling-step mosart_run imports (qsur/qsub/qgwl/qirrig/qglc_*, volr, state) and exports (runofftot/runofflnd/runoffocn, flood, direct, qirrig_actual, volr, dvolrdt, flow, erout_prev, eroutup_avg, erlat_avg, volrmch, state), plus the global water budget terms on budget-check steps.",
+  "regenerate": {
+    "command": "source stage1/runs/env.sh && python3 stage1/cesm/cime/scripts/create_newcase --case stage1/cime/cases/I2000Clm60Sp_mosart_inst --compset I2000Clm60Sp --res f19_f19_mg17 --machine illinois --run-unsupported --srcroot stage1/EqESM-cesm-mosart && cd stage1/cime/cases/I2000Clm60Sp_mosart_inst && ./xmlchange STOP_OPTION=ndays,STOP_N=1,JOB_WALLCLOCK_TIME=02:00:00,NTASKS_ATM=36,NTASKS_LND=36,NTASKS_ICE=36,NTASKS_OCN=36,NTASKS_ROF=36,NTASKS_GLC=36,NTASKS_WAV=36,NTASKS_CPL=36,NTASKS_ESP=1 && ./case.setup && ./case.build && ./case.submit",
+    "note": "Model source root is the fork worktree stage1/EqESM-cesm-mosart (branch instrument/mosart-dumps, mosart submodule branch instrument/mosart-dumps); CIME scripts come from the pristine checkout stage1/cesm/cime. Dump CSVs land in stage1/dumps/mosart/ (set by dump_dir in user_nl_mosart). Full dumps are gitignored and regenerable; the run takes ~9 min wall."
+  },
+  "run": {
+    "case": "I2000Clm60Sp_mosart_inst",
+    "job_id": "11837196",
+    "result": "COMPLETED exit 0:0, case.run success, model execution success",
+    "compset": "2000_DATM%GSWP3v1_CLM60%SP_SICE_SOCN_MOSART_DGLC%NOEVOLVE_SWAV_SESP (I2000Clm60Sp)",
+    "grid": "a%1.9x2.5_l%1.9x2.5_oi%null_r%r05_g%gris4_w%null_z%null_m%gx1v7 (f19_f19_mg17)",
+    "dates": "start 2000-01-01, STOP_OPTION=ndays STOP_N=1 (one day, 8 MOSART coupling steps)",
+    "coupling": "ROF_NCPL=8, coupling_period=10800 s, delt_mosart=3600 s, nsub=3",
+    "pes": "TOTALPES=36 on 1 node (NTASKS=36 per component, NUOPC shared layout; MOSART on all 36 PETs)",
+    "precision": "real64 everywhere (CESM default; mosart hard-coded r8)",
+    "machine": "illinois (ctessum partition, SLURM), gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0",
+    "namelist_deltas": {
+      "user_nl_mosart": "dump_mosart=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/dumps/mosart/, dump_first_cells=16, dump_first_steps=12, decomp_option='basin'",
+      "note": "decomp_option='basin' deviates from the reference run's 'roundrobin' so PET 0's first cells form a connected river network. Verified decomp-invariant: the instrumented run's mosart restart and history files are bit-identical (modulo timestamps/case-name attributes) to the un-instrumented reference run I2000Clm60Sp_f19, which also validates that the dump code does not change the solution."
+    }
+  },
+  "dump_files": {
+    "creht_nosqrt.csv": "step,ns,m,nt,nr,gindex,sqrthslp,nh,Gxr,yh,eht_raw,ehout,clamped - hillslope overland flow law eht_raw = -CREHT_nosqrt(sqrthslp,nh,Gxr,yh) [m/s], ehout after the dry-cell clamp",
+    "crvrman_trib.csv": "step,ns,m,nt,nr,gindex,tslpsqrt,n_t,rt,vt,mt,etout_raw,etout,dwt,clamped - tributary Manning law vt = CRVRMAN_nosqrt(tslpsqrt,n_t,rt) [m/s], one row per numDT_t substep",
+    "crvrman_chan.csv": "step,ns,m,nt,nr,gindex,rslpsqrt,n_r,rr,vr,mr,erin,erlateral,erout_raw,erout,dwr,qgwl_area,clamped - main-channel Manning law vr = CRVRMAN_nosqrt(rslpsqrt,n_r,rr) [m/s], one row per numDT_r substep",
+    "gr_subnet.csv": "step,ns,m,nt,nr,gindex,wt,tlen,twidth,mt,yt,pt,rt - subnetwork geometry chain GRMR/GRHT/GRPT/GRRR",
+    "gr_chan.csv": "step,ns,m,nt,nr,gindex,wr,rlen,rwidth,rwidth0,rdepth,mr,yr,pr,rr - main-channel geometry chain GRMR/GRHR/GRPR/GRRR",
+    "mosart_euler.csv": "step,ns,nt,nr,gindex,phase(entry|exit),delt,wt,wr,wh,qsur,qsub,qgwl,ehout,etin,etout,erout,erlat_avg,flow - Euler substep boundary; qsur/qsub/qgwl in m/s (converted by /area in mosart_run)",
+    "mosart_run_imports.csv": "step,ymd,tod,nt,nr,gindex,mask,qsur,qsub,qgwl,qirrig,qglc_liq,qglc_ice,volr,wt,wr,wh - coupling-step imports and initial state (before irrigation/flood/direct handling)",
+    "mosart_run_exports.csv": "step,ymd,tod,nt,nr,gindex,mask,runofftot,runoff,runofflnd,runoffocn,flood,direct,direct_glc,qirrig_actual,volr,dvolrdt,flow,erout_prev,eroutup_avg,erlat_avg,volrmch,wt,wr,wh - coupling-step exports and final state (volrmch = wr(liq)/area on the LIQ row, spval on ICE)",
+    "mosart_budget.csv": "step,ymd,tod,nt,beg_vol_glob,end_vol_glob,in_glob,out_glob,net_glob,lag_glob - global water budget (1e6 m3) from mosart_budget_type on budget-check steps (budget_frq=-24 => daily, so the final step)"
+  },
+  "traced_domain": {
+    "pet": "0 only (iam == 0 in mpicom_rof)",
+    "cells": "first 16 local cells of PET 0 (dump_first_cells=16): with the basin decomposition these are 7 land cells + 2 outlet cells that are routed (TUnit%mask > 0) and 7 pure-ocean cells handled by the direct-transfer path",
+    "steps": "all 8 coupling steps of the 1-day run (dump_first_steps=12), plus step=0 init-state geometry rows",
+    "steps_note": "step=0 rows in gr_*.csv / (via updateState_*) come from the mosart_init2 state initialization (zero storage)."
+  },
+  "checks": {
+    "bit_identical_outputs": "instrumented run mosart.r/rh0a/rh0i files differ from the reference I2000Clm60Sp_f19 run only in :history timestamp and case_name/case_id attributes - all data variables identical, so the dump code changes nothing when enabled and the basin decomp is numerically equivalent to roundrobin",
+    "manning_law": "vt = (rt^2)^(1/3)*tslpsqrt/n_t and vr = (rr^2)^(1/3)*rslpsqrt/n_r to round-off on every unclamped row",
+    "creht_law": "eht_raw = -Gxr*yh*(yh^2)^(1/3)*sqrthslp/nh to round-off on every row",
+    "gr_chain": "mr = wr/rlen (and mt = wt/tlen) to round-off",
+    "euler_counts": "8 steps x 3 substeps x 2 phases x 16 cells = 768 mosart_euler rows (LIQ tracer only; ICE is direct-routed, euler_calc=F)",
+    "budget": "net = end - beg - (in - out) consistent; conservation requires net ~= -lag"
+  }
+}

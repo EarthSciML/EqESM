@@ -1,0 +1,55 @@
+{
+  "component": "cice",
+  "reference_commit": "cesm3_cice6_6_3_22 (ESCOMP) + instrument/cice-dumps ced43eb (cice/src) / c8a3bef (wrapper) / c8a3bef (superproject)",
+  "type": "integrated_trajectory_and_instantaneous_derivative",
+  "description": "CICE boundary traces from an instrumented D-class CESM run (PLAN.md 10.4 M3), default-gated by dump_cice=.false. and enabled in this run only: (a) D-boundary pointwise laws - EVP stress tensor law (ice_dyn_evp stress, standard_2d; strain_rates -> visc_replpress -> relaxation update, one row per (T cell, corner, subcycle ksub)), EVP momentum law (stepu in ice_dyn_shared; vrel/Cb/cca/ccb/ab2/cc1/cc2 chain and final uvel/vvel, one row per (U cell, ksub), U cell = NE corner of traced T cell so rows exist only where ice covers the U point), ice strength P (ice_strength law), mushy-layer freezing temperature Tf(sss) (shr_frz_freezetemp under CESMCOUPLED), albedo and thermo-flux laws; (b) I boundaries - coupling-step imports (post-ice_import) and exports (actual ESMF export state at end of ice_export) per state index n, cell/column state entry/exit across ice_step (thermo, dynamics, transport), coupling-prep flux entry/exit, and the hemispheric budget on diagnostics steps.",
+  "regenerate": {
+    "command": "source stage1/runs/env.sh && python3 stage1/cesm/cime/scripts/create_newcase --case stage1/cime/cases/D_cice_inst --compset D --res f19_g17 --machine illinois --run-unsupported --srcroot stage1/EqESM-cesm-cice && cd stage1/cime/cases/D_cice_inst && ./xmlchange STOP_OPTION=ndays,STOP_N=1,NTASKS_ATM=18,NTASKS_ICE=18,NTASKS_OCN=18,NTASKS_ROF=18,NTASKS_GLC=18,NTASKS_WAV=18,NTASKS_CPL=18,NTASKS_ESP=1,NTHRDS=2 && ./case.setup && ./case.build && env -u SLURM_MEM_PER_NODE -u SLURM_MEM_PER_CPU -u SLURM_MEM_PER_GPU ./case.submit",
+    "note": "Model source root is the fork worktree stage1/EqESM-cesm-cice (branch instrument/cice-dumps; cice submodule @bcb9496, cice/src @2dbb70f, icepack @410ca07 untouched); CIME scripts come from the pristine checkout stage1/cesm/cime. Dump CSVs land in stage1/dumps/cice/ (set by dump_dir in user_nl_cice). Full dumps are gitignored and regenerable; the run takes ~1.5 min wall."
+  },
+  "run": {
+    "case": "D_cice_inst",
+    "job_id": "11864874 (rerun after trcr/trcrn index-order fix; prior runs 11857263/11857562)",
+    "result": "COMPLETED exit 0:0, case.run success, model execution success",
+    "compset": "2000_DATM%NYF_SLND_SICE_SOCN_DROF%NYF_SGLC_SWAV (D)",
+    "grid": "a%1.9x2.5_l%1.9x2.5_oi%null_r%r05_g%gris4_w%null_z%null_m%gx1v7 (f19_g17)",
+    "dates": "start 0001-01-01, STOP_OPTION=ndays STOP_N=1 (one day, 24 CICE timesteps of 3600 s)",
+    "coupling": "ATM_NCPL=24 (dt=3600 s), CICE dynamics ndte=120, diagfreq=24",
+    "pes": "TOTALPES=36 on 1 node (NTASKS=18 per component, NTHRDS=2; CICE on 18 PETs, dumps from PET 0 only)",
+    "precision": "real64 everywhere (CESM default)",
+    "machine": "illinois (ctessum partition, SLURM), gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0",
+    "namelist_deltas": {
+      "user_nl_cice": "dump_cice=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/dumps/cice/, dump_first_cells=32, dump_first_steps=12",
+      "note": "All other settings identical to the reference run D_f19g17 (grid_ice='B', ncat=5, nilyr=8, nslyr=3, ktherm=2 mushy, advection='remap', kdyn=1, ndte=120, shortwave='dEdd', tfrz_option='mushy', diagfreq=24, block_size_x=20, block_size_y=24, distribution_type='sectrobin', revised_evp=.false.). Verified solution-neutral: the instrumented run's iceh and restart files are bit-identical (modulo title/timestamp attributes) to the reference run, so the dump code changes nothing when enabled. RERUN 11864874: fixed trcr/trcrn index order (declared (i,j,tracer,ncat,block), was read (i,tracer,j,n,block)) so thermo_state Tsfc/Tsfcn/qice/qsno and albedo Tsfcn/alvl/apnd/hpnd/ipnd columns now carry real values; solution-neutrality re-verified."
+    }
+  },
+  "dump_files": {
+    "cice_run_imports.csv": "step,ymd,tod,iblk,i,j,gi,gj,areacor,sst,sss,Tf,frzmlt,zlvl,Tair,Qa,potT,rhoa,swvdr,swvdf,swidr,swidf,flw,frain,fsnow,uocn,vocn,uatm,vatm,wind,fsw,ss_tltx,ss_tlty,coszen - coupling-step imports as consumed by CICE (top of CICE_Run after ice_import mapping), per state index n (areacor = med2mod_areacor(n)); sst in degC, sss>=0, winds/currents/tilts rotated by ANGLET",
+    "cice_run_exports.csv": "step,ymd,tod,iblk,i,j,gi,gj,areacor,Si_ifrac,Si_imask,Si_t,Si_avsdr,Si_anidr,Si_avsdf,Si_anidf,Si_u10,Si_tref,Si_qref,Si_vsno,Si_vice,Si_snowh,Faii_taux,Faii_tauy,Faii_lat,Faii_sen,Faii_lwup,Faii_evap,Faii_swnet,Fioi_swpen,Fioi_swpen_vdr,Fioi_swpen_vdf,Fioi_swpen_idr,Fioi_swpen_idf,Fioi_melth,Fioi_meltw,Fioi_salt,Fioi_taux,Fioi_tauy - actual ESMF export state read back at the end of ice_export via dump_run_exports (per-category Si_ifrac_n/Fioi_swpen_ifrac_n omitted); areacor = mod2med_areacor(n); step=0 row is the initial export at coupling time 0",
+    "cice_freezing_temp.csv": "step,ymd,tod,iblk,i,j,gi,gj,sss,Tf - freezing temperature law Tf = max(S/(-18.48+0.01848*S), -2.0) degC (shr_frz_freezetemp mushy branch, Assur 1958), sss [psu] as clamped in ice_import; identical to run_imports sss/Tf (verified all 384 rows)",
+    "cice_thermo_state.csv": "step,ymd,tod,iblk,i,j,gi,gj,phase(entry|exit),ncat,aice,vice,vsno,aice0,Tsfc,aicen,vicen,vsnon,Tsfcn,qice_1..qice_8,qsno_1..qsno_3 - column state at top of ice_step (entry) and after step_therm1/2 + update_state (exit); qice/q sno are mushy enthalpies [J/m3], 0 when ktherm /= 2",
+    "cice_dyn_state.csv": "step,ymd,tod,iblk,i,j,gi,gj,phase,ncat,uvel,vvel,uvel_init,vvel_init,forcex,forcey,waterx,watery,strairx,strairy,strtltx,strtlty,strintx,strinty,taubx,tauby,aiU,vice,vicen,vsnon,icepresent - dynamics state around the EVP solve (entry before dyn_prep, exit after dynamics)",
+    "cice_transport_state.csv": "step,ymd,tod,iblk,i,j,gi,gj,phase,ncat,aicen,vicen,vsnon,Tsfcn,qice_1..qice_8,qsno_1..qsno_3 - state before/after the transport step (advection 'remap')",
+    "cice_evp_stress.csv": "step,ymd,tod,iblk,i,j,gi,gj,ksub,corner(1=NE,2=NW,3=SW,4=SE),uvel,vvel,dxT,dyT,dxhy,dyhx,cxp,cyp,cxm,cym,DminTarea,strength,Delta,divu,tension,shear,zetax2,etax2,rep_prs,oldp,oldm,old12,newp,newm,new12,arlx1i,revp,denom1 - EVP stress law; newp=(oldp*(1-arlx1i*revp)+arlx1i*(zetax2*divu-rep_prs))*denom1, newm=(oldm*(1-arlx1i*revp)+arlx1i*etax2*tension)*denom1, new12=(old12*(1-arlx1i*revp)+arlx1i*0.5*etax2*shear)*denom1; verified on all 184320 rows (revp=0 classic EVP)",
+    "cice_evp_momentum.csv": "step,ymd,tod,iblk,i,j,gi,gj,ksub,uold,vold,uvel_init,vvel_init,uvel,vvel,aiX,Cw,uocn,vocn,waterx,watery,forcex,forcey,Umassdti,fm,uarear,TbU,vrel,taux,tauy,Cb,cca,ccb,ab2,strintx,strinty,cc1,cc2,str_1..str_8,brlx,revp,cosw,sinw,u0,rhow - EVP momentum law per U cell (NE corner of traced T cell; rows only where ice covers the U point); full chain vrel/Cb/taux/tauy/cca/ccb/ab2/cc1/cc2 -> uvel=(cca*cc1+ccb*cc2)/ab2, vvel=(cca*cc2-ccb*cc1)/ab2 verified on all 40320 rows",
+    "cice_ice_strength.csv": "step,ymd,tod,iblk,i,j,gi,gj,P,delta_min,rescale - ice strength P from ice_strength (Pstar*h*exp(-C*(1-a))*... rescaled by delta_min), one row per dynamics step",
+    "cice_albedo.csv": "step,ymd,tod,iblk,i,j,gi,gj,ncat,alvdr,alidr,alvdf,alidf,albice,albsno,albpnd,apeff_ai,snowfrac - per-category albedo after the radiation loop (shortwave 'dEdd')",
+    "cice_flux.csv": "step,ymd,tod,iblk,i,j,gi,gj,phase(entry|exit),alvdr,alidr,alvdf,alidf,albice,albsno,albpnd,apeff_ai,snowfrac,fresh,fsalt,fhocn,fswthru,fswthru_vdr,fswthru_vdf,fswthru_idr,fswthru_idf,flwout,fsens,flat,evap,fswabs,Tref,Qref,Uref,scale_factor,fswup,fpond - coupling-prep flux boundary: entry post-thermo (pre-aggregation/scaling), exit after albedo aggregation and scale_fluxes (division by aice)",
+    "cice_thermo_flux.csv": "step,ymd,tod,iblk,i,j,gi,gj,fswsfc,fswint,fswthru,fhocn,fresh,fsalt,flat,fsens,flwout,evap - vertically integrated column fluxes after the thermodynamic step",
+    "cice_budget.csv": "step,ymd,tod,arean,areas,extentn,extents,shmaxn,shmaxs,snwmxn,snwmxs,micen,mices,msnwn,msnws,mtotn,mtots,delmin,delmis,delmxn,delmxs,fluxn,fluxs,werrn,werrs,etotn,etots,delein,deleis,hnetn,hnets,herrn,herrs,fswnetn,fswnets,fswdnn,fswdns,swerrn,swerrs,msltn,mslts,delmsltn,delmslts,sfsaltn,sfsalts,serrn,serrs - hemispheric water/heat/salt budget from runtime_diags on diagnostics steps only (diagfreq=24 => one row at step 24; NOT limited by dump_first_steps)"
+  },
+  "traced_domain": {
+    "pet": "0 only (dump_pet gate)",
+    "cells": "first 32 tmask cells of PET 0 (dump_first_cells=32) in block/(j,i) order, which matches the cap's 1-D state ordering (n = 1..numOwnedElements) so med2mod/mod2med_areacor apply by state index n; gi/gj are the global indices",
+    "steps": "first 12 timesteps (dump_first_steps=12) of the 24-step day, plus step=0 initial-export rows in cice_run_exports and the step-24 budget row",
+    "steps_note": "evp_stress has 32x4x120x12 = 184320 rows; evp_momentum 28x120x12 = 40320 rows because only 28 of the 32 traced T cells have ice-covered NE U corners (U points with ice only)."
+  },
+  "checks": {
+    "bit_identical_outputs": "instrumented run iceh + restart files differ from the reference D_f19g17 run only in :title/:date_created/:history attributes - all data variables identical, so the dump code changes nothing when enabled (stage1/analysis/compare_iceh.py)",
+    "freezing_temp_law": "Tf = max(S/(-18.48 + 0.01848*S), -2.0) [shr_frz_freezetemp mushy, Assur 1958] to round-off on all 384 rows; identical to run_imports sss/Tf",
+    "evp_stress_law": "newp/newm/new12 relaxation laws hold to round-off on all 184320 rows",
+    "evp_momentum_law": "full chain vrel -> Cb -> cca/ccb -> ab2 -> cc1/cc2 -> uvel/vvel holds to round-off on all 40320 rows",
+    "row_counts": "thermo/dyn/transport state 32 cells x 5 ncat x 2 phases x 12 steps = 3840 rows each; albedo 32x5x12 = 1920; thermo_flux/ice_strength 32x12 = 384; flux 32x2x12 = 768; imports 32x12 = 384; exports 32x13 = 416 (incl. step 0); budget 1 row at step 24; thermo_state Tsfc/Tsfcn now physical (e.g. Tsfc ~ -14.7 C, qice_1 ~ -3.03e8 J/m3)",
+    "no_blank_lines": "fixed in 2dbb70f: evp_stress and freezing_temp previously emitted a blank line after every data row; all 13 CSVs now have zero blank lines"
+  }
+}
