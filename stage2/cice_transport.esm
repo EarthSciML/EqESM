@@ -2,24 +2,38 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice_transport",
-  "description": "CICE horizontal transport (stage 2 of the EqESM project): the per-category conservative advection of the default configuration of cesm3_cice6_6_3_22, written over the ncat thickness categories. The Fortran advects the category area (the 'mass' field mm, including open water in category 0) and the per-category tracers with the incremental-remapping scheme of Dukowicz & Baumgardner (2000) / Lipscomb & Hunke (2004) (transport_remap, ice_transport_driver.F90:251-700; horizontal_remap, ice_transport_remap.F90:317-831; construct_fields F90:1009-1283; departure_points F90:1449-1623; transport_integrals F90:3188-3472), and the B-grid velocity is defined at the cell corners (ice_HaloUpdate of uvel/vvel before the remap, ice_transport_driver.F90:430-445). The conservative statement per category n is the continuity system d(a_n)/dt + div(a_n u) = 0, d(v_n)/dt + div(v_n u) = 0, d(vs_n)/dt + div(vs_n u) = 0 for the area aicen, the ice volume per unit area vicen = a_n*h_n, and the snow volume vsnon, together with the energy-conservation forms d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 and d(vsnon*qsnon)/dt + div(vsnon*qsnon*u) = 0 for the layer enthalpies (the Fortran's type-2 tracer transport conserves the tracer*mass product; qicen/qsnon are carried as tracers nt_qice/nt_qsno, ice_transport_driver.F90:98-102). The skeleton writes these as spatial-D rewrite targets (div(c u) = D(c*uvel, x) + D(c*vvel, y)) to be lowered by a discretization template from the EarthSciDiscretizations library in stage 3, exactly as the incremental-remapping scheme replaces the continuous flux form with the departure-cell integrals of the Fortran. The two enthalpy-tracer equations are documented but not carried as model equations in this skeleton: their product-form LHS cannot define an unknown under the esm equation-balance rule, and the tracer fields are parameters fed by the thermodynamics states (the assembly wires Thermodynamics.qicen -> Transport.qicen by param_to_var); the conservative tracer statement d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 is asserted once the incremental-remap discretization lands in stage 3. aicen/vicen/vsnon are the transport states; qicen/qsnon are parameter tracers (wired from the thermodynamics component's states in the assembly via param_to_var), uvel/vvel are parameter forcing (wired from the dynamics component), and the open-water concentration aice0 = 1 - sum_n aicen is a diagnostic of the assembly/coupling layer. The tests block is empty: the transport equations are written with the spatial divergence D(...) as a rewrite target (esm-spec 4.2), and an unlowered spatial-D operator makes the whole-model compile fail before any assertion can run ('unlowered_operator: rewrite-target operator D reached evaluation without being lowered', probed against the stage-1 harness); the stage-1 dumps (cice_transport_state.csv) will be pinned once the incremental-remap lowering lands (stage 3). See stage2/README-cice.md 'Testing'."
- },
- "index_sets": {
-  "ncat": {
-   "kind": "interval",
-   "size": "N_CAT"
-  },
-  "ice_layer": {
-   "kind": "interval",
-   "size": "N_ILYR"
-  },
-  "snow_layer": {
-   "kind": "interval",
-   "size": "N_SLYR"
-  }
+  "description": "CICE horizontal transport (stage 2 of the EqESM project): the per-category conservative advection of the default configuration of cesm3_cice6_6_3_22, lowered onto the traced 3x5 subdomain (N_I = 3 T cells along x, N_J = 5 along y, global cells (2..4, 4..8) of the stage-1 dump) with the EarthSciDiscretizations CICE B-grid flux-divergence rule (grids/cice_bgrid/rules/transport_flux_divergence.esm). The Fortran advects the category area (the 'mass' field mm, including open water in category 0) and the per-category tracers with the incremental-remapping scheme of Dukowicz & Baumgardner (2000) / Lipscomb & Hunke (2004) (transport_remap, ice_transport_driver.F90:251-700; horizontal_remap, ice_transport_remap.F90:317-831; construct_fields F90:1009-1283; departure_points F90:1449-1623; transport_integrals F90:3188-3472), and the B-grid velocity is defined at the cell corners (ice_HaloUpdate of uvel/vvel before the remap, ice_transport_driver.F90:430-445). The conservative statement per category n is the continuity system d(a_n)/dt + div(a_n u) = 0, d(v_n)/dt + div(v_n u) = 0, d(vs_n)/dt + div(vs_n u) = 0 for the area aicen, the ice volume per unit area vicen = a_n*h_n, and the snow volume vsnon, together with the energy-conservation forms d(vicen*qicen)/dt + div(vicen*qicen*u) = 0 and d(vsnon*qsnon)/dt + div(vsnon*qsnon*u) = 0 for the layer enthalpies (the Fortran's type-2 tracer transport conserves the tracer*mass product; qicen/qsnon are carried as tracers nt_qice/nt_qsno, ice_transport_driver.F90:98-102). The model writes these as spatial-D rewrite targets (div(c u) = D(c*uvel, x) + D(c*vvel, y)) lowered by the transport_flux_divergence rule to the conservative cell flux divergence of the Fortran's mass update mm(i,j) = mm(i,j) - w1*tarear(i,j) with w1 = mflxe(i,j) - mflxe(i-1,j) + mflxn(i,j) - mflxn(i,j-1) (ice_transport_remap.F90:3586-3590) and the centered edge reconstruction of edgearea_e/n (F90:658-666): the rule's face average (uS+uN)/2*(cL+cR)/2*HTE per edge, divided by tarea, is the continuous flux form that the incremental-remapping scheme replaces with the departure-cell integrals -- the scheme difference is documented in stage2/README-cice.md and quantified by the pin tolerances of the two tests below (integrated-pin residuals aicen <= 3.04e-5, vicen <= 3.33e-5, vsnon <= 1.78e-4 relative). The two enthalpy-tracer equations are documented but not carried as model equations: their product-form LHS cannot define an unknown under the esm equation-balance rule, and the tracer fields are parameters fed by the thermodynamics states (the assembly wires Thermodynamics.qicen -> Transport.qicen by param_to_var). The velocity and grid fields are parameters overridden from the dumps in the tests: uvel/vvel are the transport dump's t_entr step-1 ncat-1 rows (the cell (i,j) row carries the U(i,j) NE-corner velocity = the post-dynamics field), HTE/HTN/tarea are derived from the stress-dump metrics (HTE = (3*cyp - cym)/4, HTN = (3*cxp - cxm)/4, tarea = dxT*dyT). Import contract: the model declares the N_I/N_J/NCAT/N_ILYR/N_SLYR metaparameters and the i/j/ncat/ice_layer/snow_layer index sets locally (the esm CLI 0.4.0/0.6.0 rejects faq-range metaparameter references when a template library is imported with bindings -- RangeSpec round-trip parse bug, see PROGRESS.md), and imports the flux-divergence rule by reference from the EarthSciDiscretizations library (${ESD_ROOT} must be set to that repo's checkout when running the tests).",
+  "license": "MIT",
+  "tags": [
+   "stage2",
+   "component:cice-transport",
+   "grid:cice_bgrid",
+   "equation:transport"
+  ],
+  "references": [
+   {
+    "citation": "Hunke, E. C., Allard, R., Bailey, D. A., Blain, P., Craig, A., Dupont, F., ... & Roberts, A. F. (2023). CICE-Consortium Icepack v1.2.4 and CICE v6.3.22: documentation and user's guide. Los Alamos National Laboratory (LA-UR-23-31851)."
+   },
+   {
+    "citation": "Dukowicz, J. K., & Baumgardner, J. R. (2000). Incremental remapping as a transport/advection algorithm. Journal of Computational Physics, 160(1), 318-335."
+   },
+   {
+    "citation": "Lipscomb, W. H., & Hunke, E. C. (2004). Modeling sea ice transport using incremental remapping. Monthly Weather Review, 132(6), 1341-1354."
+   }
+  ]
  },
  "metaparameters": {
-  "N_CAT": {
+  "N_I": {
+   "type": "integer",
+   "default": 3,
+   "description": "number of T cells along the B-grid x axis of the traced subdomain (global cells 2..4 of the stage-1 dump), [-]"
+  },
+  "N_J": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of T cells along the B-grid y axis (global cells 4..8 of the dump), [-]"
+  },
+  "NCAT": {
    "type": "integer",
    "default": 5,
    "description": "number of ice thickness categories (namelist ncat = 5), [-]"
@@ -35,12 +49,41 @@
    "description": "number of snow layers (D-class namelist nslyr = 3), [-]"
   }
  },
+ "index_sets": {
+  "i": {
+   "kind": "interval",
+   "size": "N_I"
+  },
+  "j": {
+   "kind": "interval",
+   "size": "N_J"
+  },
+  "ncat": {
+   "kind": "interval",
+   "size": "NCAT"
+  },
+  "ice_layer": {
+   "kind": "interval",
+   "size": "N_ILYR"
+  },
+  "snow_layer": {
+   "kind": "interval",
+   "size": "N_SLYR"
+  }
+ },
  "models": {
   "Transport": {
+   "expression_template_imports": [
+    {
+     "ref": "${ESD_ROOT}/grids/cice_bgrid/rules/transport_flux_divergence.esm"
+    }
+   ],
    "variables": {
     "aicen": {
      "type": "unknown",
      "shape": [
+      "i",
+      "j",
       "ncat"
      ],
      "units": "1",
@@ -50,6 +93,8 @@
     "vicen": {
      "type": "unknown",
      "shape": [
+      "i",
+      "j",
       "ncat"
      ],
      "units": "m",
@@ -59,11 +104,46 @@
     "vsnon": {
      "type": "unknown",
      "shape": [
+      "i",
+      "j",
       "ncat"
      ],
      "units": "m",
      "default": 0.0,
      "description": "snow volume per unit grid-cell area per category vsnon = aicen*hsn, the transported snow-volume state: d(vsnon)/dt + div(vsnon*u) = 0, [m]"
+    },
+    "div_flux": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "ncat"
+     ],
+     "units": "1/s",
+     "default": 0.0,
+     "description": "the conservative per-category flux divergence div_flux = D(c*uvel,x) + D(c*vvel,y) lowered by the transport_flux_divergence rule (the continuous flux form the incremental-remapping scheme replaces; ice_transport_remap.F90:658-666, 3586-3590), the algebraic rewrite target the continuity equations consume, [1/s]"
+    },
+    "div_flux_v": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "ncat"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "the conservative ice-volume-flux divergence D(vicen*uvel,x) + D(vicen*vvel,y) (the rule target of the vicen continuity equation), [m/s]"
+    },
+    "div_flux_s": {
+     "type": "unknown",
+     "shape": [
+      "i",
+      "j",
+      "ncat"
+     ],
+     "units": "m/s",
+     "default": 0.0,
+     "description": "the conservative snow-volume-flux divergence D(vsnon*uvel,x) + D(vsnon*vvel,y) (the rule target of the vsnon continuity equation), [m/s]"
     },
     "qicen": {
      "type": "parameter",
@@ -87,18 +167,158 @@
     },
     "uvel": {
      "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
      "units": "m/s",
      "default": 0.0,
-     "description": "x-component of the ice velocity at the B-grid corner points (wired from the dynamics component), [m/s]"
+     "description": "x-component of the ice velocity at the B-grid corner points (the transport dump's t_entr step-1 ncat-1 rows: the cell (i,j) row carries the U(i,j) NE-corner velocity = the post-dynamics field, wired from the dynamics component in the assembly), [m/s]"
     },
     "vvel": {
      "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
      "units": "m/s",
      "default": 0.0,
      "description": "y-component of the ice velocity at the B-grid corner points (wired from the dynamics component), [m/s]"
+    },
+    "HTE": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "east edge length of the T cell, derived from the stress-dump metrics as HTE = (3*cyp - cym)/4 (the free-name metric of the transport_flux_divergence rule; the tests override it from the dump), [m]"
+    },
+    "HTN": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "north edge length of the T cell, HTN = (3*cxp - cxm)/4, [m]"
+    },
+    "tarea": {
+     "type": "parameter",
+     "shape": [
+      "i",
+      "j"
+     ],
+     "units": "m^2",
+     "default": 0.0,
+     "description": "area of the T cell, tarea = dxT*dyT (ice_grid.F90:682; the tests override it from the dump), [m2]"
     }
    },
    "equations": [
+    {
+     "lhs": "div_flux",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "aicen",
+           "uvel"
+          ]
+         }
+        ],
+        "wrt": "x"
+       },
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "aicen",
+           "vvel"
+          ]
+         }
+        ],
+        "wrt": "y"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "div_flux_v",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "vicen",
+           "uvel"
+          ]
+         }
+        ],
+        "wrt": "x"
+       },
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "vicen",
+           "vvel"
+          ]
+         }
+        ],
+        "wrt": "y"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "div_flux_s",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "vsnon",
+           "uvel"
+          ]
+         }
+        ],
+        "wrt": "x"
+       },
+       {
+        "op": "D",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "vsnon",
+           "vvel"
+          ]
+         }
+        ],
+        "wrt": "y"
+       }
+      ]
+     }
+    },
     {
      "lhs": {
       "op": "D",
@@ -110,37 +330,7 @@
      "rhs": {
       "op": "-",
       "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "aicen",
-             "uvel"
-            ]
-           }
-          ],
-          "wrt": "x"
-         },
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "aicen",
-             "vvel"
-            ]
-           }
-          ],
-          "wrt": "y"
-         }
-        ]
-       }
+       "div_flux"
       ]
      }
     },
@@ -155,37 +345,7 @@
      "rhs": {
       "op": "-",
       "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "vicen",
-             "uvel"
-            ]
-           }
-          ],
-          "wrt": "x"
-         },
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "vicen",
-             "vvel"
-            ]
-           }
-          ],
-          "wrt": "y"
-         }
-        ]
-       }
+       "div_flux_v"
       ]
      }
     },
@@ -200,42 +360,947 @@
      "rhs": {
       "op": "-",
       "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "vsnon",
-             "uvel"
-            ]
-           }
-          ],
-          "wrt": "x"
-         },
-         {
-          "op": "D",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "vsnon",
-             "vvel"
-            ]
-           }
-          ],
-          "wrt": "y"
-         }
-        ]
-       }
+       "div_flux_s"
       ]
      }
     }
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "cice_transport_remap_35_integrated",
+     "description": "Integrated pin of the traced step-1 transport over [0, 3600] s: the continuity system is integrated from the transport dump's t_entr state (the initial_conditions aicen/vicen/vsnon) with the dump's velocity and grid parameters (uvel/vvel = the t_entr step-1 ncat-1 rows; HTE/HTN/tarea from the stress-dump metrics), and the exit state at local cell (2,4) = global (3,7), t = 3600, is asserted against the dump's t_exit state. The pin is NOT exact: the model integrates the continuous flux form with the rule's centered face-average edge reconstruction (edgearea_e/n, ice_transport_remap.F90:658-666), while the Fortran integrates the incremental-remapping departure-cell integrals, so the residuals quantify the scheme difference (O(C*DeltaC)): aicen rel <= 3.04e-5, vicen rel <= 3.33e-5, vsnon rel <= 1.78e-4 over the five categories, hence the per-assertion tolerances rel 1e-4 / 1e-4 / 2e-4 (the transport_35.py scratch analysis of /scratch.local/ctessum/cice_verify; the entry-to-exit change is ~3e-4..5.5e-4 relative, so the scheme residual is ~10% of the transported change). The expected values are the dump's t_exit rows for cell (3,7).",
+     "time_span": {
+      "start": 0.0,
+      "end": 3600.0
+     },
+     "initial_conditions": {
+      "aicen": [
+       [
+        [
+         0.009853548870050664,
+         0.012856324595003365,
+         0.029676941490770437,
+         0.16811440592585572,
+         0.7737911360216866
+        ],
+        [
+         0.19517590526067544,
+         0.17517092814581073,
+         0.20299967624466317,
+         0.09250674814792506,
+         0.12164352345239411
+        ],
+        [
+         0.24010745627023652,
+         0.2634716864755195,
+         0.17913714386260754,
+         0.06250924884224413,
+         0.055099641785219235
+        ],
+        [
+         0.24279805104338764,
+         0.3006214819690576,
+         0.16436715629707735,
+         0.05921139667196378,
+         0.051256324337174905
+        ],
+        [
+         0.21446261957461704,
+         0.3380275433857241,
+         0.16112887904267895,
+         0.06074578363509802,
+         0.05272893334174682
+        ]
+       ],
+       [
+        [
+         0.020000787893919705,
+         0.018691298764765496,
+         0.02123405723287625,
+         0.2325823474953262,
+         0.7062726776408558
+        ],
+        [
+         0.1951085551827879,
+         0.19103150780464098,
+         0.19874511294878222,
+         0.0852676614296998,
+         0.10443105537326039
+        ],
+        [
+         0.2665650105082223,
+         0.2729606621507003,
+         0.16782172397858613,
+         0.05190504256475333,
+         0.04559080814091524
+        ],
+        [
+         0.2711227454925614,
+         0.3055903706996223,
+         0.1412717592470561,
+         0.04939762562994809,
+         0.040677317264858584
+        ],
+        [
+         0.25048328256606534,
+         0.3314283920301694,
+         0.13476490615446873,
+         0.05200182928019541,
+         0.042383130922557063
+        ]
+       ],
+       [
+        [
+         0.014548532518963476,
+         0.014380833122369022,
+         0.02220597912138724,
+         0.1984707738728337,
+         0.7493379585660391
+        ],
+        [
+         0.19336284155326217,
+         0.2162321165560872,
+         0.2086988498366698,
+         0.07229635067222134,
+         0.08562040148508959
+        ],
+        [
+         0.293731361151834,
+         0.2767298787967303,
+         0.15421663268947136,
+         0.04716294309980759,
+         0.04080758394240371
+        ],
+        [
+         0.29902010258623624,
+         0.297339158557214,
+         0.11593803015640608,
+         0.04344629470278152,
+         0.035326077885262035
+        ],
+        [
+         0.29693728359561494,
+         0.3099293559893525,
+         0.10537286140183962,
+         0.044948070262977986,
+         0.03608739625384745
+        ]
+       ]
+      ],
+      "vicen": [
+       [
+        [
+         0.0033680184834617927,
+         0.015542052227473355,
+         0.06637765750622569,
+         0.590810760871143,
+         21.61213381468219
+        ],
+        [
+         0.03492051855887914,
+         0.1881462069722783,
+         0.3803456398502473,
+         0.32465543818502113,
+         1.449938023658202
+        ],
+        [
+         0.043483558783242754,
+         0.27351867543189595,
+         0.3192183512775029,
+         0.21711473196953432,
+         0.4267481976542756
+        ],
+        [
+         0.04744904191254742,
+         0.30927223432872736,
+         0.28851115698570634,
+         0.20480394767022725,
+         0.3826462618653526
+        ],
+        [
+         0.05151143940340013,
+         0.3462557318196647,
+         0.27725715110715127,
+         0.2089216567907939,
+         0.38686182855482437
+        ]
+       ],
+       [
+        [
+         0.005398374149404335,
+         0.02394414626491763,
+         0.039941722338436514,
+         0.9742070459848247,
+         19.818005707722715
+        ],
+        [
+         0.034089423501091495,
+         0.20815847329100748,
+         0.35599580221040084,
+         0.3057541297880248,
+         1.1667404164975148
+        ],
+        [
+         0.049043930583768804,
+         0.2794514836874194,
+         0.2938193131598404,
+         0.17852188658136484,
+         0.34522466795247597
+        ],
+        [
+         0.05587368765282823,
+         0.3046830908131356,
+         0.24501371039941883,
+         0.16882628186138604,
+         0.29618372127005743
+        ],
+        [
+         0.06560408395072942,
+         0.32609147007145284,
+         0.23103593019886898,
+         0.17724136576899244,
+         0.30663221048100014
+        ]
+       ],
+       [
+        [
+         0.003501282429120844,
+         0.01786491306444554,
+         0.04490947585209308,
+         0.7286779809238466,
+         18.89132406691435
+        ],
+        [
+         0.03649673531868588,
+         0.23309953928407742,
+         0.3695943628273455,
+         0.25387709158198946,
+         0.8301563230719655
+        ],
+        [
+         0.05636266355870376,
+         0.27807881312680083,
+         0.267696453134157,
+         0.16166773031800252,
+         0.3080507749868207
+        ],
+        [
+         0.06850917717924364,
+         0.28674649365747185,
+         0.20070170993414216,
+         0.14766212029151474,
+         0.25643875495901225
+        ],
+        [
+         0.08541943356949086,
+         0.29183452966561274,
+         0.18211636343675705,
+         0.1525079186388313,
+         0.26034930198917733
+        ]
+       ]
+      ],
+      "vsnon": [
+       [
+        [
+         0.0,
+         0.0019752994781107257,
+         0.020421161467932235,
+         0.18231500761877956,
+         3.417817070425085
+        ],
+        [
+         0.002558829070170628,
+         0.04642591804295368,
+         0.08453430208038736,
+         0.053011609212643265,
+         0.16052798613321836
+        ],
+        [
+         0.005537052333306855,
+         0.07730053090743055,
+         0.06981963949185285,
+         0.036078876638408676,
+         0.05587080548511934
+        ],
+        [
+         0.007358258103351589,
+         0.09280017199343121,
+         0.0685369544362089,
+         0.03715553051049877,
+         0.05313362931543603
+        ],
+        [
+         0.01413057165211172,
+         0.10680389967046192,
+         0.0720580210125999,
+         0.04204769642589584,
+         0.05728570969849854
+        ]
+       ],
+       [
+        [
+         0.0,
+         0.0027949531841832964,
+         0.007229022287709656,
+         0.2822000858375975,
+         3.004847428368811
+        ],
+        [
+         0.0021453037964992293,
+         0.05120365121132793,
+         0.07438873060098469,
+         0.04896831880001137,
+         0.1384948923056299
+        ],
+        [
+         0.006341674700852336,
+         0.07948317298760875,
+         0.06587530420013424,
+         0.03022621513166698,
+         0.045065380693348964
+        ],
+        [
+         0.009790021264114329,
+         0.09067365685552146,
+         0.05976966142045742,
+         0.03104546605099247,
+         0.04118793098173599
+        ],
+        [
+         0.018987800137287264,
+         0.09718454331707943,
+         0.060941236218567583,
+         0.035454220890101966,
+         0.044936863252113435
+        ]
+       ],
+       [
+        [
+         0.0,
+         0.0028994981145980024,
+         0.013945776317644876,
+         0.22736282514148398,
+         3.516254903372643
+        ],
+        [
+         0.00321822271152046,
+         0.059757732239091546,
+         0.08167056070309638,
+         0.04051320512716417,
+         0.10489156378478834
+        ],
+        [
+         0.008168142483340798,
+         0.07720906990349308,
+         0.058888232679579024,
+         0.027111166918299907,
+         0.039413148002080206
+        ],
+        [
+         0.013560169735333477,
+         0.0804038925380842,
+         0.04867200453862066,
+         0.0265540148118653,
+         0.034638293156888475
+        ],
+        [
+         0.023917843356799032,
+         0.07889303175975235,
+         0.04792495336362836,
+         0.02943973746304848,
+         0.03689645590603434
+        ]
+       ]
+      ]
+     },
+     "parameter_overrides": {
+      "uvel": [
+       [
+        0.00012200831259922484,
+        -0.00430503734325033,
+        -0.006404552971129575,
+        -0.0029079564379971357,
+        -0.0037366886985347827
+       ],
+       [
+        1.349728123413932e-05,
+        -0.0049893802525858445,
+        -0.006556908183432414,
+        -0.004013004944111566,
+        -0.0042590499452267415
+       ],
+       [
+        0.0,
+        -0.006049027918925767,
+        -0.0058923320164812176,
+        -0.0045391275967812655,
+        -0.004738980872614332
+       ]
+      ],
+      "vvel": [
+       [
+        0.0007204892821085377,
+        0.0007865942006418693,
+        0.0037168927343423233,
+        0.013900356415145056,
+        0.015928611364519916
+       ],
+       [
+        0.0009977387642852074,
+        0.001620845665338858,
+        0.00661497866621736,
+        0.011651221033965178,
+        0.012191539845748306
+       ],
+       [
+        0.0,
+        0.003975027437344815,
+        0.009118244672511678,
+        0.01094051866825294,
+        0.010805999470988786
+       ]
+      ],
+      "HTE": [
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ],
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ],
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ]
+      ],
+      "HTN": [
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ],
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ],
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ]
+      ],
+      "tarea": [
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ],
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ],
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ]
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "aicen",
+       "time": 3600.0,
+       "expected": 0.27103919783438446,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 1
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vicen",
+       "time": 3600.0,
+       "expected": 0.05585460978663387,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 1
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vsnon",
+       "time": 3600.0,
+       "expected": 0.00978557361247467,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 1
+       },
+       "tolerance": {
+        "rel": 0.0002,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "aicen",
+       "time": 3600.0,
+       "expected": 0.30545282276515473,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 2
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vicen",
+       "time": 3600.0,
+       "expected": 0.30454205614243457,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 2
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vsnon",
+       "time": 3600.0,
+       "expected": 0.0906286232646995,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 2
+       },
+       "tolerance": {
+        "rel": 0.0002,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "aicen",
+       "time": 3600.0,
+       "expected": 0.14120832691372256,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 3
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vicen",
+       "time": 3600.0,
+       "expected": 0.2449038936723979,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 3
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vsnon",
+       "time": 3600.0,
+       "expected": 0.0597403722840652,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 3
+       },
+       "tolerance": {
+        "rel": 0.0002,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "aicen",
+       "time": 3600.0,
+       "expected": 0.04937153685077105,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 4
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vicen",
+       "time": 3600.0,
+       "expected": 0.16873638490628676,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 4
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vsnon",
+       "time": 3600.0,
+       "expected": 0.031027368491591805,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 4
+       },
+       "tolerance": {
+        "rel": 0.0002,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "aicen",
+       "time": 3600.0,
+       "expected": 0.04065491064383748,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 5
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vicen",
+       "time": 3600.0,
+       "expected": 0.2960204973191455,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 5
+       },
+       "tolerance": {
+        "rel": 0.0001,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "vsnon",
+       "time": 3600.0,
+       "expected": 0.041163425997390694,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 5
+       },
+       "tolerance": {
+        "rel": 0.0002,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "cice_transport_uniform_field",
+     "description": "Instantaneous pin of the lowered flux divergence at global (3,7) = local (2,4) with a uniform field: with the initial aicen = 1 everywhere (full 3x5x5 array of ones; the CLI rejects scalar initial_conditions on shaped states) and the dump's velocity/grid parameters, the algebraic rewrite target div_flux = D(aicen*uvel,x) + D(aicen*vvel,y) reduces to the discrete velocity divergence D_vel = 1.1240071614720283e-07 1/s of the rule's centered reconstruction (the flux-form operator is linear in aicen, so the c = 1 field evaluates the velocity divergence exactly; asserted at time 0 with rel 1e-12, independent of the integrator). The dump's t_exit aicen at (3,7) differs from the continuous-limit 1 - D_vel*3600 = 0.99959535742187011 by the incremental-remap scheme difference (documented in stage2/README-cice.md); this pin locks the lowered operator itself, independent of the remap scheme and of the integration solver (the earlier integrated form of this pin was solver-sensitive: the bdf integrator converges to the exponential exp(-D_vel*3600) = 0.9995954392786368, whose (D*dt)^2/2 = 8.2e-8 difference from the Euler form exceeds rel 1e-12).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "aicen": [
+       [
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       ],
+       [
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       ],
+       [
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ],
+        [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       ]
+      ]
+     },
+     "parameter_overrides": {
+      "uvel": [
+       [
+        0.00012200831259922484,
+        -0.00430503734325033,
+        -0.006404552971129575,
+        -0.0029079564379971357,
+        -0.0037366886985347827
+       ],
+       [
+        1.349728123413932e-05,
+        -0.0049893802525858445,
+        -0.006556908183432414,
+        -0.004013004944111566,
+        -0.0042590499452267415
+       ],
+       [
+        0.0,
+        -0.006049027918925767,
+        -0.0058923320164812176,
+        -0.0045391275967812655,
+        -0.004738980872614332
+       ]
+      ],
+      "vvel": [
+       [
+        0.0007204892821085377,
+        0.0007865942006418693,
+        0.0037168927343423233,
+        0.013900356415145056,
+        0.015928611364519916
+       ],
+       [
+        0.0009977387642852074,
+        0.001620845665338858,
+        0.00661497866621736,
+        0.011651221033965178,
+        0.012191539845748306
+       ],
+       [
+        0.0,
+        0.003975027437344815,
+        0.009118244672511678,
+        0.01094051866825294,
+        0.010805999470988786
+       ]
+      ],
+      "HTE": [
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ],
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ],
+       [
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605,
+        59395.455016421605
+       ]
+      ],
+      "HTN": [
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ],
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ],
+       [
+        26251.235254161526,
+        27390.328313754686,
+        28527.04003199235,
+        29661.271582069905,
+        30792.92435281096
+       ]
+      ],
+      "tarea": [
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ],
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ],
+       [
+        1525307808.0270946,
+        1593032537.954344,
+        1660618768.108248,
+        1728060622.4772792,
+        1795352237.6020775
+       ]
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "div_flux",
+       "time": 0.0,
+       "expected": 1.1240071614720283e-07,
+       "coords": {
+        "i": 2,
+        "j": 4,
+        "ncat": 1
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    }
+   ]
   }
  }
 }

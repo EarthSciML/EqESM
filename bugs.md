@@ -162,10 +162,59 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (instrumentation note; the extraction script picks a snow-present row).
 - **Status:** open (recorded; harmless for tests, documented in the extraction script).
 
-## 13. Urban canyon longwave/shortwave multiple-reflection solvers stop at a loose absolute tolerance, leaving ~1e-5 relative error
+## 19. CLM urban canyon longwave/shortwave multiple-reflection solvers stop at a loose absolute tolerance, leaving ~1e-5 relative error
 
 - **Location:** `components/clm/src/biogeophys/UrbanRadiationMod.F90:596-674` (`net_longwave`, `crit = max(road_a, sunwall_a, shadewall_a); if (crit < .001_r8) exit`); same pattern in `UrbanAlbedoMod.F90:1109-1250` (`net_solar`, `errcrit = .00001_r8`).
 - **Description:** the CLM urban canyon multiple-reflection exchange is solved by fixed-point iteration with a per-iteration *absolute* convergence test on the absorbed flux (0.001 W/m² for longwave, 1e-5 per-unit-incident-flux for solar). Because the absorbed flux shrinks by a factor of only ~0.05-0.08 per iteration but the test is on the raw increment (not normalised), the iteration exits several orders of magnitude before machine convergence. The physically exact solution is a closed-form matrix inverse, so the dumped `lwnet_*`/`sabs_*` values carry a systematic truncation error relative to the exact law.
 - **Impact on results:** measured against the exact linear-system solution of the same equations, the CLM dump `lwnet_sunwall`/`lwnet_shadewall`/`lwnet_canyon` for the traced urban rows are off by up to ~1.0e-4 W/m² (2.6e-5 W/m² on a 2.49 W/m² net, i.e. ~1e-5 relative); tight-converging the iteration to 1e-12 reproduces the exact values to <1e-14. This is a precision artefact, not a logic error — it is largely below history-file significance — but it must be accounted for when pinning `*.esm` against these dumps.
 - **Reproduced/corrected in .esm:** `components/urban_canopy/urban_radiation.esm` (EarthSciModels `clmu-verify` branch) computes the exact closed-form solution (`det_lw`, `det_dir_*` and the `band_*` expression templates are the analytic inverse of `(I - T·A)`), so it is *more* accurate than the dumped values. The CESM-dump tests `cesm_dump_canyon_longwave_hwr1p4`/`_hwr4p8` therefore assert with an absolute tolerance of 0.001 W/m² (the Fortran cutoff) rather than machine precision; the `net_solar` comparison uses the exact system solve.
 - **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
+- **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
+
+## 13. CICE strain_rates shear corner 2 sign asymmetry (ice_dyn_shared.F90:2170-2171)
+
+- **Location:** `components/cice/src/cicecore/cicedyn/dynamics/ice_dyn_shared.F90:2170-2171` (`strain_rates`, the shear corner-2 combination).
+- **Description:** the four corner shearing strain rates are not mutually consistent under a uniform B-grid pattern: corner 1 (F90:2168-2169) is all-negative `shear1 = -cym*v(i,j) - dyT*v(i-1,j) - cxm*u(i,j) - dxT*u(i,j-1)`, but corner 2 carries a sign-flipped v term `shear2 = -cyp*v(i-1,j) + dyT*v(i,j) - cxm*u(i-1,j) - dxT*u(i-1,j-1)` (the `+dyT*v(i,j)` would be `-dyT*v(i-1,j)`-pattern under a symmetric transcription).
+- **Impact on results:** the computed shear (and hence Delta, the viscosities and the plastic stress) differs from the symmetric form; the pins cannot distinguish "bug" from "intended" because every dumped row is produced by the active code.
+- **Reproduced/corrected in .esm:** reproduced exactly — the EarthSciDiscretizations `grids/cice_bgrid/stencils/strain_shear_corner2.esm` atom (ESD commit `11fe246`) and the `cice_dynamics.esm` pin (12 strain-rate assertions at rel 1e-12) match the dump; a symmetric guess fails the pins.
+- **Status:** open (recorded; transcribed as-run, asymmetries 13-15 flagged as a cluster).
+
+## 14. CICE strain_rates shear corners 3/4 sign asymmetries (ice_dyn_shared.F90:2172-2175)
+
+- **Location:** `components/cice/src/cicecore/cicedyn/dynamics/ice_dyn_shared.F90:2172-2175` (`strain_rates`, the shear corner-3 and corner-4 combinations).
+- **Description:** same cluster as #13: corner 3 `shear3 = -cyp*v(i-1,j-1) + dyT*v(i,j-1) - cxp*u(i-1,j-1) + dxT*u(i-1,j)` (F90:2172-2173) and corner 4 `shear4 = -cym*v(i,j-1) - dyT*v(i-1,j-1) - cxp*u(i,j-1) + dxT*u(i,j)` (F90:2174-2175) each carry sign flips (the `+dyT*v` and `+dxT*u` terms) relative to the corner-1 pattern.
+- **Impact on results:** as #13 — the active code's corner shear values are what they are; a symmetric transcription misses the dump.
+- **Reproduced/corrected in .esm:** reproduced exactly — the ESD `strain_shear_corner3/4.esm` atoms (commit `11fe246`), pinned at rel 1e-12.
+- **Status:** open (recorded; transcribed as-run).
+
+## 15. CICE stress() str_dy k7/k8 west-dominant p/m weighting (ice_dyn_evp.F90:1760-1765)
+
+- **Location:** `components/cice/src/cicecore/cicedyn/dynamics/ice_dyn_evp.F90:1760-1765` (`stress`, the str(i,j,7)/str(i,j,8) y-divergence corner atoms).
+- **Description:** the NW/SW corner atoms weight the p/m east-west pair sums west-dominant — `strp_tmp = p25*dxT*(p333*ssigpw + p166*ssigpe)` (F90:1754-1755) — while the NE/SE atoms k5/k6 use the east-dominant `p333*ssigpe + p166*ssigpw` (F90:1748-1749); the U-point stress interpolation is not symmetric under reflection.
+- **Impact on results:** strinty differs from a symmetric reconstruction at the ~16.7%-weight level on the traced subdomain; the dump pins reproduce the active code.
+- **Reproduced/corrected in .esm:** reproduced exactly — the ESD `str_dy_cell_k7/k8.esm` atoms (commit `11fe246`) and the `cice_dynamics.esm` strinty pin (rel 1e-12).
+- **Status:** open (recorded; transcribed as-run).
+
+## 16. esm CLI: faq-range metaparameter refs + bound template imports break RangeSpec parsing
+
+- **Location:** tooling — the EarthSciAST `esm` CLI (local v0.4.0 and v0.6.0 binaries; `src/schema`/faq range handling).
+- **Description:** `esm validate` and `esm test` both fail with `JSON parse error: data did not match any variant of untagged enum RangeSpec` whenever a faq range contains a string metaparameter reference (e.g. `[2, "N_I"]`) AND the model imports a template library with bindings. Either feature alone works; the combination breaks the RangeSpec round-trip parse.
+- **Impact on results:** the intended design — a 3×5 consumer importing `grid.esm` plus the rules with metaparameter bindings — cannot compile; all stage-2 dynamics/transport workarounds depend on the local-metaparameter pattern.
+- **Reproduced/corrected in .esm:** workaround only (2026-11-01): the consumer declares its own metaparameters (N_I/N_J/NCAT) and index_sets (i/j/corner/ncat) and imports ONLY the rule files (no grid.esm import, no bindings) via `${ESD_ROOT}` refs (env expansion works when exported). The workaround is documented in the `cice_dynamics.esm`/`cice_transport.esm` descriptions and stage2/README-cice.md.
+- **Status:** open (tooling bug; probe files in /tmp/opencode/).
+
+## 17. CICE dump extractor: transport uvel/vvel read from the momentum dump
+
+- **Location:** fork-only scratch tooling `extract_bgrid_consumer.py` (/scratch.local/ctessum/cice_verify).
+- **Description:** the transport test pins read uvel/vvel from the MOMENTUM dump (phase m1) instead of the transport dump's t_entr phase; the momentum uvel differs from the transport-side velocity the remap consumes (the transport dump's ncat-1 rows are the post-dynamics field the remap actually uses).
+- **Impact on results:** none on the model (extraction-only); the transport pins generated before the fix carry the wrong velocity inputs.
+- **Reproduced/corrected in .esm:** n/a (tooling). Fixed with a `source="transport"` parameter; the pins file was regenerated (only the uvel/vvel sections changed; the 249-assertion suite re-verified green).
+- **Status:** fixed (2026-11-01).
+
+## 18. CICE dump extractor: builder index() lookup bug (scratch tooling)
+
+- **Location:** fork-only scratch tooling `build_consumer_tests.py` (/scratch.local/ctessum/cice_verify).
+- **Description:** an index() lookup in the test-builder failed on the reordered/extended pin file (ValueError on a missing element after the uvel/vvel source fix), aborting the builder mid-injection.
+- **Impact on results:** none on the model (tooling); the uniform-field test is hand-authored rather than builder-injected.
+- **Reproduced/corrected in .esm:** n/a (tooling). Fixed in the script.
+- **Status:** fixed (2026-11-01).
