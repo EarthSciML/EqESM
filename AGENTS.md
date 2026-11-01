@@ -1,6 +1,6 @@
 This repo is an implementation of the CESM (https://github.com/ESCOMP/CESM) model in .esm files.
 
-ESM is made up of process components that are composed together into the large-scale model. Implementation will take place in three stages.
+CESM is made up of process components that are composed together into the large-scale model. Implementation will take place in three stages.
 
 In the first stage, the original C++ or FORTRAN model code will be instrumented to output inputs and outputs from each model component during simulations. Outputs can either be instantaneous derivatives (preferred) or integrated trajectories over a time period. The code will also be instrumented to output inputs and outputs of subassemblies of components as appropriate. A select subset of these inputs and outputs will be used as tests in .esm stub files for each component or subassembly which will be added as pull requests to https://github.com/EarthSciML/EarthSciModels.
 
@@ -8,7 +8,7 @@ In stage 2, The stub .esm files will be filled in with the actual physics of eac
 
 In stage 3, the components that have been merged into EarthSciModels will be imported by reference and coupled into top-level eqesm.esm model and tested against simulations of the full C++ model.
 
-All model logic should be contained in .esm files. Tests and examples should be in the "tests" and "analysis" sections of .esm files, respectively. All local tests should be conducted using the EarthSciAST rust CLI binary, a copy of which should be kept untracked in the root directory of this repo.
+All model logic should be contained in .esm files. Tests and examples should be in the "tests" and "analysis" sections of .esm files, respectively. All local tests should be conducted using the EarthSciAST rust CLI binary, a copy of which should be kept untracked in the root directory of this repo.The most recent release can be found at GitHub.com/earthsciml/earthsciast/releases.
 
 Time stepping for the fully coupled model will be done using github.com/earthsciml/earthsciintegrator.
 
@@ -16,7 +16,7 @@ The .esm files should be authored compositionally, with separate components, sub
 
 Always, the equations in the .esm files should like like math rather than einsum operations whenever possible. For example, if a component includes a aggregate operation that is a numerical representation of a mathematical integral, the .esm equivalent should be written as an integral instead of a aggregate operation. Likewise, PDEs that are discretized in the C++ could should be written as PDEs, with discretization templates either used from or submitted as pull requests to https://github.com/EarthSciML/EarthSciDiscretizations.
 
-Some components may already have implementations in EarthSciModels. If so, add additional tests from the instrumented C++ or FORTRAN to ensure the existing .esm implementations match their C++ counterparts.
+Some components may already have implementations in EarthSciModels. If so, add additional tests from the instrumented C++ or FORTRAN to ensure the existing .esm implementations match their FORTRAN or C++ counterparts.
 
 Keep a centralized list of any bugs or errors that are found in the C++ code in `bugs.md` (see its template).
 
