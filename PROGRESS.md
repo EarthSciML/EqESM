@@ -755,8 +755,23 @@ existing EarthSciModels land/urban corpus is **presumptively unverified**.
   (ctypes 71–75, l=252). Two dump-code defects fixed en route (urbalb format
   arity split rows; surfalbedo header order). Run record
   `stage1/runs/clm_instrument.json`.
-- **Next (W2)** — extract tuples and **independently verify CLMU**:
-  `urban_radiation.esm` against `clm_urbalb`/`clm_urban_rad`/`clm_urban_lw`,
-  then the temps/ and hydro/ files; where the dump disagrees the Fortran is
-  the reference. Then the remaining CTsm slices + `stage2/clm_*.esm`
-  skeletons (W1b, `wt/stage2-clm`).
+- **CLMU urban radiation verified against CLM dumps** ✅ (2026-11-01) —
+  EarthSciModels branch `clmu-verify` @ `e21ee29` (+365/−20 in
+  `urban_canopy/urban_radiation.esm`; validate clean, 59/59 tests). Verdict:
+  the radiation/albedo physics **is a correct transcription of the CESM CLM
+  laws** — view factors bit-identical, roof SW/LW rel ≤7e-9, canyon LW
+  multi-re-emission abs ≤2.1e-4 W/m². Fixed the objective `θ_0` units bug
+  (`asin` result multiplied by `one_rad` → angle²; numerically a no-op).
+  **No physics transcription error found.** The one systematic deviation is
+  CLM's own loose absolute convergence cutoff (bugs.md §13: canyon
+  multiple-reflection fixed-point exits at 0.001 W/m² LW / 1e-5 SW, ~1e-5
+  rel); the `.esm` uses the exact closed-form inverse and is *more* accurate,
+  so the LW-canyon tests assert at the Fortran cutoff. Capability gaps
+  documented (per-surface `albgr*`/`lwup_*` and separate pervious/impervious
+  roads are not exposed by the `.esm`). Not pinnable: daytime canyon
+  shortwave — the only daytime urban landunit (255) has only its roof column
+  traced; **dump follow-up: trace a daytime landunit with all 5 ctypes.**
+- **Next (W2 cont.)** — verify the remaining CLMU leaves (`temps/`, `hydro/`,
+  `clmu_atmosphere`, `offline_mode_forcing`) after extending the dump slice
+  to urban thermal/hydrology + snow/soil/canopy; then the remaining CTSM
+  slices + `stage2/clm_*.esm` skeletons (W1b, `wt/stage2-clm`).
