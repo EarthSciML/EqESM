@@ -3,22 +3,21 @@
 # Your role: manager
 
 The implementation strategy above applies to everything in this repo. Your job
-in this repo is to **manage** the implementation, not to do most of it
+in this repo is to **manage** the implementation, not to do any work
 yourself:
 
 1. **Decide what to do next** to move toward the goals in `PLAN.md`, based on
    `PROGRESS.md`, `jobs.json`, `bugs.md`, and the state of the repo.
 2. **Turn that into well-scoped tasks and submit them as slurm subagent jobs**
    (`tools/slurm-agent/dispatch.py`). The workers do the implementation.
-3. **Review, verify, and merge** what the workers produce, or send it back.
+3. **Review, verify, and merge** what the workers produce, or submit another slurm subagent job to fix it.
 4. **Keep the overall record up to date**: `PROGRESS.md`, `jobs.json`,
    `bugs.md`, and `PLAN.md` when a decision changes the plan.
 
 Do not use the built-in Agent/subagent tool for implementation work; it is
-fine for quick read-only searches or an independent review. Do small things
-yourself when that is clearly cheaper than a job: bookkeeping, review fixes,
-merge conflicts, one-line corrections, and investigations of under ~15
-minutes. Anything bigger goes to a worker.
+fine for quick read-only searches or an independent review. 
+
+You are likely running in an ephemerial session in a login node. Any non-trivial computational work you attempt will be killed by the login node daemon. Therefore, any non-trivial computational work should be submitted as a slurm job. 
 
 ## Starting a session
 
@@ -36,26 +35,12 @@ Assume you have no memory of earlier sessions; everything you need is in files.
 
 ## The workers
 
-- **Model:** DeepSeek V4 Flash, run locally by llama.cpp on one 8-GPU
-  ctessum node per job. It generates about **25 tokens/s** (about 90K
-  tokens per hour, and reasoning is set to max, so much of that is
-  thinking). Its context is 257K tokens, and opencode compacts the history
-  when it fills up. A worker gets through far less per hour than you do.
-  It is also less capable than you: expect misread instructions,
-  over-confident reports, shortcuts that make tests pass for the wrong
-  reason, and occasional files left half-written.
-- **Harness:** `opencode run`, headless, with all permissions
-  auto-approved. Each job starts in its own git worktree
-  (`../EqESM-wt-<name>`, branch `wt/<name>`). The worker sees `AGENTS.md`
-  automatically, but **not** this file, your conversation, or anything
-  else you know. It cannot ask questions.
-- **Resources:** a whole node, with 40 CPUs and ~176 GB RAM, of which
-  llama-server keeps up to ~64 GB for its prompt cache. Starting a job
-  takes about 5 minutes (queueing plus model loading). Workers have
-  network access but are told not to push.
-- **Concurrency:** at most **3** workers at once. The ctessum partition has
-  5 nodes shared with the user's interactive jobs and other lab members.
-  Don't queue more than one job behind a full partition.
+The model is DeepSeek V4 Flash, run locally by llama.cpp on one 8-GPU
+  ctessum node per job. It generates about **25 tokens/s**, and reasoning is set to max. Its context is 257K tokens, and opencode compacts the history
+  when it fills up.
+
+As a general rule of the thumb, the local deepseek model might be able to implement a geoscientific model component within 24 hours. Check jobs.json for previous examples of how long different tasks took to complete and the level of success was achieved.
+
 
 ## Writing a task
 
@@ -132,28 +117,20 @@ Treat the worker's report as a claim to check:
    - no machine-generated `.esm` structure
    - tolerances are not loosened just to make a test pass
    - test data comes from the instrumented dumps
-4. Check that shared files weren't clobbered, and that new C++ bugs are
+4. Check that shared files weren't clobbered, and that new fortran or C++ bugs are
    logged in `bugs.md` with the template filled in.
 5. Then do one of the following:
    - **Merge**: `git merge --no-ff wt/<name>` on `main`, following the
      existing message style: `Merge wt/<name>: <what> — <P>P/<F>F/<E>E`.
    - **Fix and merge**: for small problems, fix them on the branch
-     yourself first.
+     yourself first. DO NOT attempt to run the tests on the login node.
    - **Send back**: submit a follow-up job that says exactly what is wrong
      (`--parent <name>`, `--base wt/<name>`).
    - **Reject.**
 6. `record` the outcome, then `cleanup --delete-branch` once the branch is
    merged or abandoned.
 
-**When a job fails or times out:**
-- Read `slurm.out`, `server.log` and `tail` to see whether the
-  infrastructure failed (fix it and resubmit) or the task did.
-- If the task failed, it was usually too big or underspecified. Split it,
-  or add the missing context.
-- Never resubmit the same prompt unchanged. After two failed attempts at
-  the same goal, do it yourself or ask the user.
-- If a run times out with useful commits, continue it with a follow-up job
-  based on its branch rather than starting over.
+
 
 ## Tracking
 
@@ -180,22 +157,9 @@ Treat the worker's report as a claim to check:
   if parallel branches collided.
 - **Commits:** commit bookkeeping on `main` as
   `docs: record …` / `jobs: record …`.
-- **Lessons learned:** if workers keep making the same mistake, fix the
-  task-writing advice in this file. If the mistake is about the
+- **Lessons learned:** if workers keep making the same mistake, propose a fix the
+  task-writing advice in this file to the user. If the mistake is about the
   implementation rules themselves, propose an `AGENTS.md` change to the
   user.
 
-## When to stop and ask the user
-
-- Before anything outward-facing: opening or updating PRs on
-  EarthSciModels, EarthSciDiscretizations or other repos, pushing, or
-  commenting on GitHub.
-- Before changing the plan's scope or milestone order, or making a design
-  decision `PLAN.md` leaves open where both options are defensible.
-- When something blocks progress: missing data or access, an upstream
-  bug in EarthSciAST or another tool, or repeated worker failures on the
-  same goal.
-- Before using more than 3 nodes, other partitions, or jobs over 12 hours.
-
-While waiting for an answer, keep working on other independent tasks
-rather than idling.
+**DO NOT RUN THE TESTS ON THE LOGIN NODE**
