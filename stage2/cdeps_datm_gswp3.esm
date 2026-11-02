@@ -1,0 +1,1862 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cdeps_datm_gswp3",
+  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the GSWP3v1 forcing with the CLMNCEP datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of dshr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_clmncep_advance (datm/datm_datamode_clmncep_mod.F90:328-487), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub with the coszen day/night branch (value = 0 at night, i.e. when the true cosz <= 0.001; the dumped factor flb = cosz/tavCosz is then ignored); (2) Clmncep - the datamode transformation from the interpolated stream values to the export state (Sa_* / Faxa_*): tbot units detection and clamp, wind split, qsat-capped specific humidity via the esat polynomials, density, pressure zero-fill, the cam3_5_55 ratio_rvrf shortwave direct/diffuse split, the rain/snow temperature ramp, and the swnet albedo weighting with the Sx_* imports (spval 1e30 = SHR_CONST_SPVAL when absent, as in this case); (3) GSWP3Files - the four data_sources (Solar FSDS, Precip PRECTmms, TPQW TBOT, topo TOPO) read through the esm netcdf reader (CONST sources, metadata.esio_format netcdf, time axis left at 'all' because record selection is the Provider's, lat/lon fixed 0-based, extent bound to the metaparameter N_REC so index_sets.record = 1..N_REC sizes the shaped parameters). The tests pin the stage-1 instrumentation dumps (stage1/dumps/cdeps/cdeps_strdata_streams.csv, datm_gswp3_streams.csv, datm_gswp3_exports.csv; traced points are the first 16 mesh points of PET 0, all at lat -90, lon 0..37.5 deg, so the coszen rows are all polar-day - the night branch is pinned by a synthetic tuple) plus raw record values from the GSWP3 netCDF files (float32 in the files; expected values below are the exact float64 widenings). The 1991-01 file is the one the reference run reads on 2000-01-01 via taxmode=cycle year_align=1991. References: stage1/cesm/components/cdeps (cdeps1.0.112); stream config from the reference case I2000Clm60Sp_f19 Buildconf/datmconf/datm.streams.xml.",
+  "authors": [
+   "EqESM stage 2 (wt/cdeps-datm)"
+  ]
+ },
+ "metaparameters": {
+  "N_REC": {
+   "type": "integer",
+   "default": 0,
+   "description": "Number of time records the netcdf reader delivers for each data source (bound by the source's extent at test time; 0 so the document validates standalone)."
+  },
+  "N_TOPO": {
+   "type": "integer",
+   "default": 0,
+   "description": "Records delivered by the static topo source (1)."
+  }
+ },
+ "index_sets": {
+  "record": {
+   "kind": "interval",
+   "size": "N_REC"
+  },
+  "record_topo": {
+   "kind": "interval",
+   "size": "N_TOPO"
+  }
+ },
+ "data_sources": {
+  "GSWP3_Solar": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/atm/datm7/atm_forcing.datm7.GSWP3.0.5d.v1.c170516/Solar/clmforc.GSWP3.c2011.0.5x0.5.Solr.1991-01.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "gswp3",
+     "datm",
+     "forcing",
+     "solar",
+     "3-hourly",
+     "0.5deg"
+    ],
+    "description": "GSWP3v1 incoming solar radiation FSDS [W/m2], 3-hourly, 0.5x0.5 deg (720x360), 248 records/month; the Solar stream (tintalgo coszen) of the I2000Clm60Sp reference case."
+   }
+  },
+  "GSWP3_Precip": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/atm/datm7/atm_forcing.datm7.GSWP3.0.5d.v1.c170516/Precip/clmforc.GSWP3.c2011.0.5x0.5.Prec.1991-01.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 100
+     },
+     {
+      "fixed": 100
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "gswp3",
+     "datm",
+     "forcing",
+     "precipitation",
+     "3-hourly",
+     "0.5deg"
+    ],
+    "description": "GSWP3v1 total precipitation rate PRECTmms [mm/s = kg/m2/s], 3-hourly, 0.5x0.5 deg; the Precip stream (tintalgo nearest). The select fixes (lat,lon) = (100,100) - a mid-latitude cell with non-zero precipitation (the pole cell used for the other sources is always dry)."
+   }
+  },
+  "GSWP3_TPQW": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/atm/datm7/atm_forcing.datm7.GSWP3.0.5d.v1.c170516/TPHWL/clmforc.GSWP3.c2011.0.5x0.5.TPQWL.1991-01.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "gswp3",
+     "datm",
+     "forcing",
+     "temperature",
+     "humidity",
+     "wind",
+     "3-hourly",
+     "0.5deg"
+    ],
+    "description": "GSWP3v1 temperature/pressure/humidity/wind + longwave TBOT, PSRF, QBOT, WIND, FLDS (the TPQW stream fields; tintalgo linear), 3-hourly, 0.5x0.5 deg. TBOT is the field pinned by the tests."
+   }
+  },
+  "GSWP3_Topo": {
+   "kind": "static",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/atm/datm7/topo_forcing/topodata_0.9x1.25_USGS_070110_stream_c151201.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_TOPO"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "topography",
+     "usgs",
+     "static"
+    ],
+    "description": "USGS surface topography TOPO [m] on the 0.9x1.25 deg grid (the topo.observed stream, tintalgo lower, year 1 only); the file has a degenerate time dimension of length 1, kept at 'all' like every netcdf time axis."
+   }
+  }
+ },
+ "models": {
+  "Streams": {
+   "expression_template_imports": [
+    {
+     "ref": "./cdeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "lb": {
+     "type": "parameter",
+     "units": "1",
+     "description": "stream value at the lower time bound on the model grid after the spatial map (fldbun_data(LB)), [field units] (the field's own units vary per stream; the law is unit-agnostic)",
+     "default": 0.0
+    },
+    "ub": {
+     "type": "parameter",
+     "units": "1",
+     "description": "stream value at the upper time bound (fldbun_data(UB)), [field units] (the field's own units vary per stream; the law is unit-agnostic)",
+     "default": 0.0
+    },
+    "flb": {
+     "type": "parameter",
+     "units": "1",
+     "description": "time-interpolation factor on lb (linear: (t_ub - t_q)/(t_ub - t_lb); nearest/lower: 1 or 0; coszen: cosz/tavCosz, unused at night)",
+     "default": 1.0
+    },
+    "fub": {
+     "type": "parameter",
+     "units": "1",
+     "description": "time-interpolation factor on ub (linear: 1 - flb; nearest/upper: 0 or 1; coszen: 0, unused)",
+     "default": 0.0
+    },
+    "day": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "coszen day/night flag: 1 when cosz > 0.001 (the traced rows; all polar day), 0 at night when the law zeroes the value"
+    },
+    "value": {
+     "type": "unknown",
+     "units": "1",
+     "description": "the interpolated stream value written into fldbun_model and consumed by the datamode, [field units] (the field's own units vary per stream; the law is unit-agnostic)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "value",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "day",
+         0.0
+        ]
+       },
+       0.0,
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "flb",
+           "lb"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "fub",
+           "ub"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "coszen_day_step0_p1",
+     "description": "Solar stream (coszen), traced row step 0 point 1 (lat -90, lon 0): value = lb*flb with fub = 0, flb = cosz/tavCosz = 1.000157806 (cdeps_strdata_streams.csv).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 429.9039257897292,
+      "ub": 438.02563417222825,
+      "flb": 1.0001578062610825,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 429.97176732088275,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "coszen_day_step11_p16",
+     "description": "Solar stream (coszen), traced row step 11 point 16 (lon 37.5): flb = 0.999839611, fub = 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 438.02563417222825,
+      "ub": 435.1825587802471,
+      "flb": 0.9998396108711268,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 437.9553796223393,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "coszen_night_synthetic",
+     "description": "Coszen night branch (dshr_strdata_mod.F90:1292-1296): value = 0 when cosz <= 0.001 even though flb > 0. The traced window is polar day (all 16 traced points at lat -90 on Jan 1), so this branch is pinned synthetically.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 100.0,
+      "ub": 200.0,
+      "flb": 0.5,
+      "fub": 0.0,
+      "day": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "linear_tbot_step0_p1",
+     "description": "TPQW stream Sa_tbot (linear), traced row step 0 point 1: flb = fub = 0.5 (query at the interval midpoint), value = flb*lb + fub*ub = 249.309243138630478 K.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 249.1546637852978,
+      "ub": 249.46382249196316,
+      "flb": 0.5,
+      "fub": 0.5,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 249.30924313863048,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "linear_tbot_step11_p1",
+     "description": "TPQW stream Sa_tbot (linear), traced row step 11 point 1: flb = 2/3, fub = 1/3 (non-midpoint query), value = 249.361815000463992 K.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 249.49590365091888,
+      "ub": 249.09363769955428,
+      "flb": 0.6666666666666666,
+      "fub": 0.33333333333333337,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 249.361815000464,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "nearest_step0_p1",
+     "description": "Precip stream Faxa_precn (nearest), traced row step 0 point 1: (flb, fub) = (1, 0) - the lower bound is the nearer record - so value = lb.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 5.22216069182629e-06,
+      "ub": 7.058281049252279e-06,
+      "flb": 1.0,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 5.22216069182629e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "lower_topo_step0_p1",
+     "description": "topo.observed stream Sa_topo (lower), traced row step 0 point 1: (flb, fub) = (1, 0), lb = ub = 2824.92102657638907 m (the topo file is time-invariant).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 2824.921026576389,
+      "ub": 2824.921026576389,
+      "flb": 1.0,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 2824.921026576389,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "Clmncep": {
+   "expression_template_imports": [
+    {
+     "ref": "./cdeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "strm_tbot": {
+     "type": "parameter",
+     "units": "K",
+     "description": "interpolated TPQW Sa_tbot stream value, [K]",
+     "default": 249.30924313863048
+    },
+    "strm_pbot": {
+     "type": "parameter",
+     "units": "Pa",
+     "description": "interpolated TPQW Sa_pbot stream value, [Pa]",
+     "default": 68134.13610026057
+    },
+    "strm_wind": {
+     "type": "parameter",
+     "units": "m/s",
+     "description": "interpolated TPQW Sa_wind stream value, [m/s]",
+     "default": 4.88208296870192
+    },
+    "strm_shum": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "description": "interpolated TPQW Sa_shum stream value, [kg/kg]",
+     "default": 0.0007554910110128631
+    },
+    "strm_lwdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "description": "interpolated TPQW Faxa_lwdn stream value, [W/m2]",
+     "default": 147.6519253730771
+    },
+    "strm_swdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "description": "interpolated Solar Faxa_swdn stream value, [W/m2]",
+     "default": 429.97176732088275
+    },
+    "strm_precn": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "description": "interpolated Precip Faxa_precn stream value, [kg/m2/s]",
+     "default": 5.22216069182629e-06
+    },
+    "strm_topo": {
+     "type": "parameter",
+     "units": "m",
+     "description": "interpolated topo Sa_topo stream value, [m]",
+     "default": 2824.921026576389
+    },
+    "strm_z": {
+     "type": "parameter",
+     "units": "m",
+     "default": 1e+30,
+     "description": "interpolated z stream value (1e30 spval when no z stream, as in GSWP3), [m]"
+    },
+    "tbotmax": {
+     "type": "parameter",
+     "units": "K",
+     "description": "first-call global max of Sa_tbot before the tkfrz adjustment (units detector: <50 means the stream temperature is in degC), [K]",
+     "default": 310.35066065749163
+    },
+    "anidrmax": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 1e+30,
+     "description": "first-call global max of the Sx_anidr import (existence detector; 1e30 when the imports are absent), [W/m2]"
+    },
+    "topo_present": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "1 when the topo stream is associated"
+    },
+    "pbot_present": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "1 when the pbot stream is associated"
+    },
+    "lwdn_present": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "1 when the lwdn stream is associated"
+    },
+    "Sx_anidr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1e+30,
+     "description": "NIR direct albedo import (1e30 spval when absent), [-]"
+    },
+    "Sx_avsdr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1e+30,
+     "description": "VIS direct albedo import (1e30 spval when absent), [-]"
+    },
+    "Sx_anidf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1e+30,
+     "description": "NIR diffuse albedo import (1e30 spval when absent), [-]"
+    },
+    "Sx_avsdf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1e+30,
+     "description": "VIS diffuse albedo import (1e30 spval when absent), [-]"
+    },
+    "e": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "saturation vapor pressure esat(Sa_tbot, Sa_tbot) from the water/ice polynomials, [Pa]"
+    },
+    "qsat_": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "saturation specific humidity 0.622 e / (pbot - 0.378 e), [kg/kg]"
+    },
+    "vp": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "vapor pressure q pbot / (0.622 + 0.378 q), [Pa]"
+    },
+    "rainc0": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "convective-scale precipitation rate before the rain/snow split = 0.1 precn, [kg/m2/s]"
+    },
+    "rainl0": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "large-scale precipitation rate before the rain/snow split = 0.9 precn, [kg/m2/s]"
+    },
+    "frac": {
+     "type": "unknown",
+     "units": "1",
+     "description": "rain fraction of the temperature ramp clamp((tbot - TKFRZ)*0.5, 0, 1), [-]"
+    },
+    "swdn_half": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "half of the incoming shortwave = 0.5 swdn, the argument s of the ratio_rvrf polynomials, [W/m2]"
+    },
+    "ratio_nir": {
+     "type": "unknown",
+     "units": "1",
+     "description": "NIR direct fraction from the cam3_5_55 polynomial, clamped to [0.01, 0.99], [-]"
+    },
+    "ratio_vis": {
+     "type": "unknown",
+     "units": "1",
+     "description": "VIS direct fraction from the cam3_5_55 polynomial, clamped to [0.01, 0.99], [-]"
+    },
+    "e2": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "vapor pressure for the lwdn fallback = pslv q / (0.622 + 0.378 q), [Pa]"
+    },
+    "ea": {
+     "type": "unknown",
+     "units": "1",
+     "description": "lwdn fallback emissivity 0.70 + 5.95e-5 * 0.01 e * exp(1500/tbot), [-]"
+    },
+    "Sa_topo": {
+     "type": "unknown",
+     "units": "m",
+     "description": "surface height export, [m]"
+    },
+    "Sa_z": {
+     "type": "unknown",
+     "units": "m",
+     "description": "bottom-layer height export (30 m when the z stream is absent), [m]"
+    },
+    "Sa_u": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "zonal wind export = wind/sqrt(2), [m/s]"
+    },
+    "Sa_v": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "meridional wind export = wind/sqrt(2), [m/s]"
+    },
+    "Sa_tbot": {
+     "type": "unknown",
+     "units": "K",
+     "description": "bottom-layer temperature export, [K]"
+    },
+    "Sa_ptem": {
+     "type": "unknown",
+     "units": "K",
+     "description": "potential temperature export = Sa_tbot, [K]"
+    },
+    "Sa_shum": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "specific humidity export = min(qsat, stream), [kg/kg]"
+    },
+    "Sa_dens": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "density export, [kg/m3]"
+    },
+    "Sa_pbot": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "pressure export (pstd when 0 or stream absent), [Pa]"
+    },
+    "Sa_pslv": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "sea-level pressure export = Sa_pbot, [Pa]"
+    },
+    "Faxa_rainc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "convective-scale rain flux export, [kg/m2/s]"
+    },
+    "Faxa_rainl": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "large-scale rain flux export, [kg/m2/s]"
+    },
+    "Faxa_snowc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "convective-scale snow flux export, [kg/m2/s]"
+    },
+    "Faxa_snowl": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "large-scale snow flux export, [kg/m2/s]"
+    },
+    "Faxa_swndr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "NIR direct shortwave export, [W/m2]"
+    },
+    "Faxa_swndf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "NIR diffuse shortwave export, [W/m2]"
+    },
+    "Faxa_swvdr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "VIS direct shortwave export, [W/m2]"
+    },
+    "Faxa_swvdf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "VIS diffuse shortwave export, [W/m2]"
+    },
+    "Faxa_swnet": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "net shortwave export (albedo-weighted sum; 0 when the Sx imports are spval/tiny; plain sum when absent), [W/m2]"
+    },
+    "Faxa_swdn": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "incoming shortwave export = stream, [W/m2]"
+    },
+    "Faxa_lwdn": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "incoming longwave export = stream (or the ea sigma T^4 fallback), [W/m2]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "Sa_tbot",
+     "rhs": {
+      "op": "max",
+      "args": [
+       180.0,
+       {
+        "op": "+",
+        "args": [
+         "strm_tbot",
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": "<",
+            "args": [
+             "tbotmax",
+             50.0
+            ]
+           },
+           273.15,
+           0.0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Sa_ptem",
+     "rhs": "Sa_tbot"
+    },
+    {
+     "lhs": "Sa_pbot",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "pbot_present",
+         0.0
+        ]
+       },
+       101325.0,
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           "strm_pbot",
+           0.0
+          ]
+         },
+         101325.0,
+         "strm_pbot"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Sa_pslv",
+     "rhs": "Sa_pbot"
+    },
+    {
+     "lhs": "Sa_u",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "wind_split",
+      "bindings": {
+       "wind": "strm_wind"
+      }
+     }
+    },
+    {
+     "lhs": "Sa_v",
+     "rhs": "Sa_u"
+    },
+    {
+     "lhs": "e",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "esat",
+      "bindings": {
+       "tK": "Sa_tbot",
+       "tKbot": "Sa_tbot"
+      }
+     }
+    },
+    {
+     "lhs": "qsat_",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "qsat",
+      "bindings": {
+       "e": "e",
+       "pbot": "Sa_pbot"
+      }
+     }
+    },
+    {
+     "lhs": "Sa_shum",
+     "rhs": {
+      "op": "min",
+      "args": [
+       "qsat_",
+       "strm_shum"
+      ]
+     }
+    },
+    {
+     "lhs": "vp",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "vapor_pressure",
+      "bindings": {
+       "q": "Sa_shum",
+       "pbot": "Sa_pbot"
+      }
+     }
+    },
+    {
+     "lhs": "Sa_dens",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "density",
+      "bindings": {
+       "pbot": "Sa_pbot",
+       "vp": "vp",
+       "tbot": "Sa_tbot"
+      }
+     }
+    },
+    {
+     "lhs": "rainc0",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.1,
+       "strm_precn"
+      ]
+     }
+    },
+    {
+     "lhs": "rainl0",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.9,
+       "strm_precn"
+      ]
+     }
+    },
+    {
+     "lhs": "frac",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "rain_snow_frac",
+      "bindings": {
+       "tbot": "Sa_tbot"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_rainc",
+     "rhs": {
+      "op": "max",
+      "args": [
+       0.0,
+       {
+        "op": "*",
+        "args": [
+         "rainc0",
+         "frac"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_rainl",
+     "rhs": {
+      "op": "max",
+      "args": [
+       0.0,
+       {
+        "op": "*",
+        "args": [
+         "rainl0",
+         "frac"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_snowc",
+     "rhs": {
+      "op": "max",
+      "args": [
+       0.0,
+       {
+        "op": "*",
+        "args": [
+         "rainc0",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "frac"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_snowl",
+     "rhs": {
+      "op": "max",
+      "args": [
+       0.0,
+       {
+        "op": "*",
+        "args": [
+         "rainl0",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "frac"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "swdn_half",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.5,
+       "strm_swdn"
+      ]
+     }
+    },
+    {
+     "lhs": "ratio_nir",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ratio_rvrf_nir",
+      "bindings": {
+       "s": "swdn_half"
+      }
+     }
+    },
+    {
+     "lhs": "ratio_vis",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ratio_rvrf_vis",
+      "bindings": {
+       "s": "swdn_half"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_swndr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "ratio_nir",
+       "swdn_half"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swndf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "ratio_nir"
+        ]
+       },
+       "swdn_half"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swvdr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "ratio_vis",
+       "swdn_half"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swvdf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "ratio_vis"
+        ]
+       },
+       "swdn_half"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swnet",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "or",
+        "args": [
+         {
+          "op": "<",
+          "args": [
+           "anidrmax",
+           1e-08
+          ]
+         },
+         {
+          "op": ">",
+          "args": [
+           "anidrmax",
+           9e+29
+          ]
+         }
+        ]
+       },
+       0.0,
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "<",
+          "args": [
+           "Sx_anidr",
+           1e+30
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 "Sx_anidr"
+                ]
+               },
+               "Faxa_swndr"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 "Sx_avsdr"
+                ]
+               },
+               "Faxa_swvdr"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 "Sx_anidf"
+                ]
+               },
+               "Faxa_swndf"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 "Sx_avsdf"
+                ]
+               },
+               "Faxa_swvdf"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             "Faxa_swndr",
+             "Faxa_swvdr"
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             "Faxa_swndf",
+             "Faxa_swvdf"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swdn",
+     "rhs": "strm_swdn"
+    },
+    {
+     "lhs": "e2",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "Sa_pslv",
+         "Sa_shum"
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         0.622,
+         {
+          "op": "*",
+          "args": [
+           0.378,
+           "Sa_shum"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ea",
+     "rhs": {
+      "op": "+",
+      "args": [
+       0.7,
+       {
+        "op": "*",
+        "args": [
+         5.95e-05,
+         {
+          "op": "*",
+          "args": [
+           0.01,
+           {
+            "op": "*",
+            "args": [
+             "e2",
+             {
+              "op": "exp",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 1500.0,
+                 "Sa_tbot"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_lwdn",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "lwdn_present",
+         0.0
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "ea",
+         {
+          "op": "*",
+          "args": [
+           5.67e-08,
+           {
+            "op": "^",
+            "args": [
+             "Sa_tbot",
+             4
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "strm_lwdn"
+      ]
+     }
+    },
+    {
+     "lhs": "Sa_topo",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "topo_present",
+         0.0
+        ]
+       },
+       1e+30,
+       "strm_topo"
+      ]
+     }
+    },
+    {
+     "lhs": "Sa_z",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">=",
+        "args": [
+         "strm_z",
+         1e+30
+        ]
+       },
+       30.0,
+       "strm_z"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "step0_p1",
+     "description": "Traced datamode row step 0 point 1 (lon 0, lat -90): the full stream->export chain at the first coupling step. tbotmax = 310.35 K (no tkfrz adjustment), anidrmax = 1e30 (Sx imports absent -> swnet = 0), tbot = 249.309 K < 273.15 -> frac = 0 (all snow), shum = min(qsat, 7.5549e-4) = 6.4803e-4 (qsat caps), swdn split via the ratio_rvrf polynomials (datm_gswp3_streams.csv / datm_gswp3_exports.csv).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 249.30924313863048,
+      "strm_pbot": 68134.13610026057,
+      "strm_wind": 4.88208296870192,
+      "strm_shum": 0.0007554910110128631,
+      "strm_lwdn": 147.6519253730771,
+      "strm_swdn": 429.97176732088275,
+      "strm_precn": 5.22216069182629e-06,
+      "strm_topo": 2824.921026576389,
+      "strm_z": 1e+30,
+      "tbotmax": 310.35066065749163,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_topo",
+       "time": 0.0,
+       "expected": 2824.921026576389
+      },
+      {
+       "variable": "Sa_z",
+       "time": 0.0,
+       "expected": 30.0
+      },
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": 3.452153973484479
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": 3.452153973484479
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 249.30924313863048
+      },
+      {
+       "variable": "Sa_ptem",
+       "time": 0.0,
+       "expected": 249.30924313863048
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.0006480331532619146,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 0.9517205665016577,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 68134.13610026057
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 68134.13610026057
+      },
+      {
+       "variable": "Faxa_rainc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 5.222160691826291e-07
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 4.699944622643661e-06
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 179.6370757987365,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 35.348807861704884,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 141.46489999577733,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 73.52098366466403,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Faxa_swdn",
+       "time": 0.0,
+       "expected": 429.97176732088275
+      },
+      {
+       "variable": "Faxa_lwdn",
+       "time": 0.0,
+       "expected": 147.6519253730771
+      }
+     ]
+    },
+    {
+     "id": "step11_p1",
+     "description": "Traced datamode row step 11 point 1 (05:30 UTC): weaker wind (1.79 m/s -> u = v = 1.2656), slightly different tbot/pbot/precn; still all-snow (tbot = 249.36 K).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 249.361815000464,
+      "strm_pbot": 68124.74884620964,
+      "strm_wind": 1.7898325886439403,
+      "strm_shum": 0.0007548493967786151,
+      "strm_lwdn": 145.79053868187884,
+      "strm_swdn": 437.95537962233925,
+      "strm_precn": 5.524998584307837e-06,
+      "strm_topo": 2824.921026576389,
+      "strm_z": 1e+30,
+      "tbotmax": 310.35066065749163,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": 1.2656027606188025
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": 1.2656027606188025
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 249.361815000464
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.0006515049554584835,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 0.9513868162151617,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 5.524998584307837e-07
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 4.972498725877053e-06
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 183.5416775681492,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 35.43601224302044,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 145.00214991294726,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 73.97553989822235,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "step0_p16",
+     "description": "Traced datamode row step 0 point 16 (lon 37.5, lat -90): the swdn differs in the 8th significant digit from point 1 (4.29971767320882691e2 vs ...748e2), so the shortwave split pins the per-point values.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 249.30924313863048,
+      "strm_pbot": 68134.13610026057,
+      "strm_wind": 4.88208296870192,
+      "strm_shum": 0.0007554910110128631,
+      "strm_lwdn": 147.6519253730771,
+      "strm_swdn": 429.9717673208827,
+      "strm_precn": 5.22216069182629e-06,
+      "strm_topo": 2824.921026576389,
+      "strm_z": 1e+30,
+      "tbotmax": 310.35066065749163,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 179.6370757987365,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 35.348807861704856,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 141.4648999957773,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 73.52098366466404,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 5.222160691826291e-07
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 4.699944622643661e-06
+      }
+     ]
+    },
+    {
+     "id": "branch_tbot_degc",
+     "description": "The tbot units detector branch (F90:384): with tbotmax < 50 the stream temperature is in degC and TKFRZ is added. Synthetic tuple: strm_tbot = 10 degC, tbotmax = 10 -> Sa_tbot = 283.15 K, and the 180 K floor: strm_tbot = -100, tbotmax = -100 -> Sa_tbot = 180 K.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 10.0,
+      "strm_pbot": 101325.0,
+      "strm_wind": 2.0,
+      "strm_shum": 0.005,
+      "strm_lwdn": 100.0,
+      "strm_swdn": 0.0,
+      "strm_precn": 0.0,
+      "strm_topo": 0.0,
+      "strm_z": 1e+30,
+      "tbotmax": 10.0,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 283.15
+      }
+     ]
+    },
+    {
+     "id": "branch_tbot_floor",
+     "description": "The 180 K floor of Sa_tbot (F90:386): strm_tbot = -100 degC with tbotmax = -100 -> Sa_tbot = max(180, -100 + 273.15) = 180 K.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": -100.0,
+      "strm_pbot": 101325.0,
+      "strm_wind": 2.0,
+      "strm_shum": 0.005,
+      "strm_lwdn": 100.0,
+      "strm_swdn": 0.0,
+      "strm_precn": 0.0,
+      "strm_topo": 0.0,
+      "strm_z": 1e+30,
+      "tbotmax": -100.0,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 180.0
+      }
+     ]
+    },
+    {
+     "id": "branch_pbot_zero",
+     "description": "The pbot zero-fill branch (F90:394-396): strm_pbot = 0 (masked ocean points) -> Sa_pbot = Sa_pslv = pstd = 101325 Pa.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 280.0,
+      "strm_pbot": 0.0,
+      "strm_wind": 2.0,
+      "strm_shum": 0.005,
+      "strm_lwdn": 100.0,
+      "strm_swdn": 100.0,
+      "strm_precn": 0.0,
+      "strm_topo": 0.0,
+      "strm_z": 1e+30,
+      "tbotmax": 280.0,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 101325.0
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 101325.0
+      }
+     ]
+    },
+    {
+     "id": "branch_shum_qsat_cap",
+     "description": "The shum qsat cap (F90:411-417): with a saturated stream (strm_shum above qsat) Sa_shum = qsat from the esat polynomial. Synthetic: tbot = 283.15 K (water phase, e = esat(10 C) = 1227.073698721729 Pa), pbot = 101325 Pa -> qsat = 0.622 e/(pbot - 0.378 e) = 7.5672320e-3; a stream shum of 9e-3 is capped to qsat.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 283.15,
+      "strm_pbot": 101325.0,
+      "strm_wind": 2.0,
+      "strm_shum": 0.009,
+      "strm_lwdn": 100.0,
+      "strm_swdn": 100.0,
+      "strm_precn": 0.0,
+      "strm_topo": 0.0,
+      "strm_z": 1e+30,
+      "tbotmax": 283.15,
+      "anidrmax": 1e+30
+     },
+     "assertions": [
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.0075672319664761,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "GSWP3Files": {
+   "variables": {
+    "fsds": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "GSWP3_Solar",
+      "from": {
+       "file_variable": "FSDS"
+      }
+     },
+     "description": "GSWP3v1 FSDS at (lat index 0, lon index 0) = the south-pole-adjacent cell, all 248 records of 1991-01, [W/m2]"
+    },
+    "prectmms": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "GSWP3_Precip",
+      "from": {
+       "file_variable": "PRECTmms"
+      }
+     },
+     "description": "GSWP3v1 PRECTmms at (lat index 100, lon index 100), all 248 records, [kg/m2/s]"
+    },
+    "tbot": {
+     "type": "parameter",
+     "units": "K",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "GSWP3_TPQW",
+      "from": {
+       "file_variable": "TBOT"
+      }
+     },
+     "description": "GSWP3v1 TBOT at (lat index 0, lon index 0), all 248 records, [K]"
+    },
+    "topo": {
+     "type": "parameter",
+     "units": "m",
+     "shape": [
+      "record_topo"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "GSWP3_Topo",
+      "from": {
+       "file_variable": "TOPO"
+      }
+     },
+     "description": "USGS TOPO at (lat index 0, lon index 0) of the 0.9x1.25 deg grid (1 record; the row is constant 2824.921 m), [m]"
+    }
+   },
+   "equations": [],
+   "tests": [
+    {
+     "id": "netcdf_records",
+     "description": "Reader path: record 1 and record 248 of each source, at the fixed cells, exact float64 widenings of the file's float32 values.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fsds",
+       "time": 0.0,
+       "expected": 475.4850769042969,
+       "coords": {
+        "record": 1
+       }
+      },
+      {
+       "variable": "fsds",
+       "time": 0.0,
+       "expected": 351.640869140625,
+       "coords": {
+        "record": 248
+       }
+      },
+      {
+       "variable": "prectmms",
+       "time": 0.0,
+       "expected": 4.201800436476333e-07,
+       "coords": {
+        "record": 1
+       }
+      },
+      {
+       "variable": "prectmms",
+       "time": 0.0,
+       "expected": 2.0148506507666752e-07,
+       "coords": {
+        "record": 248
+       }
+      },
+      {
+       "variable": "tbot",
+       "time": 0.0,
+       "expected": 251.1199951171875,
+       "coords": {
+        "record": 1
+       }
+      },
+      {
+       "variable": "tbot",
+       "time": 0.0,
+       "expected": 236.72999572753906,
+       "coords": {
+        "record": 248
+       }
+      },
+      {
+       "variable": "topo",
+       "time": 0.0,
+       "expected": 2824.921142578125,
+       "coords": {
+        "record_topo": 1
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
