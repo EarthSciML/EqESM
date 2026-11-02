@@ -29,7 +29,12 @@ Last updated: 2026-11-01.
 - **esm CLI 0.7.0 + repo cleanup** (2026-11-01) — `./esm` upgraded
   0.6.0 → 0.7.0 (release binary, sha256 verified; breaking unit/table
   checks, new `units_dimensionless_literal_mismatch` warning). Regression
-  check dispatched as `esm070-regress`. Cleanup: merged worktrees
+  check `esm070-regress` (15 min): **no regressions** — `esm test stage2/`
+  249P/0F/0E, `esm validate` clean on all 12 files (needs `ESD_ROOT`
+  exported for the CICE B-grid rule imports). 0.7.0 warns about 66
+  dimensionless literals (cice_coupling 23, cice_thermodynamics 26,
+  cice_dynamics 3, cice Control 3, mosart channel 5 / subnetwork 5 /
+  hillslope 1; 129 counting mounts) — not fixed yet. Cleanup: merged worktrees
   `wt/cice-dedd` / `wt/stage2-clm` removed; the uncommitted CLM skeletons
   from the latter rescued to `wt/clm-skeletons` (`485b260`);
   `units/dimensionless-literals` (codemod on a stale base, conflicts in
