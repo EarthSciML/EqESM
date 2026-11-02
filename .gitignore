@@ -18,3 +18,4 @@ stage1/inputdata/
 
 # slurm subagent run dirs (tools/slurm-agent/dispatch.py)
 .slurm-agents/
+/.ast/

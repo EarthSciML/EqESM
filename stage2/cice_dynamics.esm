@@ -896,14 +896,14 @@
        {
         "op": "*",
         "args": [
-         917.0,
+         {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"},
          "vice"
         ]
        },
        {
         "op": "*",
         "args": [
-         330.0,
+         {"op": "const", "args": [], "value": 330.0, "units": "kg/m^3"},
          "vsno"
         ]
        }
@@ -1271,7 +1271,7 @@
       "name": "ocean_ice_stress_magnitude",
       "bindings": {
        "aiX": "aiX",
-       "rhow": 1026.0,
+       "rhow": {"op": "const", "args": [], "value": 1026.0, "units": "kg/m^3"},
        "Cw": "Cw",
        "uocn": "uocn",
        "vocn": "vocn",

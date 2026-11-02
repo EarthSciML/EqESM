@@ -115,7 +115,7 @@
              { "op": "*", "args": [
                { "op": "+", "args": ["qsur", "ehout_manning"] },
                "delt" ] } ] },
-           1.0e-14 ] } ] },
+           {"op": "const", "args": [], "value": 1.0e-14, "units": "m"} ] } ] },
        { "op": "*", "args": [
          -1.0,
          { "op": "+", "args": ["qsur", { "op": "/", "args": ["wh", "delt"] }] } ] },

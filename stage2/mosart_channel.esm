@@ -184,14 +184,14 @@
            { "op": "and", "args": [
              { "op": ">", "args": [
                { "op": "-", "args": ["erout_manning"] },
-               1.0e-14 ] },
+               {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3/s"} ] },
              { "op": "<", "args": [
                { "op": "+", "args": [
                  "wr",
                  { "op": "*", "args": [
                    { "op": "+", "args": ["erlateral", "erin", "erout_manning"] },
                    "localdelt" ] } ] },
-               1.0e-14 ] } ] },
+               {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3"} ] } ] },
            { "op": "-", "args": [
              { "op": "+", "args": ["erlateral", "erin", { "op": "/", "args": ["wr", "localdelt"] }] } ] },
            "erout_manning"
@@ -208,7 +208,7 @@
          { "op": "and", "args": [
            { "op": ">", "args": [
              { "op": "-", "args": ["erout_manning"] },
-             1.0e-14 ] },
+             {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3/s"} ] },
            { "op": "and", "args": [
              { "op": "<", "args": [
                { "op": "+", "args": [
@@ -216,7 +216,7 @@
                  { "op": "*", "args": [
                    { "op": "+", "args": ["erlateral", "erin", "erout_manning"] },
                    "localdelt" ] } ] },
-               1.0e-14 ] },
+               {"op": "const", "args": [], "value": 1.0e-14, "units": "m^3"} ] },
              { "op": ">", "args": ["mr", 0.0] } ] } ] },
          { "op": "/", "args": [
            { "op": "-", "args": ["erout"] },
