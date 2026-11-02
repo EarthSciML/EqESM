@@ -32,6 +32,10 @@ SKIP_GLOBAL = {
 
 
 def compare_file(ref_path, inst_path, nbad):
+    # ocean.stats is a plain-text summary; skip it here (the netCDF
+    # ocean.stats.nc carries the numeric content and is compared).
+    if not (ref_path.endswith(".nc") and inst_path.endswith(".nc")):
+        return
     ref, inst = netCDF4.Dataset(ref_path), netCDF4.Dataset(inst_path)
     for a in sorted(set(ref.ncattrs()) | set(inst.ncattrs())):
         if a in SKIP_GLOBAL:
@@ -56,7 +60,13 @@ def compare_file(ref_path, inst_path, nbad):
                 print(f"  {os.path.basename(ref_path)} var {v} attr {a}: {rva!r} != {iva!r}")
                 nbad[0] += 1
         rd, id_ = r[...], i[...]
-        if rd.dtype != id_.dtype or not (rd == id_).all():
+        # Masked-array-safe bit comparison: shapes, dtypes, masks and
+        # values must all agree (np.ma.allequal handles fully-masked
+        # variables, which (rd == id_).all() gets wrong).
+        import numpy as np
+        same = (rd.shape == id_.shape and rd.dtype == id_.dtype and
+                np.ma.allequal(rd, id_))
+        if not same:
             print(f"  {os.path.basename(ref_path)} var {v}: DATA DIFF "
                   f"(dtypes {rd.dtype} vs {id_.dtype})")
             nbad[0] += 1
@@ -69,24 +79,31 @@ def main():
     ap.add_argument("ref_dir")
     ap.add_argument("inst_dir")
     ap.add_argument("--files", nargs="+", default=None,
-                    help="file names (relative to the run dirs); default: "
-                         "intersection of the two dirs")
+                    help="file name pairs (relative to the run dirs), "
+                         "'REFNAME:INSTNAME'; default: files with identical "
+                         "names in both dirs")
     args = ap.parse_args()
 
     if args.files is None:
         common = sorted(set(os.listdir(args.ref_dir)) & set(os.listdir(args.inst_dir)))
-        files = [f for f in common if f.endswith(".nc") or f == "ocean.stats"]
+        pairs = [(f, f) for f in common if f.endswith(".nc") or f == "ocean.stats"]
     else:
-        files = args.files
+        pairs = []
+        for f in args.files:
+            if ":" in f:
+                rf, inf = f.split(":", 1)
+            else:
+                rf = inf = f
+            pairs.append((rf, inf))
 
     nbad = [0]
     nfiles = 0
-    for f in files:
-        rp, ip = os.path.join(args.ref_dir, f), os.path.join(args.inst_dir, f)
+    for rf, inf in pairs:
+        rp, ip = os.path.join(args.ref_dir, rf), os.path.join(args.inst_dir, inf)
         if not (os.path.exists(rp) and os.path.exists(ip)):
-            print(f"SKIP {f}: missing in one dir")
+            print(f"SKIP {rf}: missing in one dir")
             continue
-        print(f"comparing {f}")
+        print(f"comparing {rf}")
         compare_file(rp, ip, nbad)
         nfiles += 1
 
