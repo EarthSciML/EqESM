@@ -6,6 +6,15 @@
 # for it to be healthy, runs `opencode run` on the task prompt inside the
 # worktree, writes the agent's final message to result.md, and exits.
 #
+# Yielding: while the agent runs, a watcher asks `dispatch.py should-yield`
+# once a minute whether a job with a LOWER nice value has been waiting for a
+# node in this partition for YIELD_AFTER seconds. If this job is the one chosen
+# to make room, it stops opencode (SIGINT), saves the session DB to the run
+# dir, and requeues itself (`scontrol requeue`). When slurm restarts it
+# (SLURM_RESTART_COUNT > 0), it restores the DB and continues the same
+# opencode session with a short "you were requeued" message. The worktree is
+# on shared disk, so files are untouched across the restart.
+#
 # opencode keeps its sqlite DB, service file and locks under XDG_DATA_HOME /
 # XDG_STATE_HOME, which default to the NFS-shared home directory. Two jobs on
 # different nodes would fight over them, so each job points those at
@@ -21,6 +30,8 @@
 #SBATCH --gres={{GRES}}
 #SBATCH --job-name={{JOB_NAME}}
 #SBATCH --output={{RUN_DIR}}/slurm.out
+#SBATCH --open-mode=append
+#SBATCH --requeue
 
 set -u
 RUN_DIR={{RUN_DIR}}
@@ -30,6 +41,9 @@ OC_MODEL={{OC_MODEL}}
 TIME_SECONDS={{TIME_SECONDS}}
 GRACE_SECONDS={{GRACE_SECONDS}}
 SERVER_TIMEOUT={{SERVER_TIMEOUT}}
+YIELD={{YIELD}}             # 1 = give up the node to lower-nice jobs
+YIELD_AFTER={{YIELD_AFTER}}  # seconds such a job must have waited
+ATTEMPT=${SLURM_RESTART_COUNT:-0}
 LAUNCH_SERVER=/projects/illinois/eng/cee/ctessum/ctessum/llm/launch-server.sh
 PORT=8000   # ~/.config/opencode/opencode.json points the "local" provider here
 
@@ -38,7 +52,8 @@ export PATH=$HOME/.local/bin:$HOME/.opencode/bin:$PATH
 
 status() { echo "$1" > "$RUN_DIR/status"; echo "[$(date '+%F %T')] status: $1"; }
 status starting
-echo "node: $(hostname -s)  job: $SLURM_JOB_ID  workdir: $WORKDIR"
+echo "node: $(hostname -s)  job: $SLURM_JOB_ID  attempt: $ATTEMPT  workdir: $WORKDIR"
+rm -f "$RUN_DIR/yield"
 
 # --- node-local opencode state ---
 OC_HOME=/scratch.local/$USER/slurm-agents/$SLURM_JOB_ID
@@ -46,10 +61,18 @@ export XDG_DATA_HOME=$OC_HOME/data XDG_STATE_HOME=$OC_HOME/state XDG_CACHE_HOME=
 mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 # Seed the cache (provider packages, models.json) so nothing is re-downloaded.
 [ -d "$HOME/.cache/opencode" ] && cp -r "$HOME/.cache/opencode" "$XDG_CACHE_HOME/"
+# After a requeue: restore the saved session DB and find the session to continue.
+SESSION=""
+if (( ATTEMPT > 0 )) && [ -d "$RUN_DIR/opencode-data" ]; then
+    cp -r "$RUN_DIR/opencode-data" "$XDG_DATA_HOME/opencode"
+    SESSION=$(grep -o '"sessionID":"ses_[^"]*"' "$RUN_DIR/opencode.jsonl" 2>/dev/null | tail -1 | cut -d'"' -f4)
+fi
 
 SERVER_PID=""
 AGENT_PID=""
+WATCH_PID=""
 cleanup() {
+    [ -n "$WATCH_PID" ] && kill "$WATCH_PID" 2>/dev/null
     [ -n "$AGENT_PID" ] && kill "$AGENT_PID" 2>/dev/null
     [ -n "$SERVER_PID" ] && { pkill -P "$SERVER_PID" 2>/dev/null; kill "$SERVER_PID" 2>/dev/null; }
     pkill -u "$USER" -f "llama-server.*--port $PORT" 2>/dev/null
@@ -61,7 +84,7 @@ cleanup() {
     rm -rf "$OC_HOME"
 }
 trap cleanup EXIT
-trap 'status cancelled; exit 143' TERM INT
+trap 'if [ -f "$RUN_DIR/yield" ]; then status "requeued (waiting to restart)"; else status cancelled; fi; exit 143' TERM INT
 
 # --- llama-server ---
 if (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
@@ -88,16 +111,58 @@ if (( AGENT_SECONDS < 60 )); then status "failed: no time left for the agent"; e
 status running
 echo "agent time budget: ${AGENT_SECONDS}s"
 cd "$WORKDIR"
+RESUME_NOTE="Your slurm job was requeued to make room for a higher-priority job and has now restarted (attempt $ATTEMPT), with about $(( AGENT_SECONDS / 60 )) minutes of wall time in this attempt. Files in your worktree are as you left them, but any command that was running when you were stopped was killed and its output may be incomplete. Check \`git status\` and \`git log\`, then continue the task from where you left off."
+if [ -n "$SESSION" ]; then
+    echo "continuing opencode session $SESSION"
+    OC_ARGS=(--session "$SESSION" "$RESUME_NOTE")
+elif (( ATTEMPT > 0 )); then
+    echo "no saved session; starting a new one with the original prompt"
+    OC_ARGS=(--title "{{JOB_NAME}}" "$(cat "$RUN_DIR/prompt.md")
+
+$RESUME_NOTE")
+else
+    OC_ARGS=(--title "{{JOB_NAME}}" "$(cat "$RUN_DIR/prompt.md")")
+fi
+(( ATTEMPT == 0 )) && : > "$RUN_DIR/opencode.jsonl"
 timeout --signal=INT --kill-after=60 "$AGENT_SECONDS" \
-    opencode run --standalone --format json \
-        -m "$OC_MODEL" --title "{{JOB_NAME}}" \
-        "$(cat "$RUN_DIR/prompt.md")" \
-    > "$RUN_DIR/opencode.jsonl" 2> "$RUN_DIR/opencode.err" &
+    opencode run --standalone --format json -m "$OC_MODEL" "${OC_ARGS[@]}" \
+    >> "$RUN_DIR/opencode.jsonl" 2>> "$RUN_DIR/opencode.err" &
 AGENT_PID=$!
+
+if (( YIELD )); then
+    (
+        while sleep 60; do
+            w=$(python3 "{{TOOL_DIR}}/dispatch.py" should-yield --jobid "$SLURM_JOB_ID" \
+                    --partition "$SLURM_JOB_PARTITION" --after "$YIELD_AFTER" \
+                    --runs-dir "$(dirname "$RUN_DIR")" 2>> "$RUN_DIR/yield.err")
+            if [ -n "$w" ]; then
+                echo "$w" > "$RUN_DIR/yield"
+                echo "$(date '+%F %T') attempt $ATTEMPT: yielding to job $w" >> "$RUN_DIR/yields.log"
+                kill -INT "$AGENT_PID"
+                exit 0
+            fi
+        done
+    ) &
+    WATCH_PID=$!
+fi
+
 wait "$AGENT_PID"
 rc=$?
 AGENT_PID=""
+[ -n "$WATCH_PID" ] && { kill "$WATCH_PID" 2>/dev/null; WATCH_PID=""; }
 echo "$rc" > "$RUN_DIR/exit_code"
+
+if [ -f "$RUN_DIR/yield" ]; then
+    status "yielding to job $(cat "$RUN_DIR/yield")"
+    cleanup                  # stop llama-server, save the session DB to the run dir
+    trap - EXIT
+    if ! scontrol requeue "$SLURM_JOB_ID"; then
+        status "failed: scontrol requeue refused (session saved; resubmit with --workdir to continue)"
+        exit 1
+    fi
+    sleep 600               # slurm kills this attempt; the TERM trap sets the status
+    exit 0
+fi
 
 python3 "{{TOOL_DIR}}/dispatch.py" extract "$RUN_DIR" > "$RUN_DIR/result.md" 2>> "$RUN_DIR/opencode.err"
 

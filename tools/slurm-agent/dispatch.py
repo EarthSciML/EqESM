@@ -212,7 +212,8 @@ def cmd_submit(a):
 
     subs = dict(
         PARTITION=prof["partition"], ACCOUNT=prof["account"], QOS=prof["qos"],
-        NICE=a.nice, GRES=prof["gres"],
+        NICE=a.nice, YIELD=0 if a.no_yield else 1, YIELD_AFTER=int(a.yield_after * 60),
+        GRES=prof["gres"],
         NTASKS=prof["ntasks"], MEM=prof["mem"], TIME=fmt_time(secs),
         TIME_SECONDS=secs, GRACE_SECONDS=a.grace, SERVER_TIMEOUT=a.server_timeout,
         JOB_NAME=f"agent-{name}", RUN_DIR=d, WORKDIR=workdir,
@@ -227,7 +228,7 @@ def cmd_submit(a):
     (d / "job.slurm").write_text(script)
 
     meta = dict(name=name, workdir=str(workdir), branch=branch, base=a.base,
-                time=fmt_time(secs), profile=a.profile, llm=a.llm, nice=a.nice,
+                time=fmt_time(secs), profile=a.profile, llm=a.llm, nice=a.nice, yield_on=not a.no_yield,
                 submitted=time.strftime("%Y-%m-%d %H:%M:%S"), jobid=None)
     if a.dry_run:
         print(f"dry run: job script at {d / 'job.slurm'} (no worktree created, nothing submitted)")
@@ -318,6 +319,95 @@ def cmd_cancel(a):
         print(f"cancelled {n} (job {m['jobid']})")
 
 
+def _squeue_rows(partition):
+    fields = ("id", "name", "state", "reason", "submit", "start", "nodes", "nice", "left")
+    out = sh("squeue", "-h", "-p", partition, "-o", "%i|%j|%T|%r|%V|%S|%D|%y|%L", check=False)
+    rows = []
+    for line in out.splitlines():
+        r = dict(zip(fields, line.split("|")))
+        try:
+            r["nice"], r["nodes"] = int(r["nice"]), int(r["nodes"])
+        except (KeyError, ValueError):
+            continue
+        rows.append(r)
+    return rows
+
+
+def _seconds_since(ts):
+    try:
+        return time.time() - time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return 0
+
+
+def _seconds_left(s):
+    try:
+        return parse_time(s)
+    except ValueError:
+        return float("inf")  # UNLIMITED / NOT_SET
+
+
+def cmd_should_yield(a):
+    """Called once a minute by a running agent job. Prints the id of the waiting
+    job this agent should make room for, or nothing.
+
+    A job "outranks" an agent when its nice value is lower, whoever submitted
+    it. Waiting jobs (PENDING on Resources/Priority for at least --after
+    seconds), lowest nice and oldest first, are each given as many agent nodes
+    as they request: running agent jobs (job name agent-*) with a higher nice,
+    highest nice and most recently started first, skipping agents with less
+    than --min-left seconds left. Every watcher sees the same squeue snapshot,
+    so they agree on who yields. A shared log in the runs dir records each
+    yield, so a waiting job that still cannot start (e.g. it needs more than
+    one node can give) never gets more yields than the nodes it asked for.
+    """
+    import fcntl
+    rows = _squeue_rows(a.partition)
+    me = next((r for r in rows if r["id"] == str(a.jobid)), None)
+    if not me or me["state"] != "RUNNING":
+        return
+    waiting = sorted((r for r in rows if r["state"] == "PENDING"
+                      and r["reason"] in ("Resources", "Priority")
+                      and _seconds_since(r["submit"]) >= a.after),
+                     key=lambda r: (r["nice"], r["submit"]))
+    if not waiting:
+        return
+    runs = Path(a.runs_dir) if a.runs_dir else runs_dir()
+    logp = runs / "yield-log.json"
+    with open(runs / "yield-log.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        log = json.loads(logp.read_text()) if logp.exists() else {}
+        pending_ids = {r["id"] for r in rows if r["state"] == "PENDING"}
+        log = {w: v for w, v in log.items() if w in pending_ids}  # forget started/gone jobs
+        already = {j for v in log.values() for j in v}
+        agents = [r for r in rows if r["state"] == "RUNNING"
+                  and r["name"].startswith("agent-") and r["id"] not in already
+                  and _seconds_left(r["left"]) >= a.min_left]
+        # highest nice first; within a nice, the most recently started first
+        agents.sort(key=lambda r: r["start"], reverse=True)
+        agents.sort(key=lambda r: r["nice"], reverse=True)
+        taken = set()
+        target = None
+        for w in waiting:
+            need = w["nodes"] - len(log.get(w["id"], []))
+            for ag in agents:
+                if need <= 0:
+                    break
+                if ag["id"] in taken or ag["nice"] <= w["nice"]:
+                    continue
+                taken.add(ag["id"])
+                need -= 1
+                if ag["id"] == me["id"]:
+                    target = w["id"]
+            if target:
+                break
+        if target:
+            log.setdefault(target, []).append(me["id"])
+        logp.write_text(json.dumps(log, indent=1) + "\n")
+    if target:
+        print(target)
+
+
 def cmd_renice(a):
     """Change the nice value of queued/running runs (scontrol update)."""
     if a.nice < 0:
@@ -384,6 +474,9 @@ def cmd_record(a):
     d = runs_dir() / a.name
     if (d / "status").exists():
         j["agent_status"] = (d / "status").read_text().strip()
+    if (d / "yields.log").exists():
+        # requeued to make room for other jobs; started/run_minutes cover the last attempt only
+        j["yields"] = len((d / "yields.log").read_text().splitlines())
     if a.outcome:
         j["outcome"] = a.outcome
     if a.merge_commit:
@@ -493,6 +586,10 @@ def main():
     s.add_argument("--nice", type=int, default=DEFAULT_NICE,
                    help=f"slurm nice value, >= 0; higher = lower priority among ctessum jobs "
                         f"(default {DEFAULT_NICE}; 0 = same as a normal group job)")
+    s.add_argument("--yield-after", type=float, default=10, metavar="MIN",
+                   help="requeue to make room for a job with a lower nice that has waited "
+                        "this many minutes for a node (default 10)")
+    s.add_argument("--no-yield", action="store_true", help="never give up the node")
     s.add_argument("--ntasks", type=int), s.add_argument("--mem", type=int)
     s.add_argument("--llm", default="v4", choices=list(LLM_MODELS),
                    help="launch-server.sh model variant")
@@ -534,6 +631,15 @@ def main():
     s.add_argument("name")
     s.add_argument("-n", type=int, default=40)
     s.set_defaults(func=cmd_tail)
+
+    s = sub.add_parser("should-yield", help="(used by running jobs) print the waiting job to yield to")
+    s.add_argument("--jobid", required=True)
+    s.add_argument("--partition", required=True)
+    s.add_argument("--after", type=int, default=600, help="seconds a job must have waited")
+    s.add_argument("--min-left", type=int, default=1800,
+                   help="don't yield with less than this many seconds of time limit left")
+    s.add_argument("--runs-dir")
+    s.set_defaults(func=cmd_should_yield)
 
     s = sub.add_parser("renice", help="change the slurm nice value of queued/running runs")
     s.add_argument("nice", type=int)

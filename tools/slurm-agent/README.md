@@ -33,6 +33,38 @@ freshly submitted job only after about 17 hours of extra waiting.
 can only use values ≥ 0, and slurm may refuse to lower a value that has
 already been raised.
 
+### Yielding the node
+
+Nice only orders waiting jobs, so a running agent job would otherwise keep its
+node until it finishes. Agent jobs therefore give the node up themselves.
+Once a minute a watcher in the job runs `dispatch.py should-yield`. It
+checks the partition for a job with a **lower nice value** (any user, agent
+or not) that has been pending on `Resources`/`Priority` for `--yield-after`
+minutes (default 10). If this agent is the one chosen to make room, it:
+
+1. stops opencode with SIGINT;
+2. stops llama-server and copies the session DB to `opencode-data/`;
+3. runs `scontrol requeue` on itself, so the status file reads `requeued`.
+
+Agents with the highest nice yield first, and within the same nice the most
+recently started. Agents with under 30 min left don't yield. A waiting job
+gets at most as many yields as the nodes it requested; these are recorded in
+`.slurm-agents/yield-log.json`. A job that still can't start therefore
+doesn't cause repeated requeues.
+
+When slurm restarts the job (`SLURM_RESTART_COUNT` > 0), the new attempt:
+
+- restores the DB;
+- continues the same opencode session with a "you were requeued, check git
+  status" message;
+- appends to `opencode.jsonl` and `slurm.out`.
+
+The worktree is on shared disk, so its files are as the agent left them.
+Each yield is a line in `yields.log` and is counted as `yields` in
+`jobs.json`. `started`/`run_minutes` in `jobs.json` cover the last attempt
+only. A restart costs the model load (~4 min) plus re-reading the session
+context. Use `submit --no-yield` for a job that must not be interrupted.
+
 Nice does not affect scavenger jobs. Preemption on this cluster is QOS-based,
 and agent jobs run under QOS `scav_high` (set explicitly in the profile).
 That QOS preempts the `normal` QOS every `scavenger`-partition job uses,
