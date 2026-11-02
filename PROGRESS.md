@@ -34,7 +34,26 @@ Last updated: 2026-11-01.
   exported for the CICE B-grid rule imports). 0.7.0 warns about 66
   dimensionless literals (cice_coupling 23, cice_thermodynamics 26,
   cice_dynamics 3, cice Control 3, mosart channel 5 / subnetwork 5 /
-  hillslope 1; 129 counting mounts) — not fixed yet. Cleanup: merged worktrees
+  hillslope 1; 129 counting mounts). **Fixed** by `units-literals`
+  (merged `06e80cf`, 4 h): EarthSciAST codemod + hand review, warnings
+  66 → 0, `esm test stage2/` 249P/0F/0E unchanged; values verified
+  unchanged by a const-unwrapped JSON comparison except two **transcription
+  fixes the unit checker exposed** (both untested branches):
+  `cice_thermodynamics` ustar was `(τ²/ρw)^(1/4)` instead of
+  `sqrt(|τ|/ρw)` (icepack_therm_vertical.F90:665), and
+  `meltpond_sealvl_dvn` mixed rates and per-step amounts
+  (`(meltt·ρi + melts·ρs + frain·dt)/ρfresh` with the .esm's m/s rates
+  and pre-divided frain; icepack_meltpond_sealvl.F90:157). Also: MOSART
+  `hydraulic_radius` template param `m` renamed `area` (a param named
+  like a unit symbol shadows unit strings, esm-spec §9.6.3); manager
+  unfolded two folded ρ·Lvap constants. **Follow-ups found:** (a) MOSART
+  `channel_depth` trapezoid factor `0.1*(2.0/1.0)` = 0.2 vs Fortran
+  SLOPE1 0.05 (mosart_physics.F90:501-532) — an untested .esm
+  deviation, also in EarthSciModels#33; (b) salinity is declared `ppt`,
+  which the esm unit registry reads as parts-per-trillion (CICE means
+  parts per thousand, g/kg) — harmless while nothing converts it, but
+  wrong; (c) `atmo_constant_tau` coefficient has velocity units while
+  Control declares the stress in N/m². Cleanup: merged worktrees
   `wt/cice-dedd` / `wt/stage2-clm` removed; the uncommitted CLM skeletons
   from the latter rescued to `wt/clm-skeletons` (`485b260`);
   `units/dimensionless-literals` (codemod on a stale base, conflicts in
