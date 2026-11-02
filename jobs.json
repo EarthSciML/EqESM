@@ -260,5 +260,29 @@
     "outcome": "pending",
     "merge_commit": null,
     "notes": ""
+  },
+  {
+    "name": "mosart-channel-depth",
+    "jobid": 11977050,
+    "purpose": "Fix MOSART channel_depth trapezoid factor (0.2 vs SLOPE1/2), audit geometry templates, pin against compiled Fortran; port to PR #33 branch locally",
+    "milestone": "M3/mosart",
+    "parent": null,
+    "branch": "wt/mosart-channel-depth",
+    "workdir": "/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM-wt-mosart-channel-depth",
+    "base_commit": "6b80cf5",
+    "time_limit": "08:00:00",
+    "nice": 100,
+    "llm": "v4",
+    "prompt_chars": 4401,
+    "submitted": "2026-11-01 22:39:15",
+    "started": null,
+    "ended": null,
+    "wait_minutes": null,
+    "run_minutes": null,
+    "slurm_state": null,
+    "agent_status": null,
+    "outcome": "pending",
+    "merge_commit": null,
+    "notes": ""
   }
 ]
