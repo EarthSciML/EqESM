@@ -6,12 +6,15 @@ Usage: python3 validate_cam_dumps.py DUMP_DIR [--steps N] [--pver 32]
 Checks (mirroring the CICE lane's validation):
   1. all 7 dump files exist, start with '# description ='/'# columns ='
      headers, have zero blank lines and a consistent field count;
-  2. row counts: cam_phys_tend = N x 27 sites x pver, cam_surface_exchange
+  2. row counts: cam_phys_tend = N x 26 site-calls x pver (22 unique
+     sites: clubb and microp repeat cld_macmic_num_steps=3 times inside
+     the macro-micro loop; macrop/microp_sc/carma_emis/carma_wetdep/
+     nudging are not active in this configuration), cam_surface_exchange
      = N x 3 phases, cam_surface_cflx = N x pcnst, cam_qsat = N x 2 x pver,
      cam_tend_total = N x 2 x pver, cam_phys_tend_q = N x sum(lq count)
      x pver;
   3. per-step site order matches the tphysbc/tphysac call sequence
-     (macrop/clubb/microp(_sc) appear cld_macmic_num_steps=3 times);
+     (clubb/microp appear cld_macmic_num_steps=3 times, interleaved);
   4. the wv_saturation qsat law (Goff-Gratch mixed-phase table,
      estblf linear interpolation, svp_to_qsat, gam with the pcf
      transition polynomial) reproduces the dumped es/qs/gam exactly;
@@ -27,6 +30,10 @@ import sys
 import csv
 import os
 import numpy as np
+
+def parse(lines):
+    """Parse CSV data lines (quoted strings) into row lists."""
+    return list(csv.reader(lines))
 
 # ---------------------------------------------------------------- qsat law
 # physconst / shr_const values (physconst.F90, shr_const_mod.F90)
@@ -147,23 +154,27 @@ def qsat_law(t, p):
 
 
 # ------------------------------------------------------------- site order
-# Expected per-step site sequence (physpkg.F90 call order).  The macmic
-# loop sites (macrop/clubb/microp_sc/microp) repeat cld_macmic_num_steps
-# times; 'bc'/'ac' phases for qsat and tend_total interleave as shown.
+# Expected per-step site sequence (physpkg.F90 call order, this config).
+# The macro-micro co-substep loop runs cld_macmic_num_steps=3 times but
+# only clubb and microp are active inside it: macrop is skipped because
+# macrop_scheme='CLUBB_SGS' (use_macrop=.false.), microp_sc because
+# use_subcol_microp=.false.  Outside the loop, carma_wetdep is skipped
+# (no CARMA), and in tphysac carma_emis (no CARMA) and nudging
+# (Nudge_Model/Nudge_ON are false; the SCM relaxation is applied in the
+# dynamics, apply_iop_forcing.F90) are skipped too.
 BC_SITES = ["energy_fixer", "dadadj", "convect_deep", "convect_shallow",
             "ssatcontrail"]
-MACMIC_SITES = ["macrop", "clubb", "microp_sc", "microp"]
-AC_SITES = ["carma_emis", "aoa_tracers", "co2_cycle", "chem", "vdiff",
-            "rayleigh", "aero_drydep", "carma_tend", "gw", "qbo", "lunar",
-            "iondrag", "nudging"]
+MACMIC_SITES = ["clubb", "microp"]
+MID_SITES = ["aero_calcsize", "aero_wetdep", "convect_deep_2", "radiation"]
+AC_SITES = ["aoa_tracers", "co2_cycle", "chem", "vdiff", "rayleigh",
+            "aero_drydep", "carma_tend", "gw", "qbo", "lunar", "iondrag"]
 
 
 def expected_sites(nmacmic=3):
     sites = list(BC_SITES)
     for _ in range(nmacmic):
         sites += MACMIC_SITES
-    sites += ["aero_calcsize", "aero_wetdep", "carma_wetdep",
-              "convect_deep_2", "radiation"]
+    sites += MID_SITES
     sites += AC_SITES
     return sites
 
@@ -218,20 +229,41 @@ def main():
     assert len(tables["cam_surface_exchange.csv"][2]) == nsteps * 3, \
         "cam_surface_exchange row count"
 
+    # ---- parsed rows (csv semantics: quoted strings unquoted) --------
+    tend = parse(tables["cam_phys_tend.csv"][2])
+
     # cam_surface_cflx: nsteps x pcnst; pcnst discovered from unique idx
-    cflx_rows = [r.split(",") for r in tables["cam_surface_cflx.csv"][2]]
-    pcnst = len({r[4] for r in cflx_rows})
+    cflx_rows = parse(tables["cam_surface_cflx.csv"][2])
+    pcnst = len({r[4].strip() for r in cflx_rows})
     assert len(cflx_rows) == nsteps * pcnst, "cam_surface_cflx row count"
     print(f"pcnst = {pcnst}")
 
-    # cam_phys_tend_q: nsteps x sum(site lq count) x pver
-    tq = [r.split(",") for r in tables["cam_phys_tend_q.csv"][2]]
-    nq_sites = len({(r[0], r[3]) for r in tq})
-    assert len(tq) == nsteps * nq_sites * pver, "cam_phys_tend_q row count"
-    print(f"cam_phys_tend_q: {nq_sites} distinct (step,site) blocks x {pver} lev")
+    # cam_phys_tend_q: per (step,site) block = lq_count x pver rows;
+    # lq_count must match the nlq column of cam_phys_tend.csv
+    import collections
+    tq = parse(tables["cam_phys_tend_q.csv"][2])
+    blocks = collections.defaultdict(set)
+    for r in tq:
+        blocks[(r[0], r[3])].add(r[5])  # cnst_idx
+    nlq_from_ptend = collections.defaultdict(set)
+    for r in tend:
+        nlq_from_ptend[(r[0], r[3])].add(r[9])  # nlq column
+    okq = True
+    for (st, site), cnsts in sorted(blocks.items()):
+        rows = [r for r in tq if r[0] == st and r[3] == site]
+        if len(rows) != len(cnsts) * pver:
+            print(f"q block step {st} {site}: {len(rows)} rows, "
+                  f"{len(cnsts)} cnsts x {pver}")
+            okq = False
+        nlq = {v.strip() for v in nlq_from_ptend[(st, site)]}
+        if len(nlq) != 1 or list(nlq)[0] != str(len(cnsts)):
+            print(f"q block step {st} {site}: nlq={nlq} vs {len(cnsts)} cnsts")
+            okq = False
+    if okq:
+        print(f"cam_phys_tend_q: {len(blocks)} (step,site) blocks, "
+              f"each {pver} lev x lq, consistent with ptend nlq")
 
     # ---- per-step site order ---------------------------------------
-    tend = [r.split(",") for r in tables["cam_phys_tend.csv"][2]]
     exp = expected_sites(nmacmic)
     ok = True
     for s in range(1, nsteps + 1):
@@ -248,27 +280,26 @@ def main():
         print(f"site order OK: {len(exp)} sites x {nsteps} steps "
               f"(macmic x{nmacmic})")
 
-    # macmic substep bookkeeping: macrop/clubb/microp rows carry
-    # macmic_it = 1..3, scale = 1/3
-    import collections
+    # macmic substep bookkeeping: clubb/microp rows carry
+    # macmic_it = 1..3 and scale = 1/cld_macmic_num_steps
     bad = 0
     for s in range(1, nsteps + 1):
         rows = [r for r in tend if int(r[0]) == s]
         for site in MACMIC_SITES:
             sr = [r for r in rows if r[3] == site]
-            its = [int(r[11]) for r in sr[::pver]]
+            its = [int(r[12]) for r in sr[::pver]]
             if its != [1, 2, 3]:
                 print(f"step {s} {site}: macmic_it = {its}")
                 bad += 1
             for r in sr[::pver]:
-                if abs(float(r[14]) - 1.0 / nmacmic) > 1e-12:
-                    print(f"step {s} {site}: scale = {r[14]}")
+                if abs(float(r[15]) - 1.0 / nmacmic) > 1e-12:
+                    print(f"step {s} {site}: scale = {r[15]}")
                     bad += 1
     if bad == 0:
         print("macmic substep bookkeeping OK (macmic_it 1..3, scale=1/3)")
 
     # ---- qsat law ----------------------------------------------------
-    q = [r.split(",") for r in tables["cam_qsat.csv"][2]]
+    q = parse(tables["cam_qsat.csv"][2])
     maxes = maxqs = maxgam = 0.0
     nbad = 0
     for r in q:
@@ -288,7 +319,7 @@ def main():
           f"bad={nbad}")
 
     # ---- surface exchange: bc_out vs ac_out --------------------------
-    se = [r.split(",") for r in tables["cam_surface_exchange.csv"][2]]
+    se = parse(tables["cam_surface_exchange.csv"][2])
     cols = tables["cam_surface_exchange.csv"][1]
     camout_cols = ["tbot", "zbot", "ubot", "vbot", "qbot_Q", "pbot", "rho",
                    "netsw", "flwds", "precsc", "precsl", "precc", "precl",
@@ -317,7 +348,7 @@ def main():
     for r in se:
         if r[3] == "bc_in":
             row_Q = [x for x in qidx if x[0] == r[0]]
-            if row_Q and row_Q[0][6] != r[22]:
+            if row_Q and row_Q[0][6] != r[23]:
                 print(f"step {r[0]}: cflx_Q mismatch with cam_surface_cflx")
     print("surface exchange: bc_in rows present for all steps")
 

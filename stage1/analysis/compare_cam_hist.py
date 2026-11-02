@@ -88,9 +88,17 @@ def compare_one(ref_path, inst_path):
             print(f"  var {v}: SHAPE DIFF {rd.shape} vs {id_.shape}")
             nbad += 1
         elif rd.dtype != id_.dtype or not np.array_equal(rd, id_):
-            print(f"  var {v}: DATA DIFF (dtypes {rd.dtype} vs {id_.dtype}, "
-                  f"equal={np.array_equal(rd, id_)}, max|d|="
-                  f"{np.nanmax(np.abs(rd.astype(float) - id_.astype(float)))})")
+            if rd.dtype.kind in "fc" and id_.dtype.kind in "fc":
+                # numeric: report max abs difference
+                d = np.abs(rd.astype(float) - id_.astype(float))
+                print(f"  var {v}: DATA DIFF (dtypes {rd.dtype} vs {id_.dtype}, "
+                      f"equal={np.array_equal(rd, id_)}, max|d|="
+                      f"{np.nanmax(d)})")
+            else:
+                # char/other: report a few differing elements
+                neq = np.count_nonzero(rd != id_)
+                print(f"  var {v}: DATA DIFF (dtypes {rd.dtype} vs {id_.dtype}, "
+                      f"equal={np.array_equal(rd, id_)}, neq={neq})")
             nbad += 1
     return nbad
 
