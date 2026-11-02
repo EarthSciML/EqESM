@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_templates",
-  "description": "Expression-template library for the CTSM/CLM land-surface components (stage 2 of the EqESM project): the pointwise closure laws of ctsm5.4.063 (cesm3.0-alphabranch checkout) that are shared by the canopy, snow, soil, and biogeophysics components. Transcribed exactly from the Fortran; every template carries its source file:line in its description and returns one scalar (the CLM laws are all pointwise, so a template per output is sufficient). Reference: stage1/cesm/components/clm/src/biogeophys/.",
+  "description": "Expression-template library for the CTSM/CLM land-surface components (stage 2 of the EqESM project): the pointwise closure laws of ctsm5.4.063 (cesm3.0-alphabranch checkout) exercised by the stage-2 CLM components, currently CanopyHydrology and CanopyFluxInterface (stage2/clm_canopy.esm): the QSat saturation vapor pressure/specific humidity laws and their derivatives, the canopy interception/storage/excess laws, the ZengWang2007 roughness and displacement laws, the emissivity laws and the latent heat of vaporization/sublimation law. Transcribed exactly from the Fortran; every template carries its source file:line in its description and returns one scalar (the CLM laws are all pointwise, so a template per output is sufficient). The remaining shared laws (soil/snow hydraulics and thermal properties, snow hydrology and albedo, Monin-Obukhov and aerodynamic laws, etc.) will be added here as their stage-2 components are implemented. Reference: stage1/cesm/components/clm/src/biogeophys/.",
   "license": "MIT"
  },
  "expression_templates": {
@@ -61,212 +61,19 @@
    ]}
   },
   "qsat_qsdT": {
-   "description": "d(qs)/dT [1/K]: QSatMod.F90:118-120. qsdT = esdT * vp1 * vp * p with vp1 = 0.622/(p - 0.378*es) and vp = 1/(p - 0.378*es). Shares qsat_esat and qsat_esat_dT by reference.",
+   "description": "d(qs)/dT [1/K]: QSatMod.F90:118-120. qsdT = esdT * vp1 * vp * p with vp1 = 0.622/(p - 0.378*es) and vp = 1/(p - 0.378*es), i.e. qsdT = 0.622*esdT*p/(p - 0.378*es)^2. Shares qsat_esat and qsat_esat_dT by reference.",
    "params": ["T", "p", "TKFRZ"],
    "body": {"op": "*", "args": [
+    0.622,
     {"op": "apply_expression_template", "args": [], "name": "qsat_esat_dT", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}},
-    {"op": "^", "args": [{"op": "/", "args": [0.622, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}, 2]},
-    "p"
+    "p",
+    {"op": "^", "args": [{"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}, 2]}
    ]}
-  },
-  "soil_hk": {
-   "description": "Soil hydraulic conductivity hk = imped * hksat * s^(2*bsw+3) [mm/s]: SoilWaterRetentionCurveClappHornberg1978Mod.F90:75. NOTE: the Van Genuchten 1980 option (SoilWaterRetentionCurveVanGenuchten1980Mod.F90:75) is a verbatim copy of this Clapp-Hornberg body; see stage2/README-clm.md and bugs.md.",
-   "params": ["hksat", "bsw", "s", "imped"],
-   "body": {"op": "*", "args": ["imped", "hksat", {"op": "^", "args": ["s", {"op": "+", "args": [{"op": "*", "args": [2.0, "bsw"]}, 3.0]}]}]}
-  },
-  "soil_dhkds": {
-   "description": "d(hk)/ds = (2*bsw+3)*hk/s [mm/s]: SoilWaterRetentionCurveClappHornberg1978Mod.F90:79.",
-   "params": ["hksat", "bsw", "s", "imped"],
-   "body": {"op": "*", "args": [{"op": "+", "args": [{"op": "*", "args": [2.0, "bsw"]}, 3.0]}, {"op": "apply_expression_template", "args": [], "name": "soil_hk", "bindings": {"hksat": "hksat", "bsw": "bsw", "s": "s", "imped": "imped"}}, {"op": "/", "args": [1.0, "s"]}]}
   },
   "soil_suction": {
    "description": "Soil matric potential smp = -sucsat * s^(-bsw) [mm], negative: SoilWaterRetentionCurveClappHornberg1978Mod.F90:115.",
    "params": ["sucsat", "bsw", "s"],
    "body": {"op": "*", "args": [-1.0, "sucsat", {"op": "^", "args": ["s", {"op": "-", "args": ["bsw"]}]}]}
-  },
-  "soil_dsmpds": {
-   "description": "d(smp)/ds = -bsw*smp/s [mm]: SoilWaterRetentionCurveClappHornberg1978Mod.F90:119.",
-   "params": ["sucsat", "bsw", "s"],
-   "body": {"op": "*", "args": [-1.0, "bsw", {"op": "apply_expression_template", "args": [], "name": "soil_suction", "bindings": {"sucsat": "sucsat", "bsw": "bsw", "s": "s"}}, {"op": "/", "args": [1.0, "s"]}]}
-  },
-  "soil_suction_inverse": {
-   "description": "Relative saturation at which smp = smp_target: s = (-smp_target/sucsat)^(-1/bsw): SoilWaterRetentionCurveClappHornberg1978Mod.F90:155.",
-   "params": ["sucsat", "bsw", "smp_target"],
-   "body": {"op": "^", "args": [{"op": "/", "args": [{"op": "-", "args": ["smp_target"]}, "sucsat"]}, {"op": "/", "args": [-1.0, "bsw"]}]}
-  },
-  "soil_thermal_conductivity": {
-   "description": "Soil thermal conductivity thk [W/(m K)] from Farouki (1981)/Johansen: SoilTemperatureMod.F90:714-725. satw = relative saturation; Kersten number dke = satw for frozen soil (frozen > 0) else max(0, log10(satw)+1); dksat = tkmg * tkwat^(fl*watsat) * tkice^((1-fl)*watsat); thk = dke*dksat + (1-dke)*tkdry for satw > 1e-6, else tkdry.",
-   "params": ["tkmg", "tkwat", "tkice", "tkdry", "watsat", "satw", "fl", "frozen"],
-   "body": {"op": "ifelse", "args": [
-    {"op": ">", "args": ["satw", 1e-6]},
-    {"op": "+", "args": [
-     {"op": "*", "args": [
-      {"op": "ifelse", "args": [{"op": ">", "args": ["frozen", 0.0]}, "satw", {"op": "max", "args": [0.0, {"op": "+", "args": [{"op": "log10", "args": ["satw"]}, 1.0]}]}]},
-      {"op": "*", "args": ["tkmg", {"op": "^", "args": ["tkwat", {"op": "*", "args": ["fl", "watsat"]}]}, {"op": "^", "args": ["tkice", {"op": "*", "args": [{"op": "-", "args": [1.0, "fl"]}, "watsat"]}]}]}
-     ]},
-     {"op": "*", "args": [
-      {"op": "-", "args": [1.0, {"op": "ifelse", "args": [{"op": ">", "args": ["frozen", 0.0]}, "satw", {"op": "max", "args": [0.0, {"op": "+", "args": [{"op": "log10", "args": ["satw"]}, 1.0]}]}]}]},
-      "tkdry"
-     ]}
-    ]},
-    "tkdry"
-   ]}
-  },
-  "snow_thermal_conductivity_sturm1997": {
-   "description": "Snow thermal conductivity thk [W/(m K)] from Sturm et al. (1997), snow_thermal_cond_method = 'Sturm1997': SoilTemperatureMod.F90:768-778. For snow density rhos [kg/m3]: rhos <= 156 gives 0.023 + 0.234*(rhos/1000), else 0.138 - 1.01*(rhos/1000) + 3.233*(rhos/1000)^2.",
-   "params": ["rhos"],
-   "body": {"op": "ifelse", "args": [
-    {"op": "<=", "args": ["rhos", 156.0]},
-    {"op": "+", "args": [0.023, {"op": "*", "args": [0.234, {"op": "/", "args": ["rhos", 1000.0]}]}]},
-    {"op": "+", "args": [0.138, {"op": "*", "args": [-1.01, {"op": "/", "args": ["rhos", 1000.0]}]}, {"op": "*", "args": [3.233, {"op": "^", "args": [{"op": "/", "args": ["rhos", 1000.0]}, 2]}]}]}
-   ]}
-  },
-  "snow_thermal_conductivity_jordan1991": {
-   "description": "Snow thermal conductivity thk [W/(m K)] from Jordan (1991) p. 18, snow_thermal_cond_method = 'Jordan1991': SoilTemperatureMod.F90:767. thk = tkair + (7.75e-5*rhos + 1.105e-6*rhos^2)*(tkice-tkair).",
-   "params": ["rhos", "tkair", "tkice"],
-   "body": {"op": "+", "args": ["tkair", {"op": "*", "args": [{"op": "+", "args": [{"op": "*", "args": [7.75e-5, "rhos"]}, {"op": "*", "args": [1.105e-6, {"op": "^", "args": ["rhos", 2]}]}]}, {"op": "-", "args": ["tkice", "tkair"]}]}]}
-  },
-  "soil_heat_capacity": {
-   "description": "Soil volumetric heat capacity cv [J/(m2 K)] from de Vries (1963): SoilTemperatureMod.F90:852-853. cv = csol*(1-watsat)*dz + h2osoi_ice*cpice + h2osoi_liq*cpliq.",
-   "params": ["csol", "watsat", "h2osoi_ice", "h2osoi_liq", "cpice", "cpliq", "dz"],
-   "body": {"op": "+", "args": [
-    {"op": "*", "args": ["csol", {"op": "-", "args": [1.0, "watsat"]}, "dz"]},
-    {"op": "*", "args": ["h2osoi_ice", "cpice"]},
-    {"op": "*", "args": ["h2osoi_liq", "cpliq"]}
-   ]}
-  },
-  "snow_heat_capacity": {
-   "description": "Snow layer heat capacity cv [J/(m2 K)]: SoilTemperatureMod.F90:891-895. max(thin_sfclayer, (cpliq*h2osoi_liq + cpice*h2osoi_ice)/frac_sno) for frac_sno > 0, else thin_sfclayer.",
-   "params": ["h2osoi_liq", "h2osoi_ice", "cpliq", "cpice", "frac_sno", "thin_sfclayer"],
-   "body": {"op": "ifelse", "args": [
-    {"op": ">", "args": ["frac_sno", 0.0]},
-    {"op": "max", "args": ["thin_sfclayer", {"op": "/", "args": [{"op": "+", "args": [{"op": "*", "args": ["cpliq", "h2osoi_liq"]}, {"op": "*", "args": ["cpice", "h2osoi_ice"]}]}, "frac_sno"]}]},
-    "thin_sfclayer"
-   ]}
-  },
-  "frac_sno_niu_yang_2007": {
-   "description": "Snow cover fraction (Niu & Yang 2007): SnowCoverFractionNiuYang2007Mod.F90:111-112. frac_sno = tanh( snow_depth / (2.5*zlnd*(min(800, swe/snow_depth)/100)) ), with zlnd the soil roughness length [m].",
-   "params": ["snow_depth", "swe", "zlnd"],
-   "body": {"op": "tanh", "args": [{"op": "/", "args": ["snow_depth", {"op": "*", "args": [2.5, "zlnd", {"op": "^", "args": [{"op": "/", "args": [{"op": "min", "args": [800.0, {"op": "/", "args": ["swe", "snow_depth"]}]}, 100.0]}, 1.0]}]}]}]}
-  },
-  "frac_sno_melt_swenson_lawrence_2012": {
-   "description": "Snow cover fraction during melt (Swenson & Lawrence 2012, eqn. 4): SnowCoverFractionSwensonLawrence2012Mod.F90:263-266. smr = min(1, swe/min(int_snow,int_snow_max)); frac_sno = 1 - (acos(min(1, 2*smr-1))/pi)^n_melt.",
-   "params": ["swe", "int_snow", "int_snow_max", "n_melt"],
-   "body": {"op": "-", "args": [1.0, {"op": "^", "args": [{"op": "/", "args": [{"op": "acos", "args": [{"op": "min", "args": [1.0, {"op": "-", "args": [{"op": "*", "args": [2.0, {"op": "min", "args": [1.0, {"op": "/", "args": ["swe", {"op": "min", "args": ["int_snow", "int_snow_max"]}]}]}]}, 1.0]}]}]}, 3.141592653589793]}, "n_melt"]}]}
-  },
-  "fsca_accum_swenson_lawrence_2012": {
-   "description": "Snow cover fraction update by a new-snow event (Swenson & Lawrence 2012, eqn. 3, algebraically simplified): SnowCoverFractionSwensonLawrence2012Mod.F90:149. frac_sno = frac_prev + tanh(accum_factor*newsnow)*(1-frac_prev).",
-   "params": ["accum_factor", "newsnow", "frac_prev"],
-   "body": {"op": "+", "args": ["frac_prev", {"op": "*", "args": [{"op": "tanh", "args": [{"op": "*", "args": ["accum_factor", "newsnow"]}]}, {"op": "-", "args": [1.0, "frac_prev"]}]}]}
-  },
-  "snow_grain_dry_growth": {
-   "description": "Change in snow effective grain radius by vapor redistribution (Flanner & Zender 2006): SnowSnicarMod.F90:1635-1636. dr = drdt0 * (tau/(dr_fresh+tau))^(1/kappa) * (dtime/secsphr), dr_fresh = snw_rds - snw_rds_min [microns].",
-   "params": ["snw_rds", "drdt0", "tau", "kappa", "snw_rds_min", "dtime", "secsphr"],
-   "body": {"op": "*", "args": ["drdt0", {"op": "^", "args": [{"op": "/", "args": ["tau", {"op": "+", "args": [{"op": "-", "args": ["snw_rds", "snw_rds_min"]}, "tau"]}]}, {"op": "/", "args": [1.0, "kappa"]}]}, {"op": "/", "args": ["dtime", "secsphr"]}]}
-  },
-  "snow_grain_wet_growth": {
-   "description": "Change in snow effective grain radius by wet-snow metamorphism (Brun 1989): SnowSnicarMod.F90:1650-1651. dr_wet = 1e18*(dtime*C2*frc_liq^3)/(4*pi*snw_rds^2), with C2 = C2_liq_Brun89 [micron/s].",
-   "params": ["snw_rds", "frc_liq", "C2", "dtime"],
-   "body": {"op": "*", "args": [1e18, {"op": "/", "args": [{"op": "*", "args": ["dtime", "C2", {"op": "^", "args": ["frc_liq", 3]}]}, {"op": "*", "args": [4.0, 3.141592653589793, {"op": "^", "args": ["snw_rds", 2]}]}]}]}
-  },
-  "snow_compaction_destructive": {
-   "description": "Destructive-metamorphism settling rate ddz1 [1/s] (SNTHERM.89): SnowHydrologyMod.F90:1974-1980. ddz1 = -c3*exp(-c4*td), reduced by exp(-46e-3*(bi-upplim)) when bi > upplim, and multiplied by c5 when liquid water is present (liq_flag > 0.5). c3 = 2.777e-6 [1/s], c4 = 0.04 [1/K], c5 = 2.",
-   "params": ["c3", "c4", "td", "bi", "upplim", "liq_flag", "c5"],
-   "body": {"op": "*", "args": [
-    -1.0, "c3", {"op": "exp", "args": [{"op": "*", "args": [-1.0, "c4", "td"]}]},
-    {"op": "ifelse", "args": [{"op": ">", "args": ["bi", "upplim"]}, {"op": "exp", "args": [{"op": "*", "args": [-46e-3, {"op": "-", "args": ["bi", "upplim"]}]}]}, 1.0]},
-    {"op": "ifelse", "args": [{"op": ">", "args": ["liq_flag", 0.5]}, "c5", 1.0]}
-   ]}
-  },
-  "snow_compaction_overburden_anderson1976": {
-   "description": "Overburden compaction rate ddz2 [1/s] (Anderson 1976, NOAA NWS 19): SnowHydrologyMod.F90:3786. ddz2 = -(burden + wx/2)*exp(-Tfactor*td - c2*bi)/eta0 with c2 = 23e-3 [m3/kg].",
-   "params": ["burden", "wx", "td", "bi", "Tfactor", "eta0"],
-   "body": {"op": "*", "args": [-1.0, {"op": "+", "args": ["burden", {"op": "/", "args": ["wx", 2.0]}]}, {"op": "exp", "args": [{"op": "-", "args": [{"op": "*", "args": ["Tfactor", "td"]}, {"op": "*", "args": [23e-3, "bi"]}]}]}, {"op": "/", "args": [1.0, "eta0"]}]}
-  },
-  "snow_compaction_overburden_vionnet2012": {
-   "description": "Overburden compaction rate ddz2 [1/s] (Vionnet et al. 2012, Crocus): SnowHydrologyMod.F90:3824-3827. eta = f1*f2*(bi/ceta)*exp(aeta*td + beta*bi)*eta0 with f1 = 1/(1 + 60*lwc), lwc = h2osoi_liq/(denh2o*dz), f2 = 4, aeta = 0.1 [1/K], beta = 0.023 [m3/kg]; ddz2 = -(burden + wx/2)/eta.",
-   "params": ["h2osoi_liq", "dz", "burden", "wx", "td", "bi", "denh2o", "ceta", "eta0"],
-   "body": {"op": "*", "args": [-1.0, {"op": "+", "args": ["burden", {"op": "/", "args": ["wx", 2.0]}]}, {"op": "/", "args": [1.0, {"op": "*", "args": [{"op": "/", "args": [1.0, {"op": "+", "args": [1.0, {"op": "*", "args": [60.0, {"op": "/", "args": ["h2osoi_liq", {"op": "*", "args": ["denh2o", "dz"]}]}]}]}]}, 4.0, {"op": "/", "args": ["bi", "ceta"]}, {"op": "exp", "args": [{"op": "+", "args": [{"op": "*", "args": [0.1, "td"]}, {"op": "*", "args": [0.023, "bi"]}]}]}, "eta0"]}]}]}
-  },
-  "snow_layer_optical_depth": {
-   "description": "Snow layer optical depth tau_snw = L_snw * ext_cff_mss_snw [1]: SnowSnicarMod.F90:1011-1012. L_snw = h2osno_ice + h2osno_liq [kg/m2], ext_cff_mss_snw the mass extinction coefficient [m2/kg] from the Mie lookup.",
-   "params": ["L_snw", "ext_cff_mss_snw"],
-   "body": {"op": "*", "args": ["L_snw", "ext_cff_mss_snw"]}
-  },
-  "snow_layer_ssa": {
-   "description": "Snow+aerosol layer single-scatter albedo omega [1]: SnowSnicarMod.F90:1030. omega = (omega_sum + ss_alb_snw*tau_snw)/tau, with tau = tau_sum + tau_snw, omega_sum = sum_j(ss_alb_aer_j*tau_aer_j).",
-   "params": ["tau", "tau_snw", "ss_alb_snw", "omega_sum"],
-   "body": {"op": "/", "args": [{"op": "+", "args": ["omega_sum", {"op": "*", "args": ["ss_alb_snw", "tau_snw"]}]}, "tau"]}
-  },
-  "snow_layer_asymmetry": {
-   "description": "Snow+aerosol layer asymmetry parameter g [1]: SnowSnicarMod.F90:1031. g = (g_sum + asm_prm_snw*ss_alb_snw*tau_snw)/(tau*omega), with g_sum = sum_j(asm_prm_aer_j*ss_alb_aer_j*tau_aer_j).",
-   "params": ["tau", "omega", "g_sum", "asm_prm_snw", "ss_alb_snw", "tau_snw"],
-   "body": {"op": "/", "args": [{"op": "+", "args": ["g_sum", {"op": "*", "args": ["asm_prm_snw", "ss_alb_snw", "tau_snw"]}]}, {"op": "*", "args": ["tau", "omega"]}]}
-  },
-  "delta_eddington_gstar": {
-   "description": "Delta-Eddington transformed asymmetry parameter: SnowSnicarMod.F90:1038. g_star = g/(1+g).",
-   "params": ["g"],
-   "body": {"op": "/", "args": ["g", {"op": "+", "args": [1.0, "g"]}]}
-  },
-  "delta_eddington_omegastar": {
-   "description": "Delta-Eddington transformed single-scatter albedo: SnowSnicarMod.F90:1039. omega_star = (1-g^2)*omega/(1 - omega*g^2).",
-   "params": ["g", "omega"],
-   "body": {"op": "/", "args": [{"op": "*", "args": [{"op": "-", "args": [1.0, {"op": "^", "args": ["g", 2]}]}, "omega"]}, {"op": "-", "args": [1.0, {"op": "*", "args": ["omega", {"op": "^", "args": ["g", 2]}]}]}]}
-  },
-  "delta_eddington_taustar": {
-   "description": "Delta-Eddington transformed optical depth: SnowSnicarMod.F90:1040. tau_star = (1 - omega*g^2)*tau.",
-   "params": ["g", "omega", "tau"],
-   "body": {"op": "*", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": ["omega", {"op": "^", "args": ["g", 2]}]}]}, "tau"]}
-  },
-  "soil_albedo_direct": {
-   "description": "Direct-beam soil albedo albsod [1]: SurfaceAlbedoMod.F90:1237-1242. inc = max(0.11 - 0.40*h2osoi_vol, 0); albsod = min(albsat + inc, albdry).",
-   "params": ["albsat", "albdry", "h2osoi_vol"],
-   "body": {"op": "min", "args": [{"op": "+", "args": ["albsat", {"op": "max", "args": [{"op": "-", "args": [0.11, {"op": "*", "args": [0.40, "h2osoi_vol"]}]}, 0.0]}]}, "albdry"]}
-  },
-  "ground_albedo_direct": {
-   "description": "Snow-weighted direct ground albedo albgrd [1]: SurfaceAlbedoMod.F90:815. albgrd = albsod*(1-frac_sno) + albsnd*frac_sno.",
-   "params": ["albsod", "albsnd", "frac_sno"],
-   "body": {"op": "+", "args": [{"op": "*", "args": ["albsod", {"op": "-", "args": [1.0, "frac_sno"]}]}, {"op": "*", "args": ["albsnd", "frac_sno"]}]}
-  },
-  "ground_albedo_diffuse": {
-   "description": "Snow-weighted diffuse ground albedo albgri [1]: SurfaceAlbedoMod.F90:816. albgri = albsoi*(1-frac_sno) + albsni*frac_sno.",
-   "params": ["albsoi", "albsni", "frac_sno"],
-   "body": {"op": "+", "args": [{"op": "*", "args": ["albsoi", {"op": "-", "args": [1.0, "frac_sno"]}]}, {"op": "*", "args": ["albsni", "frac_sno"]}]}
-  },
-  "topmodel_baseflow": {
-   "description": "TOPMODEL subsurface runoff rsub_top = imped * rsub_top_max * exp(-fff*zwt) [mm/s]: SoilHydrologyMod.F90:1218. fff = 1/hkdepth [1/m], rsub_top_max = 10*sin(topo_slope) [mm/s], imped the ice-impedance factor.",
-   "params": ["imped", "rsub_top_max", "fff", "zwt"],
-   "body": {"op": "*", "args": ["imped", "rsub_top_max", {"op": "exp", "args": [{"op": "*", "args": [-1.0, "fff", "zwt"]}]}]}
-  },
-  "aquifer_specific_yield": {
-   "description": "Analytical aquifer specific yield rous (SoilHydrologyMod.F90:1222-1224): rous = watsat*(1 - (1 + 1e3*zwt/sucsat)^(-1/bsw)), floored at aq_sp_yield_min.",
-   "params": ["watsat", "sucsat", "bsw", "zwt", "aq_sp_yield_min"],
-   "body": {"op": "max", "args": [{"op": "*", "args": ["watsat", {"op": "-", "args": [1.0, {"op": "^", "args": [{"op": "+", "args": [1.0, {"op": "*", "args": [1e3, {"op": "/", "args": ["zwt", "sucsat"]}]}]}, {"op": "/", "args": [-1.0, "bsw"]}]}]}]}, "aq_sp_yield_min"]}
-  },
-  "baseflow_impedance": {
-   "description": "Ice-impedance factor for baseflow imped = 10^(-e_ice * (icefracsum/dzsum)) [1]: SoilHydrologyMod.F90:1199. icefracsum is the dz-weighted ice fraction of the unsaturated layers, dzsum the summed thickness.",
-   "params": ["e_ice", "icefrac_sum", "dz_sum"],
-   "body": {"op": "^", "args": [10.0, {"op": "*", "args": [-1.0, "e_ice", {"op": "/", "args": ["icefrac_sum", "dz_sum"]}]}]}
-  },
-  "soil_water_flux": {
-   "description": "Richards-equation water flux across a soil layer interface q = -hk*(dpsi/dz - 1) [mm/s] (Fortran header SoilWaterMovementMod.F90:443-448): the gravity term is the -1 and dpsi/dz the matric-potential gradient. hk in mm/s, dsmpdz in mm/mm.",
-   "params": ["hk", "dsmpdz"],
-   "body": {"op": "*", "args": [-1.0, "hk", {"op": "-", "args": ["dsmpdz", 1.0]}]}
-  },
-  "frozen_water_potential": {
-   "description": "Frozen-water potential smp [mm] used for supercooled soil water (Zhao 1997; Koren 1999): SoilTemperatureMod.F90:1328 / SoilWaterMovementMod.F90:656. smp = hfus*(tfrz - T)/(grav*T) * 1000.",
-   "params": ["hfus", "tfrz", "T", "grav"],
-   "body": {"op": "*", "args": ["hfus", {"op": "/", "args": [{"op": "-", "args": ["tfrz", "T"]}, {"op": "*", "args": ["grav", "T"]}]}, 1000.0]}
-  },
-  "supercool_water": {
-   "description": "Supercooled (unfrozen) soil water content supercool [mm]: SoilTemperatureMod.F90:1328-1330. supercool = watsat*(smp/sucsat)^(-1/bsw)*dz*1000, smp = frozen_water_potential(hfus,tfrz,T,grav) [mm].",
-   "params": ["sucsat", "bsw", "watsat", "hfus", "tfrz", "T", "grav", "dz"],
-   "body": {"op": "*", "args": ["watsat", {"op": "^", "args": [{"op": "/", "args": [{"op": "apply_expression_template", "args": [], "name": "frozen_water_potential", "bindings": {"hfus": "hfus", "tfrz": "tfrz", "T": "T", "grav": "grav"}}, "sucsat"]}, {"op": "/", "args": [-1.0, "bsw"]}]}, "dz", 1000.0]}
-  },
-  "snow_percolation_flux": {
-   "description": "Liquid-water percolation flux from a snow layer qflx_snow_percolation [mm/s], holding capacity ssi of the effective porosity: SnowHydrologyMod.F90:76-85. q = max(0, (vol_liq - ssi*eff_porosity)*dz*frac_sno) * 1000/dtime.",
-   "params": ["vol_liq", "eff_porosity", "ssi", "dz", "frac_sno", "dtime"],
-   "body": {"op": "*", "args": [{"op": "*", "args": [{"op": "max", "args": [0.0, {"op": "*", "args": [{"op": "-", "args": ["vol_liq", {"op": "*", "args": ["ssi", "eff_porosity"]}]}, "dz", "frac_sno"]}]}, 1000.0]}, {"op": "/", "args": [1.0, "dtime"]}]}
   },
   "canopy_intercept_liq": {
    "description": "Canopy liquid-interception fraction fpiliq [1] (CLM5 default, use_clm5_fpi = .false.): CanopyHydrologyMod.F90:538. fpiliq = 0.25*(1 - exp(-0.5*(elai+esai))).",
@@ -298,11 +105,6 @@
    "params": ["displar", "htop"],
    "body": {"op": "*", "args": ["displar", "htop"]}
   },
-  "monin_obukhov_zeta": {
-   "description": "Monin-Obukhov stability parameter zeta = zldis*vkc*grav*thvstar/(ustar^2*thv) [1]: BareGroundFluxesMod.F90:376.",
-   "params": ["zldis", "vkc", "grav", "thvstar", "ustar", "thv"],
-   "body": {"op": "/", "args": [{"op": "*", "args": ["zldis", "vkc", "grav", "thvstar"]}, {"op": "*", "args": [{"op": "^", "args": ["ustar", 2]}, "thv"]}]}
-  },
   "vegetation_emissivity": {
    "description": "Vegetation emissivity emv = 1 - exp(-(elai+esai)/avmuir) [1]: BiogeophysPreFluxCalcsMod.F90:397.",
    "params": ["elai", "esai", "avmuir"],
@@ -313,41 +115,12 @@
    "params": ["frac_sno_albedo", "emg_soil", "emg_snow"],
    "body": {"op": "+", "args": [{"op": "*", "args": [{"op": "-", "args": [1.0, "frac_sno_albedo"]}, "emg_soil"]}, {"op": "*", "args": ["frac_sno_albedo", "emg_snow"]}]}
   },
-  "dewpoint_magnus": {
-   "description": "Dewpoint temperature [K] from vapor pressure e [Pa] (Magnus, Alduchov & Eskridge 1996 coefficients; Lawrence 2005 eqn. 7): BareGroundFluxesMod.F90:571-576. Ice coefficients (A=22.587, B=273.86, C=611.21) for t < tfrz, liquid coefficients (A=17.625, B=243.04, C=610.94) otherwise; result shifted by tfrz.",
-   "params": ["e", "t", "tfrz"],
-   "body": {"op": "+", "args": [{"op": "ifelse", "args": [
-    {"op": "<", "args": ["t", "tfrz"]},
-    {"op": "/", "args": [{"op": "*", "args": [273.86, {"op": "log", "args": [{"op": "/", "args": ["e", 611.21]}]}]}, {"op": "-", "args": [22.587, {"op": "log", "args": [{"op": "/", "args": ["e", 611.21]}]}]}]},
-    {"op": "/", "args": [{"op": "*", "args": [243.04, {"op": "log", "args": [{"op": "/", "args": ["e", 610.94]}]}]}, {"op": "-", "args": [17.625, {"op": "log", "args": [{"op": "/", "args": ["e", 610.94]}]}]}]}
-   ]}, "tfrz"]}
-  },
-  "aerodynamic_ram": {
-   "description": "Aerodynamic resistance ram = 1/(ustar^2/um) = um/ustar^2 [s/m]: BareGroundFluxesMod.F90:400.",
-   "params": ["ustar", "um"],
-   "body": {"op": "*", "args": ["um", {"op": "^", "args": ["ustar", -2]}]}
-  },
-  "aerodynamic_rah": {
-   "description": "Thermal resistance rah = 1/(temp1*ustar) [s/m]: BareGroundFluxesMod.F90:401. temp1 is the Monin-Obukhov potential-temperature profile function.",
-   "params": ["temp1", "ustar"],
-   "body": {"op": "/", "args": [1.0, {"op": "*", "args": ["temp1", "ustar"]}]}
-  },
   "latent_heat_of_vapor": {
    "description": "Latent heat of vaporization or sublimation htvp [J/kg]: BiogeophysPreFluxCalcsMod.F90:354-358. hsub when the top layer has ice but no liquid (h2osoi_liq <= 0 and h2osoi_ice > 0), else hvap.",
    "params": ["h2osoi_liq_top", "h2osoi_ice_top", "hvap", "hsub"],
    "body": {"op": "ifelse", "args": [
     {"op": "and", "args": [{"op": "<=", "args": ["h2osoi_liq_top", 0.0]}, {"op": ">", "args": ["h2osoi_ice_top", 0.0]}]},
     "hsub", "hvap"
-   ]}
-  },
-  "snow_albedo_two_stream_approx": {
-   "description": "SCHEME GAP (documented in stage2/README-clm.md): a single-effective-layer delta-Eddington approximation to the SNICAR_RT multi-layer Toon et al. (1989) tridiagonal snow albedo (SnowSnicarMod.F90:1090-1346), used until the multi-layer solve is transcribed. With s = sqrt(1 - omega_eff) the semi-infinite reflectance is Rinf = (1-s)/(1+s); the substrate (albsfc) is folded in through the exponentially attenuated double pass exp(-2*tau_eff/s). NOT the SNICAR value; the tau_eff/omega_eff are the column thickness-weighted delta-Eddington transforms of snow_layer_optical_depth / snow_layer_ssa / delta_eddington_*.",
-   "params": ["tau_eff", "omega_eff", "albsfc"],
-   "body": {"op": "+", "args": ["rinf", {
-    "op": "/", "args": [
-     {"op": "*", "args": [{"op": "^", "args": [{"op": "-", "args": [1.0, "rinf"]}, 2]}, "albsfc", {"op": "exp", "args": [{"op": "*", "args": [-2.0, {"op": "/", "args": ["tau_eff", {"op": "sqrt", "args": [{"op": "-", "args": [1.0, "omega_eff"]}]}]}]}]}]},
-     {"op": "-", "args": [1.0, {"op": "*", "args": ["rinf", "albsfc", {"op": "exp", "args": [{"op": "*", "args": [-2.0, {"op": "/", "args": ["tau_eff", {"op": "sqrt", "args": [{"op": "-", "args": [1.0, "omega_eff"]}]}]}]}]}]}]}
-    ]}
    ]}
   }
  }

@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_canopy",
-  "description": "CTSM/CLM canopy state and flux interface (stage 2 of the EqESM project): the canopy interception/throughfall hydrology of CanopyHydrologyMod.F90 and the pre-flux interface of BiogeophysPreFluxCalcsMod.F90 plus SurfaceHumidityMod.F90, transcribed from ctsm5.4.063 (cesm3.0-alphabranch). CanopyHydrology is CanopyInterceptionAndThroughfall (CanopyHydrologyMod.F90:167) written as the interception fractions fpiliq/fpisnow (:538/:541), direct throughfall and interception (:544-549), the canopy storage ODE for liqcan/snocan (UpdateState_AddInterceptionToCanopy :702-703, UpdateState_RemoveCanfallFromCanopy :835, UpdateState_RemoveSnowUnloading :978), the excess-storage fall fluxes (:755-758), snow unloading (BulkFlux_SnowUnloading :917-925) and the wet/dry/snow-covered fractions (BulkDiag_FracWet :1120), and the resulting ground fluxes qflx_snow_grnd/qflx_liq_grnd (SumFlux_FluxesOntoGround :1023). CanopyFluxInterface is the pre-flux state consumed by CanopyFluxes/BareGroundFluxes/SoilFluxes: SetZ0mDisp (BiogeophysPreFluxCalcsMod.F90:122, ZengWang2007 branch :175-176), CalcInitialTemperatureAndEnergyVars (:225: t_grnd :334-339, emg :348, htvp :354-358, thv :364, emv :397, thm :400), and CalculateSurfaceHumidity (SurfaceHumidityMod.F90:41: qg_soil/qg_snow/qg_h2osfc/qg/dqgdT :185-232, soilalpha :139-141). All pointwise laws are imported by reference from ./clm_templates.esm. The tests block is empty pending the stage-1 clm_canopyflux.csv / clm_run_imports.csv dumps; see stage2/README-clm.md. Reference: stage1/cesm/components/clm/src/biogeophys/.",
+  "description": "CTSM/CLM canopy state and flux interface (stage 2 of the EqESM project): the canopy interception/throughfall hydrology of CanopyHydrologyMod.F90 and the pre-flux interface of BiogeophysPreFluxCalcsMod.F90 plus SurfaceHumidityMod.F90, transcribed from ctsm5.4.063 (cesm3.0-alphabranch). CanopyHydrology is CanopyInterceptionAndThroughfall (CanopyHydrologyMod.F90:167) written as the interception fractions fpiliq/fpisnow (:538/:541; 0 outside the interception window so the variables are well-defined, matching the stage-1 dump's effective-coefficient convention), direct throughfall and interception (:544-549), the canopy storage ODEs for liqcan/snocan (the continuous limit of the Fortran's discrete updates: AddInterceptionToCanopy :702-703 with the max(0,.) positivity clamps, RemoveCanfallFromCanopy :835, RemoveSnowUnloading :978), the excess-storage fall fluxes (:755-758, computed only when the patch intercepts, BulkFlux_CanopyExcess :730-741), snow unloading (BulkFlux_SnowUnloading :917-925) and the wet/dry/snow-covered fractions (BulkDiag_FracWet :1120-1195), and the resulting ground fluxes qflx_snow_grnd/qflx_liq_grnd including the drip-irrigation term (SumFlux_FluxesOntoGround :1023, :1063-1067). CanopyFluxInterface is the pre-flux state consumed by CanopyFluxes/BareGroundFluxes/SoilFluxes: SetZ0mDisp (BiogeophysPreFluxCalcsMod.F90:122, ZengWang2007 branch :175-176), CalcInitialTemperatureAndEnergyVars (:225: t_grnd :334-339, emg :348, htvp :354-358, thv :364, emv :397, thm :400), and CalculateSurfaceHumidity (SurfaceHumidityMod.F90:41, vegetated-landunit branch: soilalpha :139-141, the smpmin-clamped soil relative humidity hr :135-138, qsatg_soil/qsatgdT_soil with the supersaturated-window clamp :185-190, qg_soil :191, the snow/h2osfc humidities :194-209, qg :215-216, dqgdT :197-210). All pointwise laws are imported by reference from ./clm_templates.esm. The tests pin the stage-1 CLM dumps (stage1/dumps/clm/): clm_qsat.csv, clm_run_imports.csv, clm_bareground.csv, clm_soilfluxes.csv and clm_canopyflux.csv; see stage2/README-clm.md for the coverage map and the dump defects (t_soisno lower-bound shift in clm_soilfluxes.csv/clm_soiltemp.csv, qsdT/esdT identically 0 in clm_qsat.csv). Reference: stage1/cesm/components/clm/src/biogeophys/.",
   "license": "MIT"
  },
  "index_sets": {
@@ -22,38 +22,40 @@
     "qflx_liq_above_canopy": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "liquid water input above the canopy = forc_rain + qflx_irrig_sprinkler (SumFlux_TopOfCanopyInputs, CanopyHydrologyMod.F90:438-476), [mm/s]"},
     "forc_snow_patch": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "atmospheric snowfall at patch level (CanopyHydrologyMod.F90:203,248-255), [mm/s]"},
     "check_point": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "1 when the patch intercepts precipitation: frac_veg_nosno == 1 and (forc_snow + qflx_liq_above_canopy) > 0 (CanopyHydrologyMod.F90:531-532), [-]"},
-    "fpiliq": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "liquid interception fraction (CanopyHydrologyMod.F90:538), [-]"},
-    "fpisnow": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "snow interception fraction (CanopyHydrologyMod.F90:541), [-]"},
+    "fpiliq": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "effective liquid interception coefficient, 0 outside the interception window (CanopyHydrologyMod.F90:538; the stage-1 dump normalizes the coefficient to 1 - throughfall/input, 0 when there is no input), [-]"},
+    "fpisnow": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "effective snow interception coefficient, 0 outside the interception window (CanopyHydrologyMod.F90:541; dump-normalized as fpiliq), [-]"},
     "qflx_through_snow": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy throughfall of snow (CanopyHydrologyMod.F90:544,560), [mm/s]"},
     "qflx_through_liq": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy throughfall of liquid (CanopyHydrologyMod.F90:545,561), [mm/s]"},
     "qflx_intercepted_snow": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy interception of snow (CanopyHydrologyMod.F90:548), [mm/s]"},
     "qflx_intercepted_liq": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy interception of liquid (CanopyHydrologyMod.F90:549), [mm/s]"},
-    "liqcan": {"type": "unknown", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy liquid water storage, an ODE state (CanopyHydrologyMod.F90:686,703), [mm]"},
-    "snocan": {"type": "unknown", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy snow water storage, an ODE state (CanopyHydrologyMod.F90:685,702), [mm]"},
+    "liqcan": {"type": "unknown", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy liquid water storage, an ODE state (the continuous limit of the discrete update chain AddInterceptionToCanopy -> RemoveCanfallFromCanopy, CanopyHydrologyMod.F90:686,703,835), [mm]"},
+    "snocan": {"type": "unknown", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy snow water storage, an ODE state (AddInterceptionToCanopy -> RemoveCanfallFromCanopy -> RemoveSnowUnloading, CanopyHydrologyMod.F90:685,702,835,978), [mm]"},
     "h2ocan": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "total canopy water h2ocan = liqcan + snocan (CanopyHydrologyMod.F90:1215), [mm]"},
+    "vegt": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "leaf+stem area index weighted by the vegetation fraction vegt = frac_veg_nosno*(elai + esai) (BulkDiag_FracWet, CanopyHydrologyMod.F90:1173), [-]"},
     "liqcanmx": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "maximum canopy liquid storage (CanopyHydrologyMod.F90:755), [mm]"},
     "snocanmx": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "maximum canopy snow storage (CanopyHydrologyMod.F90:757), [mm]"},
-    "qflx_liqcanfall": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "rate of excess canopy liquid falling off (CanopyHydrologyMod.F90:756), [mm/s]"},
-    "qflx_snocanfall": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "rate of excess canopy snow falling off (CanopyHydrologyMod.F90:758), [mm/s]"},
+    "qflx_liqcanfall": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "rate of excess canopy liquid falling off, 0 outside the interception window (CanopyHydrologyMod.F90:756, gated on check_point in BulkFlux_CanopyExcess :730-741), [mm/s]"},
+    "qflx_snocanfall": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "rate of excess canopy snow falling off, 0 outside the interception window (CanopyHydrologyMod.F90:758, gated on check_point :730-741), [mm/s]"},
     "qflx_snotempunload": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy snow unloading from temperature (CanopyHydrologyMod.F90:917), [mm/s]"},
     "qflx_snowindunload": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy snow unloading from wind (CanopyHydrologyMod.F90:918), [mm/s]"},
     "qflx_snow_unload": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "total canopy snow unloading (CanopyHydrologyMod.F90:919), [mm/s]"},
-    "fwet": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of canopy that is wet (CanopyHydrologyMod.F90:1160), [-]"},
-    "fcansno": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of canopy that is snow-covered (CanopyHydrologyMod.F90:1162), [-]"},
-    "fdry": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of foliage that is green and dry (CanopyHydrologyMod.F90:1171), [-]"},
+    "fwet": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of canopy that is wet, 0 unless the canopy is vegetated and holds water (CanopyHydrologyMod.F90:1160,1170-1171), [-]"},
+    "fcansno": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of canopy that is snow-covered, clamped at 1 (CanopyHydrologyMod.F90:1162,1173-1174), [-]"},
+    "fdry": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "fraction of foliage that is green and dry (CanopyHydrologyMod.F90:1171,1194), [-]"},
     "qflx_snow_grnd_patch": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "snow reaching the ground after interception (CanopyHydrologyMod.F90:1059-1061), [mm/s]"},
-    "qflx_liq_grnd_patch": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "liquid reaching the ground after interception (CanopyHydrologyMod.F90:1063-1067), [mm/s]"},
+    "qflx_liq_grnd_patch": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "liquid reaching the ground after interception, including the drip irrigation that falls through the canopy (CanopyHydrologyMod.F90:1063-1067), [mm/s]"},
     "forc_rain": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "atmospheric rainfall at patch level (forc_rain_downscaled_col), [mm/s]"},
     "forc_snow": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "atmospheric snowfall at patch level (forc_snow_downscaled_col), [mm/s]"},
     "qflx_irrig_sprinkler": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "sprinkler irrigation added above the canopy, [mm/s]"},
+    "qflx_irrig_drip": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "drip irrigation that falls through the canopy straight to the ground (SumFlux_FluxesOntoGround, CanopyHydrologyMod.F90:1063-1067), [mm/s]"},
     "elai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided leaf area index with burying by snow, [-]"},
     "esai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided stem area index with burying by snow, [-]"},
     "frac_veg_nosno": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "fraction of vegetation not covered by snow (0 or 1), [-]"},
-    "liq_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 0.1, "description": "liqcanmx per unit lai+sai (CanopyHydrologyMod.F90:755), [mm]"},
-    "snow_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 0.1, "description": "snocanmx per unit lai+sai (CanopyHydrologyMod.F90:757), [mm]"},
-    "maximum_leaf_wetted_fraction": {"type": "parameter", "units": "1", "default": 0.05, "description": "maximum fwet (CanopyHydrologyMod.F90:1161), [-]"},
-    "snowcan_unload_temp_fact": {"type": "parameter", "units": "K*s", "default": 187000.0, "description": "temperature snow-unloading factor (CanopyHydrologyMod.F90:917), [K s]"},
-    "snowcan_unload_wind_fact": {"type": "parameter", "units": "1/m", "default": 431000.0, "description": "wind snow-unloading factor (CanopyHydrologyMod.F90:918), [1/m]"},
+    "liq_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 0.1, "description": "liqcanmx per unit lai+sai (ctsm60_params.c260518.nc liq_canopy_storage_scalar = 0.1; CanopyHydrologyMod.F90:755), [mm]"},
+    "snow_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 6.0, "description": "snocanmx per unit lai+sai (ctsm60_params.c260518.nc snow_canopy_storage_scalar = 6.0; CanopyHydrologyMod.F90:757), [mm]"},
+    "maximum_leaf_wetted_fraction": {"type": "parameter", "units": "1", "default": 0.05, "description": "maximum fwet (ctsm60_params.c260518.nc maximum_leaf_wetted_fraction = 0.05; CanopyHydrologyMod.F90:1161), [-]"},
+    "snowcan_unload_temp_fact": {"type": "parameter", "units": "K*s", "default": 187000.0, "description": "temperature snow-unloading factor C2 of Roesch et al. (2001) (ctsm60_params.c260518.nc snowcan_unload_temp_fact = 187000; CanopyHydrologyMod.F90:917), [K s]"},
+    "snowcan_unload_wind_fact": {"type": "parameter", "units": "1", "default": 0.5, "description": "wind snow-unloading scaling factor modifying the fixed 1.56e5 divisor C3 of Roesch et al. (2001) (ctsm60_params.c260518.nc snowcan_unload_wind_fact = 0.5; CanopyHydrologyMod.F90:918), [-]"},
     "forc_t": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "atmospheric temperature (forc_t_downscaled_col), [K]"},
     "forc_wind": {"type": "parameter", "shape": ["patch"], "units": "m/s", "default": 0.0, "description": "atmospheric wind speed (forc_wind_grc), [m/s]"},
     "dtime": {"type": "parameter", "units": "s", "default": 1800.0, "description": "land model time step (get_step_size_real), [s]"}
@@ -66,8 +68,14 @@
       {"op": ">", "args": ["frac_veg_nosno", 0.5]},
       {"op": ">", "args": [{"op": "+", "args": ["forc_snow_patch", "qflx_liq_above_canopy"]}, 0.0]}]},
      1.0, 0.0]}},
-    {"lhs": "fpiliq", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_liq", "bindings": {"elai": "elai", "esai": "esai"}}},
-    {"lhs": "fpisnow", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_snow", "bindings": {"elai": "elai", "esai": "esai"}}},
+    {"lhs": "fpiliq", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["check_point", 0.5]},
+     {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_liq", "bindings": {"elai": "elai", "esai": "esai"}},
+     0.0]}},
+    {"lhs": "fpisnow", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["check_point", 0.5]},
+     {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_snow", "bindings": {"elai": "elai", "esai": "esai"}},
+     0.0]}},
     {"lhs": "qflx_through_snow", "rhs": {"op": "ifelse", "args": [
      {"op": ">", "args": ["check_point", 0.5]},
      {"op": "*", "args": ["forc_snow_patch", {"op": "-", "args": [1.0, "fpisnow"]}]},
@@ -87,10 +95,17 @@
     {"lhs": {"op": "D", "args": ["liqcan"], "wrt": "t"},
      "rhs": {"op": "-", "args": ["qflx_intercepted_liq", "qflx_liqcanfall"]}},
     {"lhs": "h2ocan", "rhs": {"op": "+", "args": ["liqcan", "snocan"]}},
+    {"lhs": "vegt", "rhs": {"op": "*", "args": ["frac_veg_nosno", {"op": "+", "args": ["elai", "esai"]}]}},
     {"lhs": "liqcanmx", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_storage_max", "bindings": {"storage_scalar": "liq_canopy_storage_scalar", "elai": "elai", "esai": "esai"}}},
     {"lhs": "snocanmx", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_storage_max", "bindings": {"storage_scalar": "snow_canopy_storage_scalar", "elai": "elai", "esai": "esai"}}},
-    {"lhs": "qflx_liqcanfall", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_excess_flux", "bindings": {"can": "liqcan", "canmx": "liqcanmx", "dtime": "dtime"}}},
-    {"lhs": "qflx_snocanfall", "rhs": {"op": "apply_expression_template", "args": [], "name": "canopy_excess_flux", "bindings": {"can": "snocan", "canmx": "snocanmx", "dtime": "dtime"}}},
+    {"lhs": "qflx_liqcanfall", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["check_point", 0.5]},
+     {"op": "apply_expression_template", "args": [], "name": "canopy_excess_flux", "bindings": {"can": "liqcan", "canmx": "liqcanmx", "dtime": "dtime"}},
+     0.0]}},
+    {"lhs": "qflx_snocanfall", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["check_point", 0.5]},
+     {"op": "apply_expression_template", "args": [], "name": "canopy_excess_flux", "bindings": {"can": "snocan", "canmx": "snocanmx", "dtime": "dtime"}},
+     0.0]}},
     {"lhs": "qflx_snotempunload", "rhs": {"op": "ifelse", "args": [
      {"op": "and", "args": [{"op": ">", "args": ["frac_veg_nosno", 0.5]}, {"op": ">", "args": ["snocan", 0.0]}]},
      {"op": "max", "args": [0.0, {"op": "/", "args": [{"op": "*", "args": ["snocan", {"op": "-", "args": ["forc_t", 270.15]}]}, "snowcan_unload_temp_fact"]}]},
@@ -103,23 +118,94 @@
      {"op": "+", "args": ["qflx_snotempunload", "qflx_snowindunload"]},
      {"op": "/", "args": ["snocan", "dtime"]}]}},
     {"lhs": "fwet", "rhs": {"op": "ifelse", "args": [
-     {"op": "and", "args": [{"op": ">", "args": ["frac_veg_nosno", 0.5]}, {"op": ">", "args": [{"op": "+", "args": ["elai", "esai"]}, 0.0]}]},
+     {"op": "and", "args": [{"op": ">", "args": ["frac_veg_nosno", 0.5]}, {"op": ">", "args": ["h2ocan", 0.0]}]},
      {"op": "min", "args": [
-      {"op": "^", "args": [{"op": "/", "args": ["h2ocan", {"op": "*", "args": [{"op": "+", "args": ["elai", "esai"]}, "liq_canopy_storage_scalar"]}]}, 0.666666666666]},
+      {"op": "^", "args": [{"op": "/", "args": ["h2ocan", {"op": "*", "args": ["vegt", "liq_canopy_storage_scalar"]}]}, 0.666666666666]},
       "maximum_leaf_wetted_fraction"]},
      0.0]}},
     {"lhs": "fcansno", "rhs": {"op": "ifelse", "args": [
-     {"op": "and", "args": [{"op": ">", "args": ["frac_veg_nosno", 0.5]}, {"op": ">", "args": ["snocan", 0.0]}]},
-     {"op": "^", "args": [{"op": "/", "args": ["snocan", {"op": "*", "args": [{"op": "+", "args": ["elai", "esai"]}, "snow_canopy_storage_scalar"]}]}, 0.15]},
+     {"op": "and", "args": [
+      {"op": ">", "args": ["frac_veg_nosno", 0.5]},
+      {"op": ">", "args": ["h2ocan", 0.0]},
+      {"op": ">", "args": ["snocan", 0.0]}]},
+     {"op": "min", "args": [
+      {"op": "^", "args": [{"op": "/", "args": ["snocan", {"op": "*", "args": ["vegt", "snow_canopy_storage_scalar"]}]}, 0.15]},
+      1.0]},
      0.0]}},
     {"lhs": "fdry", "rhs": {"op": "ifelse", "args": [
      {"op": ">", "args": ["frac_veg_nosno", 0.5]},
      {"op": "*", "args": [{"op": "-", "args": [1.0, "fwet"]}, {"op": "/", "args": ["elai", {"op": "+", "args": ["elai", "esai"]}]}]},
      0.0]}},
     {"lhs": "qflx_snow_grnd_patch", "rhs": {"op": "+", "args": ["qflx_through_snow", "qflx_snocanfall", "qflx_snow_unload"]}},
-    {"lhs": "qflx_liq_grnd_patch", "rhs": {"op": "+", "args": ["qflx_through_liq", "qflx_liqcanfall"]}}
+    {"lhs": "qflx_liq_grnd_patch", "rhs": {"op": "+", "args": ["qflx_through_liq", "qflx_liqcanfall", "qflx_irrig_drip"]}}
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "clm_canopy_throughfall_snow_step1_p1",
+     "description": "Instantaneous pin against clm_canopyflux.csv (step 1, patch 1, hyd stage): a bare patch (frac_veg_nosno = 0) receives forc_snow = 5.2221606918262895e-06 mm/s with no rain. check_point = 0, so the interception branch is skipped: throughfall carries the full snowfall (CanopyHydrologyMod.F90:544,560), the interception and excess-fall fluxes are 0, the canopy fractions are 0, and qflx_snow_grnd_patch = qflx_through_snow (SumFlux_FluxesOntoGround :1059-1061; qflx_snocanfall = qflx_snow_unload = 0) while qflx_liq_grnd_patch = 0 (throughfall 0 + liqcanfall 0 + qflx_irrig_drip 0, :1063-1067). The dump row carries exactly these values (qflx_through_snow = qflx_snow_grnd = forc_snow to round-off on all 192 hyd rows).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_snow": [5.2221606918262895e-06],
+      "forc_rain": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [0.0],
+      "elai": [0.0],
+      "esai": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qflx_through_snow", "time": 0.0, "expected": 5.2221606918262895e-06, "coords": {"patch": 1}},
+      {"variable": "qflx_snow_grnd_patch", "time": 0.0, "expected": 5.2221606918262895e-06, "coords": {"patch": 1}},
+      {"variable": "qflx_intercepted_snow", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "qflx_through_liq", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "qflx_liq_grnd_patch", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "fpiliq", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "fpisnow", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "fcansno", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_throughfall_nosnow_step12_p16",
+     "description": "Instantaneous pin against clm_canopyflux.csv (step 12, patch 16, hyd stage): a bare patch with no precipitation at all (forc_snow = forc_rain = 0). Everything evaluates to 0: throughfall of snow and liquid, the ground fluxes and the canopy fractions. The dump row is all zeros (patch 16 is one of the traced patches with forc_snow = 0 at step 12).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_snow": [0.0],
+      "forc_rain": [0.0],
+      "frac_veg_nosno": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qflx_through_snow", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "qflx_snow_grnd_patch", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "qflx_liq_grnd_patch", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_ode_zeros_step6_p3",
+     "description": "One-step continuous-ODE trace against clm_canopyflux.csv (step 6, patch 3): the ent-stage row carries liqcan = snocan = 0 with frac_veg_nosno = 0 and forc_snow = 7.0582810492522795e-06 mm/s; the hyd-stage row (the end of the same 1800 s step) carries liqcan = snocan = 0 and qflx_snow_grnd = 7.0582810492522795e-06. With check_point = 0 the interception, excess-fall and snow-unloading fluxes are all identically 0, so d(liqcan)/dt = d(snocan)/dt = 0 and the integrated state stays at 0 exactly (no scheme gap: the Fortran's discrete max(0, .) clamps of UpdateState_AddInterceptionToCanopy :702-703 are inert at zero storage). Pins the ODE wiring and the check_point gate through a full 1800 s integration.",
+     "time_span": {"start": 0.0, "end": 1800.0},
+     "parameter_overrides": {
+      "forc_snow": [7.0582810492522795e-06],
+      "forc_rain": [0.0],
+      "frac_veg_nosno": [0.0],
+      "dtime": 1800.0
+     },
+     "initial_conditions": {
+      "liqcan": [0.0],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-18},
+     "assertions": [
+      {"variable": "liqcan", "time": 1800.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "snocan", "time": 1800.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "qflx_snow_grnd_patch", "time": 1800.0, "expected": 7.0582810492522795e-06, "coords": {"patch": 1}},
+      {"variable": "qflx_intercepted_snow", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    }
+   ]
   },
   "CanopyFluxInterface": {
    "expression_template_imports": [
@@ -132,23 +218,25 @@
     "emg": {"type": "unknown", "shape": ["column"], "units": "1", "description": "ground emissivity (BiogeophysPreFluxCalcsMod.F90:344-350), [-]"},
     "emv": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "vegetation emissivity (BiogeophysPreFluxCalcsMod.F90:397), [-]"},
     "htvp": {"type": "unknown", "shape": ["column"], "units": "J/kg", "description": "latent heat of vaporization or sublimation (BiogeophysPreFluxCalcsMod.F90:354-358), [J/kg]"},
-    "thm": {"type": "unknown", "shape": ["patch"], "units": "K", "description": "intermediate temperature forc_t + 0.0098*forc_hgt_t (BiogeophysPreFluxCalcsMod.F90:400), [K]"},
+    "thm": {"type": "unknown", "shape": ["patch"], "units": "K", "description": "intermediate temperature forc_t + 0.0098*forc_hgt_t where forc_hgt_t is the reference height of the temperature observation including the roughness correction (BiogeophysPreFluxCalcsMod.F90:400 with forc_hgt_t_patch of FrictionVelocityMod.F90:664; for the bare-ground traced patches forc_hgt_t_patch = 30.0 m + z0mg, see the thm tests), [K]"},
     "thv": {"type": "unknown", "shape": ["column"], "units": "K", "description": "virtual potential temperature forc_th*(1+0.61*forc_q) (BiogeophysPreFluxCalcsMod.F90:364), [K]"},
     "beta": {"type": "unknown", "shape": ["column"], "units": "1", "description": "coefficient of convective velocity, set to 1 (BiogeophysPreFluxCalcsMod.F90:362), [-]"},
     "zii": {"type": "unknown", "shape": ["column"], "units": "m", "description": "convective boundary layer height, set to 1000 (BiogeophysPreFluxCalcsMod.F90:363), [m]"},
-    "hr": {"type": "unknown", "shape": ["column"], "units": "1", "description": "soil surface relative humidity exp(psit/(roverg*T1)) (SurfaceHumidityMod.F90:135-138), [-]"},
-    "s_top": {"type": "unknown", "shape": ["column"], "units": "1", "description": "relative saturation of the top soil layer, fac = min(1, max(0.01, wx/watsat)) (SurfaceHumidityMod.F90:132-134), [-]"},
-    "soilalpha": {"type": "unknown", "shape": ["column"], "units": "1", "description": "factor reducing ground saturated specific humidity qred (SurfaceHumidityMod.F90:139-141), [-]"},
-    "qsatg_soil": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "saturation specific humidity at the soil temperature, clamped to forc_q in the supersaturated window (SurfaceHumidityMod.F90:185-190), [kg/kg]"},
+    "s_top": {"type": "unknown", "shape": ["column"], "units": "1", "description": "relative saturation of the top soil layer, fac = min(1, max(0.01, wx/watsat)) with wx the volumetric water content (SurfaceHumidityMod.F90:132-134), [-]"},
+    "hr": {"type": "unknown", "shape": ["column"], "units": "1", "description": "soil surface relative humidity exp(psit/(roverg*T1)) with psit = max(smpmin, -sucsat*fac^-bsw) (SurfaceHumidityMod.F90:135-138, the smpmin clamp at :136), [-]"},
+    "soilalpha": {"type": "unknown", "shape": ["column"], "units": "1", "description": "factor reducing ground saturated specific humidity qred = (1-frac_sno_fluxes-frac_h2osfc)*hr + frac_sno_fluxes + frac_h2osfc (SurfaceHumidityMod.F90:139-141), [-]"},
+    "qsatg_soil_raw": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "unclamped saturation specific humidity at the soil temperature (the raw QSat result before the supersaturated-window clamp, SurfaceHumidityMod.F90:185), [kg/kg]"},
+    "qsatg_soil": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "saturation specific humidity at the soil temperature, clamped to forc_q in the supersaturated window qsatg > forc_q > hr*qsatg (SurfaceHumidityMod.F90:185-190), [kg/kg]"},
+    "qsatgdT_soil": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qsatg_soil)/dT, zeroed in the supersaturated window (SurfaceHumidityMod.F90:186-190), [1/K]"},
     "qsatg_snow": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "saturation specific humidity at the snow temperature (SurfaceHumidityMod.F90:194), [kg/kg]"},
-    "qsatg_h2osfc": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "saturation specific humidity at the surface-water temperature (SurfaceHumidityMod.F90:207), [kg/kg]"},
-    "qsatgdT_soil": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qsatg_soil)/dT (SurfaceHumidityMod.F90:186), [1/K]"},
     "qsatgdT_snow": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qsatg_snow)/dT (SurfaceHumidityMod.F90:195), [1/K]"},
-    "qg_soil": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the soil surface (SurfaceHumidityMod.F90:191), [kg/kg]"},
-    "qg_snow": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the snow surface (SurfaceHumidityMod.F90:196), [kg/kg]"},
-    "qg_h2osfc": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the surface-water surface (SurfaceHumidityMod.F90:209), [kg/kg]"},
+    "qsatg_h2osfc": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "saturation specific humidity at the surface-water temperature (SurfaceHumidityMod.F90:207), [kg/kg]"},
+    "qsatgdT_h2osfc": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qsatg_h2osfc)/dT (SurfaceHumidityMod.F90:208), [1/K]"},
+    "qg_soil": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the soil surface hr*qsatg_soil with the clamped saturation humidity (SurfaceHumidityMod.F90:191), [kg/kg]"},
+    "qg_snow": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the snow surface, qg_soil when no snow (SurfaceHumidityMod.F90:194-196, the snl = 0 consistency branch at :198-203), [kg/kg]"},
+    "qg_h2osfc": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "specific humidity at the surface-water surface, qg_soil without surface water (SurfaceHumidityMod.F90:207-213), [kg/kg]"},
     "qg": {"type": "unknown", "shape": ["column"], "units": "kg/kg", "description": "area-weighted ground specific humidity (SurfaceHumidityMod.F90:215-216), [kg/kg]"},
-    "dqgdT": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qg)/dT (SurfaceHumidityMod.F90:197-210), [1/K]"},
+    "dqgdT": {"type": "unknown", "shape": ["column"], "units": "1/K", "description": "d(qg)/dT including the frac_h2osfc*qsatgdT_h2osfc surface-water term (SurfaceHumidityMod.F90:197-210), [1/K]"},
     "htop": {"type": "parameter", "shape": ["patch"], "units": "m", "default": 0.0, "description": "canopy top height (canopystate htop), [m]"},
     "elai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided leaf area index with burying by snow, [-]"},
     "esai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided stem area index with burying by snow, [-]"},
@@ -170,14 +258,15 @@
     "bsw_top": {"type": "parameter", "shape": ["column"], "units": "1", "default": 6.0, "description": "Clapp-Hornberg exponent of the top layer, [-]"},
     "denh2o": {"type": "parameter", "units": "kg/m^3", "default": 1000.0, "description": "density of liquid water (clm_varcon denh2o), [kg/m3]"},
     "denice": {"type": "parameter", "units": "kg/m^3", "default": 917.0, "description": "density of ice (clm_varcon denice), [kg/m3]"},
-    "roverg": {"type": "parameter", "units": "J/kg/K", "default": 461.5, "description": "gas constant for water vapor (clm_varcon roverg), [J/kg/K]"},
+    "roverg": {"type": "parameter", "units": "mm/K", "default": 47062.72789962227, "description": "Rw/g*1000 with Rw = R/M_wv the water-vapor gas constant and g gravity, converting soil water potential from mm of head to temperature units in hr = exp(psit/(roverg*T)) (clm_varcon roverg = SHR_CONST_RWV/SHR_CONST_G*1000), [mm/K]"},
+    "smpmin": {"type": "parameter", "units": "mm", "default": -1e8, "description": "restriction for min of soil potential (soilstate smpmin = -1.e8, SoilStateInitTimeConstMod.F90:246), [mm]"},
     "forc_t": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "atmospheric temperature, [K]"},
     "forc_th": {"type": "parameter", "shape": ["column"], "units": "K", "default": 273.15, "description": "atmospheric potential temperature, [K]"},
     "forc_q": {"type": "parameter", "shape": ["column"], "units": "kg/kg", "default": 0.0, "description": "atmospheric specific humidity, [kg/kg]"},
     "forc_pbot": {"type": "parameter", "shape": ["column"], "units": "Pa", "default": 101325.0, "description": "atmospheric pressure, [Pa]"},
-    "forc_hgt_t": {"type": "parameter", "shape": ["patch"], "units": "m", "default": 30.0, "description": "observational height of temperature, [m]"},
-    "hvap": {"type": "parameter", "units": "J/kg", "default": 2.501e6, "description": "latent heat of vaporization (clm_varcon hvap), [J/kg]"},
-    "hsub": {"type": "parameter", "units": "J/kg", "default": 2.835e6, "description": "latent heat of sublimation (clm_varcon hsub), [J/kg]"},
+    "forc_hgt_t": {"type": "parameter", "shape": ["patch"], "units": "m", "default": 30.0, "description": "observational height of temperature including the ground roughness correction (for the bare-ground traced patches = 30.0 m forcing height + z0mg; FrictionVelocityMod.F90:632,664), [m]"},
+    "hvap": {"type": "parameter", "units": "J/kg", "default": 2.501e6, "description": "latent heat of vaporization (clm_varcon hvap = SHR_CONST_LATVAP), [J/kg]"},
+    "hsub": {"type": "parameter", "units": "J/kg", "default": 2.8347e6, "description": "latent heat of sublimation hsub = LATICE + LATVAP = 3.337e5 + 2.501e6 (clm_varcon hsub = SHR_CONST_LATSUB), [J/kg]"},
     "TKFRZ": {"type": "parameter", "units": "K", "default": 273.15, "description": "freezing point of water (SHR_CONST_TKFRZ), [K]"},
     "emg_soil": {"type": "parameter", "units": "1", "default": 0.96, "description": "bare-soil ground emissivity (BiogeophysPreFluxCalcsMod.F90:348), [-]"},
     "emg_snow": {"type": "parameter", "units": "1", "default": 0.97, "description": "snow ground emissivity (BiogeophysPreFluxCalcsMod.F90:348), [-]"}
@@ -206,22 +295,28 @@
      {"op": "+", "args": [{"op": "/", "args": ["h2osoi_liq_top", "denh2o"]}, {"op": "/", "args": ["h2osoi_ice_top", "denice"]}]},
      {"op": "*", "args": ["dz_top", "watsat_top"]}]}]}]}},
     {"lhs": "hr", "rhs": {"op": "exp", "args": [{"op": "/", "args": [
-     {"op": "apply_expression_template", "args": [], "name": "soil_suction", "bindings": {"sucsat": "sucsat_top", "bsw": "bsw_top", "s": "s_top"}},
+     {"op": "max", "args": ["smpmin", {"op": "apply_expression_template", "args": [], "name": "soil_suction", "bindings": {"sucsat": "sucsat_top", "bsw": "bsw_top", "s": "s_top"}}]},
      {"op": "*", "args": ["roverg", "t_soisno_top_soil"]}]}]}},
     {"lhs": "soilalpha", "rhs": {"op": "+", "args": [
      {"op": "*", "args": [{"op": "-", "args": [{"op": "-", "args": [1.0, "frac_sno_fluxes"]}, "frac_h2osfc"]}, "hr"]},
      "frac_sno_fluxes", "frac_h2osfc"]}},
-    {"lhs": "qsatg_soil", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "t_soisno_top_soil", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
-    {"lhs": "qsatgdT_soil", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qsdT", "bindings": {"T": "t_soisno_top_soil", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
+    {"lhs": "qsatg_soil_raw", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "t_soisno_top_soil", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
+    {"lhs": "qsatg_soil", "rhs": {"op": "ifelse", "args": [
+     {"op": "and", "args": [
+      {"op": ">", "args": ["qsatg_soil_raw", "forc_q"]},
+      {"op": ">", "args": ["forc_q", {"op": "*", "args": ["hr", "qsatg_soil_raw"]}]}]},
+     "forc_q", "qsatg_soil_raw"]}},
+    {"lhs": "qsatgdT_soil", "rhs": {"op": "ifelse", "args": [
+     {"op": "and", "args": [
+      {"op": ">", "args": ["qsatg_soil_raw", "forc_q"]},
+      {"op": ">", "args": ["forc_q", {"op": "*", "args": ["hr", "qsatg_soil_raw"]}]}]},
+     0.0,
+     {"op": "apply_expression_template", "args": [], "name": "qsat_qsdT", "bindings": {"T": "t_soisno_top_soil", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}]}},
+    {"lhs": "qg_soil", "rhs": {"op": "*", "args": ["hr", "qsatg_soil"]}},
     {"lhs": "qsatg_snow", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "t_soisno_top_snow", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
     {"lhs": "qsatgdT_snow", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qsdT", "bindings": {"T": "t_soisno_top_snow", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
     {"lhs": "qsatg_h2osfc", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "t_h2osfc", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
-    {"lhs": "qg_soil", "rhs": {"op": "ifelse", "args": [
-     {"op": "and", "args": [
-      {"op": ">", "args": ["qsatg_soil", "forc_q"]},
-      {"op": ">", "args": ["forc_q", {"op": "*", "args": ["hr", "qsatg_soil"]}]}]},
-     "forc_q",
-     {"op": "*", "args": ["hr", "qsatg_soil"]}]}},
+    {"lhs": "qsatgdT_h2osfc", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qsdT", "bindings": {"T": "t_h2osfc", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}},
     {"lhs": "qg_snow", "rhs": {"op": "ifelse", "args": [{"op": "<", "args": ["snl", 0.0]}, "qsatg_snow", "qg_soil"]}},
     {"lhs": "qg_h2osfc", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["frac_h2osfc", 0.0]}, "qsatg_h2osfc", "qg_soil"]}},
     {"lhs": "qg", "rhs": {"op": "+", "args": [
@@ -232,11 +327,195 @@
      {"op": "<", "args": ["snl", 0.0]},
      {"op": "+", "args": [
       {"op": "*", "args": ["frac_sno_fluxes", "qsatgdT_snow"]},
-      {"op": "*", "args": [{"op": "-", "args": [{"op": "-", "args": [1.0, "frac_sno_fluxes"]}, "frac_h2osfc"]}, {"op": "*", "args": ["hr", "qsatgdT_soil"]}]}]},
-     {"op": "*", "args": [{"op": "-", "args": [1.0, "frac_h2osfc"]}, {"op": "*", "args": ["hr", "qsatgdT_soil"]}]}
+      {"op": "*", "args": [{"op": "-", "args": [{"op": "-", "args": [1.0, "frac_sno_fluxes"]}, "frac_h2osfc"]}, {"op": "*", "args": ["hr", "qsatgdT_soil"]}]},
+      {"op": "ifelse", "args": [{"op": ">", "args": ["frac_h2osfc", 0.0]}, {"op": "*", "args": ["frac_h2osfc", "qsatgdT_h2osfc"]}, 0.0]}]},
+     {"op": "+", "args": [
+      {"op": "*", "args": [{"op": "-", "args": [1.0, "frac_h2osfc"]}, {"op": "*", "args": ["hr", "qsatgdT_soil"]}]},
+      {"op": "ifelse", "args": [{"op": ">", "args": ["frac_h2osfc", 0.0]}, {"op": "*", "args": ["frac_h2osfc", "qsatgdT_h2osfc"]}, 0.0]}]}
     ]}}
    ],
-   "tests": []
+   "tests": [
+    {
+     "id": "clm_qsat_snow_surfhum_step1_c1",
+     "description": "Surface-humidity boundary against clm_run_imports.csv (surfhum stage, step 1, column 1) with the input temperatures reconstructed from clm_soiltemp.csv (entry stage, same step/column): the top snow layer sits at t_soisno(c,snl+1) = 247.89440355155975 K (= the entry-dump j = 4 value; the preflux t_grnd equals it to round-off on all 192 rows, so frac_sno_fluxes = 1, frac_h2osfc = 0 and snl < 0), and forc_pbot = 68134.13610026057 Pa from clm_bareground.csv (step 1, column 1). Pins qg_snow = qsat_qs(T,p) (SurfaceHumidityMod.F90:194), dqgdT = qsatgdT_snow = qsat_qsdT(T,p) (:195,:201-202 — the qsat_qsdT template), qg = frac_sno_fluxes*qg_snow (:215-216), soilalpha = 1 (:139-141) and t_grnd = frac_sno_fluxes*t_soisno_top_snow (BiogeophysPreFluxCalcsMod.F90:334-339) — every asserted value reproduces the dump row to round-off (max rel err 2e-14 over all 192 surfhum rows).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [247.89440355155975],
+      "t_soisno_top_soil": [225.73971413063589],
+      "forc_pbot": [68134.13610026057],
+      "frac_sno_fluxes": [1.0],
+      "frac_h2osfc": [0.0],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00056337651511675002, "coords": {"column": 1}},
+      {"variable": "dqgdT", "time": 0.0, "expected": 5.6409773573906722e-05, "coords": {"column": 1}},
+      {"variable": "qg", "time": 0.0, "expected": 0.00056337651511675002, "coords": {"column": 1}},
+      {"variable": "soilalpha", "time": 0.0, "expected": 1.0, "coords": {"column": 1}},
+      {"variable": "t_grnd", "time": 0.0, "expected": 247.89440355155975, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_snow_surfhum_step6_c8",
+     "description": "Surface-humidity boundary against clm_run_imports.csv (surfhum stage, step 6, column 8) with t_soisno(c,snl+1) = 241.96073639532057 K from clm_soiltemp.csv (entry stage) and forc_pbot = 67186.833031985443 Pa from clm_bareground.csv. Same pins as clm_qsat_snow_surfhum_step1_c1 at a colder snowpack (qg_snow = 3.11e-4 kg/kg); reproduces the dump row to round-off.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [241.96073639532057],
+      "t_soisno_top_soil": [222.30208511095697],
+      "forc_pbot": [67186.833031985443],
+      "frac_sno_fluxes": [1.0],
+      "frac_h2osfc": [0.0],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00031085250551674698, "coords": {"column": 1}},
+      {"variable": "dqgdT", "time": 0.0, "expected": 3.2666066761867317e-05, "coords": {"column": 1}},
+      {"variable": "qg", "time": 0.0, "expected": 0.00031085250551674698, "coords": {"column": 1}},
+      {"variable": "soilalpha", "time": 0.0, "expected": 1.0, "coords": {"column": 1}},
+      {"variable": "t_grnd", "time": 0.0, "expected": 241.96073639532057, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_snow_surfhum_step12_c16",
+     "description": "Surface-humidity boundary against clm_run_imports.csv (surfhum stage, step 12, column 16) with t_soisno(c,snl+1) = 238.94086302846571 K from clm_soiltemp.csv (entry stage) and forc_pbot = 68444.897202159162 Pa from clm_bareground.csv. Same pins as clm_qsat_snow_surfhum_step1_c1 at the coldest traced column; reproduces the dump row to round-off.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [238.94086302846571],
+      "t_soisno_top_soil": [222.67810166186928],
+      "forc_pbot": [68444.897202159162],
+      "frac_sno_fluxes": [1.0],
+      "frac_h2osfc": [0.0],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00022127811594841744, "coords": {"column": 1}},
+      {"variable": "dqgdT", "time": 0.0, "expected": 2.3842994119383746e-05, "coords": {"column": 1}},
+      {"variable": "qg", "time": 0.0, "expected": 0.00022127811594841744, "coords": {"column": 1}},
+      {"variable": "soilalpha", "time": 0.0, "expected": 1.0, "coords": {"column": 1}},
+      {"variable": "t_grnd", "time": 0.0, "expected": 238.94086302846571, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_ice_law_tmin",
+     "description": "Ice-branch saturation humidity law against clm_qsat.csv row 191 (the coldest traced QSat call, T = 242.24520844746368 K = the dump's T minimum, p = 68444.897202159162 Pa): qsatg_snow = qsat_qs(T,p) (QSatMod.F90:90-103, ice polynomial c0..c8 scaled by 100 to Pa and 0.622*es/(p-0.378*es); the power-sum poly8 form agrees with the Fortran's Horner form to round-off) reproduces the dumped qs = 3.1438600814480351e-4 kg/kg. Also pins the qg_snow = qsatg_snow branch for snl < 0 (SurfaceHumidityMod.F90:194-196). The dump's qsdT/esdT columns are identically 0 (the traced callers do not request derivatives; the derivative law is pinned through dqgdT by the clm_qsat_snow_surfhum_* tests instead). All 192 qsat rows are at T < 273.15 K, so the liquid branch (td >= 0) of qsat_esat/qsat_esat_dT is untested — see stage2/README-clm.md.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [242.24520844746368],
+      "forc_pbot": [68444.897202159162],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qsatg_snow", "time": 0.0, "expected": 0.00031438600814480351, "coords": {"column": 1}},
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00031438600814480351, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_ice_law_row0",
+     "description": "Ice-branch saturation humidity law against clm_qsat.csv row 0 (step 1, first traced call, T = 249.84176062390847 K, p = 89397.54962865921 Pa): qsatg_snow reproduces the dumped qs = 5.2097179659388478e-4 kg/kg (QSatMod.F90:90-103).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [249.84176062390847],
+      "forc_pbot": [89397.54962865921],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qsatg_snow", "time": 0.0, "expected": 0.00052097179659388478, "coords": {"column": 1}},
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00052097179659388478, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_ice_law_mid",
+     "description": "Ice-branch saturation humidity law against clm_qsat.csv row 48 (T = 249.46382249196316 K, p = 68128.683789063114 Pa): qsatg_snow reproduces the dumped qs = 6.5864099448677336e-4 kg/kg (QSatMod.F90:90-103).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [249.46382249196316],
+      "forc_pbot": [68128.683789063114],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qsatg_snow", "time": 0.0, "expected": 0.00065864099448677336, "coords": {"column": 1}},
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00065864099448677336, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_qsat_ice_law_tmax",
+     "description": "Ice-branch saturation humidity law against clm_qsat.csv row 191 (the dump's T maximum, T = 254.53766055496772 K, p = 87604.757364526013 Pa): qsatg_snow reproduces the dumped qs = 8.3739404786668987e-4 kg/kg (QSatMod.F90:90-103).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_soisno_top_snow": [254.53766055496772],
+      "forc_pbot": [87604.757364526013],
+      "snl": [-1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qsatg_snow", "time": 0.0, "expected": 0.00083739404786668987, "coords": {"column": 1}},
+      {"variable": "qg_snow", "time": 0.0, "expected": 0.00083739404786668987, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_thm_bareground_step1_c1",
+     "description": "Intermediate temperature law against clm_bareground.csv (step 1, patch/column 1): thm = forc_t + 0.0098*forc_hgt_t (BiogeophysPreFluxCalcsMod.F90:400) with forc_hgt_t the patch-level reference height forc_hgt_t_patch = forc_hgt_t + z0hg + displa of the bare-ground branch (FrictionVelocityMod.F90:632,664; z0hg = z0mg = 8.1340205057601613e-05 m from the dump, displa = 0, GSWP3 forcing height 30 m). With forc_t = 249.30924313863048 K the model reproduces the dumped thm = 249.60324393576448 K; max |thm - forc_t - 0.0098*(30 + z0mg)| = 5.1e-14 over all 192 bareground rows.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_t": [249.30924313863048],
+      "forc_hgt_t": [30.000081340205058]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "thm", "time": 0.0, "expected": 249.60324393576448, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_thm_bareground_step7_c9",
+     "description": "Intermediate temperature law against clm_bareground.csv (step 7, patch/column 9): thm = forc_t + 0.0098*(30 + z0mg) at a colder air temperature (forc_t = 247.33711310932009 K) reproduces the dumped thm = 247.63111390645409 K (BiogeophysPreFluxCalcsMod.F90:400; FrictionVelocityMod.F90:632,664).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_t": [247.33711310932009],
+      "forc_hgt_t": [30.000081340205058]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "thm", "time": 0.0, "expected": 247.63111390645409, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_htvp_sublimation",
+     "description": "Latent heat of sublimation against clm_run_imports.csv (preflux stage: htvp = 2.8347e6 J/kg exactly on all 192 rows) and clm_soilfluxes.csv (eflx_lh_grnd/qflx_evap_soi = 2,834,700 exactly on all 192 rows, SoilFluxesMod.F90:394): the top layer is frozen with no liquid water (the traced columns carry h2osoi_liq = 0 and h2osoi_ice > 0), so the htvp branch condition h2osoi_liq <= 0 and h2osoi_ice > 0 (BiogeophysPreFluxCalcsMod.F90:354-358) selects hsub = LATICE + LATVAP = 3.337e5 + 2.501e6 = 2.8347e6 J/kg (SHR_CONST_LATSUB, not the 2.835e6 icepack-style rounded value).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "h2osoi_liq_top": [0.0],
+      "h2osoi_ice_top": [1.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "htvp", "time": 0.0, "expected": 2834700.0, "coords": {"column": 1}}
+     ]
+    },
+    {
+     "id": "clm_ground_veg_emissivity_bare",
+     "description": "Ground and vegetation emissivities and the ZengWang2007 roughness laws against clm_run_imports.csv (preflux stage, step 1, patch/column 1): with frac_sno_albedo = 1 the ground emissivity emg = (1-frac_sno_albedo)*0.96 + frac_sno_albedo*0.97 = 0.97 (BiogeophysPreFluxCalcsMod.F90:348; the dump emg = 0.97 exactly on all 192 rows, consistent with frac_sno_albedo = 1 for the traced columns in clm_surfalbedo.csv), and with elai = esai = htop = 0 the vegetation emissivity emv = 1 - exp(-(elai+esai)) = 0 (:397), z0m = z0mr*htop = 0 and displa = displar*htop = 0 (:175-176) — the dumped emv/z0mv/displa are 0 exactly.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "frac_sno_albedo": [1.0],
+      "elai": [0.0],
+      "esai": [0.0],
+      "htop": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "emg", "time": 0.0, "expected": 0.97, "coords": {"column": 1}},
+      {"variable": "emv", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "z0m", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}},
+      {"variable": "displa", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    }
+   ]
   }
  }
 }
