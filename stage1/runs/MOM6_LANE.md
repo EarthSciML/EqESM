@@ -173,6 +173,30 @@ they are additive (dump calls only, solution-neutral).
      kg_m2_s_conversion·IOB%salt_flux; u/v_flux rotation
      (cos_rot/sin_rot) reproduced from the mediator values.
 
+## Run results (2026-11-02)
+
+- **Run 1** (`case.run` 11980255, COMPLETED 0:0): dumps were written but
+  with two bugs found during inspection - (a) `dump_open` wrote to
+  `trim(dump_dir)//trim(fname)` and DUMP_DIR has no trailing slash, so the
+  files landed one directory up as `mom6mom6_*.csv`; (b) the coupling-step
+  counter was incremented once per traced *cell* instead of once per
+  coupling interval, so the trace covered 1 full + 1 partial coupling step
+  and let the KPP dumps run 2 intervals past the intended budget. Fixed in
+  MOM6 84f9c9a66 (dump_open path separator; counter advanced by the first
+  traced cell of each interval, re-gated after increment; init
+  confirmation messages via `MOM_error(NOTE)` so they land in the
+  component log). Solution neutrality of run 1 was verified anyway
+  (`compare_mom6_restarts.py`: mom6.r/mom6.r_stoch/cpl.r/datm.r/dice.r/
+  drof.r restarts + ocean.stats.nc + Vertical_coordinate.nc all
+  bit-identical to the reference, 0 differences).
+- **Traced domain:** PET 0 is the SW corner block of the 6x6
+  decomposition; only 12 of its cells are ocean (the 77 southernmost grid
+  rows are Antarctic land mask), so the traced set is all 12 ocean cells
+  (dump_first_cells=32 requested, 12 found). Row counts: eos 12x75x12 =
+  10800; kpp_obl/kpp/sfc_forcing 12x12 = 144 each.
+- **Run 2** (11986853): rerun with the fixed module; the dumps land in
+  `stage1/dumps/mom6/` with the correct names and step semantics.
+
 ## Proposed stage-2 target
 
 **EOS (WRIGHT_FULL) first** — it is a closed-form pointwise law with 15
