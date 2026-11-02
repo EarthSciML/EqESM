@@ -2,7 +2,7 @@
 
 Tracking progress on PLAN.md (Stage 1 — instrument the CESM codes; Stage 2 —
 stubs → physics → EarthSciModels PRs; Stage 3 — top-level `eqesm.esm`).
-Last updated: 2026-11-01.
+Last updated: 2026-11-02.
 
 ## Milestone 0 — Scaffolding (in progress)
 
@@ -863,3 +863,51 @@ existing EarthSciModels land/urban corpus is **presumptively unverified**.
   `clmu_atmosphere`, `offline_mode_forcing`) after extending the dump slice
   to urban thermal/hydrology + snow/soil/canopy; then the remaining CTSM
   slices + `stage2/clm_*.esm` skeletons (W1b, `wt/stage2-clm`).
+
+## MOM6 lane (M7 stage-1) — see `stage1/runs/MOM6_LANE.md`
+
+Started 2026-11-02 as the MOM6 stage-1 instrumentation lane (this worktree,
+`wt/mom6-w1`). Complete: fork + dumps + validation + run record.
+
+- **Instrumented fork** ✅ — worktree `stage1/EqESM-cesm-mom6` (branch
+  `instrument/mom6-dumps`, local/unpushed): new module
+  `MOM6/src/framework/mom6_dump_mod.F90` (auto-picked-up via the MOM6
+  Filepath list), namelist-gated (`DUMP_MOM6`/`DUMP_DIR`/`DUMP_FIRST_CELLS`/
+  `DUMP_FIRST_STEPS` read via get_param from MOM_override — no CIME
+  namelist-definition change needed, unlike CICE), OMP-critical writes,
+  PET-0-only. Three boundaries: (B1) Wright_FULL EOS ρ(T,S,p) + analytic
+  derivatives per (cell, layer, thermo step) from inside KPP_compute_BLD;
+  (B2) CVMix KPP OBL computation inputs/outputs + full KPP_calculate
+  result (Kd_heat/Kd_salt/Kv, NLT, final Kt/Ks/Kv, smoothed OBLdepth);
+  (B3) surface forcing import → fluxes/forces mapping per coupling step.
+  Chain: MOM6 submodule `9955b6b31` (dump fixes 84f9c9a66 + LangEnhK init)
+  → components/mom `f8bd526` → superproject `a6a28ad`.
+- **Instrumented run** ✅ (2026-11-02) — case `C_JRA_t62_mom6_inst`
+  (mirror of the validated C-class reference `C_JRA_t62`, T62_t232
+  tx2_3v2, 72 PEs/2 nodes, 1 day), job `11992759` COMPLETED 0:0 (7:43
+  wall). 4 CSVs in `stage1/dumps/mom6/`: eos 11700 rows (12 cells × 75
+  layers × 13 thermo steps), kpp_obl/kpp 156 rows each (12 × 13), sfc
+  forcing 144 rows (12 × 12). Traced set: all 12 ocean cells of PET 0
+  (SW corner block; the 77 southernmost grid rows are Antarctic land).
+  Trace pattern: CESM startup ocean-lag (mom_cap.F90:1835-1856) → the
+  forcing dump fired 12× (OS%Time tods 0, 7200..43200) and the KPP dumps
+  on all 13 thermo steps covered (tods 3600..46800; cpl_step 1 twice).
+  Two dump-code defects fixed en route: dump_open missing path separator
+  (files landed as `mom6mom6_*.csv` one dir up) + per-cell step counter →
+  per-interval counter (84f9c9a66); uninitialized LangEnhK denormal
+  1.636e-311 in the kpp CSV (LT_K_ENHANCEMENT=False) → explicit else
+  branch. Run record: `stage1/runs/mom6_instrument.json`.
+- **Validation** ✅ (all green, `validate_mom6_dumps.py`): solution
+  neutrality — all 6 restarts + ocean.stats.nc + Vertical_coordinate.nc
+  bit-identical to the reference (`compare_mom6_restarts.py`, 0 diffs);
+  EOS law bit-exact on 11700 rows (max rel err 0.0); hydrostatic
+  dp/dh = RHO_0·g = 10143 constant over 11544 interfaces; KPP update rule
+  (KPP_IS_ADDITIVE=False) on all 11856 interfaces; NLT structure (all
+  traced columns stably stratified); OBL/kOBL consistency + z_inter
+  cross-match on 156 columns; forcing latent/sw/evap/p/ice/liq/melt/tau/
+  ustar/omega laws 144/144 and salt_flux semantics pinned
+  (RESTORE_SALINITY=True: salt_flux_o = salt_flux_in + restoring flux;
+  the mediator's import is 0 in this run).
+- **Next:** stage-2 EOS component first (`mom6_eos.esm` — closed-form
+  pointwise law, the dump pins it to 1e-12 relative), then KPP, then the
+  surface forcing mapping (PLAN.md M7).

@@ -1,7 +1,7 @@
 # MOM6 lane — stage-1 instrumentation (W1)
 
-Status: **run complete, dumps validated** (2026-11-02). Fork
-`stage1/EqESM-cesm-mom6` (branch `instrument/mom6-dumps`), case
+Status: **run complete, dumps validated, all checks green** (2026-11-02).
+Fork `stage1/EqESM-cesm-mom6` (branch `instrument/mom6-dumps`), case
 `C_JRA_t62_mom6_inst`, dumps in `stage1/dumps/mom6/` (gitignored).
 Run record: `stage1/runs/mom6_instrument.json`.
 
@@ -169,9 +169,11 @@ they are additive (dump calls only, solution-neutral).
      surfBuoyFlux≥0, NLT shape profile (1-σ)²·(1+2σ) per MATCH_TECHNIQUE/
      NLT_SHAPE on the traced columns.
    - Forcing: fluxes%sw = sum of the four sw components; latent =
-     q_flux·Lv − fprec·Lf − frunoff·Lf (sign conventions); salt_flux =
-     kg_m2_s_conversion·IOB%salt_flux; u/v_flux rotation
-     (cos_rot/sin_rot) reproduced from the mediator values.
+     q_flux·Lv − fprec·Lf − frunoff·Lf − frunoff_glc·Lf (sign
+     conventions); salt_flux_in = kg_m2_s_conversion·IOB%salt_flux and
+     salt_flux = salt_flux_in + salinity-restoring flux
+     (RESTORE_SALINITY=True; the mediator's import is 0 in this run);
+     AGRID tau_mag/ustar/omega built from the imported u_flux/v_flux.
 
 ## Run results (2026-11-02)
 
@@ -189,13 +191,67 @@ they are additive (dump calls only, solution-neutral).
   (`compare_mom6_restarts.py`: mom6.r/mom6.r_stoch/cpl.r/datm.r/dice.r/
   drof.r restarts + ocean.stats.nc + Vertical_coordinate.nc all
   bit-identical to the reference, 0 differences).
+- **Run 2** (11986853): rerun with the fixed module - correct filenames
+  and step semantics, but the validation pass exposed an **uninitialized
+  `LangEnhK`** in `MOM_CVMix_KPP.F90`: with LT_K_ENHANCEMENT=False the
+  local remained a denormal (`1.636e-311`) that leaked into the kpp CSV.
+  Fixed with an explicit `else; LangEnhK = 1.0` branch (fork commit; the
+  original trailing `endif` after the Langmuir do-loop was removed so the
+  loop stays inside the IF). Run-2 restarts also bit-identical to the
+  reference.
+- **Run 3** (11992759, COMPLETED 0:0, 7:43 wall; st_archive 11992761):
+  the final, valid run. `validate_mom6_dumps.py` passes all checks
+  (results below) and the run-3 restarts are bit-identical to the
+  reference (all 6 restart files + ocean.stats.nc + Vertical_coordinate.nc,
+  0 differences).
 - **Traced domain:** PET 0 is the SW corner block of the 6x6
   decomposition; only 12 of its cells are ocean (the 77 southernmost grid
   rows are Antarctic land mask), so the traced set is all 12 ocean cells
-  (dump_first_cells=32 requested, 12 found). Row counts: eos 12x75x12 =
-  10800; kpp_obl/kpp/sfc_forcing 12x12 = 144 each.
-- **Run 2** (11986853): rerun with the fixed module; the dumps land in
-  `stage1/dumps/mom6/` with the correct names and step semantics.
+  (dump_first_cells=32 requested, 12 found).
+- **Trace pattern (CESM startup ocean-lag, mom_cap.F90:1835-1856):** the
+  first coupling timestep is skipped, and the second call steps back one
+  interval and advances by two - so for the 12 traced coupling steps the
+  forcing dump fired 12 times (OS%Time tods 0, 7200..43200; the first is
+  the lag call whose OS%Time is still 0) while the KPP dumps fired on all
+  13 thermo steps covered (Time_end tods 3600..46800; cpl_step 1 appears
+  twice - the first advance covers two thermo steps with the same
+  forcing). Row counts: eos 12x75x13 = 11700; kpp_obl/kpp 12x13 = 156
+  each; sfc_forcing 12x12 = 144.
+
+## Validation results (run 3, `validate_mom6_dumps.py`, all green)
+
+- **EOS law:** Wright_FULL ρ(T,S,p) and drho/dT, drho/dS bit-exact (max
+  rel err 0.0) on all 11700 rows (Python mirror of the Fortran operation
+  order).
+- **Hydrostatic pressure:** p_{k+1} − p_k = g·H_to_RZ·h_k with a constant
+  ratio 1.0143e4 = RHO_0·g = 1035·9.8 (stdev 1.2e-7 relative, round-off
+  only) over all 11544 layer interfaces; p(k=1) == p_surf exactly on all
+  156 columns. (The pressure column is the Boussinesq pRef at the top
+  interface of each layer, accumulated in KPP_compute_BLD:
+  pRef += g_Earth·H_to_RZ·h.)
+- **KPP update:** with KPP_IS_ADDITIVE=False, Kt_out = Kd_heat where
+  Kd_heat≠0 else Kt_in (same for Ks/Kv) on all 11856 interfaces.
+- **NLT:** NLT_heat == NLT_salt everywhere; NLT = 0 at the surface
+  interface (k=1) and everywhere surfBuoyFlux ≥ 0. All 156 traced columns
+  are stably stratified (surfBuoyFlux ≥ 0), so the unstable-column
+  NLT_SHAPE branch is not exercised by this trace.
+- **OBL:** kbl = int(kOBL) in [1,ke], fractional part in [0,1), and
+  −OBLdepth bracketed by the interface pair around kOBL, on all 156
+  columns; z_inter identical between the OBL and KPP dumps for the same
+  (cell, step).
+- **Forcing:** latent (q_flux·Lv − fprec·Lf − frunoff·Lf − frunoff_glc·Lf)
+  and the three latent diags, sw = sum of the 4 components, evap =
+  q_flux, lprec/fprec/lrunoff/frunoff and seaice_melt(+heat) mapping,
+  p_surf_full = p (both fluxes and forces), ice_fraction,
+  tau_mag_o = GUST_CONST + |u_flux,v_flux|, ustar_o = sqrt(tau_mag_o/1035),
+  omega_w2x = atan2(v_flux,u_flux): all 144/144. **salt_flux:**
+  RESTORE_SALINITY=True ⇒ fluxes%salt_flux = salinity-restoring flux +
+  coupler import, with the import alone recorded in fluxes%salt_flux_in
+  (convert_IOB_to_fluxes, mom_surface_forcing_nuopc.F90:686-689); the
+  mediator sends salt_flux = 0 in this run, so salt_flux_in == salt_flux
+  == 0 on all 144 rows and salt_flux_o (4.90e-7..1.02e-6) is purely the
+  restoring flux (SALT_RESTORE_FILE=state_restore_tx2_3_20230416.nc,
+  ADJUST_NET_SRESTORE_TO_ZERO=True).
 
 ## Proposed stage-2 target
 

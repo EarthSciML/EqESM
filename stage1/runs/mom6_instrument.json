@@ -9,8 +9,8 @@
   },
   "run": {
     "case": "C_JRA_t62_mom6_inst",
-    "job_id": "TBD",
-    "result": "TBD",
+    "job_id": "11992759",
+    "result": "COMPLETED 0:0 (7:43 wall; runs 1 and 2 superseded - run 1 used an uncommitted dump writer with broken filenames, run 2 exposed the uninitialized LangEnhK denormal, both fixed in the fork and both solution-neutral anyway)",
     "compset": "C_JRA (C: atm+ocn+ice+land+glc+rof+esp; datm JRA-1hr, ocn MOM6, ice CICE5, lnd CLM, rof MOSART, glc Stieglitz)",
     "grid": "T62_t232 (tx2_3v2 2-deg ocean, NIGLOBAL=540 x NJGLOBAL=480, NK=75 z* layers)",
     "dates": "start 0001-01-01, STOP_OPTION=ndays STOP_N=1 (one day), REST_OPTION=ndays REST_N=1",
@@ -41,9 +41,9 @@
     "eos_law": "rho = (p+p0)/(lambda + al0*(p+p0)) with al0 = a0+(a1*T+a2*S), p0 = b0+(b4*S+T*(b1+(T*(b2+b3*T)+b5*S))), lambda = c0+(c4*S+T*(c1+(T*(c2+c3*T)+c5*S))) and the analytic drho/dT, drho/dS (MOM_EOS_Wright_full.F90:24-38 constants) hold to round-off on all 11700 rows (Python reimplementation mirrors the Fortran operation order exactly)",
     "hydrostatic_pressure": "p_{k+1} - p_k = g*H_to_RZ * h_k with a constant dp/dh ratio across all layers/cells/steps (Boussinesq pRef accumulation in KPP_compute_BLD)",
     "kpp_update_law": "with KPP_IS_ADDITIVE=False: Kt_out = Kd_heat where Kd_heat/=0 else Kt_in (same for Ks_out/Kd_salt/Ks_in and Kv_out/Kv/Kv_in) on all 156x76 interfaces",
-    "kpp_nlt_law": "NLT_heat == NLT_salt everywhere; NLT = 0 at the surface interface (k=1) and everywhere surfBuoyFlux >= 0; within the OBL with surfBuoyFlux < 0, NLT_k / (sigma_k*(1-sigma_k)^2) is constant (CVMix NLT_SHAPE) - reported as statistics",
+    "kpp_nlt_law": "NLT_heat == NLT_salt everywhere; NLT = 0 at the surface interface (k=1) and everywhere surfBuoyFlux >= 0, on all 156 columns. All traced columns happen to be stably stratified (surfBuoyFlux >= 0), so the CVMix NLT_SHAPE branch for unstable columns (NLT_k/(sigma_k*(1-sigma_k)^2) constant) is not exercised by this trace",
     "kpp_obl_law": "kbl = int(kOBL) in [1,ke] (ke+1 only when the OBL reaches the bottom clamp), fractional part in [0,1), and -OBLdepth bracketed by the interface pair around kOBL on all 156 columns; OBLdepth > 0, kOBL >= 1; z_inter identical between the OBL and KPP dumps for the same (cell, step)",
-    "forcing_law": "latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf, latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf (Lv=2.501e6, Lf=3.337e5 J/kg); sw = sw_vis_dir+sw_vis_dif+sw_nir_dir+sw_nir_dif; evap = q_flux; lprec_o/fprec_o/lrunoff_o/frunoff_o/salt_flux_o/seaice_melt_o/seaice_melt_heat_o/ice_fraction_o = the imported values (conversions 1.0); p_surf_full = p and p_surf_full_o = p; tau_mag_o = GUST_CONST + sqrt(u_flux^2+v_flux^2) (GUST_CONST=4.0e-4 Pa; AGRID builds tau_mag from the imported u_flux/v_flux, mom_surface_forcing_nuopc.F90:956-959); ustar_o = sqrt((GUST_CONST+sqrt(u_flux^2+v_flux^2))/RHO_0) (RHO_0=1035); omega_w2x = atan2(v_flux,u_flux) - all on 144 rows",
+    "forcing_law": "latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf, latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf (Lv=2.501e6, Lf=3.337e5 J/kg); sw = sw_vis_dir+sw_vis_dif+sw_nir_dir+sw_nir_dif; evap = q_flux; lprec_o/fprec_o/lrunoff_o/frunoff_o/seaice_melt_o/seaice_melt_heat_o/ice_fraction_o = the imported values (conversions 1.0); p_surf_full = p and p_surf_full_o = p; tau_mag_o = GUST_CONST + sqrt(u_flux^2+v_flux^2) (GUST_CONST=4.0e-4 Pa; AGRID builds tau_mag from the imported u_flux/v_flux, mom_surface_forcing_nuopc.F90:956-959); ustar_o = sqrt((GUST_CONST+sqrt(u_flux^2+v_flux^2))/RHO_0) (RHO_0=1035); omega_w2x = atan2(v_flux,u_flux); salt_flux: with RESTORE_SALINITY=True the coupler import is copied into salt_flux_in by convert_IOB_to_fluxes (fluxes%salt_flux_in = mask*kg_m2_s_conversion*IOB%salt_flux, mom_surface_forcing_nuopc.F90:686-689) and added to the salinity-restoring flux in fluxes%salt_flux (salt_flux_o = salt_flux_in + restore); the mediator sends salt_flux = 0 in this run, so salt_flux_in == salt_flux == 0 on all 144 rows and salt_flux_o (4.90e-7..1.02e-6) is purely the restoring flux (SALT_RESTORE_FILE=state_restore_tx2_3_20230416.nc, ADJUST_NET_SRESTORE_TO_ZERO=True) - all on 144 rows",
     "row_counts": "eos 12x75x13 = 11700 (13 thermo steps incl. the lag double-step); kpp_obl, kpp 12x13 = 156 each; sfc_forcing 12x12 = 144; zero blank lines in all 4 CSVs"
   }
 }

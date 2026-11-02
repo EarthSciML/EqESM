@@ -152,21 +152,31 @@ def main():
 
     # The traced domain is discovered from the data: PET 0's ocean cells
     # (the SW corner block of the tx2_3v2 grid has only 12 ocean cells -
-    # the 77 southernmost rows are Antarctic land) and the number of traced
-    # coupling steps (dump_first_steps=12).
+    # the 77 southernmost rows are Antarctic land).  The KPP/EOS dumps fire
+    # once per thermo step; the MOM6 cap's startup ocean-lag logic
+    # (mom_cap.F90:1835-1856) skips the first coupling timestep and then
+    # advances the ocean by TWO coupling steps in the second call, so the
+    # first dump step covers two thermo steps and the KPP dumps have
+    # NSTEPS+1 calls for dump_first_steps traced coupling steps (step 1
+    # appears twice, steps 2..12 once).  The forcing dump fires once per
+    # update_ocean_model call (NSTEPS calls; the first is the lag call,
+    # whose OS%Time is still 0).
     def key_cols(rows, cols):
         ix = {c: i for i, c in enumerate(cols)}
         return {(r[ix["cpl_step"]], r[ix["gi"]], r[ix["gj"]]) for r in rows}
     obl_keys = key_cols(obl_rows, obl_cols)
     NCELLS = len({(k[1], k[2]) for k in obl_keys})
     NSTEPS = len({k[0] for k in obl_keys})
-    print(f"traced domain: {NCELLS} cells x {NSTEPS} steps (from CSV keys)")
+    n_kpp_calls = len({r[2] for r in obl_rows})  # distinct tods = thermo steps
+    n_sfc_calls = len({r[2] for r in sfc_rows})  # distinct tods = coupling calls
+    print(f"traced domain: {NCELLS} cells; {NSTEPS} distinct cpl_step values "
+          f"({n_kpp_calls} KPP/thermo steps, {n_sfc_calls} forcing calls)")
 
     expect = {
-        "mom6_eos.csv": NCELLS * KE * NSTEPS,
-        "mom6_kpp_obl.csv": NCELLS * NSTEPS,
-        "mom6_kpp.csv": NCELLS * NSTEPS,
-        "mom6_sfc_forcing.csv": NCELLS * NSTEPS,
+        "mom6_eos.csv": NCELLS * KE * n_kpp_calls,
+        "mom6_kpp_obl.csv": NCELLS * n_kpp_calls,
+        "mom6_kpp.csv": NCELLS * n_kpp_calls,
+        "mom6_sfc_forcing.csv": NCELLS * n_sfc_calls,
     }
     got = {
         "mom6_eos.csv": len(eos_rows),
@@ -198,10 +208,11 @@ def main():
     print(f"EOS law: {n_checked} rows; max rel err rho={mx_rho:.3e} drho/dT={mx_dT:.3e} drho/dS={mx_dS:.3e}")
 
     # Sanity: pressure increases downward within each (cell, step) column.
+    # (tod disambiguates the duplicated first cpl_step, see section 3.)
     prev_key, prev_p = None, None
     n_bad_p = 0
     for r in eos_rows:
-        key = (r[ix["cpl_step"]], r[ix["gi"]], r[ix["gj"]])
+        key = (r[ix["cpl_step"]], r[ix["tod"]], r[ix["gi"]], r[ix["gj"]])
         if key == prev_key:
             if not (r[ix["p"]] > prev_p):
                 n_bad_p += 1
@@ -213,16 +224,19 @@ def main():
     #    (Boussinesq pRef accumulation: dp = g_Earth*H_to_RZ * h)
     # ------------------------------------------------------------------
     ixo = {c: i for i, c in enumerate(obl_cols)}
-    # h_01..h_75 and p_surf from the OBL dump; p_k from the EOS dump.
+    # h_01..h_75 and p_surf from the OBL dump; p_k from the EOS dump.  The
+    # key includes tod because cpl_step repeats for the lag double-step
+    # (step 1 covers two thermo steps with different column states).
     h_names = [f"h_{k:02d}" for k in range(1, KE + 1)]
     eos_by_key = {}
     for re_ in eos_rows:
-        eos_by_key.setdefault((re_[ix["cpl_step"]], re_[ix["gi"]], re_[ix["gj"]]), {})[
+        eos_by_key.setdefault((re_[ix["cpl_step"]], re_[ix["tod"]],
+                                re_[ix["gi"]], re_[ix["gj"]]), {})[
             int(re_[ix["k"]])] = re_[ix["p"]]
     ratios = []
     n_p1 = 0
     for r in obl_rows:
-        key = (r[ixo["cpl_step"]], r[ixo["gi"]], r[ixo["gj"]])
+        key = (r[ixo["cpl_step"]], r[ixo["tod"]], r[ixo["gi"]], r[ixo["gj"]])
         p_surf = r[ixo["p_surf"]]
         p_k = eos_by_key[key]
         if 1 in p_k and p_k[1] == p_surf:
@@ -232,17 +246,17 @@ def main():
                 dp = p_k[k + 1] - p_k[k]
                 h = r[ixo[h_names[k - 1]]]
                 ratios.append(dp / h)
-    # The ratio should be g_Earth*H_to_RZ; check constancy, report the value.
-    # (The accumulated pRef carries round-off, so a loose spread is expected
-    # for deep thin layers; 1e-6 relative is still far tighter than any
-    # physics.)
-    check(n_p1 == NCELLS * NSTEPS, f"eos p(k=1) == p_surf: {n_p1}", failures)
+    # The ratio should be g_Earth*H_to_RZ (= Rho0*g with unit rescaling 1.0,
+    # i.e. 1035*9.8 = 10143); check constancy, report the value.  (The
+    # accumulated pRef carries round-off, so a loose spread is expected for
+    # deep thin layers; 1e-6 relative is still far tighter than any physics.)
+    check(n_p1 == NCELLS * n_kpp_calls, f"eos p(k=1) == p_surf: {n_p1}", failures)
     if ratios:
         rmin, rmax = min(ratios), max(ratios)
         spread = (rmax - rmin) / max(abs(rmax), 1e-300)
         check(spread < 1e-6, f"dp/dh ratio spread {spread:.3e}", failures)
         print(f"dp/dh ratio: {rmin:.9e} .. {rmax:.9e} "
-              f"(g*H_to_RZ ~ {9.8 / RHO_0:.9e} if H_to_RZ = 1/Rho0)")
+              f"(Rho0*g = {RHO_0 * 9.8:.9e})")
 
     # ------------------------------------------------------------------
     # 4. KPP boundary layer (mom6_kpp.csv)
@@ -306,22 +320,22 @@ def main():
                 n_nlt_sfc += 1
             if bfsfc >= 0.0 and r[kcol("NLT_heat", k)] == 0.0:
                 n_nlt_stable += 1
-    tot_k = NCELLS * NSTEPS * NZ
+    tot_k = NCELLS * n_kpp_calls * NZ
     n_stable = sum(1 for r in kpp_rows if r[ixk["surfBuoyFlux"]] >= 0.0)
     check(n_kt == tot_k, f"Kt update rule: {n_kt}/{tot_k}", failures)
     check(n_ks == tot_k, f"Ks update rule: {n_ks}/{tot_k}", failures)
     check(n_kv == tot_k, f"Kv update rule: {n_kv}/{tot_k}", failures)
     check(n_nlt_eq == tot_k, f"NLT_heat==NLT_salt: {n_nlt_eq}/{tot_k}", failures)
-    check(n_nlt_sfc == NCELLS * NSTEPS,
-          f"NLT(k=1)=0: {n_nlt_sfc}/{NCELLS * NSTEPS}", failures)
+    check(n_nlt_sfc == NCELLS * n_kpp_calls,
+          f"NLT(k=1)=0: {n_nlt_sfc}/{NCELLS * n_kpp_calls}", failures)
     check(n_nlt_stable == NZ * n_stable,
           f"NLT=0 where surfBuoyFlux>=0: {n_nlt_stable}/{NZ * n_stable} "
           f"({n_stable} stable columns)", failures)
-    check(n_obl == NCELLS * NSTEPS, f"OBL within kOBL cell: {n_obl}", failures)
-    check(n_kobl == NCELLS * NSTEPS, f"kOBL fractional part: {n_kobl}", failures)
+    check(n_obl == NCELLS * n_kpp_calls, f"OBL within kOBL cell: {n_obl}", failures)
+    check(n_kobl == NCELLS * n_kpp_calls, f"kOBL fractional part: {n_kobl}", failures)
     print(f"KPP: Kt/Ks/Kv update rule {n_kt}/{n_ks}/{n_kv} of {tot_k} interfaces; "
           f"NLT structure {n_nlt_sfc}/{n_nlt_stable}; "
-          f"OBL/kOBL consistency {n_obl}/{n_kobl} of {NCELLS * NSTEPS} columns")
+          f"OBL/kOBL consistency {n_obl}/{n_kobl} of {NCELLS * n_kpp_calls} columns")
 
     # ------------------------------------------------------------------
     # 5. OBL dump consistency with the KPP dump (same column geometry)
@@ -329,21 +343,21 @@ def main():
     ixob = {c: i for i, c in enumerate(obl_cols)}
     kpp_z = {}
     for r in kpp_rows:
-        key = (r[ixk["cpl_step"]], r[ixk["gi"]], r[ixk["gj"]])
+        key = (r[ixk["cpl_step"]], r[ixk["tod"]], r[ixk["gi"]], r[ixk["gj"]])
         kpp_z[key] = [r[kcol("z_inter", k)] for k in range(1, NZ + 1)]
     n_z = 0
     for r in obl_rows:
-        key = (r[ixob["cpl_step"]], r[ixob["gi"]], r[ixob["gj"]])
+        key = (r[ixob["cpl_step"]], r[ixob["tod"]], r[ixob["gi"]], r[ixob["gj"]])
         if key in kpp_z:
             same = all(r[ixob[f"z_inter_{k:02d}"]] == kpp_z[key][k - 1]
                        for k in range(1, NZ + 1))
             if same:
                 n_z += 1
-    check(n_z == NCELLS * NSTEPS,
-          f"z_inter identical obl vs kpp: {n_z}/{NCELLS * NSTEPS}", failures)
+    check(n_z == NCELLS * n_kpp_calls,
+          f"z_inter identical obl vs kpp: {n_z}/{NCELLS * n_kpp_calls}", failures)
     n_obl_ok = sum(1 for r in obl_rows
                    if r[ixob["OBLdepth"]] > 0.0 and r[ixob["kOBL"]] >= 1.0)
-    check(n_obl_ok == NCELLS * NSTEPS, f"OBL dump sanity: {n_obl_ok}", failures)
+    check(n_obl_ok == NCELLS * n_kpp_calls, f"OBL dump sanity: {n_obl_ok}", failures)
     print(f"OBL dump: z_inter matches kpp dump on {n_z} columns; "
           f"OBLdepth>0, kOBL>=1 on {n_obl_ok}")
 
@@ -353,6 +367,7 @@ def main():
     ixs = {c: i for i, c in enumerate(sfc_cols)}
     n_lat = n_latd = n_sw = n_evap = n_salt = n_tau = n_ustar = n_omega = 0
     n_p = n_ice = n_liq = n_melt = 0
+    restore_fluxes = []
     for r in sfc_rows:
         qf, fp, fr = r[ixs["q_flux"]], r[ixs["fprec"]], r[ixs["frunoff"]]
         frg = r[ixs["frunoff_glc"]]
@@ -372,8 +387,17 @@ def main():
             n_sw += 1
         if abs(r[ixs["evap"]] - qf) < 1e-9 * max(abs(qf), 1.0):
             n_evap += 1
-        if abs(r[ixs["salt_flux_o"]] - r[ixs["salt_flux"]]) < 1e-9 * max(abs(r[ixs["salt_flux"]]), 1.0):
+        # RESTORE_SALINITY=True in this run: fluxes%salt_flux holds the
+        # salinity-restoring flux PLUS the coupler-imported salt flux, and
+        # fluxes%salt_flux_in records the import alone
+        # (convert_IOB_to_fluxes, mom_surface_forcing_nuopc.F90:686-689).
+        # The mediator sends salt_flux = 0 here, so salt_flux_in ==
+        # salt_flux == 0 on every row and salt_flux_o is the restoring flux.
+        if abs(r[ixs["salt_flux_in"]] - r[ixs["salt_flux"]]) < \
+                1e-12 * max(abs(r[ixs["salt_flux"]]), 1e-300):
             n_salt += 1
+        restore_fluxes.append(float(r[ixs["salt_flux_o"]]) -
+                              float(r[ixs["salt_flux_in"]]))
         if (abs(r[ixs["p_surf_full"]] - r[ixs["p"]]) < 1e-6 * max(abs(r[ixs["p"]]), 1.0) and
                 abs(r[ixs["p_surf_full_o"]] - r[ixs["p"]]) < 1e-6 * max(abs(r[ixs["p"]]), 1.0)):
             n_p += 1
@@ -400,23 +424,26 @@ def main():
             n_ustar += 1
         if abs(r[ixs["omega_w2x"]] - math.atan2(vf, uf)) < 1e-9:
             n_omega += 1
-    nr = NCELLS * NSTEPS
+    nr = NCELLS * n_sfc_calls
     check(n_lat == nr, f"latent law: {n_lat}/{nr}", failures)
     check(n_latd == 3 * nr, f"latent diag laws: {n_latd}/{3 * nr}", failures)
     check(n_sw == nr, f"sw sum: {n_sw}/{nr}", failures)
     check(n_evap == nr, f"evap=q_flux: {n_evap}/{nr}", failures)
-    check(n_salt == nr, f"salt_flux: {n_salt}/{nr}", failures)
-    check(n_p == 2 * nr, f"p_surf_full=p: {n_p}/{2 * nr}", failures)
+    check(n_salt == nr, f"salt_flux_in==salt_flux import: {n_salt}/{nr}", failures)
+    check(n_p == nr, f"p_surf_full=p: {n_p}/{nr}", failures)
     check(n_ice == nr, f"ice_fraction: {n_ice}/{nr}", failures)
-    check(n_liq == 4 * nr, f"lprec/fprec/lrunoff/frunoff: {n_liq}/{4 * nr}", failures)
-    check(n_melt == 2 * nr, f"seaice_melt(+heat): {n_melt}/{2 * nr}", failures)
+    check(n_liq == nr, f"lprec/fprec/lrunoff/frunoff: {n_liq}/{nr}", failures)
+    check(n_melt == nr, f"seaice_melt(+heat): {n_melt}/{nr}", failures)
     check(n_tau == nr, f"tau_mag law: {n_tau}/{nr}", failures)
     check(n_ustar == nr, f"ustar law: {n_ustar}/{nr}", failures)
     check(n_omega == nr, f"omega_w2x law: {n_omega}/{nr}", failures)
     print(f"Forcing: latent {n_lat}/{nr}, latent diags {n_latd}/{3*nr}, sw {n_sw}/{nr}, "
-          f"evap {n_evap}/{nr}, salt {n_salt}/{nr}, p {n_p}/{2*nr}, ice {n_ice}/{nr}, "
-          f"liq {n_liq}/{4*nr}, melt {n_melt}/{2*nr}, tau {n_tau}/{nr}, ustar {n_ustar}/{nr}, "
+          f"evap {n_evap}/{nr}, salt_in==import {n_salt}/{nr}, p {n_p}/{nr}, ice {n_ice}/{nr}, "
+          f"liq {n_liq}/{nr}, melt {n_melt}/{nr}, tau {n_tau}/{nr}, ustar {n_ustar}/{nr}, "
           f"omega {n_omega}/{nr}")
+    if restore_fluxes:
+        print(f"  salt_flux_o - salt_flux_in (salinity-restoring flux): "
+              f"min {min(restore_fluxes):.6e} max {max(restore_fluxes):.6e}")
 
     if failures:
         print("\nFAILURES:")
