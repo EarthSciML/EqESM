@@ -69,6 +69,46 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
   - W1c: uninstrumented single-point urban reference case + 1x1 inputdata.
 - **W2 — dumps → independent tests.** Extract `stage1/dumps/clm/`; fill tests;
   **verify CLMU and the other reused pieces against the dumps**; `bugs.md`.
+  - W2a (2026-11-01): added 4 dump slices to `clm_dump_mod.F90` (fork clm
+    `cef3e7256` / superproject `9e349ee`, branch `instrument/clm-dumps`):
+    `clm_canopyflux.csv` (canopy interception/throughfall + CanopyFluxes
+    boundary, stages ent|hyd|flx), `clm_run_imports.csv` (pre-flux column
+    state, stages preflux|surfhum), `clm_soiltemp.csv` (snow/soil temperature
+    solve, stages entry|exit, one row per column layer), and switched the
+    urban slices (`clm_urbalb`, `clm_urban_rad`) from first-16-columns to
+    landunit-by-id selection (all 5 column types of the first 16 urban
+    landunits, so the daytime landunit is fully traced; `clm_urban_rad` gained
+    a coszen column). Instrumented rerun: job **11971155** (in-node
+    `case.submit --no-batch` fallback because the 5-node ctessum partition was
+    fully occupied by agent sessions; backfill slot was 00:31).
+  - Law spot-checks pass: fpiliq/fpisnow effective coefficients recovered
+    from the traced fluxes match the CLM formula
+    `fpiliq = 0.25*(1-exp(-0.5*(elai+esai)))` (`use_clm5_fpi=.false.`
+    default), `fpisnow = 1-exp(-0.5*(elai+esai))`; `liqcan/snocan` update is
+    `max(0, storage + dtime*interception)`; `qg` composition
+    `frac_sno*qg_snow + (1-frac_sno-frac_h2osfc)*qg_soil + frac_h2osfc*qg_h2osfc`;
+    soiltemp entry/exit `t_soisno` continuity across the solve.
+  - W2b (2026-11-02): root-caused + fixed the soiltemp/soilfluxes layer
+    indexing bug (fork clm `2d8e0c697` / superproject `7896e49`):
+    **gfortran rebases assumed-shape dummy args to 1-based positional
+    views**, so `(:,:)` dummies read every layer shifted by nlevsno slots
+    (snow appeared at j=4..12; j=-8..0 read OOB garbage; W1 soilfluxes
+    t_soisno_1..3 read unused snow slots = 0). Fix: explicit dim2 lower
+    bound `-nlevsno+1` on all 2-D dummies; qflx_snomelt_lyr/snofrz_lyr
+    (snow-only arrays) reads guarded `j <= 0` (NaN for soil). Also fixed
+    the clm_soiltemp `# columns` header order (h2osoi before qflx, to match
+    the data emission) and documented the j-layer convention (file slot =
+    j+nlevsno). Rebuilt + rerun twice with `--no-batch` in allocation
+    11967609 (final CSVs LID 261102-004337). Verified: entry(step 1)
+    matches finidat exactly (34/34 layers, c=1 and c=14); liq+ice conserved
+    entry→exit to 0.0; soil-layer cross-step continuity 0 bad; snow-layer
+    differences (≤4e-3 K) fully explained by designed inter-step snow
+    hydrology (DivideSnowLayers dzmax_u cascade + snow capping at
+    h2osno_max=10 m WE + snowfall; reproduced analytically to ~3%);
+    neutrality re-verified bit-identical vs the f19 reference restart
+    (290/292 vars identical, 2 differ only in embedded path strings).
+    bugs.md: SoilWaterMovementMod negative-h2osoi_liq print (endrun
+    commented out) candidate entry.
 - **W3 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
   existing files, plus fixing the 2 invalid files).
 
