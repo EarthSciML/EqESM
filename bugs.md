@@ -219,3 +219,35 @@ Format template:
 - **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
 - **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
 
+
+## 20. CISM pseudo-plastic basal law (HO_BABC_PSEUDO_PLASTIC_OLD) uses cell-center topg where stagtopg was intended
+
+- **Location:** `components/cism/source_cism/libglissade/glissade_basal_traction.F90:262-277` (`glissade_calcbeta`, PSEUDO_PLASTIC_OLD branch).
+- **Description:** the phi(bed) ramp and the resulting tau_c/beta are computed from `bed = topg(ew,ns) - eus` — the **cell-center** bed elevation — while beta lives on the **staggered** grid (vertices). The code's own comment admits it: "There is a minor bug in the loop below. beta(ew,ns) is computed based on topg(ew,ns); should use stagtopg(ew,ns) instead. Leaving the bug as is for back compatibility, given that this method will be deprecated." (The newer BPMP branch at :1191 does use `stagtopg`.) The stage-1 basal_traction trace pins the as-run behavior: `bed = topg - eus` with cell-center topg (validated by cross-referencing the velo trace's topg/eus columns).
+- **Impact on results:** tau_c/beta are evaluated at a slightly different bed elevation than the vertex-consistent one; the effect is small for smooth bed topography but systematic. The stage-1 dump reproduces the active code exactly.
+- **Reproduced/corrected in .esm:** reproduced as-run in the stage-2 CISM basal law test (bed from cell-center topg − eus).
+- **Status:** open (recorded; transcribed as-run).
+
+## 21. CISM cap import turns the mediator's 0 K missing-data sentinel into a +0 °C surface air temperature
+
+- **Location:** `components/cism/drivers/cpl/nuopc/glc_import_export.F90:323-329` (`import_fields`).
+- **Description:** after `tsfc = tsfc - tkfrz`, the cap applies the "Jer hack fix": `where (tsfc < -250.d0) tsfc = 0.d0`. CLM sends 0 K (i.e. -273.15 °C after conversion) for land points where CLM sees ocean and for all ocean points, so those cells get a surface air temperature of **0 °C** rather than being masked/excluded. The `-250 °C` threshold is a hard-coded sentinel test.
+- **Impact on results:** on the gris20 active grid, boundary cells adjacent to the ocean receive artm = 0 °C instead of a physical value; the tsfc trace pins the post-processing values exactly as consumed by CISM.
+- **Reproduced/corrected in .esm:** reproduced as-run in the cap-boundary test (tsfc column of the cism_cap trace).
+- **Status:** open (recorded; legacy behavior kept for bit-reproducibility).
+
+## 22. CISM beta_internal unit conversion at the solver boundary is undocumented (Pa/(m/yr) internal vs Pa/(m/s) stored)
+
+- **Location:** `components/cism/source_cism/libglissade/glissade_velo_higher.F90:3989-3990` (`glissade_velo_higher_scale_output`); field docs `libglide/glide_types.F90:1457-1459,2345-2347`.
+- **Description:** the HO velocity solver works internally in Pa/(m/yr) (the units in which the sliding laws are evaluated, matching the dumped beta column), but `scale_output` silently converts the stored field with `beta_internal = beta_internal * scyr` to Pa/(m/s). The `glide_types` field comments describe beta as "Pa yr/m" without mentioning the stored-field unit, so the two unit conventions coexist without documentation.
+- **Impact on results:** none on the trajectory (self-consistent); matters for anyone reading the stored beta field or writing an `.esm` that must match the solver-internal value (the stage-1 beta trace deliberately reports the pre-scale_output Pa/(m/yr) value).
+- **Reproduced/corrected in .esm:** the basal-law pin uses the Pa/(m/yr) solver-internal units (documented in the cism_basal_traction.csv header).
+- **Status:** open (documentation/units note; recorded).
+
+## 23. CISM geomderv%stagtopg is vestigial (never staggered in the Glissade path)
+
+- **Location:** `components/cism/source_cism/libglissade/glissade_velo.F90:137,180` (passed to `glissade_velo_driver`), `libglissade/glissade_types.F90` (geomderv).
+- **Description:** `model%geomderv%stagtopg` is passed through the Glissade velocity driver but is never computed by any stagger call; the higher-order solve uses its own local `stagtopg` (from `glissade_stagger(topg, stagtopg)` at `glissade_velo_higher.F90:1520`), and the basal-traction routines use their own local copies. The derived-type field is dead weight.
+- **Impact on results:** none (dead field; the stage-1 velo trace dumps the solve-local stagtopg, which is the value actually used).
+- **Reproduced/corrected in .esm:** n/a (no behavioral effect).
+- **Status:** open (dead-code note; recorded).
