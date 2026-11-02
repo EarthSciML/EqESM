@@ -702,6 +702,23 @@ In progress. See PLAN.md §4.1 for the playbook.
   pinned via Tf(sss) in the coupling cap and its constants are exercised
   inside the zTin quadratic). `esm test stage2/`: 178P/0F/0E (115 MOSART
   + 63 CICE).
+- **CICE upstream PR branches prepared (not pushed)** ✅ (2026-11-02,
+  `cice-upstream-prep`, merged `0f3fcd4`, notes `stage2/UPSTREAM-cice-pr.md`)
+  — local EarthSciDiscretizations `cice-bgrid-rules` @ `a0c0421` (B-grid
+  rules + 6 conformance fixtures; all five bindings 1521P/0F/0S) and
+  EarthSciModels `cice` @ `f7e05c5` (`components/cryosphere/cice/`, 6 `.esm`
+  + README, strip-compare identical to `stage2/`), each with an untracked
+  `PR_DESCRIPTION.md`. Rust CLI: 134P/0F/0E with the ESD branch, 99P/0F/3E
+  against ESD `main` → **ESD PR must merge first**. Runner findings (files
+  are spec-correct): python runner silently drops array-valued
+  `parameter_overrides` (9-line repro; 69E coupling + 7E thermo); Julia
+  tree-walk does not finish `cice_coupling.esm` (166 observeds) within
+  any CI budget and rejects dynamics `sigma12` shape / thermo `index` op;
+  RangeSpec bug (#16) still present on 0.8.0, workaround kept;
+  EarthSciModels `Project.toml` still pins EarthSciAST 0.3 (no bump in
+  this PR to avoid conflicting with #33). **Next: user approval to push
+  and open the ESD then EarthSciModels PRs; file the python-runner and
+  Julia-walker issues upstream.**
 - **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
   `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
   (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
@@ -878,7 +895,36 @@ existing EarthSciModels land/urban corpus is **presumptively unverified**.
   roads are not exposed by the `.esm`). Not pinnable: daytime canyon
   shortwave — the only daytime urban landunit (255) has only its roof column
   traced; **dump follow-up: trace a daytime landunit with all 5 ctypes.**
-- **Next (W2 cont.)** — verify the remaining CLMU leaves (`temps/`, `hydro/`,
-  `clmu_atmosphere`, `offline_mode_forcing`) after extending the dump slice
-  to urban thermal/hydrology + snow/soil/canopy; then the remaining CTSM
-  slices + `stage2/clm_*.esm` skeletons (W1b, `wt/stage2-clm`).
+- **CLM W2 dumps + layer-index fix** ✅ (2026-11-02, `clm-dumps-w2`,
+  merged `8f0c24d`, 8.7 h) — 3 new slices (`clm_canopyflux`,
+  `clm_run_imports`, `clm_soiltemp` 13056 rows), urban slices now by
+  landunit id (daytime l=255 has all 5 ctypes, coszen up to 0.92). Root
+  cause of shifted layer indices: gfortran passes arrays to assumed-shape
+  `(:,:)` dummies as 1-based positional views → fixed with an explicit dim2
+  lower bound (fork clm `2d8e0c697` / superproject `7896e49`); soiltemp now
+  uses the model layer j (file slot j+nlevsno) and soilfluxes t_soisno_1..3
+  are the real top-soil temperatures. Entry state matches finidat 34/34
+  layers; neutrality **verified bit-identical** vs the f19 reference
+  restart. Snow-layer inter-step jumps explained as DivideSnowLayers /
+  SnowCapping behavior. bugs.md **#20**: SoilWaterMovementMod prints
+  negative h2osoi_liq (−20.9 kg/m², col 182) with `endrun` commented out.
+- **CLM stage-2 skeleton (W1b)** ✅ (2026-11-02, `clm-w1b`, merged
+  `91c3be3`, 4.9 h) — `stage2/clm_canopy.esm` (CanopyHydrology +
+  CanopyFluxInterface, 47 equations, 14 tests / 47 assertions at rel
+  1e-12), `clm_templates.esm` trimmed to the 15 exercised templates,
+  `README-clm.md`. `esm test stage2/` **296P/0F/0E** (249 + 47). Fixes
+  made while testing: `roverg` = Rw/g·1000 mm/K (not Rw), `qsat_qsdT` had
+  an extra 0.622. bugs.md #21 (dump index shift — the W2 defect above,
+  now marked fixed) and #22 (VanGenuchten1980 module is a verbatim
+  Clapp-Hornberg copy), renumbered from the colliding #20/#21. Caveats:
+  pins were taken from the pre-fix dumps (values valid, j labels in test
+  descriptions refer to the old layout); canopy tests mostly hit the
+  bare-patch / zero-precip branches — the vegetated interception branch,
+  liquid QSat branch, and h2osfc branch are unpinned (README coverage gaps).
+- **Next (W2 cont.)** — (a) re-pin `clm_canopy.esm` against the W2 dumps:
+  vegetated canopyflux rows (frac_veg_nosno=1, nonzero storage) and
+  soilfluxes t_soisno_1..3, update provenance to the new j convention;
+  (b) verify the remaining CLMU leaves (`temps/`, `hydro/`,
+  `clmu_atmosphere`, `offline_mode_forcing`) and daytime canyon shortwave
+  now that l=255 is fully traced; (c) next CTSM slices (soil temperature
+  solve from `clm_soiltemp`, bare-ground / canopy fluxes).
