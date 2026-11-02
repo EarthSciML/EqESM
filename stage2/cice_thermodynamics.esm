@@ -2017,7 +2017,7 @@
             "op": "-",
             "args": [
              "qsnon_top",
-             {"op": "const", "args": [], "value": 825330000.0, "units": "J/m^3"}
+             {"op": "*", "args": [{"op": "const", "args": [], "value": 330.0, "units": "kg/m^3"}, {"op": "const", "args": [], "value": 2501000.0, "units": "J/kg"}]}
             ]
            },
            "dt"
@@ -2048,7 +2048,7 @@
             "op": "-",
             "args": [
              "qm_top",
-             {"op": "const", "args": [], "value": 2293417000.0, "units": "J/m^3"}
+             {"op": "*", "args": [{"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}, {"op": "const", "args": [], "value": 2501000.0, "units": "J/kg"}]}
             ]
            },
            "dt"
