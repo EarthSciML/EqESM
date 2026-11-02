@@ -1,0 +1,127 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_templates",
+  "description": "Expression-template library for the CTSM/CLM land-surface components (stage 2 of the EqESM project): the pointwise closure laws of ctsm5.4.063 (cesm3.0-alphabranch checkout) exercised by the stage-2 CLM components, currently CanopyHydrology and CanopyFluxInterface (stage2/clm_canopy.esm): the QSat saturation vapor pressure/specific humidity laws and their derivatives, the canopy interception/storage/excess laws, the ZengWang2007 roughness and displacement laws, the emissivity laws and the latent heat of vaporization/sublimation law. Transcribed exactly from the Fortran; every template carries its source file:line in its description and returns one scalar (the CLM laws are all pointwise, so a template per output is sufficient). The remaining shared laws (soil/snow hydraulics and thermal properties, snow hydrology and albedo, Monin-Obukhov and aerodynamic laws, etc.) will be added here as their stage-2 components are implemented. Reference: stage1/cesm/components/clm/src/biogeophys/.",
+  "license": "MIT"
+ },
+ "expression_templates": {
+  "poly8": {
+   "description": "Ninth-order power-sum polynomial c0 + c1*x + ... + c8*x^8, the mathematical form of the Flatau et al. (1992) saturation-vapor-pressure fits used by QSat (QSatMod.F90:18-56). Written as a power sum rather than the Fortran's nested Horner form (QSatMod.F90:93-97) for readability; the two agree to round-off.",
+   "params": ["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "x"],
+   "body": {"op": "+", "args": [
+    "c0",
+    {"op": "*", "args": ["c1", "x"]},
+    {"op": "*", "args": ["c2", {"op": "^", "args": ["x", 2]}]},
+    {"op": "*", "args": ["c3", {"op": "^", "args": ["x", 3]}]},
+    {"op": "*", "args": ["c4", {"op": "^", "args": ["x", 4]}]},
+    {"op": "*", "args": ["c5", {"op": "^", "args": ["x", 5]}]},
+    {"op": "*", "args": ["c6", {"op": "^", "args": ["x", 6]}]},
+    {"op": "*", "args": ["c7", {"op": "^", "args": ["x", 7]}]},
+    {"op": "*", "args": ["c8", {"op": "^", "args": ["x", 8]}]}
+   ]}
+  },
+  "qsat_esat": {
+   "description": "Saturation vapor pressure es(T) [Pa]: QSatMod.F90:90-100. td = min(100, max(-75, T - TKFRZ)); the water polynomial (coefficients a0..a8, QSatMod.F90:18-26) for td >= 0, the ice polynomial (c0..c8, QSatMod.F90:38-46) otherwise, scaled by 100 to Pa.",
+   "params": ["T", "TKFRZ"],
+   "body": {"op": "*", "args": [100.0, {"op": "ifelse", "args": [
+    {"op": ">=", "args": [{"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}, 0.0]},
+    {"op": "apply_expression_template", "args": [], "name": "poly8", "bindings": {
+     "c0": 6.11213476, "c1": 0.444007856, "c2": 0.143064234e-1, "c3": 0.264461437e-3,
+     "c4": 0.305903558e-5, "c5": 0.196237241e-7, "c6": 0.892344772e-10, "c7": -0.373208410e-12,
+     "c8": 0.209339997e-15, "x": {"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}}},
+    {"op": "apply_expression_template", "args": [], "name": "poly8", "bindings": {
+     "c0": 6.11123516, "c1": 0.503109514, "c2": 0.188369801e-1, "c3": 0.420547422e-3,
+     "c4": 0.614396778e-5, "c5": 0.602780717e-7, "c6": 0.387940929e-9, "c7": 0.149436277e-11,
+     "c8": 0.262655803e-14, "x": {"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}}}
+   ]}]}
+  },
+  "qsat_esat_dT": {
+   "description": "d(es)/dT [Pa/K]: QSatMod.F90:108-117. The b0..b8 water fit (QSatMod.F90:28-36) for td >= 0, the d0..d8 ice fit (QSatMod.F90:48-56) otherwise, scaled by 100. td = min(100, max(-75, T - TKFRZ)).",
+   "params": ["T", "TKFRZ"],
+   "body": {"op": "*", "args": [100.0, {"op": "ifelse", "args": [
+    {"op": ">=", "args": [{"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}, 0.0]},
+    {"op": "apply_expression_template", "args": [], "name": "poly8", "bindings": {
+     "c0": 0.444017302, "c1": 0.286064092e-1, "c2": 0.794683137e-3, "c3": 0.121211669e-4,
+     "c4": 0.103354611e-6, "c5": 0.404125005e-9, "c6": -0.788037859e-12, "c7": -0.114596802e-13,
+     "c8": 0.381294516e-16, "x": {"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}}},
+    {"op": "apply_expression_template", "args": [], "name": "poly8", "bindings": {
+     "c0": 0.503277922, "c1": 0.377289173e-1, "c2": 0.126801703e-2, "c3": 0.249468427e-4,
+     "c4": 0.313703411e-6, "c5": 0.257180651e-8, "c6": 0.133268878e-10, "c7": 0.394116744e-13,
+     "c8": 0.498070196e-16, "x": {"op": "min", "args": [100.0, {"op": "max", "args": [-75.0, {"op": "-", "args": ["T", "TKFRZ"]}]}]}}}
+   ]}]}
+  },
+  "qsat_qs": {
+   "description": "Saturation specific humidity qs(T,p) [kg/kg]: QSatMod.F90:101-103. vp = 1/(p - 0.378*es) [1/Pa]; qs = es * 0.622 * vp. Shares qsat_esat by reference.",
+   "params": ["T", "p", "TKFRZ"],
+   "body": {"op": "*", "args": [
+    {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}},
+    0.622,
+    {"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}
+   ]}
+  },
+  "qsat_qsdT": {
+   "description": "d(qs)/dT [1/K]: QSatMod.F90:118-120. qsdT = esdT * vp1 * vp * p with vp1 = 0.622/(p - 0.378*es) and vp = 1/(p - 0.378*es), i.e. qsdT = 0.622*esdT*p/(p - 0.378*es)^2. Shares qsat_esat and qsat_esat_dT by reference.",
+   "params": ["T", "p", "TKFRZ"],
+   "body": {"op": "*", "args": [
+    0.622,
+    {"op": "apply_expression_template", "args": [], "name": "qsat_esat_dT", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}},
+    "p",
+    {"op": "^", "args": [{"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}, 2]}
+   ]}
+  },
+  "soil_suction": {
+   "description": "Soil matric potential smp = -sucsat * s^(-bsw) [mm], negative: SoilWaterRetentionCurveClappHornberg1978Mod.F90:115.",
+   "params": ["sucsat", "bsw", "s"],
+   "body": {"op": "*", "args": [-1.0, "sucsat", {"op": "^", "args": ["s", {"op": "-", "args": ["bsw"]}]}]}
+  },
+  "canopy_intercept_liq": {
+   "description": "Canopy liquid-interception fraction fpiliq [1] (CLM5 default, use_clm5_fpi = .false.): CanopyHydrologyMod.F90:538. fpiliq = 0.25*(1 - exp(-0.5*(elai+esai))).",
+   "params": ["elai", "esai"],
+   "body": {"op": "*", "args": [0.25, {"op": "-", "args": [1.0, {"op": "exp", "args": [{"op": "*", "args": [-0.5, {"op": "+", "args": ["elai", "esai"]}]}]}]}]}
+  },
+  "canopy_intercept_snow": {
+   "description": "Canopy snow-interception fraction fpisnow [1]: CanopyHydrologyMod.F90:541. fpisnow = 1 - exp(-0.5*(elai+esai)).",
+   "params": ["elai", "esai"],
+   "body": {"op": "-", "args": [1.0, {"op": "exp", "args": [{"op": "*", "args": [-0.5, {"op": "+", "args": ["elai", "esai"]}]}]}]}
+  },
+  "canopy_storage_max": {
+   "description": "Maximum canopy storage canmx [mm H2O] = storage_scalar*(elai+esai): CanopyHydrologyMod.F90:755 (liq_canopy_storage_scalar) and :757 (snow_canopy_storage_scalar).",
+   "params": ["storage_scalar", "elai", "esai"],
+   "body": {"op": "*", "args": ["storage_scalar", {"op": "+", "args": ["elai", "esai"]}]}
+  },
+  "canopy_excess_flux": {
+   "description": "Rate of excess canopy water falling off the canopy [mm H2O/s] = max((can - canmx)/dtime, 0): CanopyHydrologyMod.F90:756, 758.",
+   "params": ["can", "canmx", "dtime"],
+   "body": {"op": "max", "args": [{"op": "*", "args": [{"op": "-", "args": ["can", "canmx"]}, {"op": "/", "args": [1.0, "dtime"]}]}, 0.0]}
+  },
+  "pft_z0m_zengwang2007": {
+   "description": "Momentum roughness length z0m = z0mr*htop [m], z0param_method = 'ZengWang2007': BiogeophysPreFluxCalcsMod.F90:175.",
+   "params": ["z0mr", "htop"],
+   "body": {"op": "*", "args": ["z0mr", "htop"]}
+  },
+  "pft_displa_zengwang2007": {
+   "description": "Displacement height displa = displar*htop [m], z0param_method = 'ZengWang2007': BiogeophysPreFluxCalcsMod.F90:176.",
+   "params": ["displar", "htop"],
+   "body": {"op": "*", "args": ["displar", "htop"]}
+  },
+  "vegetation_emissivity": {
+   "description": "Vegetation emissivity emv = 1 - exp(-(elai+esai)/avmuir) [1]: BiogeophysPreFluxCalcsMod.F90:397.",
+   "params": ["elai", "esai", "avmuir"],
+   "body": {"op": "-", "args": [1.0, {"op": "exp", "args": [{"op": "*", "args": [-1.0, {"op": "/", "args": [{"op": "+", "args": ["elai", "esai"]}, "avmuir"]}]}]}]}
+  },
+  "ground_emissivity": {
+   "description": "Ground emissivity emg = (1-frac_sno)*emg_soil + frac_sno*emg_snow [1], emg_soil = 0.96, emg_snow = 0.97: BiogeophysPreFluxCalcsMod.F90:348.",
+   "params": ["frac_sno_albedo", "emg_soil", "emg_snow"],
+   "body": {"op": "+", "args": [{"op": "*", "args": [{"op": "-", "args": [1.0, "frac_sno_albedo"]}, "emg_soil"]}, {"op": "*", "args": ["frac_sno_albedo", "emg_snow"]}]}
+  },
+  "latent_heat_of_vapor": {
+   "description": "Latent heat of vaporization or sublimation htvp [J/kg]: BiogeophysPreFluxCalcsMod.F90:354-358. hsub when the top layer has ice but no liquid (h2osoi_liq <= 0 and h2osoi_ice > 0), else hvap.",
+   "params": ["h2osoi_liq_top", "h2osoi_ice_top", "hvap", "hsub"],
+   "body": {"op": "ifelse", "args": [
+    {"op": "and", "args": [{"op": "<=", "args": ["h2osoi_liq_top", 0.0]}, {"op": ">", "args": ["h2osoi_ice_top", 0.0]}]},
+    "hsub", "hvap"
+   ]}
+  }
+ }
+}
