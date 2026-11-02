@@ -219,3 +219,34 @@ Format template:
 - **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
 - **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
 
+
+## 20. CLM soil-water negative h2osoi_liq is printed but not stopped (endrun commented out)
+
+- **Location:** `components/clm/src/biogeophys/SoilWaterMovementMod.F90:1412-1416`
+  (private `soilwater_moisture_form`, adaptive-substep Richards solve; the
+  check `if(h2osoi_liq(c,j) < -1e-6_r8)` prints
+  `'layer, h2osoi_liq: ', c, j, h2osoi_liq(c,j)` and then the
+  `call endrun(subname // ':: negative soil moisture values found!')` is
+  **commented out**).
+- **Description:** when the Richards substep solve produces negative liquid
+  soil moisture, the code writes a diagnostic line and continues with the
+  unphysical negative value instead of aborting (or clamping). In the
+  instrumented I2000Clm60Sp run (cesm.log.11967609.261101-200125 and
+  .261102-004337, lines 14-19) column 182 prints layers 2-5:
+  `-20.878`, `-1.957e-2`, `-2.258e-2`, `-7.776e-3` kg/m2 (deterministic,
+  4 lines per run). The -20.9 kg/m2 layer-2 value is far below the
+  physical range (a 0.02 m soil layer at porosity ~0.4 holds at most
+  ~8 kg/m2), so the state is corrupt at that point.
+- **Impact on results:** the traced soil-moisture-dependent outputs
+  (infiltration, drainage, transpiration stress, soil heat capacity via
+  h2osoi in SoilThermProp) inherit the negative water mass for the
+  affected column/layers; the effect is confined to the flagged column in
+  this run but the code path is reachable in any run with the adaptive
+  substep scheme.
+- **Reproduced/corrected in .esm:** n/a for stage 2 so far (no soil-water
+  .esm component yet); the stage-2 clm soil skeleton should reproduce the
+  Richards solve and clamp/flag negatives.
+- **Status:** open (recorded; endrun deliberately disabled upstream — the
+  surrounding code already moved the over-saturation excess upward just
+  before this check, so the negative is a residual from the substep
+  solve, not from that redistribution).
