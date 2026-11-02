@@ -255,7 +255,8 @@
          { "op": ">", "args": ["rlen", 0.0] },
          { "op": ">", "args": ["wr", 0.0] } ] },
        { "op": "apply_expression_template", "args": [], "name": "channel_depth",
-         "bindings": { "m": "mr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth" } },
+         "bindings": { "m": "mr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth",
+          "SLOPE1": {"op": "const", "args": [], "value": 0.1, "units": "1"} } },
        0.0
      ] }
     },
@@ -266,7 +267,8 @@
          { "op": ">", "args": ["rlen", 0.0] },
          { "op": ">", "args": ["wr", 0.0] } ] },
        { "op": "apply_expression_template", "args": [], "name": "channel_perimeter",
-         "bindings": { "h": "yr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth" } },
+         "bindings": { "h": "yr", "rwidth": "rwidth", "rwidth0": "rwidth0", "rdepth": "rdepth",
+          "SLOPE1": {"op": "const", "args": [], "value": 0.1, "units": "1"} } },
        0.0
      ] }
     },
@@ -402,6 +404,131 @@
       {"variable": "erout", "time": 0.0, "expected": 0.0},
       {"variable": "dwr", "time": 0.0, "expected": 5.089772935408382e-19},
       {"variable": "flow", "time": 0.0, "expected": 0.0}
+     ]
+    },
+    {
+     "id": "geometry_inbank_cell100312",
+     "description": "Instantaneous pin of the in-bank branch of the main-channel cross-section chain GRMR/GRHR/GRPR/GRRR (mosart_physics.F90:441-572) at half bankfull on the cell-100312 reach (rlen = 144889.1719 m, rwidth = 93.9573745727539062 m, rwidth0 = 469.786872863769531 m, rdepth = 2 m): wr = 1.36134061957444288e7 m3 gives mr = wr/rlen = 93.9573745727539062 m2 = (rdepth*rwidth)/2, so mr - rdepth*rwidth = -93.9573745727539062 m2 <= TINYVALUE and GRHR returns yr = mr/rwidth = 1.0 m (F90:510-511); GRPR sees h <= rdepth + TINYVALUE and returns pr = rwidth + 2*yr = 95.9573745727539062 m (F90:543-544); GRRR returns rr = mr/pr = 0.979157412247834924 m. Expected values from the unmodified GRHR/GRPR/GRRR compiled from mosart_physics.F90 into the standalone driver stage1/analysis/mosart_geometry/mosart_geometry_driver.f90 (run at these exact inputs; output in stage1/analysis/mosart_geometry/mosart_geometry_reference.txt). time_span {0,0} evaluates the chain pointwise; the closed forms reproduce to round-off (rel 1e-12).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "rlen": 144889.1719,
+      "rwidth": 93.9573745727539062,
+      "rwidth0": 469.786872863769531,
+      "rdepth": 2.0,
+      "rslpsqrt": 0.099498743710662,
+      "nr": 0.05000000074505806,
+      "erlateral": 0.0,
+      "localdelt": 180.0
+     },
+     "initial_conditions": {
+      "wr": 13613406.1957444288
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-24},
+     "assertions": [
+      {"variable": "mr", "time": 0.0, "expected": 93.9573745727539062},
+      {"variable": "yr", "time": 0.0, "expected": 1.0},
+      {"variable": "pr", "time": 0.0, "expected": 95.9573745727539062},
+      {"variable": "rr", "time": 0.0, "expected": 0.979157412247834924}
+     ]
+    },
+    {
+     "id": "geometry_trapezoid_low_cell100312",
+     "description": "Instantaneous pin of the trapezoid branch of GRHR/GRPR/GRRR (mosart_physics.F90:501-572) just above bankfull on the cell-100312 reach: wr = 2.73717015633888580e7 m3 gives mr = wr/rlen = 188.914749145507812 m2 = rdepth*rwidth + 1 m2, so the not-flooded test fails and mr is below the flood-plain threshold rdepth*rwidth + (rwidth+rwidth0)*SLOPE1*((rwidth0-rwidth)/2)/2 + TINYVALUE = 5484.70769110837773 m2, so the trapezoid branch computes yr = rdepth + (-rwidth + sqrt(rwidth^2 + 4*(mr - rdepth*rwidth)/SLOPE1))*SLOPE1/2 = 2.01063109524591122 m (F90:527-530; before the fix this branch multiplied by 0.1*(2.0/1.0) = 0.2 instead of SLOPE1/2 = 0.05 and dropped the leading rdepth, so the depth was wrong in both the increment and the offset); GRPR sees rdepth < h <= rdepth + ((rwidth0-rwidth)/2)*SLOPE1 + TINYVALUE and returns pr = rwidth + 2*(rdepth + (h - rdepth)*sinatanSLOPE1defr) = 98.1710569426293063 m (F90:568-570); GRRR returns rr = mr/pr = 1.92434262224464669 m. Expected values from the compiled Fortran driver stage1/analysis/mosart_geometry/mosart_geometry_driver.f90 at these exact inputs (mosart_geometry_reference.txt). time_span {0,0}; rel 1e-12.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "rlen": 144889.1719,
+      "rwidth": 93.9573745727539062,
+      "rwidth0": 469.786872863769531,
+      "rdepth": 2.0,
+      "rslpsqrt": 0.099498743710662,
+      "nr": 0.05000000074505806,
+      "erlateral": 0.0,
+      "localdelt": 180.0
+     },
+     "initial_conditions": {
+      "wr": 27371701.563388858
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-24},
+     "assertions": [
+      {"variable": "mr", "time": 0.0, "expected": 188.914749145507812},
+      {"variable": "yr", "time": 0.0, "expected": 2.01063109524591122},
+      {"variable": "pr", "time": 0.0, "expected": 98.1710569426293063},
+      {"variable": "rr", "time": 0.0, "expected": 1.92434262224464669}
+     ]
+    },
+    {
+     "id": "geometry_trapezoid_mid_cell100312",
+     "description": "Instantaneous pin of the trapezoid branch of GRHR/GRPR/GRRR (mosart_physics.F90:501-572) at mid-trapezoid on the cell-100312 reach: wr = 4.10950783934871316e8 m3 gives mr = wr/rlen = 2836.31122012694277 m2 = rdepth*rwidth + atrap/2 with atrap = (rwidth+rwidth0)*SLOPE1*((rwidth0-rwidth)/2)/2 = 5296.79294196286992 m2 the full trapezoid area, so the trapezoid branch gives yr = 14.2405378578643376 m and GRPR (trapezoid branch) pr = rwidth + 2*(rdepth + (yr - rdepth)*sinatanSLOPE1defr) = 343.989140587070096 m, rr = mr/pr = 8.24535104592646029 m. Expected values from the compiled Fortran driver stage1/analysis/mosart_geometry/mosart_geometry_driver.f90 at these exact inputs (mosart_geometry_reference.txt). time_span {0,0}; rel 1e-12.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "rlen": 144889.1719,
+      "rwidth": 93.9573745727539062,
+      "rwidth0": 469.786872863769531,
+      "rdepth": 2.0,
+      "rslpsqrt": 0.099498743710662,
+      "nr": 0.05000000074505806,
+      "erlateral": 0.0,
+      "localdelt": 180.0
+     },
+     "initial_conditions": {
+      "wr": 410950783.934871316
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-24},
+     "assertions": [
+      {"variable": "mr", "time": 0.0, "expected": 2836.31122012694277},
+      {"variable": "yr", "time": 0.0, "expected": 14.2405378578643376},
+      {"variable": "pr", "time": 0.0, "expected": 343.989140587070096},
+      {"variable": "rr", "time": 0.0, "expected": 8.24535104592646029}
+     ]
+    },
+    {
+     "id": "geometry_trapezoid_high_cell100312",
+     "description": "Instantaneous pin of the trapezoid branch of GRHR/GRPR/GRRR (mosart_physics.F90:501-572) just below the flood-plain threshold on the cell-100312 reach: wr = 7.94529866306353807e8 m3 gives mr = wr/rlen = 5483.70769110837773 m2 = rdepth*rwidth + atrap - 1 m2 (the flood-plain threshold is rdepth*rwidth + atrap + TINYVALUE = 5484.70769110837773 m2, so the trapezoid branch still applies), yr = 20.7893461932681980 m (approaching the trapezoid-top depth rdepth + SLOPE1*((rwidth0-rwidth)/2) = 20.7914749145507827 m), pr = 475.618559061807161 m, rr = mr/pr = 11.5296335406368442 m. Expected values from the compiled Fortran driver stage1/analysis/mosart_geometry/mosart_geometry_driver.f90 at these exact inputs (mosart_geometry_reference.txt). time_span {0,0}; rel 1e-12.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "rlen": 144889.1719,
+      "rwidth": 93.9573745727539062,
+      "rwidth0": 469.786872863769531,
+      "rdepth": 2.0,
+      "rslpsqrt": 0.099498743710662,
+      "nr": 0.05000000074505806,
+      "erlateral": 0.0,
+      "localdelt": 180.0
+     },
+     "initial_conditions": {
+      "wr": 794529866.306353807
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-24},
+     "assertions": [
+      {"variable": "mr", "time": 0.0, "expected": 5483.70769110837773},
+      {"variable": "yr", "time": 0.0, "expected": 20.789346193268198},
+      {"variable": "pr", "time": 0.0, "expected": 475.618559061807161},
+      {"variable": "rr", "time": 0.0, "expected": 11.5296335406368442}
+     ]
+    },
+    {
+     "id": "geometry_floodplain_cell100312",
+     "description": "Instantaneous pin of the flood-plain branch of GRHR/GRPR/GRRR (mosart_physics.F90:501-572) above the trapezoid on the cell-100312 reach: wr = 8.30897048453253746e8 m3 gives mr = wr/rlen = 5734.70769110837773 m2 = rdepth*rwidth + atrap + 250 m2 > the flood-plain threshold, so GRHR returns yr = rdepth + SLOPE1*((rwidth0-rwidth)/2) + deltam/rwidth0 = 21.3236311207861262 m (deltam = 250 m2, F90:525-526); GRPR (flood-plain branch) returns pr = rwidth + 2*(rdepth + ((rwidth0-rwidth)/2)*SLOPE1*sinatanSLOPE1defr + deltah) = 476.725658242511884 m; GRRR returns rr = mr/pr = 12.0293665590600813 m. Expected values from the compiled Fortran driver stage1/analysis/mosart_geometry/mosart_geometry_driver.f90 at these exact inputs (mosart_geometry_reference.txt). time_span {0,0}; rel 1e-12.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "rlen": 144889.1719,
+      "rwidth": 93.9573745727539062,
+      "rwidth0": 469.786872863769531,
+      "rdepth": 2.0,
+      "rslpsqrt": 0.099498743710662,
+      "nr": 0.05000000074505806,
+      "erlateral": 0.0,
+      "localdelt": 180.0
+     },
+     "initial_conditions": {
+      "wr": 830897048.453253746
+     },
+     "tolerance": {"rel": 1e-12, "abs": 1e-24},
+     "assertions": [
+      {"variable": "mr", "time": 0.0, "expected": 5734.70769110837773},
+      {"variable": "yr", "time": 0.0, "expected": 21.3236311207861262},
+      {"variable": "pr", "time": 0.0, "expected": 476.725658242511884},
+      {"variable": "rr", "time": 0.0, "expected": 12.0293665590600813}
      ]
     }
    ]
