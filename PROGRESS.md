@@ -26,6 +26,16 @@ Last updated: 2026-11-01.
   2026-11-01: manager instructions moved to `CLAUDE.md`; workers are now
   DeepSeek V4 Flash opencode slurm jobs (`tools/slurm-agent/`), tracked in
   `jobs.json`.
+- **esm CLI 0.7.0 + repo cleanup** (2026-11-01) — `./esm` upgraded
+  0.6.0 → 0.7.0 (release binary, sha256 verified; breaking unit/table
+  checks, new `units_dimensionless_literal_mismatch` warning). Regression
+  check dispatched as `esm070-regress`. Cleanup: merged worktrees
+  `wt/cice-dedd` / `wt/stage2-clm` removed; the uncommitted CLM skeletons
+  from the latter rescued to `wt/clm-skeletons` (`485b260`);
+  `units/dimensionless-literals` (codemod on a stale base, conflicts in
+  CICE files) dropped locally — origin copy kept; redo the codemod on
+  current main after the 0.7.0 check. CTSM W1b (`clm-w1b`, base
+  `wt/clm-skeletons`) and W2 dump extension (`clm-dumps-w2`) dispatched.
 
 ## Milestone 1 — CESM source access + build; reference runs; boundary catalog
 
