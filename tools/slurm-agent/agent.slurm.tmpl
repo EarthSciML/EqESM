@@ -160,7 +160,10 @@ if [ -f "$RUN_DIR/yield" ]; then
         status "failed: scontrol requeue refused (session saved; resubmit with --workdir to continue)"
         exit 1
     fi
-    sleep 600               # slurm kills this attempt; the TERM trap sets the status
+    # slurm now signals this attempt; the TERM trap sets the status. Sleep in the
+    # background and `wait`, so bash runs the trap at once (a foreground sleep
+    # would delay it until slurm's SIGKILL, KillWait = 90 s later).
+    sleep 600 & wait $!
     exit 0
 fi
 

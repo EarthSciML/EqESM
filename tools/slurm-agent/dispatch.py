@@ -320,8 +320,8 @@ def cmd_cancel(a):
 
 
 def _squeue_rows(partition):
-    fields = ("id", "name", "state", "reason", "submit", "start", "nodes", "nice", "left")
-    out = sh("squeue", "-h", "-p", partition, "-o", "%i|%j|%T|%r|%V|%S|%D|%y|%L", check=False)
+    fields = ("id", "name", "state", "reason", "submit", "start", "nodes", "nice", "left", "nodelist")
+    out = sh("squeue", "-h", "-p", partition, "-o", "%i|%j|%T|%r|%V|%S|%D|%y|%L|%N", check=False)
     rows = []
     for line in out.splitlines():
         r = dict(zip(fields, line.split("|")))
@@ -347,17 +347,47 @@ def _seconds_left(s):
         return float("inf")  # UNLIMITED / NOT_SET
 
 
+def _hostnames(spec):
+    if not spec or spec == "(null)":
+        return None
+    return set(sh("scontrol", "show", "hostnames", spec, check=False).split())
+
+
+def _node_limits(jobid):
+    """(required nodes or None, excluded nodes) of a pending job."""
+    out = sh("scontrol", "show", "job", "-o", str(jobid), check=False)
+    f = dict(kv.split("=", 1) for kv in out.split() if "=" in kv)
+    return _hostnames(f.get("ReqNodeList")), _hostnames(f.get("ExcNodeList")) or set()
+
+
+def _agent_yield_settings(runs):
+    """{jobid: yield_after_seconds or None (= never yields)} from each run's job script."""
+    out = {}
+    for m in runs.glob("*/meta.json"):
+        try:
+            jobid = str(json.loads(m.read_text()).get("jobid"))
+            script = (m.parent / "job.slurm").read_text()
+        except (OSError, ValueError):
+            continue
+        y = re.search(r"^YIELD=(\d)", script, re.M)
+        after = re.search(r"^YIELD_AFTER=(\d+)", script, re.M)
+        out[jobid] = int(after[1]) if y and y[1] == "1" and after else None
+    return out
+
+
 def cmd_should_yield(a):
     """Called once a minute by a running agent job. Prints the id of the waiting
     job this agent should make room for, or nothing.
 
     A job "outranks" an agent when its nice value is lower, whoever submitted
-    it. Waiting jobs (PENDING on Resources/Priority for at least --after
-    seconds), lowest nice and oldest first, are each given as many agent nodes
-    as they request: running agent jobs (job name agent-*) with a higher nice,
-    highest nice and most recently started first, skipping agents with less
-    than --min-left seconds left. Every watcher sees the same squeue snapshot,
-    so they agree on who yields. A shared log in the runs dir records each
+    it. Waiting jobs (PENDING on Resources/Priority), lowest nice and oldest
+    first, are each given as many agent nodes as they request: running agent
+    jobs (job name agent-*) with a higher nice, on a node the waiting job may
+    use (its ReqNodeList/ExcNodeList), whose own yield-after time the job has
+    waited (read from each run's job.slurm, so all watchers agree; agents
+    submitted with --no-yield never qualify), highest nice and most recently
+    started first, skipping agents with less than --min-left seconds left.
+    Every watcher sees the same squeue snapshot, so they agree on who yields. A shared log in the runs dir records each
     yield, so a waiting job that still cannot start (e.g. it needs more than
     one node can give) never gets more yields than the nodes it asked for.
     """
@@ -366,13 +396,17 @@ def cmd_should_yield(a):
     me = next((r for r in rows if r["id"] == str(a.jobid)), None)
     if not me or me["state"] != "RUNNING":
         return
+    runs = Path(a.runs_dir) if a.runs_dir else runs_dir()
+    settings = _agent_yield_settings(runs)
+    settings.setdefault(me["id"], a.after)
+    finite = [v for v in settings.values() if v is not None]
+    shortest = min(finite) if finite else a.after
     waiting = sorted((r for r in rows if r["state"] == "PENDING"
                       and r["reason"] in ("Resources", "Priority")
-                      and _seconds_since(r["submit"]) >= a.after),
+                      and _seconds_since(r["submit"]) >= shortest),
                      key=lambda r: (r["nice"], r["submit"]))
     if not waiting:
         return
-    runs = Path(a.runs_dir) if a.runs_dir else runs_dir()
     logp = runs / "yield-log.json"
     with open(runs / "yield-log.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -390,10 +424,17 @@ def cmd_should_yield(a):
         target = None
         for w in waiting:
             need = w["nodes"] - len(log.get(w["id"], []))
+            if need <= 0:
+                continue
+            waited = _seconds_since(w["submit"])
+            req, exc = _node_limits(w["id"])
             for ag in agents:
                 if need <= 0:
                     break
-                if ag["id"] in taken or ag["nice"] <= w["nice"]:
+                after = settings.get(ag["id"])
+                if (ag["id"] in taken or ag["nice"] <= w["nice"] or after is None
+                        or waited < after or ag["nodelist"] in exc
+                        or (req is not None and ag["nodelist"] not in req)):
                     continue
                 taken.add(ag["id"])
                 need -= 1
@@ -401,9 +442,10 @@ def cmd_should_yield(a):
                     target = w["id"]
             if target:
                 break
-        if target:
+        if target and not a.dry_run:
             log.setdefault(target, []).append(me["id"])
-        logp.write_text(json.dumps(log, indent=1) + "\n")
+        if not a.dry_run:
+            logp.write_text(json.dumps(log, indent=1) + "\n")
     if target:
         print(target)
 
@@ -639,6 +681,7 @@ def main():
     s.add_argument("--min-left", type=int, default=1800,
                    help="don't yield with less than this many seconds of time limit left")
     s.add_argument("--runs-dir")
+    s.add_argument("--dry-run", action="store_true", help="decide only; don't record the yield")
     s.set_defaults(func=cmd_should_yield)
 
     s = sub.add_parser("renice", help="change the slurm nice value of queued/running runs")
