@@ -1599,7 +1599,7 @@
         "op": "*",
         "args": [
          0.95,
-         5.67e-08,
+         {"op": "const", "args": [], "value": 5.67e-08, "units": "W/m^2/K^4"},
          {
           "op": "^",
           "args": [
@@ -1607,7 +1607,7 @@
             "op": "+",
             "args": [
              "Tsfc",
-             273.15
+             {"op": "const", "args": [], "value": 273.15, "units": "K"}
             ]
            },
            4
@@ -1645,10 +1645,10 @@
         "op": "sqrt",
         "args": [
          {
-          "op": "sqrt",
+          "op": "/",
           "args": [
            {
-            "op": "/",
+            "op": "sqrt",
             "args": [
              {
               "op": "+",
@@ -1668,10 +1668,10 @@
                 ]
                }
               ]
-             },
-             {"op": "const", "args": [], "value": 1026.0, "units": "kg^2/m^6"}
+             }
             ]
-           }
+           },
+           {"op": "const", "args": [], "value": 1026.0, "units": "kg/m^3"}
           ]
          }
         ]
@@ -2203,7 +2203,7 @@
        {
         "op": "*",
         "args": [
-         917.0,
+         {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"},
          4.0,
          0.001,
          {
@@ -2216,7 +2216,7 @@
             "op": "/",
             "args": [
              "evapin",
-             917.0
+             {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}
             ]
            }
           ]

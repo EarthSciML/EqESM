@@ -277,7 +277,7 @@
          { "op": ">", "args": ["rlen", 0.0] },
          { "op": ">", "args": ["wr", 0.0] } ] },
        { "op": "apply_expression_template", "args": [], "name": "hydraulic_radius",
-         "bindings": { "m": "mr", "p": "pr" } },
+         "bindings": { "area": "mr", "p": "pr" } },
        0.0
      ] }
     },

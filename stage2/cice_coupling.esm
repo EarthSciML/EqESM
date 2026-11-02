@@ -1880,7 +1880,7 @@
              {
               "op": "*",
               "args": [
-               {"op": "const", "args": [], "value": 287.058, "units": "m^2/(K*s^2)"},
+               {"op": "const", "args": [], "value": 287.058, "units": "J/kg/K"},
                {
                 "op": "+",
                 "args": [
@@ -2736,7 +2736,7 @@
              {
               "op": "*",
               "args": [
-               {"op": "const", "args": [], "value": 5.67e-08, "units": "kg/(K^4*s^3)"},
+               {"op": "const", "args": [], "value": 5.67e-08, "units": "W/m^2/K^4"},
                {
                 "op": "^",
                 "args": [
@@ -2744,7 +2744,7 @@
                   "op": "+",
                   "args": [
                    "Tf",
-                   {"op": "const", "args": [], "value": 273.15, "units": "degC"}
+                   {"op": "const", "args": [], "value": 273.15, "units": "K"}
                   ]
                  },
                  4
@@ -4359,22 +4359,22 @@
            {
             "op": "/",
             "args": [
-             9.80616,
+             {"op": "const", "args": [], "value": 9.80616, "units": "m/s^2"},
              2.0
             ]
            },
            {
             "op": "-",
             "args": [
-             1026.0,
-             917.0
+             {"op": "const", "args": [], "value": 1026.0, "units": "kg/m^3"},
+             {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"}
             ]
            },
            {
             "op": "/",
             "args": [
-             917.0,
-             1026.0
+             {"op": "const", "args": [], "value": 917.0, "units": "kg/m^3"},
+             {"op": "const", "args": [], "value": 1026.0, "units": "kg/m^3"}
             ]
            }
           ]

@@ -208,7 +208,7 @@
          { "op": ">", "args": ["tlen", 0.0] },
          { "op": ">", "args": ["wt", 0.0] } ] },
        { "op": "apply_expression_template", "args": [], "name": "hydraulic_radius",
-         "bindings": { "m": "mt", "p": "pt" } },
+         "bindings": { "area": "mt", "p": "pt" } },
        0.0
      ] }
     },

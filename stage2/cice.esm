@@ -229,7 +229,7 @@
       "bindings": {
        "rhoa": "rhoa",
        "wind": "wind",
-       "Lheat": {"op": "const", "args": [], "value": 2834700.0, "units": "m^2/s^2"}
+       "Lheat": {"op": "const", "args": [], "value": 2834700.0, "units": "J/kg"}
       }
      }
     }
