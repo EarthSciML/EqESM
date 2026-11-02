@@ -8,7 +8,10 @@ C_JRA_t62_mom6_inst run (see stage1/runs/MOM6_LANE.md):
 
 1. CSV hygiene: `# description`/`# columns` headers present, no blank
    lines, every data row has exactly #columns fields (trailing comma
-   stripped), expected row counts.
+   stripped), expected row counts (the traced domain - the number of
+   traced cells and steps - is discovered from the CSV keys: PET 0's SW
+   corner block has 12 ocean cells and the trace covers 12 coupling
+   steps).
 2. EOS law (mom6_eos.csv): rho(T,S,p), drho/dT, drho/dS reproduced by the
    Wright 1997 full-range law (MOM_EOS_Wright_full.F90 density_elem /
    calculate_density_derivs_elem, constants at :24-38) to round-off; the
@@ -72,9 +75,7 @@ RHO_0 = 1035.0        # kg m-3
 LF = 3.337e5          # J/kg latent heat of fusion
 LV = 2.501e6          # J/kg latent heat of vaporization
 
-NCELLS = 32
-NLAYERS = 75
-NSTEPS = 12
+NLAYERS = 75          # NK of the tx2_3v2 grid (MOM_input NK)
 KE = NLAYERS
 NZ = KE + 1
 
@@ -148,6 +149,18 @@ def main():
     obl_desc, obl_cols, obl_rows = read_csv(D + "mom6_kpp_obl.csv")
     kpp_desc, kpp_cols, kpp_rows = read_csv(D + "mom6_kpp.csv")
     sfc_desc, sfc_cols, sfc_rows = read_csv(D + "mom6_sfc_forcing.csv")
+
+    # The traced domain is discovered from the data: PET 0's ocean cells
+    # (the SW corner block of the tx2_3v2 grid has only 12 ocean cells -
+    # the 77 southernmost rows are Antarctic land) and the number of traced
+    # coupling steps (dump_first_steps=12).
+    def key_cols(rows, cols):
+        ix = {c: i for i, c in enumerate(cols)}
+        return {(r[ix["cpl_step"]], r[ix["gi"]], r[ix["gj"]]) for r in rows}
+    obl_keys = key_cols(obl_rows, obl_cols)
+    NCELLS = len({(k[1], k[2]) for k in obl_keys})
+    NSTEPS = len({k[0] for k in obl_keys})
+    print(f"traced domain: {NCELLS} cells x {NSTEPS} steps (from CSV keys)")
 
     expect = {
         "mom6_eos.csv": NCELLS * KE * NSTEPS,
