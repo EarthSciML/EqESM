@@ -34,12 +34,27 @@ TEMPLATE = TOOL_DIR / "agent.slurm.tmpl"
 # for its GPUs. A comma-separated --profile list submits to several partitions
 # at once (slurm starts the job on whichever has room first); this only works
 # when the profiles share the same gres/mem/ntasks.
+#
+# qos: on this cluster preemption is QOS-based (PreemptType=preempt/qos).
+# `scav_high` (the ctessum account's default) preempts the `normal` QOS that
+# every scavenger-partition job runs under, so an agent job outranks scavenger
+# work no matter what its nice value is. It is set explicitly so that this does
+# not depend on the account default.
 PROFILES = {
-    "ctessum": dict(partition="ctessum", account="ctessum",
+    "ctessum": dict(partition="ctessum", account="ctessum", qos="scav_high",
                     gres="gpu:QuadroRTX6000:8", ntasks=40, mem=176992,
                     max_seconds=3 * 86400),
 }
 DEFAULT_PROFILE = "ctessum"
+
+# Default slurm nice value for agent jobs. Among ctessum-partition jobs the
+# priority is PriorityWeightPartition (2000) + age (up to 1000 after 7 days,
+# about 6 per hour) - nice; the QOS priority weight is 0. A nice of 100 puts an
+# agent job just below a group member's normal job of the same age (it takes
+# about 17 h of extra waiting to catch up with a freshly submitted one). It
+# does not affect preemption of scavenger jobs (see qos above). Users may only
+# raise nice (lower priority); a negative value needs a slurm operator.
+DEFAULT_NICE = 100
 
 LLM_MODELS = {"v4": "local/deepseek-v4-flash", "v41": "local/deepseek-v4.1-flash"}
 
@@ -161,13 +176,15 @@ def cmd_submit(a):
     profiles = [PROFILES[p] for p in a.profile.split(",")]
     prof = dict(profiles[0])
     prof["partition"] = ",".join(p["partition"] for p in profiles)
-    for k in ("partition", "account", "gres", "ntasks", "mem"):
+    for k in ("partition", "account", "qos", "gres", "ntasks", "mem"):
         if getattr(a, k) is not None:
             prof[k] = getattr(a, k)
 
     secs = parse_time(a.time)
     if secs > prof["max_seconds"]:
         sys.exit(f"--time {a.time} exceeds the partition limit {fmt_time(prof['max_seconds'])}")
+    if a.nice < 0:
+        sys.exit("--nice must be >= 0 (a negative nice needs a slurm operator)")
     if secs < a.server_timeout + a.grace + 600:
         sys.exit(f"--time {a.time} is too short: model loading alone can take "
                  f"{a.server_timeout // 60} min")
@@ -194,7 +211,8 @@ def cmd_submit(a):
     (d / "prompt.md").write_text(prompt.rstrip() + "\n" + ("" if a.no_footer else footer))
 
     subs = dict(
-        PARTITION=prof["partition"], ACCOUNT=prof["account"], GRES=prof["gres"],
+        PARTITION=prof["partition"], ACCOUNT=prof["account"], QOS=prof["qos"],
+        NICE=a.nice, GRES=prof["gres"],
         NTASKS=prof["ntasks"], MEM=prof["mem"], TIME=fmt_time(secs),
         TIME_SECONDS=secs, GRACE_SECONDS=a.grace, SERVER_TIMEOUT=a.server_timeout,
         JOB_NAME=f"agent-{name}", RUN_DIR=d, WORKDIR=workdir,
@@ -209,7 +227,7 @@ def cmd_submit(a):
     (d / "job.slurm").write_text(script)
 
     meta = dict(name=name, workdir=str(workdir), branch=branch, base=a.base,
-                time=fmt_time(secs), profile=a.profile, llm=a.llm,
+                time=fmt_time(secs), profile=a.profile, llm=a.llm, nice=a.nice,
                 submitted=time.strftime("%Y-%m-%d %H:%M:%S"), jobid=None)
     if a.dry_run:
         print(f"dry run: job script at {d / 'job.slurm'} (no worktree created, nothing submitted)")
@@ -224,7 +242,7 @@ def cmd_submit(a):
         name=name, jobid=meta["jobid"], purpose=a.purpose, milestone=a.milestone,
         parent=a.parent, branch=branch, workdir=str(workdir),
         base_commit=sh("git", "rev-parse", "--short", a.base, cwd=repo) if branch else None,
-        time_limit=fmt_time(secs), llm=a.llm, prompt_chars=len(prompt),
+        time_limit=fmt_time(secs), nice=a.nice, llm=a.llm, prompt_chars=len(prompt),
         submitted=meta["submitted"], started=None, ended=None,
         wait_minutes=None, run_minutes=None, slurm_state=None, agent_status=None,
         outcome="pending", merge_commit=None, notes=""))
@@ -298,6 +316,28 @@ def cmd_cancel(a):
         m = load_meta(run_dir(n))
         sh("scancel", str(m["jobid"]))
         print(f"cancelled {n} (job {m['jobid']})")
+
+
+def cmd_renice(a):
+    """Change the nice value of queued/running runs (scontrol update)."""
+    if a.nice < 0:
+        sys.exit("nice must be >= 0 (a negative nice needs a slurm operator)")
+    for n in a.names:
+        d = run_dir(n)
+        m = load_meta(d)
+        r = subprocess.run(["scontrol", "update", f"jobid={m['jobid']}", f"nice={a.nice}"],
+                           text=True, capture_output=True)
+        if r.returncode:
+            print(f"{n} (job {m['jobid']}): {(r.stderr or r.stdout).strip()}", file=sys.stderr)
+            continue
+        m["nice"] = a.nice
+        (d / "meta.json").write_text(json.dumps(m, indent=2))
+        jobs = load_jobs()
+        for j in jobs:
+            if j.get("jobid") == m["jobid"]:
+                j["nice"] = a.nice
+        save_jobs(jobs)
+        print(f"{n} (job {m['jobid']}): nice={a.nice}")
 
 
 OUTCOMES = ("merged", "partial", "rejected", "timeout", "failed", "cancelled", "superseded")
@@ -449,6 +489,10 @@ def main():
     s.add_argument("--profile", default=DEFAULT_PROFILE,
                    help=f"resource profile(s), comma-separated; known: {', '.join(PROFILES)}")
     s.add_argument("--partition"), s.add_argument("--account"), s.add_argument("--gres")
+    s.add_argument("--qos", help="slurm QOS (default from the profile; scav_high for ctessum)")
+    s.add_argument("--nice", type=int, default=DEFAULT_NICE,
+                   help=f"slurm nice value, >= 0; higher = lower priority among ctessum jobs "
+                        f"(default {DEFAULT_NICE}; 0 = same as a normal group job)")
     s.add_argument("--ntasks", type=int), s.add_argument("--mem", type=int)
     s.add_argument("--llm", default="v4", choices=list(LLM_MODELS),
                    help="launch-server.sh model variant")
@@ -490,6 +534,11 @@ def main():
     s.add_argument("name")
     s.add_argument("-n", type=int, default=40)
     s.set_defaults(func=cmd_tail)
+
+    s = sub.add_parser("renice", help="change the slurm nice value of queued/running runs")
+    s.add_argument("nice", type=int)
+    s.add_argument("names", nargs="+")
+    s.set_defaults(func=cmd_renice)
 
     s = sub.add_parser("cancel", help="scancel runs")
     s.add_argument("names", nargs="+")

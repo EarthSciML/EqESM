@@ -21,6 +21,23 @@ This:
    agent is stopped `--grace` seconds (default 300) before the slurm time
    limit.
 
+## Priority
+
+Agent jobs are submitted with `--nice 100` by default, so they rank just
+below a normal job from someone in the ctessum group. Within the `ctessum`
+partition, priority is 2000 (partition) + age (up to 1000 after 7 days, about
+6 per hour) − nice. A job with nice 100 catches up with a group member's
+freshly submitted job only after about 17 hours of extra waiting.
+`--nice 0` gives normal group priority; a larger value lowers it further.
+`dispatch.py renice <nice> <names…>` changes it for a queued job. Plain users
+can only use values ≥ 0, and slurm may refuse to lower a value that has
+already been raised.
+
+Nice does not affect scavenger jobs. Preemption on this cluster is QOS-based,
+and agent jobs run under QOS `scav_high` (set explicitly in the profile).
+That QOS preempts the `normal` QOS every `scavenger`-partition job uses,
+whatever its nice value.
+
 ## Files in the run dir
 
 | file | contents |
@@ -41,6 +58,7 @@ dispatch.py tail <name> [-n 40]      # readable view of recent tool calls/text
 dispatch.py result <name>            # final report
 dispatch.py record <name> --outcome merged|partial|rejected|timeout|failed|cancelled|superseded \
     [--merge-commit SHA] [--notes …]   # fill in jobs.json timing (from sacct) and outcome
+dispatch.py renice <nice> <names…>    # change a queued run's slurm nice value
 dispatch.py cancel <names…>
 dispatch.py cleanup <name> [--delete-branch] [--force] [--keep-run-dir]
 ```

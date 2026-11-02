@@ -12,6 +12,8 @@
 # node-local scratch and copies the DB back to the run dir when it finishes.
 #SBATCH --partition={{PARTITION}}
 #SBATCH --account={{ACCOUNT}}
+#SBATCH --qos={{QOS}}
+#SBATCH --nice={{NICE}}
 #SBATCH --time={{TIME}}
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node={{NTASKS}}
