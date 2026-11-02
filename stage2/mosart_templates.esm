@@ -110,7 +110,7 @@
       "op": "<=",
       "args": [
        "m",
-       1e-14
+       {"op": "const", "args": [], "value": 1e-14, "units": "m^2"}
       ]
      },
      0.0,
@@ -137,7 +137,7 @@
       "op": "<=",
       "args": [
        "h",
-       1e-14
+       {"op": "const", "args": [], "value": 1e-14, "units": "m"}
       ]
      },
      0.0,
@@ -158,9 +158,9 @@
    }
   },
   "hydraulic_radius": {
-   "description": "Hydraulic radius GRRR (mosart_physics.F90:485-497): r = m / p (wetted area over wetted perimeter), zeroed when the perimeter p <= TINYVALUE (1.0e-14).",
+   "description": "Hydraulic radius GRRR (mosart_physics.F90:485-497): r = area / p (wetted area over wetted perimeter), zeroed when the perimeter p <= TINYVALUE (1.0e-14).",
    "params": [
-    "m",
+    "area",
     "p"
    ],
    "body": {
@@ -170,14 +170,14 @@
       "op": "<=",
       "args": [
        "p",
-       1e-14
+       {"op": "const", "args": [], "value": 1e-14, "units": "m"}
       ]
      },
      0.0,
      {
       "op": "/",
       "args": [
-       "m",
+       "area",
        "p"
       ]
      }
@@ -199,7 +199,7 @@
       "op": "<=",
       "args": [
        "m",
-       1e-14
+       {"op": "const", "args": [], "value": 1e-14, "units": "m^2"}
       ]
      },
      0.0,
@@ -222,7 +222,7 @@
            }
           ]
          },
-         1e-14
+         {"op": "const", "args": [], "value": 1e-14, "units": "m^2"}
         ]
        },
        {
@@ -281,7 +281,7 @@
                }
               ]
              },
-             1e-14
+             {"op": "const", "args": [], "value": 1e-14, "units": "m^2"}
             ]
            }
           ]
@@ -455,7 +455,7 @@
       "op": "<",
       "args": [
        "h",
-       1e-14
+       {"op": "const", "args": [], "value": 1e-14, "units": "m"}
       ]
      },
      0.0,
@@ -470,7 +470,7 @@
           "op": "+",
           "args": [
            "rdepth",
-           1e-14
+           {"op": "const", "args": [], "value": 1e-14, "units": "m"}
           ]
          }
         ]
@@ -518,7 +518,7 @@
                0.1
               ]
              },
-             1e-14
+             {"op": "const", "args": [], "value": 1e-14, "units": "m"}
             ]
            }
           ]
