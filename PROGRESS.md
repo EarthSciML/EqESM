@@ -716,9 +716,12 @@ In progress. See PLAN.md §4.1 for the playbook.
   any CI budget and rejects dynamics `sigma12` shape / thermo `index` op;
   RangeSpec bug (#16) still present on 0.8.0, workaround kept;
   EarthSciModels `Project.toml` still pins EarthSciAST 0.3 (no bump in
-  this PR to avoid conflicting with #33). **Next: user approval to push
-  and open the ESD then EarthSciModels PRs; file the python-runner and
-  Julia-walker issues upstream.**
+  this PR to avoid conflicting with #33). **Opened 2026-11-02** from the
+  `ctessum-claude` fork: EarthSciML/EarthSciDiscretizations#50 (merge
+  first) and EarthSciML/EarthSciModels#37 (description corrected for the
+  final python/julia runner results). **Next: shepherd #50 then #37 through
+  review; file the python-runner array-override and Julia-walker issues
+  upstream.**
 - **CICE stage-2 skeleton** ✅ (2026-10-27, merged `7dec7d6`) — worker
   `wt/stage2-cice` (ses_e854ab193ffeUZQdIktqWsJlLU): `cice_templates.esm`
   (41 pointwise law templates with file:line citations), `cice_thermodynamics.esm`
