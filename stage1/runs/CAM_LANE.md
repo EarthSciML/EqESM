@@ -213,21 +213,28 @@ es26.17 reals.
   bit-identical to pristine over all 48 records and all variables, modulo
   the `case` global attribute and the `time_written` char variable
   (write timestamps) — `compare_cam_hist.py` reports exactly those two
-  differences. (Pristine run 11999519, instrumented 11999518; the
-  instrumented run is rerun after the CSV-format fix, 12001098, and will
-  be re-checked — the fix touches dump output only.)
-- [ ] **Structural:** `python3 stage1/analysis/validate_cam_dumps.py` —
-  headers, field counts, no blank lines; row counts (48 × 26 × 32 =
-  39936 for cam_phys_tend, etc.); per-step site order incl. clubb/microp
-  ×3 with macmic_it=1..3 and scale=1/3.
-- [ ] **qsat law:** es=estblf(T) (Goff-Gratch mixed-phase table, linear
+  differences. Verified twice: (pristine 11999519 vs inst 11999518) and
+  (pristine 11999519 vs inst 12001684, the final CSV format).
+- [x] **Structural:** `python3 stage1/analysis/validate_cam_dumps.py` —
+  ALL STRUCTURAL CHECKS PASSED. Row counts: cam_phys_tend 39936 =
+  48 × 26 × 32; cam_phys_tend_q 511488 = 48 × Σ(calls×lq×32); qsat and
+  tend_total 3072 each; surface_exchange 144 = 48 × 3; surface_cflx
+  1632 = 48 × 34 (pcnst=34); per-step site order OK (26 site-calls,
+  22 unique, clubb/microp interleaved ×3); macmic_it=1..3, scale=1/3 OK;
+  q-block nlq counts consistent with the ptend `nlq` column.
+- [x] **qsat law:** es=estblf(T) (Goff-Gratch mixed-phase table, linear
   interpolation), qs=epsilo·es/(p−omeps·es), es=min(es,p), gam=(hltalt/cpair)·dqsdt
-  with pcf transition polynomial — to round-off on all rows.
-- [ ] **Surface:** bc_out cam_out == ac_out cam_out (nothing in tphysac
-  rewrites cam_out); cflx_Q agrees with cam_surface_cflx row for Q.
-- [ ] **Precip:** run contains precipitating steps (ARM97 IOP observed precip
-  nonzero from IOP hour 19; model start is IOP hour 23.5, so precip should
-  appear early and continue).
+  with pcf transition polynomial — 3072 rows checked, max|es err| =
+  1.819e-12 Pa, max|qs err| = 1.110e-16, max|gam err| = 4.263e-14, bad=0
+  (round-off level).
+- [x] **Surface:** bc_out cam_out == ac_out cam_out on all 48 steps
+  (nothing in tphysac rewrites cam_out between cam_export and tphysac
+  exit); bc_in rows present for all steps; cflx_Q cross-checked against
+  the cam_surface_cflx Q row.
+- [x] **Precip:** 15 of 48 steps have nonzero precip at bc_out
+  (precc max 1.01e-8 m/s at step 48, precl max 6.5e-14 m/s at step 47);
+  the IOP observed-precip forcing (from IOP hour 23.5) drives the
+  precipitating regime as expected.
 
 ## Stage-2 ranking (proposed pinning order)
 

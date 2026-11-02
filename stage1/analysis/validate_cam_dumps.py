@@ -250,10 +250,15 @@ def main():
         nlq_from_ptend[(r[0], r[3])].add(r[9])  # nlq column
     okq = True
     for (st, site), cnsts in sorted(blocks.items()):
+        # site-calls of this (step,site) in the ptend file (macmic sites
+        # appear cld_macmic_num_steps times; the q file rows carry no
+        # macmic_it, so they accumulate over the substeps)
+        n_calls = len([r for r in tend
+                       if r[0] == st and r[3] == site]) // pver
         rows = [r for r in tq if r[0] == st and r[3] == site]
-        if len(rows) != len(cnsts) * pver:
+        if len(rows) != n_calls * len(cnsts) * pver:
             print(f"q block step {st} {site}: {len(rows)} rows, "
-                  f"{len(cnsts)} cnsts x {pver}")
+                  f"{n_calls} calls x {len(cnsts)} cnsts x {pver}")
             okq = False
         nlq = {v.strip() for v in nlq_from_ptend[(st, site)]}
         if len(nlq) != 1 or list(nlq)[0] != str(len(cnsts)):
@@ -261,7 +266,7 @@ def main():
             okq = False
     if okq:
         print(f"cam_phys_tend_q: {len(blocks)} (step,site) blocks, "
-              f"each {pver} lev x lq, consistent with ptend nlq")
+              f"rows = calls x lq x {pver}, consistent with ptend nlq")
 
     # ---- per-step site order ---------------------------------------
     exp = expected_sites(nmacmic)

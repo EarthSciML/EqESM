@@ -9,8 +9,8 @@
   },
   "run": {
     "case": "FSCAMARM97_ne3_cam_inst",
-    "job_id": "11999518 (final, with the ocean-column domain file v2 and the ptend-name fix; earlier attempts: 11978227/11978230 crashed on the missing inputdata file; 11987658/11987708 aborted at step ~17 via CLM flwds<=0 with the land-column domain v1)",
-    "result": "PENDING",
+    "job_id": "12001684 (FINAL: ocean-column domain file v2, ptend-name fix, no trailing commas/blank lines, surface row length fix; earlier attempts: 11978227/11978230 crashed on the missing inputdata file; 11987658/11987708 aborted at step ~17 via CLM flwds<=0 with the land-column domain v1; 11999518/12001098/12001251 were dump-format iterations)",
+    "result": "COMPLETED + ALL CHECKS PASSED (2026-11-02, run 12001684, 48/48 steps, exit 0; see checks below)",
     "compset": "2000_CAM60%SCAMARM97_CLM50%SP_CICE%PRES_DOCN%DOM_SROF_SGLC_SWAV_SESP (FSCAMARM97)",
     "grid": "a%ne3np4_l%ne3np4_oi%ne3np4_r%null_g%null_w%null_z%null_m%gx3v7 (ne3_ne3_mg37)",
     "dates": "start 1997-06-18 23:29:45 (START_TOD=84585), STOP_OPTION=nhours STOP_N=24 = 48 physics steps of 1800 s, REST_OPTION=never",
@@ -40,10 +40,10 @@
   "checks": {
     "bit_identical_outputs": "VERIFIED (2026-11-02): instrumented h0i is bit-identical to the pristine run h0i over all 48 records and all variables; the only differences are the case global attribute and the time_written char variable (write timestamps). So the dump code changes nothing in the solution (stage1/analysis/compare_cam_hist.py)",
     "qsat_law": "es = estblf(T) (Goff-Gratch mixed-phase table, linear interpolation), qs = epsilo*es/(p-omeps*es), es=min(es,p), gam = (hltalt/cpair)*qs*p*desdt/(es*(p-omeps*es)) with desdt = hltalt*es/(rh2o*T^2)+tterm (pcf polynomial) to round-off on all 3072 rows",
-    "row_counts": "cam_phys_tend 39936 = 48 steps x 26 site-calls x 32 lev; cam_qsat/cam_tend_total 3072; cam_surface_exchange 144; cam_surface_cflx 48 x pcnst; cam_phys_tend_q 48 x sum(lq) x 32; zero blank lines in all CSVs",
+    "row_counts": "VERIFIED: cam_phys_tend 39936 = 48 x 26 site-calls x 32 lev; cam_phys_tend_q 511488 = 48 x sum(calls x lq x 32), consistent with the ptend nlq column; cam_qsat/cam_tend_total 3072; cam_surface_exchange 144; cam_surface_cflx 1632 = 48 x pcnst (34); no blank lines, no trailing commas",
     "site_order": "per-step site order matches the tphysbc/tphysac call sequence; clubb/microp repeat with macmic_it=1..3 and scale=1/3 (interleaved); the other 20 sites once each",
     "surface_consistency": "bc_out cam_out == ac_out cam_out on all steps; cflx_Q matches the cam_surface_cflx row for Q",
-    "precip": "run precipitates (precsc/precsl/precc/precl > 0 on multiple steps; ARM97 observed precip is nonzero from IOP hour 19, model starts at IOP hour 23.5)"
+    "precip": "VERIFIED: 15/48 steps have nonzero precip at bc_out (precc max 1.01e-8 m/s at step 48, precl max 6.5e-14 m/s at step 47); ARM97 observed precip is nonzero from IOP hour 19, model starts at IOP hour 23.5"
   },
   "stage2_ranking": {
     "1_qsat": "wv_saturation qsat law (wv_saturation.F90 qsat_2D + wv_sat_methods.F90): pure table+formula law, fully pinned by cam_qsat.csv with no pbuf state; first stage-2 target.",
