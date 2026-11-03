@@ -1,0 +1,467 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cdeps_templates",
+  "description": "Expression-template library for the CDEPS DATM data-atmosphere component (stage 2 of the EqESM project): the pointwise forcing-derivation laws of the CLMNCEP datamode (datm/datm_datamode_clmncep_mod.F90, cdeps1.0.112) and of the stream time interpolation (streams/dshr_strdata_mod.F90, streams/dshr_tinterp_mod.F90), transcribed exactly for use by the stage-2 DATM component (cdeps_datm_gswp3.esm). The library carries (a) the saturation vapor pressure esat of datm_eSat (clmncep F90:545-586): the water a0..a6 and ice b0..b6 polynomials evaluated by Horner's rule in degrees C on t = clamp(tK - TKFRZ, -50, 50), phase selected by tKbot < TKFRZ (ice) vs >= (water), result in hPa x100 = Pa; (b) the saturation specific humidity qsat = 0.622 e / (pbot - 0.378 e) (F90:410,415,422); (c) the vapor pressure vp = q pbot / (0.622 + 0.378 q) and air density rho = (pbot - 0.378 vp) / (tbot RDAIR) with RDAIR = 287.0423113650487 (F90:428-429, SHR_CONST_RDAIR = AVOGAD*BOLTZ/MWDAIR); (d) the shortwave direct/diffuse ratios ratio_rvrf of the cam3_5_55-based polynomials (F90:450-456): NIR 0.29548 + 0.00504 s - 1.4957e-5 s^2 + 1.4881e-8 s^3 and VIS 0.17639 + 0.00380 s - 9.0039e-6 s^2 + 8.1351e-9 s^3, both clamped to [0.01, 0.99], where s is the half shortwave (s = swdn/2 = swndr = swvdr); (e) the rain/snow ramp fraction frac = clamp((T - TKFRZ)*0.5, 0, 1) of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45); and (f) the horizontal wind split u = v = wind/sqrt(2) (F90:402-403). TKFRZ = 273.15 K and the phase/ramp thresholds are inlined as literals. All laws are pointwise; the stage-2 DATM model applies them per mesh point with stream values (LB/UB + interpolation factors at the streams layer; interpolated values at the datamode layer) from the GSWP3v1 data_sources, and the tests pin them to the stage-1 instrumentation dumps (stage1/dumps/cdeps/cdeps_strdata_streams.csv, datm_gswp3_streams.csv, datm_gswp3_exports.csv)."
+ },
+ "expression_templates": {
+  "esat_poly_water": {
+   "description": "Saturation vapor pressure over water, a0..a6 polynomial of datm_eSat (datm_datamode_clmncep_mod.F90:553-560, 585-586) evaluated by Horner's rule: e = a0 + t (a1 + t (a2 + t (a3 + t (a4 + t (a5 + t a6))))), t in degrees C (the caller clamps to [-50, 50] and selects the phase), result in hPa (multiply by 100 for Pa).",
+   "params": ["t"],
+   "body": {
+    "op": "+",
+    "args": [
+     6.107799961,
+     {
+      "op": "*",
+      "args": [
+       "t",
+       {
+        "op": "+",
+        "args": [
+         4.436518521e-01,
+         {
+          "op": "*",
+          "args": [
+           "t",
+           {
+            "op": "+",
+            "args": [
+             1.428945805e-02,
+             {
+              "op": "*",
+              "args": [
+               "t",
+               {
+                "op": "+",
+                "args": [
+                 2.650648471e-04,
+                 {
+                  "op": "*",
+                  "args": [
+                   "t",
+                   {
+                    "op": "+",
+                    "args": [
+                     3.031240396e-06,
+                     {
+                      "op": "*",
+                      "args": [
+                       "t",
+                       {
+                        "op": "+",
+                        "args": [
+                         2.034080948e-08,
+                         {
+                          "op": "*",
+                          "args": [
+                           "t",
+                           6.136820929e-11
+                          ]
+                         }
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "esat_poly_ice": {
+   "description": "Saturation vapor pressure over ice, b0..b6 polynomial of datm_eSat (datm_datamode_clmncep_mod.F90:562-569, 582-583) evaluated by Horner's rule: e = b0 + t (b1 + t (b2 + t (b3 + t (b4 + t (b5 + t b6))))), t in degrees C (the caller clamps to [-50, 50] and selects the phase), result in hPa (multiply by 100 for Pa).",
+   "params": ["t"],
+   "body": {
+    "op": "+",
+    "args": [
+     6.109177956,
+     {
+      "op": "*",
+      "args": [
+       "t",
+       {
+        "op": "+",
+        "args": [
+         5.034698970e-01,
+         {
+          "op": "*",
+          "args": [
+           "t",
+           {
+            "op": "+",
+            "args": [
+             1.886013408e-02,
+             {
+              "op": "*",
+              "args": [
+               "t",
+               {
+                "op": "+",
+                "args": [
+                 4.176223716e-04,
+                 {
+                  "op": "*",
+                  "args": [
+                   "t",
+                   {
+                    "op": "+",
+                    "args": [
+                     5.824720280e-06,
+                     {
+                      "op": "*",
+                      "args": [
+                       "t",
+                       {
+                        "op": "+",
+                        "args": [
+                         4.838803174e-08,
+                         {
+                          "op": "*",
+                          "args": [
+                           "t",
+                           1.838826904e-10
+                          ]
+                         }
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "esat": {
+   "description": "Saturation vapor pressure datm_eSat(tK, tKbot) (datm_datamode_clmncep_mod.F90:545-586): t = clamp(tK - TKFRZ, -50, 50) degrees C; over ice when tKbot < TKFRZ else over water (the phase test is on the unclamped bottom temperature, F90:581-585); result x100 converts the hPa polynomials to Pa. Used for the qsat and tdew paths of Sa_shum (F90:408-425) and by the lwdn fallback.",
+   "params": ["tK", "tKbot"],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": ["tKbot", 273.15]
+     },
+     {
+      "op": "*",
+      "args": [
+       100.0,
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "esat_poly_ice",
+        "bindings": {
+         "t": {
+          "op": "min",
+          "args": [
+           50.0,
+           {
+            "op": "max",
+            "args": [
+             -50.0,
+             {
+              "op": "-",
+              "args": ["tK", 273.15]
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       100.0,
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "esat_poly_water",
+        "bindings": {
+         "t": {
+          "op": "min",
+          "args": [
+           50.0,
+           {
+            "op": "max",
+            "args": [
+             -50.0,
+             {
+              "op": "-",
+              "args": ["tK", 273.15]
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "qsat": {
+   "description": "Saturation specific humidity qsat = 0.622 e / (pbot - 0.378 e) (datm_datamode_clmncep_mod.F90:410, 415, 422), e in Pa (from esat), pbot in Pa. Sa_shum = min(qsat, stream shum) on the shum path (F90:411-417).",
+   "params": ["e", "pbot"],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [0.622, "e"]
+     },
+     {
+      "op": "-",
+      "args": [
+       "pbot",
+       {
+        "op": "*",
+        "args": [0.378, "e"]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "vapor_pressure": {
+   "description": "Vapor pressure vp = q pbot / (0.622 + 0.378 q) (datm_datamode_clmncep_mod.F90:428), q = specific humidity [kg/kg], pbot [Pa], vp [Pa]. Intermediate of Sa_dens.",
+   "params": ["q", "pbot"],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": ["q", "pbot"]
+     },
+     {
+      "op": "+",
+      "args": [
+       0.622,
+       {
+        "op": "*",
+        "args": [0.378, "q"]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "density": {
+   "description": "Air density Sa_dens = (pbot - 0.378 vp) / (tbot RDAIR) (datm_datamode_clmncep_mod.F90:429) with RDAIR = 287.0423113650487 J/kg/K = SHR_CONST_AVOGAD*SHR_CONST_BOLTZ/SHR_CONST_MWDAIR (share/shr_const_mod.F90:23-29), tbot [K], pbot and vp [Pa], density [kg/m3].",
+   "params": ["pbot", "vp", "tbot"],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       "pbot",
+       {
+        "op": "*",
+        "args": [0.378, "vp"]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": ["tbot", 287.0423113650487]
+     }
+    ]
+   }
+  },
+  "ratio_rvrf_nir": {
+   "description": "Near-infrared direct/diffuse ratio ratio_rvrf of datm_datamode_clmncep_mod.F90:450-451: min(0.99, max(0.29548 + 0.00504 s - 1.4957e-5 s^2 + 1.4881e-8 s^3, 0.01)) with s = swndr = 0.5 swdn (F90:447-448). The cam3_5_55-derived polynomial gives the fraction of the NIR half of the incoming shortwave that is direct; the diffuse half is (1 - ratio_rvrf).",
+   "params": ["s"],
+   "body": {
+    "op": "min",
+    "args": [
+     0.99,
+     {
+      "op": "max",
+      "args": [
+       0.01,
+       {
+        "op": "+",
+        "args": [
+         0.29548,
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "*",
+            "args": [0.00504, "s"]
+           },
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               -1.4957e-05,
+               {
+                "op": "*",
+                "args": ["s", "s"]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               1.4881e-08,
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": ["s", "s"]
+                 },
+                 "s"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "ratio_rvrf_vis": {
+   "description": "Visible direct/diffuse ratio ratio_rvrf of datm_datamode_clmncep_mod.F90:455-456: min(0.99, max(0.17639 + 0.00380 s - 9.0039e-6 s^2 + 8.1351e-9 s^3, 0.01)) with s = swvdr = 0.5 swdn (F90:453-454).",
+   "params": ["s"],
+   "body": {
+    "op": "min",
+    "args": [
+     0.99,
+     {
+      "op": "max",
+      "args": [
+       0.01,
+       {
+        "op": "+",
+        "args": [
+         0.17639,
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "*",
+            "args": [0.00380, "s"]
+           },
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               -9.0039e-06,
+               {
+                "op": "*",
+                "args": ["s", "s"]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               8.1351e-09,
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": ["s", "s"]
+                 },
+                 "s"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "rain_snow_frac": {
+   "description": "Rain fraction of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45): frac = min(1, max(0, (T - TKFRZ)*0.5)), T in K; the rest (1 - frac) falls as snow. Applied to the convective-scale and large-scale precipitation separately (datm_datamode_clmncep_mod.F90:483-487): snow = rain0*(1 - frac), rain = rain0*frac, each max(0, .).",
+   "params": ["tbot"],
+   "body": {
+    "op": "min",
+    "args": [
+     1.0,
+     {
+      "op": "max",
+      "args": [
+       0.0,
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": ["tbot", 273.15]
+         },
+         0.5
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "wind_split": {
+   "description": "Horizontal wind components Sa_u = Sa_v = wind/sqrt(2) (datm_datamode_clmncep_mod.F90:402-403): the stream wind magnitude is split equally between the zonal and meridional components.",
+   "params": ["wind"],
+   "body": {
+    "op": "/",
+    "args": [
+     "wind",
+     {
+      "op": "sqrt",
+      "args": [2.0]
+     }
+    ]
+   }
+  }
+ }
+}
