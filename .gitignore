@@ -21,6 +21,9 @@ stage1/analysis/mosart_geometry/
 .work/
 __pycache__/
 
+# Scratch analysis tools for the clm-w2-repin lane
+scratch/
+
 # slurm subagent run dirs (tools/slurm-agent/dispatch.py)
 .slurm-agents/
 /.ast/
