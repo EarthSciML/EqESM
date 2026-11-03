@@ -128,6 +128,10 @@ solution-neutral (bit-identical restart files vs the reference
   Sa_pslv})` — one law, one template, no copied formula.
 - JRA55 datamode (same stream layer, different datamode laws) is the
   next slice if time permits.
+- Factoring cleanup: the `s^3` term of the ratio_rvrf_nir/vis
+  polynomials is written with the `^` operator
+  (`{"op": "^", "args": ["s", 3]}`) instead of the nested
+  `(s·s)·s` multiplication; the laws and expected values are unchanged.
 
 ## Units hygiene
 
