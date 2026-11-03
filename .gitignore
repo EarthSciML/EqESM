@@ -11,6 +11,7 @@ stage1/EqESM-cesm-*/
 stage1/instrument/build/
 stage1/cime/cases/
 stage1/inputdata/
+stage1/analysis/mosart_geometry/
 
 # Logs and scratch
 *.log

@@ -95,7 +95,7 @@ formula → esm formula:
 | `rectangular_depth` | GRHT: `h = m/twid`, zeroed when `m <= TINYVALUE` | `ifelse(m <= 1e-14, 0, m/twid)` |
 | `rectangular_perimeter` | GRPT: `p = twid + 2·h`, zeroed when `h <= TINYVALUE` | `ifelse(h <= 1e-14, 0, twid + 2·h)` |
 | `hydraulic_radius` | GRRR: `r = m/p`, zeroed when `p <= TINYVALUE` | `ifelse(p <= 1e-14, 0, m/p)` |
-| `channel_depth` | GRHR three-part cross section (bankfull rectangle → trapezoid of slope SLOPE1=0.1 → flood plain): `h=0` if `m<=TINYVALUE`; `m/rwidth` if `m - rdepth·rwidth <= TINYVALUE`; trapezoid `rdepth + (-rwidth + sqrt(rwidth² + 4·deltam/SLOPE1))·SLOPE1/2`, `deltam = m - rdepth·rwidth`; flood plain `rdepth + SLOPE1·((rwidth0-rwidth)/2) + deltam/rwidth0`, `deltam = m - rdepth·rwidth - (rwidth+rwidth0)·SLOPE1·((rwidth0-rwidth)/2)/2` | nested `ifelse` with `SLOPE1 = 0.1` inlined; trapezoid threshold test `m > rdepth·rwidth + (rwidth+rwidth0)·0.1·((rwidth0-rwidth)/2)/2 + 1e-14` as in F90:517-518 |
+| `channel_depth` | GRHR three-part cross section (bankfull rectangle → trapezoid of slope SLOPE1=0.1 → flood plain): `h=0` if `m<=TINYVALUE`; `m/rwidth` if `m - rdepth·rwidth <= TINYVALUE`; trapezoid `rdepth + (-rwidth + sqrt(rwidth² + 4·deltam/SLOPE1))·SLOPE1/2`, `deltam = m - rdepth·rwidth`; flood plain `rdepth + SLOPE1·((rwidth0-rwidth)/2) + deltam/rwidth0`, `deltam = m - rdepth·rwidth - (rwidth+rwidth0)·SLOPE1·((rwidth0-rwidth)/2)/2` | nested `ifelse` with `SLOPE1` a dimensionless template parameter bound to 0.1 (SLOPE1def, F90:41) at the call sites; trapezoid threshold test `m > rdepth·rwidth + (rwidth+rwidth0)·SLOPE1·((rwidth0-rwidth)/2)/2 + 1e-14` as in F90:517-518. Two transcription bugs were fixed here and are pinned by the Fortran-driver tests (see Testing): the trapezoid depth multiplied by `0.1·(2/1) = 0.2` instead of `SLOPE1/2 = 0.05` (4× too large) and dropped the leading `rdepth` |
 | `channel_perimeter` | GRPR: `p=0` if `h<TINYVALUE`; bankfull `rwidth + 2·h` if `h <= rdepth+TINYVALUE`; flood plain `rwidth + 2·(rdepth + ((rwidth0-rwidth)/2)·SLOPE1·sinatan + deltah)`, `deltah = h - rdepth - ((rwidth0-rwidth)/2)·SLOPE1`; trapezoid `rwidth + 2·(rdepth + (h-rdepth)·sinatan)`; `sinatan = sinatanSLOPE1defr = 1/sin(atan(SLOPE1def))` (F90:554) | same structure; `sinatan` spelled as the identical expression `1/sin(atan(0.1))` |
 
 Substep / routing transcriptions:
@@ -198,11 +198,29 @@ with
 (tests of mounted models run when their own file is a target; the assembly run
 additionally reports its 4 mounts). `esm validate` passes for all six files.
 
+**Fortran-driver geometry pins.** The dump window never reaches the flooded
+GRHR/GRPR branches (see Coverage limitations below), so the wet cross-section
+branches are pinned against the Fortran itself: `GRMR`, `GRRR`, `GRHR` and
+`GRPR` are copied verbatim from `mosart_physics.F90` (with the `TINYVALUE`,
+`SLOPE1def` and `r8` definitions they need) into a standalone gfortran driver,
+untracked under `stage1/analysis/mosart_geometry/` (`mosart_geometry_driver.f90`;
+run at the cell-100312 reach geometry of the dump tests, output in
+`mosart_geometry_reference.txt`). The driver's GRMR→GRHR→GRPR→GRRR chain
+values at inputs hitting every branch — dry, in-bank (`mr = rdepth·rwidth/2`),
+trapezoid just above bankfull (`deltam = 1 m²`), mid-trapezoid
+(`deltam = atrap/2`), trapezoid just below the flood threshold, and flood plain
+(`deltam = atrap + 250 m²`) — are asserted as instantaneous (`time_span {0,0}`,
+rel 1e-12) Channel-model tests `geometry_*_cell100312` (5 tests, 20 assertions;
+`atrap = (rwidth+rwidth0)·SLOPE1·((rwidth0-rwidth)/2)/2 = 5296.79 m²`). These
+tests are the ones that caught the `channel_depth` trapezoid transcription bugs
+(the 0.2-vs-0.05 factor and the missing `rdepth` prefix): before the fix the
+trapezoid `yr` came out 4× too deep minus `rdepth`.
+
 | File | Tests | Assertions | What is pinned |
 |---|---|---|---|
 | `mosart_hillslope.esm` | 6 | 20 | CREHT_nosqrt pointwise (wet and dry states, cells 100312/101032/100313) + one-step growth/drain traces of `d(wh)/dt = qsur + ehout` |
 | `mosart_subnetwork.esm` | 8 | 30 | GRMR/GRHT/GRPT/GRRR chain pointwise (incl. the TINYVALUE zero guards) + Manning velocity + one-step etin/erlateral trace of `d(wt)/dt` |
-| `mosart_channel.esm` | 4 | 33 | dry-cell GRMR/GRHR/GRPR/GRRR chain and dry routing branches pointwise (2 cells + zero guard) + one-step `d(wr)/dt = erlateral` accumulation trace |
+| `mosart_channel.esm` | 9 | 53 | dry-cell GRMR/GRHR/GRPR/GRRR chain and dry routing branches pointwise (2 cells + zero guard) + one-step `d(wr)/dt = erlateral` accumulation trace + **wet cross-section geometry pins from the compiled Fortran** (in-bank, three trapezoid depths, flood plain — every branch of GRHR/GRPR/GRRR) |
 | `mosart_coupling.esm` | 1 | 16 | med↔rof conversions: `Flrl_rofsur → qsur_m3s`, `volr/volrmch → Flrr_volr/volrmch`, all-zero streams |
 | `mosart_routing.esm` | 1 | 16 | one coupling period of the full assembly: mass-conserved `volr`, hillslope fill `wh`, subcycling diagnostics, zero branches |
 
@@ -257,10 +275,11 @@ wetted-area cutoff that would wake the channel flow).
 ### Coverage limitations (this data window)
 
 - The channel is dry through all 8 dumped steps (max `wr = 1.9e-12 m³` →
-  `mr = 1.3e-17 m² < TINYVALUE`), so the nonzero GRHR/GRPR flood-plain
-  branches (`mosart_physics.F90:501-572`) and the wet Manning routing branch
-  of `Routing_KW` are not exercised — they await a wetter window (stage-1
-  rerun with stronger forcing).
+  `mr = 1.3e-17 m² < TINYVALUE`), so the dump window exercises no nonzero
+  GRHR/GRPR branch; the wet cross-section branches are instead pinned by the
+  compiled-Fortran driver tests (`geometry_*_cell100312`, see Testing). Still
+  uncovered by dumps: the wet Manning routing branch of `Routing_KW` (needs a
+  wetter window — stage-1 rerun with stronger forcing).
 - Likewise not present in the window: the `areaTotal2/(rwidth·rlen) > 1e6` and
   `rlen <= 0` channel branches, the `tlen <= hlen` subnetwork pass-through,
   and the nonzero irrigation / flood / qgwl / direct-transfer branches (all
