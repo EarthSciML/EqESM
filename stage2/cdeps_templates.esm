@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cdeps_templates",
-  "description": "Expression-template library for the CDEPS DATM data-atmosphere component (stage 2 of the EqESM project): the pointwise forcing-derivation laws of the CLMNCEP datamode (datm/datm_datamode_clmncep_mod.F90, cdeps1.0.112) and of the stream time interpolation (streams/dshr_strdata_mod.F90, streams/dshr_tinterp_mod.F90), transcribed exactly for use by the stage-2 DATM component (cdeps_datm_gswp3.esm). The library carries (a) the saturation vapor pressure esat of datm_eSat (clmncep F90:545-586): the water a0..a6 and ice b0..b6 polynomials evaluated by Horner's rule in degrees C on t = clamp(tK - TKFRZ, -50, 50), phase selected by tKbot < TKFRZ (ice) vs >= (water), result in hPa x100 = Pa; (b) the saturation specific humidity qsat = 0.622 e / (pbot - 0.378 e) (F90:410,415,422); (c) the vapor pressure vp = q pbot / (0.622 + 0.378 q) and air density rho = (pbot - 0.378 vp) / (tbot RDAIR) with RDAIR = 287.0423113650487 (F90:428-429, SHR_CONST_RDAIR = AVOGAD*BOLTZ/MWDAIR); (d) the shortwave direct/diffuse ratios ratio_rvrf of the cam3_5_55-based polynomials (F90:450-456): NIR 0.29548 + 0.00504 s - 1.4957e-5 s^2 + 1.4881e-8 s^3 and VIS 0.17639 + 0.00380 s - 9.0039e-6 s^2 + 8.1351e-9 s^3, both clamped to [0.01, 0.99], where s is the half shortwave (s = swdn/2 = swndr = swvdr); (e) the rain/snow ramp fraction frac = clamp((T - TKFRZ)*0.5, 0, 1) of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45); and (f) the horizontal wind split u = v = wind/sqrt(2) (F90:402-403). TKFRZ = 273.15 K and the phase/ramp thresholds are inlined as literals. All laws are pointwise; the stage-2 DATM model applies them per mesh point with stream values (LB/UB + interpolation factors at the streams layer; interpolated values at the datamode layer) from the GSWP3v1 data_sources, and the tests pin them to the stage-1 instrumentation dumps (stage1/dumps/cdeps/cdeps_strdata_streams.csv, datm_gswp3_streams.csv, datm_gswp3_exports.csv)."
+  "description": "Expression-template library for the CDEPS DATM data-atmosphere component (stage 2 of the EqESM project): the pointwise forcing-derivation laws of the CLMNCEP datamode (datm/datm_datamode_clmncep_mod.F90, cdeps1.0.112) and of the stream time interpolation (streams/dshr_strdata_mod.F90, streams/dshr_tinterp_mod.F90), transcribed exactly for use by the stage-2 DATM component (cdeps_datm_gswp3.esm). The library carries (a) the saturation vapor pressure esat of datm_eSat (clmncep F90:545-586): the water a0..a6 and ice b0..b6 polynomials evaluated by Horner's rule in degrees C on t = clamp(tK - TKFRZ, -50, 50), phase selected by tKbot < TKFRZ (ice) vs >= (water), result in hPa x100 = Pa; (b) the saturation specific humidity qsat = eps e / (pbot - eps1 e) (F90:410,415,422) with eps = 0.622 and eps1 = 1 - eps = 0.378 (the molecular-weight-ratio pair of water vapor to dry air); (c) the vapor pressure vp = q pbot / (eps + eps1 q) and air density rho = (pbot - eps1 vp) / (tbot RDAIR) with RDAIR = 287.0423113650487 (F90:428-429, SHR_CONST_RDAIR = AVOGAD*BOLTZ/MWDAIR); (d) the shortwave direct/diffuse ratios ratio_rvrf of the cam3_5_55-based polynomials (F90:450-456): NIR 0.29548 + 0.00504 s - 1.4957e-5 s^2 + 1.4881e-8 s^3 and VIS 0.17639 + 0.00380 s - 9.0039e-6 s^2 + 8.1351e-9 s^3, both clamped to [0.01, 0.99], where s is the half shortwave (s = swdn/2 = swndr = swvdr); (e) the rain/snow ramp fraction frac = clamp((T - TKFRZ)*0.5, 0, 1) of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45); and (f) the horizontal wind split u = v = wind/sqrt(2) (F90:402-403). The shared constants are factored as zero-parameter fragments: tkfrz = 273.15 K (the TKFRZ of the esat phase branch and the rain/snow ramp) and the molecular-weight-ratio pair eps = 0.622, eps1 = 1 - eps = 0.378 of the qsat/vapor-pressure/density laws; the polynomial coefficients and the ramp slope stay as literals. All laws are pointwise; the stage-2 DATM model applies them per mesh point with stream values (LB/UB + interpolation factors at the streams layer; interpolated values at the datamode layer) from the GSWP3v1 data_sources, and the tests pin them to the stage-1 instrumentation dumps (stage1/dumps/cdeps/cdeps_strdata_streams.csv, datm_gswp3_streams.csv, datm_gswp3_exports.csv)."
  },
  "expression_templates": {
   "esat_poly_water": {
@@ -234,7 +234,7 @@
    }
   },
   "esat": {
-   "description": "Saturation vapor pressure datm_eSat(tK, tKbot) (datm_datamode_clmncep_mod.F90:545-586): t = clamp(tK - TKFRZ, -50, 50) degrees C; over ice when tKbot < TKFRZ else over water (the phase test is on the unclamped bottom temperature, F90:581-585); result x100 converts the hPa polynomials to Pa. Used for the qsat and tdew paths of Sa_shum (F90:408-425) and by the lwdn fallback.",
+   "description": "Saturation vapor pressure datm_eSat(tK, tKbot) (datm_datamode_clmncep_mod.F90:545-586): t = clamp(tK - tkfrz, -50, 50) degrees C; over ice when tKbot < tkfrz else over water (the phase test is on the unclamped bottom temperature, F90:581-585); result x100 converts the hPa polynomials to Pa. Used for the qsat and tdew paths of Sa_shum (F90:408-425) and by the lwdn fallback.",
    "params": [
     "tK",
     "tKbot"
@@ -247,10 +247,10 @@
       "args": [
        "tKbot",
        {
-        "op": "const",
+        "op": "apply_expression_template",
         "args": [],
-        "value": 273.15,
-        "units": "K"
+        "name": "tkfrz",
+        "bindings": {}
        }
       ]
      },
@@ -291,10 +291,10 @@
               "args": [
                "tK",
                {
-                "op": "const",
+                "op": "apply_expression_template",
                 "args": [],
-                "value": 273.15,
-                "units": "K"
+                "name": "tkfrz",
+                "bindings": {}
                }
               ]
              }
@@ -343,10 +343,10 @@
               "args": [
                "tK",
                {
-                "op": "const",
+                "op": "apply_expression_template",
                 "args": [],
-                "value": 273.15,
-                "units": "K"
+                "name": "tkfrz",
+                "bindings": {}
                }
               ]
              }
@@ -362,7 +362,7 @@
    }
   },
   "qsat": {
-   "description": "Saturation specific humidity qsat = 0.622 e / (pbot - 0.378 e) (datm_datamode_clmncep_mod.F90:410, 415, 422), e in Pa (from esat), pbot in Pa. Sa_shum = min(qsat, stream shum) on the shum path (F90:411-417).",
+   "description": "Saturation specific humidity qsat = eps e / (pbot - eps1 e) with eps = 0.622 and eps1 = 1 - eps = 0.378 (datm_datamode_clmncep_mod.F90:410, 415, 422), e in Pa (from esat), pbot in Pa. Sa_shum = min(qsat, stream shum) on the shum path (F90:411-417).",
    "params": [
     "e",
     "pbot"
@@ -374,10 +374,10 @@
       "op": "*",
       "args": [
        {
-        "op": "const",
+        "op": "apply_expression_template",
         "args": [],
-        "value": 0.622,
-        "units": "1"
+        "name": "eps",
+        "bindings": {}
        },
        "e"
       ]
@@ -390,10 +390,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 0.378,
-          "units": "1"
+          "name": "eps1",
+          "bindings": {}
          },
          "e"
         ]
@@ -404,7 +404,7 @@
    }
   },
   "vapor_pressure": {
-   "description": "Vapor pressure vp = q pbot / (0.622 + 0.378 q) (datm_datamode_clmncep_mod.F90:428), q = specific humidity [kg/kg], pbot [Pa], vp [Pa]. Intermediate of Sa_dens.",
+   "description": "Vapor pressure vp = q pbot / (eps + eps1 q) with eps = 0.622 and eps1 = 1 - eps = 0.378 (datm_datamode_clmncep_mod.F90:428), q = specific humidity [kg/kg], pbot [Pa], vp [Pa]. Intermediate of Sa_dens.",
    "params": [
     "q",
     "pbot"
@@ -423,19 +423,19 @@
       "op": "+",
       "args": [
        {
-        "op": "const",
+        "op": "apply_expression_template",
         "args": [],
-        "value": 0.622,
-        "units": "1"
+        "name": "eps",
+        "bindings": {}
        },
        {
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 0.378,
-          "units": "1"
+          "name": "eps1",
+          "bindings": {}
          },
          "q"
         ]
@@ -446,7 +446,7 @@
    }
   },
   "density": {
-   "description": "Air density Sa_dens = (pbot - 0.378 vp) / (tbot RDAIR) (datm_datamode_clmncep_mod.F90:429) with RDAIR = 287.0423113650487 J/kg/K = SHR_CONST_AVOGAD*SHR_CONST_BOLTZ/SHR_CONST_MWDAIR (share/shr_const_mod.F90:23-29), tbot [K], pbot and vp [Pa], density [kg/m3].",
+   "description": "Air density Sa_dens = (pbot - eps1 vp) / (tbot RDAIR) with eps1 = 1 - eps = 0.378 (datm_datamode_clmncep_mod.F90:429) with RDAIR = 287.0423113650487 J/kg/K = SHR_CONST_AVOGAD*SHR_CONST_BOLTZ/SHR_CONST_MWDAIR (share/shr_const_mod.F90:23-29), tbot [K], pbot and vp [Pa], density [kg/m3].",
    "params": [
     "pbot",
     "vp",
@@ -463,10 +463,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 0.378,
-          "units": "1"
+          "name": "eps1",
+          "bindings": {}
          },
          "vp"
         ]
@@ -548,10 +548,10 @@
                 "units": "m^4/W^2"
                },
                {
-                "op": "*",
+                "op": "^",
                 "args": [
                  "s",
-                 "s"
+                 2
                 ]
                }
               ]
@@ -645,10 +645,10 @@
                 "units": "m^4/W^2"
                },
                {
-                "op": "*",
+                "op": "^",
                 "args": [
                  "s",
-                 "s"
+                 2
                 ]
                }
               ]
@@ -683,7 +683,7 @@
    }
   },
   "rain_snow_frac": {
-   "description": "Rain fraction of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45): frac = min(1, max(0, (T - TKFRZ)*0.5)), T in K; the rest (1 - frac) falls as snow. Applied to the convective-scale and large-scale precipitation separately (datm_datamode_clmncep_mod.F90:483-487): snow = rain0*(1 - frac), rain = rain0*frac, each max(0, .).",
+   "description": "Rain fraction of shr_precip_partition_rain_snow_ramp (share/shr_precip_mod.F90:17-45): frac = min(1, max(0, (T - tkfrz)*0.5)), T in K; the rest (1 - frac) falls as snow. Applied to the convective-scale and large-scale precipitation separately (datm_datamode_clmncep_mod.F90:483-487): snow = rain0*(1 - frac), rain = rain0*frac, each max(0, .).",
    "params": [
     "tbot"
    ],
@@ -713,10 +713,10 @@
           "args": [
            "tbot",
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 273.15,
-            "units": "K"
+            "name": "tkfrz",
+            "bindings": {}
            }
           ]
          },
@@ -752,6 +752,47 @@
         "units": "1"
        }
       ]
+     }
+    ]
+   }
+  },
+  "tkfrz": {
+   "description": "The freezing-point temperature of the esat phase branch and the rain/snow ramp: tkfrz = TKFRZ = 273.15 K (share/shr_const_mod.F90 SHR_CONST_TKFRZ). Zero-parameter constant-fragment template applied with empty bindings; the fragment names the repeated 273.15 K literal.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 273.15,
+    "units": "K"
+   }
+  },
+  "eps": {
+   "description": "The ratio of the molecular weight of water vapor to that of dry air: eps = 0.622 (SHR_CONST_EPS, share/shr_const_mod.F90), shared by the qsat and vapor-pressure laws. Zero-parameter constant-fragment template applied with empty bindings.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 0.622,
+    "units": "1"
+   }
+  },
+  "eps1": {
+   "description": "The companion constant eps1 = 1 - eps = 0.378 of the qsat/vapor-pressure/density laws, derived from the eps fragment. Zero-parameter fragment template applied with empty bindings.",
+   "params": [],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     },
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "eps",
+      "bindings": {}
      }
     ]
    }
