@@ -483,5 +483,29 @@
     "outcome": "pending",
     "merge_commit": null,
     "notes": ""
+  },
+  {
+    "name": "factoring-cleanup",
+    "jobid": 12027518,
+    "purpose": "Refactor-only cleanup of repeated subexpressions/unnamed constants in CMEPS, MOM6, CAM, CDEPS stage-2 files; shrink aoflux frozen-state plumbing; tests unchanged",
+    "milestone": "M8/cleanup",
+    "parent": null,
+    "branch": "wt/factoring-cleanup",
+    "workdir": "/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM-wt-factoring-cleanup",
+    "base_commit": "6e0e8c8",
+    "time_limit": "10:00:00",
+    "nice": 100,
+    "llm": "v4",
+    "prompt_chars": 6277,
+    "submitted": "2026-11-03 10:32:56",
+    "started": null,
+    "ended": null,
+    "wait_minutes": null,
+    "run_minutes": null,
+    "slurm_state": null,
+    "agent_status": null,
+    "outcome": "pending",
+    "merge_commit": null,
+    "notes": ""
   }
 ]
