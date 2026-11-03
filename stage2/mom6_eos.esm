@@ -1,0 +1,448 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_eos",
+  "description": "Stage-2 implementation of the MOM6 equation of state (stage 1 boundary B1 of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the Wright 1997 full-range in-situ density rho(T, S, p) and its analytic first derivatives drho/dT, drho/dS, as evaluated by the model's calculate_density / calculate_density_derivs_scalar calls in KPP_compute_BLD (MOM_CVMix_KPP.F90:1437; the EOS law itself is density_elem_Wright_full / calculate_density_derivs_elem_Wright_full, MOM_EOS_Wright_full.F90:75-91 / 179-204). The model WrightEOS carries the 15 Fortran coefficients as named parameters with units (values from MOM_EOS_Wright_full.F90:23-37), computes the three shared polynomials al0/p0/lambda as intermediate unknowns via the wright_alpha0/wright_p0/wright_lambda templates of ./mom6_templates.esm, then rho = (p + p0)/(lambda + al0*(p + p0)) via the wright_density template and the Fortran's hand-coded derivative formulas (wright_drho_dT / wright_drho_dS templates) with the shared denominator inverse I_denom2 = 1/(lambda + al0*(p + p0))^2 (F90:198). The derivatives are transcribed formulas, NOT symbolic D(rho, T)/D(rho, S): in esm 1.3.0 the D operator is a rewrite-target for discretization stencils (esm-spec 4.2 / 9.6.8) and the CLI 0.7.0 evaluator rejects it for algebraic expressions ('unlowered_operator ... reached evaluation without being lowered to a stencil'), so the Fortran derivative formulas are reproduced exactly instead (operation order identical to the Fortran, so the tests pin the derivative columns to round-off, rel 1e-12). State units: T potential temperature [degC], S salinity [ppt], p pressure at the top interface of the layer [Pa] (surface pressure + hydrostatic weight of the layers above, MOM_CVMix_KPP.F90:1428-1440), rho in-situ density [kg m-3], drho/dT [kg m-3 degC-1], drho/dS [kg m-3 ppt-1]. The run configuration (C_JRA_t62_mom6_inst) uses EQN_OF_STATE = WRIGHT_FULL (the MOM6 default), USE_PSURF_IN_EOS = True, and all unit rescale factors 1.0, so the dumped values are the physical-unit law values.",
+  "authors": [
+   "EqESM stage 2 (wt/mom6-eos)"
+  ]
+ },
+ "models": {
+  "WrightEOS": {
+   "expression_template_imports": [
+    { "ref": "./mom6_templates.esm" }
+   ],
+   "variables": {
+    "T": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Potential temperature relative to the surface (the dumped T column), [degC]"
+    },
+    "S": {
+     "type": "parameter",
+     "units": "ppt",
+     "default": 35.0,
+     "description": "Salinity (the dumped S column), [ppt]"
+    },
+    "p": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 100000.0,
+     "description": "Pressure at the top interface of the layer: surface pressure plus the hydrostatic weight of the layers above (MOM_CVMix_KPP.F90:1428-1440), [Pa]"
+    },
+    "a0": {
+     "type": "parameter",
+     "units": "m^3/kg",
+     "default": 7.133718e-4,
+     "description": "Wright alpha_0 fit parameter a0 (MOM_EOS_Wright_full.F90:23), [m3 kg-1]"
+    },
+    "a1": {
+     "type": "parameter",
+     "units": "m^3/kg/degC",
+     "default": 2.724670e-7,
+     "description": "Wright alpha_0 fit parameter a1 (MOM_EOS_Wright_full.F90:24), [m3 kg-1 degC-1]"
+    },
+    "a2": {
+     "type": "parameter",
+     "units": "m^3/kg/ppt",
+     "default": -1.646582e-7,
+     "description": "Wright alpha_0 fit parameter a2 (MOM_EOS_Wright_full.F90:25), [m3 kg-1 PSU-1]"
+    },
+    "b0": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 5.613770e8,
+     "description": "Wright p_0 fit parameter b0 (MOM_EOS_Wright_full.F90:26), [Pa]"
+    },
+    "b1": {
+     "type": "parameter",
+     "units": "Pa/degC",
+     "default": 3.600337e6,
+     "description": "Wright p_0 fit parameter b1 (MOM_EOS_Wright_full.F90:27), [Pa degC-1]"
+    },
+    "b2": {
+     "type": "parameter",
+     "units": "Pa/degC^2",
+     "default": -3.727194e4,
+     "description": "Wright p_0 fit parameter b2 (MOM_EOS_Wright_full.F90:28), [Pa degC-2]"
+    },
+    "b3": {
+     "type": "parameter",
+     "units": "Pa/degC^3",
+     "default": 1.660557e2,
+     "description": "Wright p_0 fit parameter b3 (MOM_EOS_Wright_full.F90:29), [Pa degC-3]"
+    },
+    "b4": {
+     "type": "parameter",
+     "units": "Pa/ppt",
+     "default": 6.844158e5,
+     "description": "Wright p_0 fit parameter b4 (MOM_EOS_Wright_full.F90:30), [Pa PSU-1]"
+    },
+    "b5": {
+     "type": "parameter",
+     "units": "Pa/degC/ppt",
+     "default": -8.389457e3,
+     "description": "Wright p_0 fit parameter b5 (MOM_EOS_Wright_full.F90:31), [Pa degC-1 PSU-1]"
+    },
+    "c0": {
+     "type": "parameter",
+     "units": "m^2/s^2",
+     "default": 1.609893e5,
+     "description": "Wright lambda fit parameter c0 (MOM_EOS_Wright_full.F90:32), [m2 s-2]"
+    },
+    "c1": {
+     "type": "parameter",
+     "units": "m^2/s^2/degC",
+     "default": 8.427815e2,
+     "description": "Wright lambda fit parameter c1 (MOM_EOS_Wright_full.F90:33), [m2 s-2 degC-1]"
+    },
+    "c2": {
+     "type": "parameter",
+     "units": "m^2/s^2/degC^2",
+     "default": -6.931554,
+     "description": "Wright lambda fit parameter c2 (MOM_EOS_Wright_full.F90:34), [m2 s-2 degC-2]"
+    },
+    "c3": {
+     "type": "parameter",
+     "units": "m^2/s^2/degC^3",
+     "default": 3.869318e-2,
+     "description": "Wright lambda fit parameter c3 (MOM_EOS_Wright_full.F90:35), [m2 s-2 degC-3]"
+    },
+    "c4": {
+     "type": "parameter",
+     "units": "m^2/s^2/ppt",
+     "default": -1.664201e2,
+     "description": "Wright lambda fit parameter c4 (MOM_EOS_Wright_full.F90:36), [m2 s-2 PSU-1]"
+    },
+    "c5": {
+     "type": "parameter",
+     "units": "m^2/s^2/degC/ppt",
+     "default": -2.765195,
+     "description": "Wright lambda fit parameter c5 (MOM_EOS_Wright_full.F90:37), [m2 s-2 degC-1 PSU-1]"
+    },
+    "al0": {
+     "type": "unknown",
+     "units": "m^3/kg",
+     "description": "The specific volume at zero pressure offset in the Wright EOS (al0, MOM_EOS_Wright_full.F90:82), [m3 kg-1]"
+    },
+    "p0": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "The pressure offset in the Wright EOS (p0, MOM_EOS_Wright_full.F90:83), [Pa]"
+    },
+    "lam": {
+     "type": "unknown",
+     "units": "m^2/s^2",
+     "description": "The sound speed squared at zero alpha offset in the Wright EOS (lambda, MOM_EOS_Wright_full.F90:84), [m2 s-2]"
+    },
+    "I_denom2": {
+     "type": "unknown",
+     "units": "s^4/m^4",
+     "description": "The inverse of the square of the denominator of density in the Wright EOS, 1/(lambda + al0*(p + p0))^2 (MOM_EOS_Wright_full.F90:192, 198), [s4 m-4]"
+    },
+    "rho": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "In-situ density of sea water (density_elem_Wright_full, MOM_EOS_Wright_full.F90:75-91), [kg m-3]"
+    },
+    "drho_dT": {
+     "type": "unknown",
+     "units": "kg/m^3/degC",
+     "description": "The partial derivative of density with potential temperature (calculate_density_derivs_elem_Wright_full, MOM_EOS_Wright_full.F90:184-185, 199-200), [kg m-3 degC-1]"
+    },
+    "drho_dS": {
+     "type": "unknown",
+     "units": "kg/m^3/ppt",
+     "description": "The partial derivative of density with salinity (calculate_density_derivs_elem_Wright_full, MOM_EOS_Wright_full.F90:186-187, 201-202), [kg m-3 PSU-1]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "al0",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_alpha0",
+       "bindings": { "a0": "a0", "a1": "a1", "a2": "a2", "T": "T", "S": "S" } }
+    },
+    {
+     "lhs": "p0",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_p0",
+       "bindings": { "b0": "b0", "b1": "b1", "b2": "b2", "b3": "b3", "b4": "b4", "b5": "b5", "T": "T", "S": "S" } }
+    },
+    {
+     "lhs": "lam",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_lambda",
+       "bindings": { "c0": "c0", "c1": "c1", "c2": "c2", "c3": "c3", "c4": "c4", "c5": "c5", "T": "T", "S": "S" } }
+    },
+    {
+     "lhs": "rho",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_density",
+       "bindings": { "p": "p", "p0": "p0", "al0": "al0", "lambda": "lam" } }
+    },
+    {
+     "lhs": "I_denom2",
+     "rhs": { "op": "/", "args": [
+       1.0,
+       { "op": "^", "args": [
+         { "op": "+", "args": [
+           "lam",
+           { "op": "*", "args": ["al0", { "op": "+", "args": ["p", "p0"] }] } ] },
+         2 ] } ] }
+    },
+    {
+     "lhs": "drho_dT",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_drho_dT",
+       "bindings": { "T": "T", "S": "S", "p": "p", "p0": "p0", "lambda": "lam", "I_denom2": "I_denom2",
+         "a1": "a1", "b1": "b1", "b2": "b2", "b3": "b3", "b5": "b5", "c1": "c1", "c2": "c2", "c3": "c3", "c5": "c5" } }
+    },
+    {
+     "lhs": "drho_dS",
+     "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_drho_dS",
+       "bindings": { "T": "T", "S": "S", "p": "p", "p0": "p0", "lambda": "lam", "I_denom2": "I_denom2",
+         "a2": "a2", "b4": "b4", "b5": "b5", "c4": "c4", "c5": "c5" } }
+    }
+   ],
+   "tests": [
+    {
+     "id": "surface_k1_cell3_78_step1",
+     "description": "Instantaneous pin of the WRIGHT_FULL law and its derivatives at the surface layer of traced cell (gi, gj) = (3, 78) on the first thermo step: mom6_eos.csv row (cpl_step 1, gi 3, gj 78, k 1) gives T = 1.9019792708374321 degC, S = 33.59310698272627 ppt, p = 99753.85917574639 Pa (surface pressure; the same p as the surface-forcing dump's p column for this cell), rho = 1026.872408356005 kg m-3, drho/dT = -0.07330861794257675 kg m-3 degC-1, drho/dS = 0.7969321251520414 kg m-3 ppt-1. The coefficients take their Fortran defaults (MOM_EOS_Wright_full.F90:23-37). time_span {0,0} evaluates the algebraic law pointwise; the dump writes es26.17 so the transcription is pinned to round-off (rel 1e-12).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 1.9019792708374321,
+      "S": 33.59310698272627,
+      "p": 99753.85917574639
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.872408356005},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.07330861794257675},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7969321251520414}
+     ]
+    },
+    {
+     "id": "mid_k20_cell3_78_step1",
+     "description": "Instantaneous pin at mid column (k 20, p = 911460.4250244079 Pa) of cell (3, 78), step 1 (mom6_eos.csv row cpl_step 1, gi 3, gj 78, k 20).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.6357484297227263,
+      "S": 34.37662928211302,
+      "p": 911460.4250244079
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1028.074512242791},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.03101589531568881},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8064150931615521}
+     ]
+    },
+    {
+     "id": "deep_k75_cell3_78_step1",
+     "description": "Instantaneous pin at the deepest layer (k 75, p = 5729586.858116947 Pa) of cell (3, 78), step 1 (mom6_eos.csv row cpl_step 1, gi 3, gj 78, k 75).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -0.6945580002170941,
+      "S": 34.655703276474746,
+      "p": 5729586.858116947
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1030.5628261659137},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.06014616388113794},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7991850653068867}
+     ]
+    },
+    {
+     "id": "surface_k1_cell7_80_step1",
+     "description": "Instantaneous pin at the surface layer of a second cell (gi, gj) = (7, 80), step 1 (mom6_eos.csv row cpl_step 1, gi 7, gj 80, k 1).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 1.6607833811937347,
+      "S": 33.467472794155434,
+      "p": 99843.79217433969
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.7895536782476},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.069871467486114},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7976209342761974}
+     ]
+    },
+    {
+     "id": "deep_k75_cell7_80_step1",
+     "description": "Instantaneous pin at the deepest layer of cell (7, 80), step 1 (mom6_eos.csv row cpl_step 1, gi 7, gj 80, k 75).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -0.6869934834497631,
+      "S": 34.65583813258381,
+      "p": 5189567.184159757
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1030.3061418064617},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.05853965311808156},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7996393313247196}
+     ]
+    },
+    {
+     "id": "surface_k1_cell2_80_step6",
+     "description": "Instantaneous pin at the surface layer of cell (2, 80) on a later thermo step (step 6; mom6_eos.csv row cpl_step 6, gi 2, gj 80, k 1).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 1.6987719376916435,
+      "S": 33.508876111318855,
+      "p": 99770.4718415441
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.8198749183525},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.07047441003787758},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7975081271031985}
+     ]
+    },
+    {
+     "id": "deep_k75_cell2_80_step6",
+     "description": "Instantaneous pin at the deepest layer of cell (2, 80), step 6 (mom6_eos.csv row cpl_step 6, gi 2, gj 80, k 75; the coldest traced deep layer at T = -1.8455915301413852 degC).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.8455915301413852,
+      "S": 34.521931876321425,
+      "p": 7355610.255753006
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1031.2919920412974},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.04985081487421974},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8011921281510815}
+     ]
+    },
+    {
+     "id": "surface_k1_cell3_78_step12",
+     "description": "Instantaneous pin at the surface layer of cell (3, 78) on the last traced step (step 12; mom6_eos.csv row cpl_step 12, gi 3, gj 78, k 1).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 1.762542514555966,
+      "S": 33.44167819989054,
+      "p": 99831.7513959237
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.7618042912509},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.07110693014827449},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7973433396209207}
+     ]
+    },
+    {
+     "id": "deep_k75_cell7_80_step12",
+     "description": "Instantaneous pin at the deepest layer of cell (7, 80), step 12 (mom6_eos.csv row cpl_step 12, gi 7, gj 80, k 75).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.9010039557589582,
+      "S": 34.46755822596265,
+      "p": 5178612.817899026
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1030.2109879049563},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.0418051369775449},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8033356944915659}
+     ]
+    },
+    {
+     "id": "middeep_k40_cell4_79_step3",
+     "description": "Instantaneous pin at mid-deep layer k 40 of cell (4, 79), step 3 (mom6_eos.csv row cpl_step 3, gi 4, gj 79, k 40).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.8792215152636769,
+      "S": 34.428228301026564,
+      "p": 1987222.7310364512
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1028.643488921011},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.031382585741409806},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8061799842456343}
+     ]
+    },
+    {
+     "id": "deepmaxp_k75_cell3_80_step1",
+     "description": "Instantaneous pin at the deepest and most compressed traced state (k 75 of cell (3, 80), step 1): p = 7850396.01801675 Pa, the maximum pressure and maximum rho = 1031.5659265209388 kg m-3 of the dump (mom6_eos.csv row cpl_step 1, gi 3, gj 80, k 75).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -0.6877563821531609,
+      "S": 34.655838133483236,
+      "p": 7850396.01801675
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1031.5659265209388},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.06689203818911935},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7973025745041014}
+     ]
+    },
+    {
+     "id": "surface_warmest_k1_cell2_80_step12",
+     "description": "Instantaneous pin at the warmest traced state (k 1 of cell (2, 80), step 12): T = 2.040402578701901 degC, the maximum T and the minimum drho/dT = -0.07479431037397358 and drho/dS = 0.7965697893418161 of the dump (mom6_eos.csv row cpl_step 12, gi 2, gj 80, k 1).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 2.040402578701901,
+      "S": 33.49154093880031,
+      "p": 99836.03959818835
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.7812739667604},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.07479431037397358},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7965697893418161}
+     ]
+    },
+    {
+     "id": "deepcold_k56_cell2_80_step1",
+     "description": "Instantaneous pin at the coldest traced state (k 56 of cell (2, 80), step 1): T = -1.99128106159049 degC, the minimum T of the dump (mom6_eos.csv row cpl_step 1, gi 2, gj 80, k 56).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.99128106159049,
+      "S": 34.481807275379296,
+      "p": 5226302.734523922
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1030.2490179209408},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.04078311769840534},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8035667991545218}
+     ]
+    },
+    {
+     "id": "surface_freshest_k1_cell4_78_step12",
+     "description": "Instantaneous pin at the freshest traced state (k 1 of cell (4, 78), step 12): S = 33.25068021800728 ppt, the minimum salinity and minimum rho = 1026.6387691889138 kg m-3 of the dump (mom6_eos.csv row cpl_step 12, gi 4, gj 78, k 1).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": 1.331002337113528,
+      "S": 33.25068021800728,
+      "p": 99838.14520494227
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1026.6387691889138},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.06500019579071073},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.7985837233495315}
+     ]
+    },
+    {
+     "id": "mid_k21_cell4_78_step5",
+     "description": "Instantaneous pin at the near-minimum drho/dT state (k 21 of cell (4, 78), step 5): drho/dT = -0.028916991799756 kg m-3 degC-1, the least-negative value of the dump, with drho/dS = 0.8068792707341548 near its maximum (mom6_eos.csv row cpl_step 5, gi 4, gj 78, k 21).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "T": -1.7974748220107517,
+      "S": 34.378566869224194,
+      "p": 956900.0011979548
+     },
+     "tolerance": {"rel": 1e-12},
+     "assertions": [
+      {"variable": "rho", "time": 0.0, "expected": 1028.1028999347188},
+      {"variable": "drho_dT", "time": 0.0, "expected": -0.028916991799756},
+      {"variable": "drho_dS", "time": 0.0, "expected": 0.8068792707341548}
+     ]
+    }
+   ]
+  }
+ }
+}

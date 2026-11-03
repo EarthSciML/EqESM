@@ -1,0 +1,2377 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_surface_forcing",
+  "description": "Stage-2 implementation of the MOM6 surface forcing import-to-fluxes/forces mapping (stage 1 boundary I of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the per-column mapping from the imported coupler fields (x_in, 25 fields gathered by the driver) to the MOM6 forcing fluxes (convert_IOB_to_fluxes, mom_surface_forcing_nuopc.F90:258-734) and mechanical forces (convert_IOB_to_forces, :739-1050), plus the net mass source (set_net_mass_forcing, MOM_forcing_type.F90:2748-2800), all with the unit conversions of the reference run (C_JRA_t62_mom6_inst: every conversion factor 1.0, so the laws below are pure arithmetic). All fluxes/forces are pass-throughs of the imports except: sw = sw_vis_dir + sw_vis_dif + sw_nir_dir + sw_nir_dif (:597); latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf with Lv = 2.501e6 and Lf = 3.337e5 J kg-1 (:572-596); the latent heat diagnostics latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf; vprec = vprec_restore - net_fw_global_adjust (SRESTORE_AS_SFLUX=True so the restoring freshwater flux is 0, and ADJUST_NET_FRESH_WATER_TO_ZERO=True subtracts the area-mean net fresh-water flux; :455-486, :694-714); salt_flux_o = salt_flux + salt_restore_flux (:430-447, :686-689); the mechanical forces with wind_stagger = AGRID (taux/tauy are the h-point stress averages onto the u/v points east/north of the cell, :943-951, while tau_mag = GUST_CONST + sqrt(u_flux^2 + v_flux^2), ustar = sqrt(tau_mag/RHO_0) and omega_w2x = atan2(v_flux, u_flux) are built from the h-point stresses directly, :956-962); and net_mass_src, the nine-term sum of the water fluxes. GUST_CONST = 4.0e-4 Pa, RHO_0 = 1035.0 kg m-3, Lf and Lv as above. The restoring salt flux and the net-FW adjustment are ocean-state-driven fields, not IOB imports, so they enter as inputs (the dump records them as salt_flux_o - salt_flux_in and -vprec). The tests pin the stage-1 instrumentation dump mom6_sfc_forcing.csv (12 traced cells x 12 coupling steps; the rows below cover ocean and land east/north neighbors of the AGRID averages and the runoff/melt/evaporation branches). The dump writes es26.17; the run is r8, so the transcriptions are pinned to round-off (rel 1e-12). The u10_sqr import is never used: the reference run does not allocate fluxes%u10_sqr (:644-645), so u10_sqr_o is identically 0 (u10_sqr_allocated = 0).",
+  "authors": [
+   "EqESM stage 2 (wt/mom6-eos)"
+  ]
+ },
+ "models": {
+  "SurfaceForcing": {
+   "variables": {
+    "p": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Imported sea-level pressure (x_in(1); Sa_pslv as consumed by MOM6), [Pa]"
+    },
+    "sw_vis_dir": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported visible direct shortwave (x_in(2); Foxx_swnet_vdr), [W m-2]"
+    },
+    "sw_vis_dif": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported visible diffuse shortwave (x_in(3); Foxx_swnet_vdf), [W m-2]"
+    },
+    "sw_nir_dir": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported near-IR direct shortwave (x_in(4); Foxx_swnet_idr), [W m-2]"
+    },
+    "sw_nir_dif": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported near-IR diffuse shortwave (x_in(5); Foxx_swnet_idf), [W m-2]"
+    },
+    "lw_flux": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported net longwave (x_in(6); Foxx_lwnet), [W m-2]"
+    },
+    "t_flux": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported sensible heat flux (x_in(7); Foxx_sen), [W m-2]"
+    },
+    "q_flux": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported latent heat flux expressed as a water flux (x_in(8); Foxx_evap); negative upward, [kg m-2 s-1]"
+    },
+    "lprec": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported liquid precipitation (x_in(9); Faxa_rain), [kg m-2 s-1]"
+    },
+    "fprec": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported frozen precipitation (x_in(10); Faxa_snow), [kg m-2 s-1]"
+    },
+    "lrunoff": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported liquid runoff (x_in(11); Foxx_rofl), [kg m-2 s-1]"
+    },
+    "frunoff": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported frozen runoff (x_in(12); Foxx_rofi), [kg m-2 s-1]"
+    },
+    "lrunoff_glc_import": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported liquid glacier runoff (IOB%lrunoff_glc, mom_surface_forcing_nuopc.F90:539-541); the mediator does not send it in the reference run, so the dump column lrunoff_glc is identically 0, [kg m-2 s-1]"
+    },
+    "frunoff_glc_import": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported frozen glacier runoff (IOB%frunoff_glc, mom_surface_forcing_nuopc.F90:544-546); absent in the reference run, [kg m-2 s-1]"
+    },
+    "hrain": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of liquid precipitation (x_in(13); Foxx_hrain), [W m-2]"
+    },
+    "hsnow": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of frozen precipitation (x_in(14); Foxx_hsnow), [W m-2]"
+    },
+    "hrofl": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of liquid runoff (x_in(15); Foxx_hrofl), [W m-2]"
+    },
+    "hrofi": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of frozen runoff (x_in(16); Foxx_hrofi), [W m-2]"
+    },
+    "hevap": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of evaporation (x_in(17); Foxx_hevap), [W m-2]"
+    },
+    "hcond": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported enthalpy of condensation (x_in(18); Foxx_hcond), [W m-2]"
+    },
+    "u_flux": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Imported zonal wind stress at h points, rotated to local coordinates (x_in(19); Foxx_taux), [Pa]"
+    },
+    "v_flux": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Imported meridional wind stress at h points, rotated to local coordinates (x_in(20); Foxx_tauy), [Pa]"
+    },
+    "u_flux_east": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "The h-point zonal wind stress of the east neighbor cell (i+1, j), the second term of the AGRID u-point average of forces%taux (mom_surface_forcing_nuopc.F90:943-946); 0 over land, [Pa]"
+    },
+    "mask_east": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "Ocean mask of the east neighbor cell (i+1, j): 1 ocean, 0 land; the AGRID average divides by mask2dT(i,j) + mask2dT(i+1,j) (mom_surface_forcing_nuopc.F90:943-946), [1]"
+    },
+    "v_flux_north": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "The h-point meridional wind stress of the north neighbor cell (i, j+1), the second term of the AGRID v-point average of forces%tauy (mom_surface_forcing_nuopc.F90:948-951); 0 over land, [Pa]"
+    },
+    "mask_north": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "Ocean mask of the north neighbor cell (i, j+1): 1 ocean, 0 land (mom_surface_forcing_nuopc.F90:948-951), [1]"
+    },
+    "salt_flux": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported salt flux (x_in(21); Fioi_salt); the mediator sends 0 in the reference run, [kg m-2 s-1]"
+    },
+    "salt_restore_flux": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "The salinity-restoring salt flux of the SRESTORE_AS_SFLUX=True path (mom_surface_forcing_nuopc.F90:430-447): an ocean-state-driven field, not part of the IOB import; the dump records it as salt_flux_o - salt_flux_in, [kg m-2 s-1]"
+    },
+    "seaice_melt_heat": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Imported sea-ice and snow melt heat flux (x_in(22); Fioi_melth), [W m-2]"
+    },
+    "seaice_melt": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "Imported water flux from sea-ice and snow melt (x_in(23); Fioi_meltw), [kg m-2 s-1]"
+    },
+    "ice_fraction": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "Imported sea-ice fraction (x_in(24); Si_ifrac), [1]"
+    },
+    "u10_sqr": {
+     "type": "parameter",
+     "units": "m^2/s^2",
+     "default": 0.0,
+     "description": "Imported 10-m wind speed squared (x_in(25); So_duu10n), [m2 s-2]"
+    },
+    "u10_sqr_allocated": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 in configurations where the model allocates fluxes%u10_sqr and copies the import (mom_surface_forcing_nuopc.F90:644-645); the reference run never allocates it, so u10_sqr_o is identically 0 there, [1]"
+    },
+    "vprec_restore": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "The salinity-restoring virtual freshwater flux of the SRESTORE_AS_SFLUX=False path (mom_surface_forcing_nuopc.F90:470-485); 0 with SRESTORE_AS_SFLUX=True (the reference run), [kg m-2 s-1]"
+    },
+    "net_fw_global_adjust": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "The area-mean net fresh-water flux subtracted from vprec by ADJUST_NET_FRESH_WATER_TO_ZERO (mom_surface_forcing_nuopc.F90:694-714): a global sum over the ocean, not an IOB import; the dump records it as -vprec, constant across the cells of a step, [kg m-2 s-1]"
+    },
+    "heat_added_override": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "The hflx_adj data-override heat flux of allow_flux_adjustments (mom_surface_forcing_nuopc.F90:1074-1077); the reference run has no override, so the dump column heat_added is identically 0, [W m-2]"
+    },
+    "GUST_CONST": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0004,
+     "description": "The constant gustiness stress added to the wind stress magnitude (CS%gust_const = GUST_CONST = 4.0e-4 Pa in MOM_parameter_doc.all), [Pa]"
+    },
+    "RHO_0": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1035.0,
+     "description": "The Boussinesq reference density (RHO_0 = 1035.0 kg m-3), [kg m-3]"
+    },
+    "Lf": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 333700.0,
+     "description": "The latent heat of fusion (LF = 3.337e5 J kg-1), [J/kg]"
+    },
+    "Lv": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 2501000.0,
+     "description": "The latent heat of vaporization (LV = 2.501e6 J kg-1), [J/kg]"
+    },
+    "sw_vis_dir_o": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Visible direct shortwave forcing (fluxes%sw_vis_dir, mom_surface_forcing_nuopc.F90:604-606), [W m-2]"
+    },
+    "sw_vis_dif_o": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Visible diffuse shortwave forcing (fluxes%sw_vis_dif, :607-609), [W m-2]"
+    },
+    "sw_nir_dir_o": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Near-IR direct shortwave forcing (fluxes%sw_nir_dir, :610-612), [W m-2]"
+    },
+    "sw_nir_dif_o": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Near-IR diffuse shortwave forcing (fluxes%sw_nir_dif, :613-615), [W m-2]"
+    },
+    "sw": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Total shortwave forcing (fluxes%sw = sw_vis_dir + sw_vis_dif + sw_nir_dir + sw_nir_dif, mom_surface_forcing_nuopc.F90:597), [W m-2]"
+    },
+    "lw": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Net longwave forcing (fluxes%lw, mom_surface_forcing_nuopc.F90:560-561), [W m-2]"
+    },
+    "sens": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Sensible heat forcing (fluxes%sens, mom_surface_forcing_nuopc.F90:564-565), [W m-2]"
+    },
+    "latent": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Latent heat forcing (fluxes%latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf, mom_surface_forcing_nuopc.F90:572-596), [W m-2]"
+    },
+    "latent_evap_diag": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Latent heat diagnostic of evaporation (fluxes%latent_evap_diag = q_flux*Lv, mom_surface_forcing_nuopc.F90:594-595), [W m-2]"
+    },
+    "latent_fprec_diag": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Latent heat diagnostic of frozen precipitation (fluxes%latent_fprec_diag = -fprec*Lf, mom_surface_forcing_nuopc.F90:575-576), [W m-2]"
+    },
+    "latent_frunoff_diag": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Latent heat diagnostic of frozen runoff (fluxes%latent_frunoff_diag = -frunoff*Lf, mom_surface_forcing_nuopc.F90:581-582), [W m-2]"
+    },
+    "seaice_melt_heat_o": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Sea-ice and snow melt heat forcing (fluxes%seaice_melt_heat, mom_surface_forcing_nuopc.F90:569-570), [W m-2]"
+    },
+    "heat_added": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Heat added by the hflx_adj data override (fluxes%heat_added, mom_surface_forcing_nuopc.F90:1074-1077); 0 in the reference run, [W m-2]"
+    },
+    "evap": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Evaporation water forcing (fluxes%evap, mom_surface_forcing_nuopc.F90:525-526), [kg m-2 s-1]"
+    },
+    "lprec_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Liquid precipitation forcing (fluxes%lprec, mom_surface_forcing_nuopc.F90:519-520), [kg m-2 s-1]"
+    },
+    "fprec_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Frozen precipitation forcing (fluxes%fprec, mom_surface_forcing_nuopc.F90:522-523), [kg m-2 s-1]"
+    },
+    "vprec": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Virtual precipitation (fluxes%vprec): the salinity-restoring freshwater flux minus the global net-FW adjustment (mom_surface_forcing_nuopc.F90:455-486, :694-714), [kg m-2 s-1]"
+    },
+    "lrunoff_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Liquid runoff forcing (fluxes%lrunoff, mom_surface_forcing_nuopc.F90:529-530), [kg m-2 s-1]"
+    },
+    "frunoff_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Frozen runoff forcing (fluxes%frunoff, mom_surface_forcing_nuopc.F90:534-535), [kg m-2 s-1]"
+    },
+    "lrunoff_glc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Liquid glacier runoff forcing (fluxes%lrunoff_glc, mom_surface_forcing_nuopc.F90:539-541); 0 in the reference run, [kg m-2 s-1]"
+    },
+    "frunoff_glc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Frozen glacier runoff forcing (fluxes%frunoff_glc, mom_surface_forcing_nuopc.F90:544-546); 0 in the reference run, [kg m-2 s-1]"
+    },
+    "seaice_melt_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Water forcing from sea-ice and snow melt (fluxes%seaice_melt, mom_surface_forcing_nuopc.F90:574-575), [kg m-2 s-1]"
+    },
+    "salt_flux_o": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Total salt flux (fluxes%salt_flux): the salinity-restoring flux plus the import (mom_surface_forcing_nuopc.F90:430-447, :686-689), [kg m-2 s-1]"
+    },
+    "salt_flux_in": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "The imported salt flux alone (fluxes%salt_flux_in, mom_surface_forcing_nuopc.F90:688-689), [kg m-2 s-1]"
+    },
+    "p_surf_full": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Full surface pressure forcing (fluxes%p_surf_full, mom_surface_forcing_nuopc.F90:674-680), [Pa]"
+    },
+    "ustar": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "Friction velocity (fluxes%ustar; the dump records fluxes%ustar = forces%ustar on every row), [m s-1]"
+    },
+    "tau_mag": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Wind stress magnitude (fluxes%tau_mag; equal to forces%tau_mag in the dump), [Pa]"
+    },
+    "ice_fraction_o": {
+     "type": "unknown",
+     "units": "1",
+     "description": "Sea-ice fraction forcing (fluxes%ice_fraction, mom_surface_forcing_nuopc.F90:641-642), [1]"
+    },
+    "u10_sqr_o": {
+     "type": "unknown",
+     "units": "m^2/s^2",
+     "description": "10-m wind speed squared forcing (fluxes%u10_sqr, mom_surface_forcing_nuopc.F90:644-645); 0 in the reference run, [m2 s-2]"
+    },
+    "heat_content_cond": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of condensation (fluxes%heat_content_cond, mom_surface_forcing_nuopc.F90:631-632), [W m-2]"
+    },
+    "heat_content_evap": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of evaporation (fluxes%heat_content_evap, mom_surface_forcing_nuopc.F90:628-629), [W m-2]"
+    },
+    "heat_content_lprec": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of liquid precipitation (fluxes%heat_content_lprec, mom_surface_forcing_nuopc.F90:622-623), [W m-2]"
+    },
+    "heat_content_fprec": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of frozen precipitation (fluxes%heat_content_fprec, mom_surface_forcing_nuopc.F90:625-626), [W m-2]"
+    },
+    "heat_content_lrunoff": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of liquid runoff (fluxes%heat_content_lrunoff, mom_surface_forcing_nuopc.F90:616-617), [W m-2]"
+    },
+    "heat_content_frunoff": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "Enthalpy of frozen runoff (fluxes%heat_content_frunoff, mom_surface_forcing_nuopc.F90:619-620), [W m-2]"
+    },
+    "taux": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Zonal wind stress at the u point east of the cell (forces%taux, the AGRID average of the h-point stresses of cells (i, j) and (i+1, j), mom_surface_forcing_nuopc.F90:943-946), [Pa]"
+    },
+    "tauy": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Meridional wind stress at the v point north of the cell (forces%tauy, the AGRID average of (i, j) and (i, j+1), mom_surface_forcing_nuopc.F90:948-951), [Pa]"
+    },
+    "tau_mag_o": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Wind stress magnitude (forces%tau_mag = GUST_CONST + |(u_flux, v_flux)|, built from the h-point stresses, NOT from taux/tauy; mom_surface_forcing_nuopc.F90:956-957), [Pa]"
+    },
+    "ustar_o": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "Friction velocity (forces%ustar = sqrt(tau_mag/RHO_0), mom_surface_forcing_nuopc.F90:960-961), [m s-1]"
+    },
+    "p_surf_full_o": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Full surface pressure (forces%p_surf_full, mom_surface_forcing_nuopc.F90:674-680), [Pa]"
+    },
+    "omega_w2x": {
+     "type": "unknown",
+     "units": "rad",
+     "description": "Wind stress angle (forces%omega_w2x = atan2(v_flux, u_flux), mom_surface_forcing_nuopc.F90:962), [rad]"
+    },
+    "net_mass_src": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "Net mass source into the ocean (forces%net_mass_src, the sum of the nine water fluxes; MOM_forcing_type.F90 set_net_mass_forcing/get_net_mass_forcing, :2748-2800), [kg m-2 s-1]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "lprec_o",
+     "rhs": "lprec"
+    },
+    {
+     "lhs": "fprec_o",
+     "rhs": "fprec"
+    },
+    {
+     "lhs": "evap",
+     "rhs": "q_flux"
+    },
+    {
+     "lhs": "lrunoff_o",
+     "rhs": "lrunoff"
+    },
+    {
+     "lhs": "frunoff_o",
+     "rhs": "frunoff"
+    },
+    {
+     "lhs": "lrunoff_glc",
+     "rhs": "lrunoff_glc_import"
+    },
+    {
+     "lhs": "frunoff_glc",
+     "rhs": "frunoff_glc_import"
+    },
+    {
+     "lhs": "lw",
+     "rhs": "lw_flux"
+    },
+    {
+     "lhs": "sens",
+     "rhs": "t_flux"
+    },
+    {
+     "lhs": "seaice_melt_heat_o",
+     "rhs": "seaice_melt_heat"
+    },
+    {
+     "lhs": "seaice_melt_o",
+     "rhs": "seaice_melt"
+    },
+    {
+     "lhs": "latent_evap_diag",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "q_flux",
+       "Lv"
+      ]
+     }
+    },
+    {
+     "lhs": "latent_fprec_diag",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "fprec",
+         "Lf"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "latent_frunoff_diag",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "frunoff",
+         "Lf"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "latent",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "q_flux",
+             "Lv"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "fprec",
+             "Lf"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "frunoff",
+           "Lf"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "frunoff_glc_import",
+         "Lf"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "sw_vis_dir_o",
+     "rhs": "sw_vis_dir"
+    },
+    {
+     "lhs": "sw_vis_dif_o",
+     "rhs": "sw_vis_dif"
+    },
+    {
+     "lhs": "sw_nir_dir_o",
+     "rhs": "sw_nir_dir"
+    },
+    {
+     "lhs": "sw_nir_dif_o",
+     "rhs": "sw_nir_dif"
+    },
+    {
+     "lhs": "sw",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "sw_vis_dir",
+       "sw_vis_dif",
+       "sw_nir_dir",
+       "sw_nir_dif"
+      ]
+     }
+    },
+    {
+     "lhs": "heat_content_cond",
+     "rhs": "hcond"
+    },
+    {
+     "lhs": "heat_content_evap",
+     "rhs": "hevap"
+    },
+    {
+     "lhs": "heat_content_lprec",
+     "rhs": "hrain"
+    },
+    {
+     "lhs": "heat_content_fprec",
+     "rhs": "hsnow"
+    },
+    {
+     "lhs": "heat_content_lrunoff",
+     "rhs": "hrofl"
+    },
+    {
+     "lhs": "heat_content_frunoff",
+     "rhs": "hrofi"
+    },
+    {
+     "lhs": "ice_fraction_o",
+     "rhs": "ice_fraction"
+    },
+    {
+     "lhs": "u10_sqr_o",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "u10_sqr_allocated",
+       "u10_sqr"
+      ]
+     }
+    },
+    {
+     "lhs": "p_surf_full",
+     "rhs": "p"
+    },
+    {
+     "lhs": "heat_added",
+     "rhs": "heat_added_override"
+    },
+    {
+     "lhs": "salt_flux_in",
+     "rhs": "salt_flux"
+    },
+    {
+     "lhs": "salt_flux_o",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "salt_flux",
+       "salt_restore_flux"
+      ]
+     }
+    },
+    {
+     "lhs": "vprec",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "vprec_restore",
+       "net_fw_global_adjust"
+      ]
+     }
+    },
+    {
+     "lhs": "taux",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "u_flux",
+         {
+          "op": "*",
+          "args": [
+           "mask_east",
+           "u_flux_east"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         "mask_east"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "tauy",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "v_flux",
+         {
+          "op": "*",
+          "args": [
+           "mask_north",
+           "v_flux_north"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         "mask_north"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "tau_mag",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "GUST_CONST",
+       {
+        "op": "sqrt",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "^",
+            "args": [
+             "u_flux",
+             2
+            ]
+           },
+           {
+            "op": "^",
+            "args": [
+             "v_flux",
+             2
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ustar",
+     "rhs": {
+      "op": "sqrt",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         "tau_mag",
+         "RHO_0"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "tau_mag_o",
+     "rhs": "tau_mag"
+    },
+    {
+     "lhs": "ustar_o",
+     "rhs": "ustar"
+    },
+    {
+     "lhs": "p_surf_full_o",
+     "rhs": "p"
+    },
+    {
+     "lhs": "omega_w2x",
+     "rhs": {
+      "op": "atan2",
+      "args": [
+       "v_flux",
+       "u_flux"
+      ]
+     }
+    },
+    {
+     "lhs": "net_mass_src",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "lprec_o",
+       "fprec_o",
+       "vprec",
+       "lrunoff_o",
+       "frunoff_o",
+       "lrunoff_glc",
+       "frunoff_glc",
+       "evap",
+       "seaice_melt_o"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "cpl1_i7_j82",
+     "description": "Coupling step 1, cell (i, j) = (7, 82) (global gi/gj (3, 78), the same cell as the EOS test surface_k1_cell3_78_step1: identical p = 99753.85917574639 Pa): east neighbor (8, 82) and north neighbor (7, 83) are both ocean, so taux = (u_flux + u_flux_east)/2 and tauy = (v_flux + v_flux_north)/2; minimal branch set (evaporation and frozen precipitation only; no runoff, no melt). mom6_sfc_forcing.csv row cpl_step 1, i 7, j 82.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99753.85917574639,
+      "sw_vis_dir": 47.293988455798626,
+      "sw_vis_dif": 47.293988455798626,
+      "sw_nir_dir": 35.677922156938166,
+      "sw_nir_dif": 35.677922156938166,
+      "lw_flux": -42.399437179840895,
+      "t_flux": -11.146607337011853,
+      "q_flux": -7.68922543320097e-06,
+      "lprec": 0.0,
+      "fprec": 1.3785555304105718e-06,
+      "lrunoff": 0.0,
+      "frunoff": 0.0,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.0,
+      "hrofi": 0.0,
+      "hevap": -0.05846293209400731,
+      "hcond": 0.0,
+      "u_flux": -0.00943988242442084,
+      "v_flux": 0.0021274182107054768,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": 0.0,
+      "seaice_melt": 0.0,
+      "ice_fraction": 0.4692451250438887,
+      "u10_sqr": 10.03301907078677,
+      "u_flux_east": -0.015566905896419557,
+      "mask_east": 1.0,
+      "v_flux_north": 0.0034032931577250994,
+      "mask_north": 1.0,
+      "salt_restore_flux": 6.73244932367025e-07,
+      "net_fw_global_adjust": -2.4885908890093212e-06
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 165.94382122547358
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 47.293988455798626
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 47.293988455798626
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 35.677922156938166
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 35.677922156938166
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -42.399437179840895
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -19.690776788933633
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -11.146607337011853
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -7.68922543320097e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 1.3785555304105718e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": 2.4885908890093212e-06
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 6.73244932367025e-07
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99753.85917574639
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.00312023723466675
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.010076636214621834
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.4692451250438887
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.05846293209400731
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -19.230752808435625
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.4600239804980078
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -0.0
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.012503394160420199
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": 0.0027653556842152883
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.010076636214621834
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.00312023723466675
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99753.85917574639
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": 2.919930916068436
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": -3.822079013781076e-06
+      }
+     ]
+    },
+    {
+     "id": "cpl1_i8_j82",
+     "description": "Coupling step 1, cell (8, 82): east neighbor (9, 82) is land, so mask_east = 0 and taux = u_flux exactly; north neighbor (8, 83) is ocean, so tauy is the north average. Liquid and frozen runoff are present (lrunoff/frunoff and hrofl/hrofi nonzero), exercising the runoff, enthalpy, and latent_frunoff branches.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99768.41042848327,
+      "sw_vis_dir": 39.181167371951105,
+      "sw_vis_dif": 39.181167371951105,
+      "sw_nir_dir": 29.557723616838306,
+      "sw_nir_dif": 29.557723616838306,
+      "lw_flux": -34.40174951199798,
+      "t_flux": -11.455250921034086,
+      "q_flux": -7.2291904482186025e-06,
+      "lprec": 0.0,
+      "fprec": 1.1380019490534958e-06,
+      "lrunoff": 1.555125266040855e-05,
+      "frunoff": 1.763739579996362e-05,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.10020551727358855,
+      "hrofi": -0.37343129005388975,
+      "hevap": -0.0465817631641514,
+      "hcond": 0.0,
+      "u_flux": -0.015566905896419557,
+      "v_flux": 0.002926413648708439,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": 0.0,
+      "seaice_melt": 0.0,
+      "ice_fraction": 0.5618601725895971,
+      "u10_sqr": 16.79276423041976,
+      "u_flux_east": 0.0,
+      "mask_east": 0.0,
+      "v_flux_north": 0.003354519206024812,
+      "mask_north": 1.0,
+      "salt_restore_flux": 6.552986313595736e-07,
+      "net_fw_global_adjust": -2.4885908890093212e-06
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 137.47778197757881
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 39.181167371951105
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 39.181167371951105
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 29.557723616838306
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 29.557723616838306
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -34.40174951199798
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -24.345555539841737
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -11.455250921034086
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -7.2291904482186025e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 1.1380019490534958e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": 2.4885908890093212e-06
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 1.555125266040855e-05
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 1.763739579996362e-05
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 6.552986313595736e-07
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99768.41042848327
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.003961113528183046
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.01623958509656516
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.5618601725895971
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.0465817631641514
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.10020551727358855
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": -0.37343129005388975
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -18.080205310994724
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.37975125039915153
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -5.8855989784478595
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.015566905896419557
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": 0.0031404664273666253
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.01623958509656516
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.003961113528183046
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99768.41042848327
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": 2.9557719449897193
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": 2.9586050850216386e-05
+      }
+     ]
+    },
+    {
+     "id": "cpl3_i7_j82",
+     "description": "Coupling step 3, cell (7, 82): both neighbors ocean. The sea-ice melt branches are nonzero (seaice_melt_heat = -143.48 W m-2, seaice_melt = 4.2997e-4 kg m-2 s-1); vprec = -2.3603e-5 kg m-2 s-1 (the net-FW adjustment of step 3).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99747.88776992254,
+      "sw_vis_dir": 70.70465072380517,
+      "sw_vis_dif": 70.70465072380517,
+      "sw_nir_dir": 53.33859771660119,
+      "sw_nir_dif": 53.33859771660119,
+      "lw_flux": -35.50883543703146,
+      "t_flux": -13.348421801870595,
+      "q_flux": -8.701233877467565e-06,
+      "lprec": 0.0,
+      "fprec": 2.0729461023186773e-06,
+      "lrunoff": 0.0,
+      "frunoff": 0.0,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.0,
+      "hrofi": 0.0,
+      "hevap": -0.066301244843396,
+      "hcond": 0.0,
+      "u_flux": -0.012030523694664442,
+      "v_flux": -0.0015677941876670047,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": -143.48163956333374,
+      "seaice_melt": 0.00042997194954550117,
+      "ice_fraction": 0.47828136789071685,
+      "u10_sqr": 12.67069503771175,
+      "u_flux_east": -0.02013617018973673,
+      "mask_east": 1.0,
+      "v_flux_north": -0.0006329083300894729,
+      "mask_north": 1.0,
+      "salt_restore_flux": 6.910845520309043e-07,
+      "net_fw_global_adjust": 2.360305286850575e-05
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 248.08649688081272
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 70.70465072380517
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 70.70465072380517
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 53.33859771660119
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 53.33859771660119
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -35.50883543703146
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -22.453528041890124
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -13.348421801870595
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": -143.48163956333374
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -8.701233877467565e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 2.0729461023186773e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": -2.360305286850575e-05
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.00042997194954550117
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 6.910845520309043e-07
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99747.88776992254
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.0034797203429439982
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.012532249543376735
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.47828136789071685
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.066301244843396
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -21.76178592754638
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.6917421143437427
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -0.0
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.016083346942200587
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0011003512588782388
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.012532249543376735
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.0034797203429439982
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99747.88776992254
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": -3.0120049143885357
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": 0.0003997406089018465
+      }
+     ]
+    },
+    {
+     "id": "cpl5_i8_j82",
+     "description": "Coupling step 5, cell (8, 82): east neighbor land, north neighbor ocean; the largest |u_flux| of the traced rows (0.0178 Pa) and the full branch set of the reference run (runoff, melt, evaporation, snow).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99777.35498675313,
+      "sw_vis_dir": 70.45810191280735,
+      "sw_vis_dif": 70.45810191280735,
+      "sw_nir_dir": 53.15260474849094,
+      "sw_nir_dif": 53.15260474849094,
+      "lw_flux": -24.247004736781342,
+      "t_flux": -13.679612407340397,
+      "q_flux": -6.830704428051774e-06,
+      "lprec": 0.0,
+      "fprec": 2.1819122072710634e-06,
+      "lrunoff": 1.555125266040855e-05,
+      "frunoff": 1.763739579996362e-05,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.09406217693196502,
+      "hrofi": -0.37343129005388975,
+      "hevap": -0.041315702503960425,
+      "hcond": 0.0,
+      "u_flux": -0.01780593182523747,
+      "v_flux": -0.004642441024022306,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": -174.44311652467223,
+      "seaice_melt": 0.0005227543198222123,
+      "ice_fraction": 0.5814882841070294,
+      "u10_sqr": 15.485714162838667,
+      "u_flux_east": 0.0,
+      "mask_east": 0.0,
+      "v_flux_north": -0.0022548943724622307,
+      "mask_north": 1.0,
+      "salt_restore_flux": 7.510320790925461e-07,
+      "net_fw_global_adjust": 2.191476364849981e-05
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 247.2214133225966
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 70.45810191280735
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 70.45810191280735
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 53.15260474849094
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 53.15260474849094
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -24.247004736781342
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -23.697294856571702
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -13.679612407340397
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": -174.44311652467223
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -6.830704428051774e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 2.1819122072710634e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": -2.191476364849981e-05
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 1.555125266040855e-05
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 1.763739579996362e-05
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.0005227543198222123
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 7.510320790925461e-07
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99777.35498675313
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.004262087797327811
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.018801181125855205
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.5814882841070294
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.041315702503960425
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.09406217693196502
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": -0.37343129005388975
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -17.083591774557487
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.7281041035663539
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -5.8855989784478595
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.01780593182523747
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.003448667698242268
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.018801181125855205
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.004262087797327811
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99777.35498675313
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": -2.886546176574713
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": 0.0005293794124133039
+      }
+     ]
+    },
+    {
+     "id": "cpl12_i8_j82",
+     "description": "Coupling step 12, cell (8, 82): east neighbor land. Last traced step; the weakest wind stress row of the pair, tau_mag = 4.40e-3 Pa.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99838.14520494227,
+      "sw_vis_dir": 32.7722278195117,
+      "sw_vis_dif": 32.7722278195117,
+      "sw_nir_dir": 24.722909427416315,
+      "sw_nir_dif": 24.722909427416315,
+      "lw_flux": -26.973375899306802,
+      "t_flux": -7.13483409726206,
+      "q_flux": -3.600948448457745e-06,
+      "lprec": 0.0,
+      "fprec": 1.746093831564993e-06,
+      "lrunoff": 1.555125266040855e-05,
+      "frunoff": 1.763739579996362e-05,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.08272267031397242,
+      "hrofi": -0.37343129005388975,
+      "hevap": -0.019154731636361624,
+      "hcond": 0.0,
+      "u_flux": -0.0022665610933487327,
+      "v_flux": -0.003298314866024808,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": -184.74767607782374,
+      "seaice_melt": 0.0005536340307995917,
+      "ice_fraction": 0.6158374792625361,
+      "u10_sqr": 4.844903595243099,
+      "u_flux_east": 0.0,
+      "mask_east": 0.0,
+      "v_flux_north": -0.0024710708261696025,
+      "mask_north": 1.0,
+      "salt_restore_flux": 1.0008026194152396e-06,
+      "net_fw_global_adjust": 1.8645492704950625e-05
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 114.99027449385602
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 32.7722278195117
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 32.7722278195117
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 24.722909427416315
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 24.722909427416315
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -26.973375899306802
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -15.474242559633918
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -7.13483409726206
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": -184.74767607782374
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -3.600948448457745e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 1.746093831564993e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": -1.8645492704950625e-05
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 1.555125266040855e-05
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 1.763739579996362e-05
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.0005536340307995917
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 1.0008026194152396e-06
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99838.14520494227
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.0020623194125833377
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.0044020220071012165
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.6158374792625361
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.019154731636361624
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.08272267031397242
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": -0.37343129005388975
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -9.00597206959282
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.5826715115932382
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -5.8855989784478595
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.0022665610933487327
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0028846928460972052
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.0044020220071012165
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.0020623194125833377
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99838.14520494227
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": -2.172871511705786
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": 0.0005663223319381205
+      }
+     ]
+    },
+    {
+     "id": "cpl12_i8_j83",
+     "description": "Coupling step 12, cell (8, 83): both neighbors ocean; the smallest tau_mag of the traced rows (3.31e-3 Pa) and the largest salinity-restoring flux (salt_restore_flux = 1.0184e-6 kg m-2 s-1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "p": 99839.22343332047,
+      "sw_vis_dir": 33.115236713395895,
+      "sw_vis_dif": 33.115236713395895,
+      "sw_nir_dir": 24.981670530353853,
+      "sw_nir_dif": 24.981670530353853,
+      "lw_flux": -27.10190551912963,
+      "t_flux": -5.6487799293412655,
+      "q_flux": -2.956029486464198e-06,
+      "lprec": 0.0,
+      "fprec": 1.7632058521852717e-06,
+      "lrunoff": 1.555125425900569e-05,
+      "frunoff": 1.763739761300666e-05,
+      "hrain": 0.0,
+      "hsnow": 0.0,
+      "hrofl": 0.07808190624434634,
+      "hrofi": -0.37343132844090615,
+      "hevap": -0.014842045109252711,
+      "hcond": 0.0,
+      "u_flux": -0.0015444706501878266,
+      "v_flux": -0.0024710708261696025,
+      "salt_flux": 0.0,
+      "seaice_melt_heat": -183.6182710438356,
+      "seaice_melt": 0.0005502495386390039,
+      "ice_fraction": 0.6120726601970723,
+      "u10_sqr": 3.174691189048575,
+      "u_flux_east": -0.002107067931459877,
+      "mask_east": 1.0,
+      "v_flux_north": -0.003058906541782407,
+      "mask_north": 1.0,
+      "salt_restore_flux": 1.0183930365185741e-06,
+      "net_fw_global_adjust": 1.8645492704950625e-05
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "sw",
+       "time": 0.0,
+       "expected": 116.1938144874995
+      },
+      {
+       "variable": "sw_vis_dir_o",
+       "time": 0.0,
+       "expected": 33.115236713395895
+      },
+      {
+       "variable": "sw_vis_dif_o",
+       "time": 0.0,
+       "expected": 33.115236713395895
+      },
+      {
+       "variable": "sw_nir_dir_o",
+       "time": 0.0,
+       "expected": 24.981670530353853
+      },
+      {
+       "variable": "sw_nir_dif_o",
+       "time": 0.0,
+       "expected": 24.981670530353853
+      },
+      {
+       "variable": "lw",
+       "time": 0.0,
+       "expected": -27.10190551912963
+      },
+      {
+       "variable": "latent",
+       "time": 0.0,
+       "expected": -13.867011121981506
+      },
+      {
+       "variable": "sens",
+       "time": 0.0,
+       "expected": -5.6487799293412655
+      },
+      {
+       "variable": "seaice_melt_heat_o",
+       "time": 0.0,
+       "expected": -183.6182710438356
+      },
+      {
+       "variable": "heat_added",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -2.956029486464198e-06
+      },
+      {
+       "variable": "lprec_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "fprec_o",
+       "time": 0.0,
+       "expected": 1.7632058521852717e-06
+      },
+      {
+       "variable": "vprec",
+       "time": 0.0,
+       "expected": -1.8645492704950625e-05
+      },
+      {
+       "variable": "lrunoff_o",
+       "time": 0.0,
+       "expected": 1.555125425900569e-05
+      },
+      {
+       "variable": "frunoff_o",
+       "time": 0.0,
+       "expected": 1.763739761300666e-05
+      },
+      {
+       "variable": "lrunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "frunoff_glc",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "seaice_melt_o",
+       "time": 0.0,
+       "expected": 0.0005502495386390039
+      },
+      {
+       "variable": "salt_flux_o",
+       "time": 0.0,
+       "expected": 1.0183930365185741e-06
+      },
+      {
+       "variable": "salt_flux_in",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "p_surf_full",
+       "time": 0.0,
+       "expected": 99839.22343332047
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.001789402965625948
+      },
+      {
+       "variable": "tau_mag",
+       "time": 0.0,
+       "expected": 0.003314031677459621
+      },
+      {
+       "variable": "ice_fraction_o",
+       "time": 0.0,
+       "expected": 0.6120726601970723
+      },
+      {
+       "variable": "u10_sqr_o",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_cond",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_evap",
+       "time": 0.0,
+       "expected": -0.014842045109252711
+      },
+      {
+       "variable": "heat_content_lprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_fprec",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "heat_content_lrunoff",
+       "time": 0.0,
+       "expected": 0.07808190624434634
+      },
+      {
+       "variable": "heat_content_frunoff",
+       "time": 0.0,
+       "expected": -0.37343132844090615
+      },
+      {
+       "variable": "latent_evap_diag",
+       "time": 0.0,
+       "expected": -7.393029745646959
+      },
+      {
+       "variable": "latent_fprec_diag",
+       "time": 0.0,
+       "expected": -0.5883817928742252
+      },
+      {
+       "variable": "latent_frunoff_diag",
+       "time": 0.0,
+       "expected": -5.885599583460323
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.0018257692908238516
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0027649886839760046
+      },
+      {
+       "variable": "tau_mag_o",
+       "time": 0.0,
+       "expected": 0.003314031677459621
+      },
+      {
+       "variable": "ustar_o",
+       "time": 0.0,
+       "expected": 0.001789402965625948
+      },
+      {
+       "variable": "p_surf_full_o",
+       "time": 0.0,
+       "expected": 99839.22343332047
+      },
+      {
+       "variable": "omega_w2x",
+       "time": 0.0,
+       "expected": -2.1294105950995332
+      },
+      {
+       "variable": "net_mass_src",
+       "time": 0.0,
+       "expected": 0.0005635998741717867
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
