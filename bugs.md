@@ -220,7 +220,7 @@ Format template:
 - **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
 
 
-## 20. CMEPS single-column driver: unchecked netCDF errors (SIGSEGV on missing file) and undetected mesh-match failure (garbage scol_* attributes, run continues)
+## 27. CMEPS single-column driver: unchecked netCDF errors (SIGSEGV on missing file) and undetected mesh-match failure (garbage scol_* attributes, run continues)
 
 - **Location:** `components/cmeps/cesm/driver/esm.F90` `esm_get_single_column_attributes` (lines ~1312-1455, cam6_4_212-era CMEPS; called once per component in the cap init for SCAM/single-column mode).
 - **Description:** every `nf90_*` call checks its status only by logging (`call shr_log_error(...)`), which does not stop the run; the code then proceeds to use the (uninitialized) return buffers. Two concrete failures seen in this lane:

@@ -70,7 +70,7 @@ Two versions were needed:
   (`flwds`) collapses to 0.0 from step ~5 onward in this configuration
   (radiation steps 1/3 give 385.5/92.9 W/m², then 0), and CLM rejects
   `flwds ≤ 0`. The reference survived only because its land fraction was
-  zero (no land gridcells → check loop empty). Recorded in `bugs.md` #20.
+  zero (no land gridcells → check loop empty). Recorded in `bugs.md` #27.
 - **v2 (`mask=0, frac=0`, ocean column, in use):** reproduces the
   reference configuration (`scol_lndfrac=0`, `scol_ocnfrac=1`) while
   keeping the correct element-348 column coordinates; both runs complete
@@ -82,7 +82,7 @@ Verified: the archived reference `cam.h0i` has lat/lon = 36.51977632 /
 same column as the reference regardless of mask/frac. The original file
 was not byte-restorable (not on the SVN server); flagged for the inputdata
 owner. The driver's unchecked-error handling behind all of this is logged
-as a CESM bug (`bugs.md` #20).
+as a CESM bug (`bugs.md` #27).
 
 ### Dump-module bug found and fixed (fork `d6230637`)
 
