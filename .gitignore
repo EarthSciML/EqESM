@@ -17,6 +17,10 @@ stage1/analysis/mosart_geometry/
 *.log
 .DS_Store
 
+# Scratch for editing fork files (staged copies + patch scripts)
+.work/
+__pycache__/
+
 # slurm subagent run dirs (tools/slurm-agent/dispatch.py)
 .slurm-agents/
 /.ast/
