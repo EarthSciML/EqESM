@@ -6,7 +6,10 @@ files: the canopy interception/throughfall hydrology of CanopyHydrologyMod.F90
 and the pre-flux surface interface of BiogeophysPreFluxCalcsMod.F90 plus
 SurfaceHumidityMod.F90, with the shared pointwise laws factored into an
 expression-template library. The `tests` blocks pin the stage-1
-instrumentation dumps (`stage1/dumps/clm/`) — see [Testing](#testing).
+instrumentation dumps (`stage1/dumps/clm/` — the clm-dumps-w2 regeneration,
+fork clm `2d8e0c697`/LID 261102-004337, with layer-exact
+`clm_soiltemp.csv` j labels and real `clm_soilfluxes.csv` t_soisno_1..3;
+see [Dump defects](#dump-defects)) — see [Testing](#testing).
 
 All model logic lives in `.esm` files; this README is the human-readable map.
 Sources: `stage1/cesm/components/clm/src/biogeophys/`
@@ -28,7 +31,10 @@ non-lake, non-urban patch filter of the traced run (see
 [Coverage gaps](#coverage-gaps)). The traced run is a single-clump column
 experiment: 16 patches on 16 columns (mostly bare, `frac_veg_nosno = 0`,
 `elai = esai = htop = 0`, deep snowpacks `snl = −9` on the traced columns),
-12 steps of dtime = 1800 s.
+12 steps of dtime = 1800 s. The canopyflux dump's ent/hyd stages trace the
+bare patches 1-16; its flx stage (CanopyFluxes exit, end of step) traces the
+vegetated patches 48-65 (`frac_veg_nosno = 1`, nonzero elai/esai,
+forc_snow = 0, liqcan > 0 post-evap).
 
 ## File map
 
@@ -79,23 +85,24 @@ the wiring exactly (see [Testing](#testing)).
 ## Dump defects
 
 The stage-1 CLM dumps were produced by the fork instrumentation
-(`stage1/EqESM-cesm-ctsm/.../clm_dump_mod.F90`) and carry two defects that
-any consumer must decode (both recorded in `bugs.md`):
+(`stage1/EqESM-cesm-ctsm/.../clm_dump_mod.F90`). The clm-dumps-w2
+regeneration (fork clm `2d8e0c697`, LID 261102-004337) fixed the layer
+indexing defect of the original dumps; one defect remains (both recorded in
+`bugs.md`):
 
-1. **t_soisno lower-bound shift (bugs.md #21).** `dump_soiltemp`
-   (clm_dump_mod.F90:831-910) loops over the true layer indices
-   `j = snl(c)+1 .. jbot` (as its header documents) but the t_soisno/dz/z/zi
-   value columns at row `j` carry true layer `j−12` (the dummy arguments read
-   an array whose slot s holds true layer s−12: the snow layers live at slots
-   4..12 and the top soil layer at slot 13 for this build, nlevsno = 9,
-   nlevgrnd = 25). Rows j = 1..3 read 0.0-filled unused slots below the snow
-   layers and rows j ≤ 0 read out-of-bounds/stale memory (garbage dz, stale
-   ~225.7 K temperatures). The valid window is **j = 4..25**: j = 4 is the
-   top snow layer t_soisno(c,snl+1) — equal to the preflux t_grnd to round-off
-   on all 192 rows — and j = 13 is the top soil layer. The same shift makes
-   `dump_soilfluxes`' t_soisno_1..3 (clm_dump_mod.F90:588, the top three
-   slots) identically 0.0 on all 192 rows. The clm_canopy.esm surfhum tests
-   reconstruct their inputs through this decode (see
+1. **t_soisno lower-bound shift — fixed in W2 (bugs.md #21).** The original
+   `dump_soiltemp`/`dump_soilfluxes` wrote every t_soisno/dz/z/zi value
+   column 12 layers below its j label (the top snow layer appeared at row
+   j = 4, the top soil layer at j = 13, and `dump_soilfluxes`' t_soisno_1..3
+   were identically 0.0). W2 declares the 2-D dummy arguments with the dim2
+   lower bound `-nlevsno+1`, so the regenerated files carry the true model
+   layer index j = snl(c)+1 .. jbot: the top snow layer is j = snl+1 = −8
+   (for snl = −9; equal to the preflux t_grnd to round-off on all 192 rows)
+   and the top soil layer is j = 1, and the soilfluxes t_soisno_1..3 are
+   real (t_soisno_1 equals the soiltemp exit j = 1 row to round-off on all
+   192 rows). The clm_canopy.esm pins were re-decoded to the new convention
+   (entry j = −8 / j = 1); the values themselves are unchanged — the old
+   decode was exact, so only the cited j labels moved (see
    [Testing](#testing)).
 2. **qsat derivative columns zero.** `clm_qsat.csv`'s qsdT/esdT are
    identically 0: the traced QSat callers do not request the optional
@@ -112,7 +119,7 @@ laws cannot be pinned from this dump).
 
 ## Coverage gaps
 
-The 14 tests pin exactly what the dumps can support; the following branches
+The 18 tests pin exactly what the dumps can support; the following branches
 are transcribed but not dump-pinned (all inputs/behaviors are the active
 Fortran's, and no tolerance has been loosened or quantity invented to force a
 pin):
@@ -125,27 +132,43 @@ pin):
   CalculateSurfaceHumidity never fires; h2osoi_liq/h2osoi_ice, sucsat, bsw,
   watsat and dz are not dumped, so hr ≈ 0.991 (inferred from the
   qg_soil/qsat(T_soil) ratio of the dump's internal values) cannot be pinned
-  directly. The hr equation, its smpmin clamp and the supersaturated-window
-  clamp (qsatg_soil → forc_q when qsatg > forc_q > hr·qsatg,
+  directly. The soil-branch QSat *wiring* is now pinned by
+  `clm_soilfluxes_soil_qsat_step1_c1` (qsatg_soil_raw/qsatg_soil/qsatgdT_soil
+  at the post-solve top-soil temperature from clm_soilfluxes.csv t_soisno_1,
+  clamp inactive since qsatg_soil = 4.9e-5 < forc_q = 6.5e-4), but the hr
+  equation, its smpmin clamp and the supersaturated-window clamp
+  (qsatg_soil → forc_q when qsatg > forc_q > hr·qsatg,
   SurfaceHumidityMod.F90:185-190) are transcribed with the verified constants
   but carry no assertion.
 - **qg_h2osfc and the snl = 0 branches.** frac_h2osfc = 0 and snl < 0 on all
   traced rows, so qg_h2osfc/qsatg_h2osfc and the qg_snow = qg_soil fallback
   are untested.
-- **Canopy interception itself.** All traced patches are bare
-  (frac_veg_nosno = 0, elai = esai = 0) and check_point = 0 everywhere, so
-  the interception fractions, the excess-fall fluxes, the nonzero snow
-  unloading, and nonzero fwet/fcansno/fdry are untested; the ODE integration
-  test pins the zero branch only (see Testing). qflx_irrig_drip is never
-  nonzero in the dump.
+- **Canopy interception/throughfall flux split.** The ent/hyd stages trace
+  only the bare patches 1-16 (check_point = 0 everywhere there), and the flx
+  stage — which traces the vegetated patches 48-65 — writes NaN for
+  fpiliq/fpisnow/qflx_intercepted_*/qflx_through_* (fields defined only at
+  the hyd stage), so the interception fractions themselves, the
+  throughfall/interception split, the excess-fall fluxes (qflx_liqcanfall/
+  qflx_snocanfall) and the nonzero snow unloading (snocan > 0) are untested;
+  qflx_irrig_drip is never nonzero in the dump. The vegetated *fraction
+  laws* (fwet/fdry/fcansno) are pinned at nonzero canopy storage by the
+  flx-stage tests `clm_canopy_fractions_veg_step*` (fwet clamp-saturated at
+  0.05 on 182/192 flx rows; the 10 rows with fwet < 0.05 are unpinnable —
+  their fwet was evaluated from the pre-evap storage, which is not dumped —
+  see Testing). qflx_liq_grnd for the vegetated columns is a wtcol-weighted
+  column aggregate (ratio to forc_rain constant per column), not a
+  patch-level value, so it is not pinned either. The ODE integration test
+  still pins the zero branch only.
 - **thv.** forc_th is not dumped, so thv = forc_th·(1+0.61·forc_q) carries no
   assertion.
 - **t_grnd mixing.** frac_sno_fluxes = 1 and frac_h2osfc = 0, so only the
   t_grnd = t_soisno_top_snow endpoint is pinned; the weighted mean and the
   snl = 0 branches are untested.
 - **htvp/emg/emv/z0m/displa alternatives.** Only the hsub branch (frozen top
-  layer with no liquid), the emg_snow endpoint (frac_sno_albedo = 1), and the
-  zero elai/esai/htop endpoints are exercised.
+  layer with no liquid; pinned with the real top-snow h2osoi_ice =
+  5.39439117719703098 kg/m2), the emg_snow endpoint (frac_sno_albedo = 1),
+  and the zero elai/esai/htop endpoints are exercised; the hvap branch
+  (liquid top layer) is untested.
 - **Landunit/column-type branches.** The icol_road_perv branch of
   CalculateSurfaceHumidity and the urban road/roof columns of
   CanopyHydrology are outside the traced filters.
@@ -167,20 +190,22 @@ the source actually differs.
 ## Testing
 
 The stage-2 `tests` blocks pin the stage-1 instrumentation dumps
-(`stage1/dumps/clm/`): `clm_qsat.csv`, `clm_run_imports.csv`
-(preflux + surfhum stages), `clm_soiltemp.csv` (entry stage, through the
-j→j−12 decode of bug #21), `clm_bareground.csv`, `clm_soilfluxes.csv` and
-`clm_canopyflux.csv` (ent/hyd stages). Run `./esm test stage2/` for the full
-suite (296 assertions: 115 MOSART + 134 CICE + 47 CLM). The CLM files
-themselves are pointwise (no ESD rules), so they validate and test without
-ESD_ROOT; the suite-level command still needs
+(`stage1/dumps/clm/`, the clm-dumps-w2 regeneration): `clm_qsat.csv`,
+`clm_run_imports.csv` (preflux + surfhum stages), `clm_soiltemp.csv`
+(entry/exit stages, layer-exact j labels: top snow j = −8, top soil j = 1),
+`clm_bareground.csv`, `clm_soilfluxes.csv` (real t_soisno_1..3) and
+`clm_canopyflux.csv` (ent/hyd stages for the bare patches 1-16, flx stage
+for the vegetated patches 48-65). Run `./esm test stage2/` for the full
+suite (404 assertions: 58 DATM/GSWP3 + 135 MOSART + 134 CICE + 77 CLM).
+The CLM files themselves are pointwise (no ESD rules), so they validate and
+test without ESD_ROOT; the suite-level command still needs
 `export ESD_ROOT=/path/to/EarthSciDiscretizations` for the lowered cice/
 mosart files.
 
 | file | tests | assertions | what is pinned |
 |---|---|---|---|
-| `clm_canopy.esm` — CanopyHydrology | 3 | 17 | the no-interception branch against `clm_canopyflux.csv` (hyd stage): throughfall carrying the full snowfall (qflx_through_snow = qflx_snow_grnd = forc_snow to round-off on all 192 hyd rows), zero interception/excess/canopy-fraction rows for a zero-precipitation patch, and `clm_canopy_ode_zeros_step6_p3` — the storage ODEs d(liqcan)/dt = d(snocan)/dt = 0 integrated over the full 1800 s step from the ent-stage state (liqcan = snocan = 0), pinning the ODE wiring and the check_point gate (time_span {0, 1800}, `initial_conditions`, MOSART precedent; no scheme gap: the Fortran's discrete max(0, .) clamps are inert at zero storage) |
-| `clm_canopy.esm` — CanopyFluxInterface | 11 | 30 | the ice-branch QSat law against `clm_qsat.csv` rows 0/48/191/Tmax (qsat_qs = qs to round-off; qg_snow = qsatg_snow for snl < 0); the surface-humidity boundary against `clm_run_imports.csv` surfhum rows (1,1)/(6,8)/(12,16) with t_soisno_top_snow from `clm_soiltemp.csv` entry j = 4 and forc_pbot from `clm_bareground.csv` (qg_snow = qsat_qs(T_snow, p), dqgdT = qsat_qsdT(T_snow, p), qg = frac_sno_fluxes·qg_snow, soilalpha = 1, t_grnd = t_soisno_top_snow — max rel err 2e-14 over all 192 surfhum rows); the thm law thm = forc_t + 0.0098·forc_hgt_t with forc_hgt_t = 30 + z0mg (FrictionVelocityMod.F90:632,664, z0mg = 8.1340205057601613e-05 m) against `clm_bareground.csv` rows (1,1)/(7,9); htvp = hsub = 2,834,700 J/kg against the preflux row and `clm_soilfluxes.csv` (eflx_lh_grnd = qflx_evap_soi·hsub exactly on all 192 rows); and the emg/emv/z0m/displa endpoints emg = 0.97, emv = z0m = displa = 0 against the preflux row (dumped exactly) |
+| `clm_canopy.esm` — CanopyHydrology | 6 | 44 | the no-interception branch against `clm_canopyflux.csv` (hyd stage): throughfall carrying the full snowfall (qflx_through_snow = qflx_snow_grnd = forc_snow to round-off on all 192 hyd rows), zero interception/excess/canopy-fraction rows for a zero-precipitation patch, `clm_canopy_ode_zeros_step6_p3` — the storage ODEs d(liqcan)/dt = d(snocan)/dt = 0 integrated over the full 1800 s step from the ent-stage state (liqcan = snocan = 0), pinning the ODE wiring and the check_point gate (time_span {0, 1800}, `initial_conditions`, MOSART precedent; no scheme gap: the Fortran's discrete max(0, .) clamps are inert at zero storage) — and the vegetated fraction laws at nonzero canopy storage against the flx-stage rows (1,48)/(1,60)/(12,52) (`clm_canopy_fractions_veg_step*`): fwet = 0.05 exactly (the raw law (h2ocan/(vegt·0.1))^0.666666666666 evaluates to 0.436/0.116/0.982, so the clamp saturates — the pin is robust to the pre/post-evap storage ambiguity; 182/192 flx rows carry fwet = 0.05, and the 10 rows with fwet < 0.05 are unpinnable since their pre-evap storage is not dumped), fdry = (1−fwet)·elai/(elai+esai) to round-off, fcansno = 0 (snocan = 0), and the h2ocan/vegt/liqcanmx/snocanmx storage equations (expected values are f64 evaluations at the dumped elai/esai/liqcan/snocan), with the state set via `initial_conditions` at time_span {0, 0} (the flx liqcan is post-evap; the evaporation is outside CanopyHydrology) |
+| `clm_canopy.esm` — CanopyFluxInterface | 12 | 33 | the ice-branch QSat law against `clm_qsat.csv` rows 0/48/191(Tmin)/7(Tmax) (qsat_qs = qs to round-off; qg_snow = qsatg_snow for snl < 0); the surface-humidity boundary against `clm_run_imports.csv` surfhum rows (1,1)/(6,8)/(12,16) with t_soisno_top_snow from `clm_soiltemp.csv` entry j = −8 and forc_pbot from `clm_bareground.csv` (qg_snow = qsat_qs(T_snow, p), dqgdT = qsat_qsdT(T_snow, p), qg = frac_sno_fluxes·qg_snow, soilalpha = 1, t_grnd = t_soisno_top_snow — max rel err 3.1e-16 over all 192 surfhum rows); the soil-branch QSat wiring `clm_soilfluxes_soil_qsat_step1_c1` against `clm_soilfluxes.csv` t_soisno_1 = 225.739712678586642 K (= soiltemp exit j = 1 to round-off on all 192 rows): qsatg_soil_raw = qsatg_soil = qsat_qs(T,p) and qsatgdT_soil = qsat_qsdT(T,p) with the supersaturated-window clamp inactive (qsatg = 4.9e-5 < forc_q = 6.5e-4); the thm law thm = forc_t + 0.0098·forc_hgt_t with forc_hgt_t = 30 + z0mg (FrictionVelocityMod.F90:632,664, z0mg = 8.13402050576016129e-05 m) against `clm_bareground.csv` rows (1,1)/(7,9); htvp = hsub = 2,834,700 J/kg against the preflux row and `clm_soilfluxes.csv` (eflx_lh_grnd = qflx_evap_soi·hsub exactly on all 192 rows), with the real top-snow h2osoi_ice = 5.39439117719703098 kg/m2 (soiltemp entry j = −8); and the emg/emv/z0m/displa endpoints emg = 0.97, emv = z0m = displa = 0 against the preflux row (dumped exactly) |
 
 All assertions use `tolerance {rel 1e-12, abs 0}` (the ODE test adds
 `abs 1e-18`); every expected value traces to a specific dump row (step,
@@ -189,8 +214,15 @@ patch/column) cited in the test description, and the instantaneous tests use
 direct dumps: the input temperatures are taken from the entry-stage
 `clm_soiltemp.csv` of the same step/column (the surfhum instant's t_soisno —
 the entry dump is the previous step's post-solve array, and the preflux t_grnd
-equals the entry j = 4 value to round-off on all 192 rows), and forc_pbot
-comes from the same step's `clm_bareground.csv` row.
+equals the entry j = −8 value to round-off on all 192 rows), and forc_pbot
+comes from the same step's `clm_bareground.csv` row. The soil-QSat test is
+also a reconstruction: t_soisno_top_soil is the post-solve value from
+`clm_soilfluxes.csv` t_soisno_1 (the soilfluxes dump point, one step-solve
+increment after the surfhum instant's entry value), with forc_pbot from the
+same step's `clm_bareground.csv` row. The flx-stage fraction tests set the
+liqcan/snocan ODE states through `initial_conditions` (flx liqcan is
+post-evap, so the storage cannot be integrated by CanopyHydrology alone);
+the fraction laws are pinned at that state with time_span {0, 0}.
 
 ### Transcription fixes found while writing the tests
 
@@ -214,11 +246,16 @@ state and ground fluxes against the hyd-stage dump row. With the interception
 branch off, all source terms are identically 0, so the integration is exact —
 it pins the ODE wiring, the check_point gate and the initial_conditions
 plumbing, not the interception physics (the dumps contain no vegetated patch
-with precipitation; see Coverage gaps). The Fortran's discrete storage update
-chain (AddInterceptionToCanopy → RemoveCanfallFromCanopy →
-RemoveSnowUnloading, CanopyHydrologyMod.F90:686-703, 835, 978) becomes the
-continuous ODEs; at zero storage the max(0, .) positivity clamps are inert, so
-the continuous and discrete forms agree exactly on the pinned trace.
+with precipitation at a stage that carries the interception fluxes; see
+Coverage gaps). The Fortran's discrete storage update chain
+(AddInterceptionToCanopy → RemoveCanfallFromCanopy → RemoveSnowUnloading,
+CanopyHydrologyMod.F90:686-703, 835, 978) becomes the continuous ODEs; at zero
+storage the max(0, .) positivity clamps are inert, so the continuous and
+discrete forms agree exactly on the pinned trace. The flx-stage fraction
+tests (see the table above) complement the ODE test by pinning the
+vegetated branch of the fraction laws at nonzero storage — but with the fwet
+clamp saturated, so the (h2ocan/(vegt·0.1))^0.666666666666 exponent itself is
+only pinned to the inequality raw ≥ 0.05, not to round-off.
 
 ## Removed templates
 
@@ -241,18 +278,26 @@ descriptions).
 
 ## Dump extensions that would close the gaps
 
-To pin the remaining branches, the stage-1 instrumentation should dump
-(per step, per traced patch/column): the preflux h2osoi_liq/h2osoi_ice,
-sucsat, bsw, watsat and dz of the top layer (for hr/soilalpha/qg_soil and the
-supersaturated-window clamp), forc_th (for thv), a vegetated patch receiving
-precipitation (elai/esai > 0, forc_rain/forc_snow > 0, frac_veg_nosno = 1 —
-for the interception/storage/excess/unloading laws and nonzero
-fwet/fcansno/fdry), a T > 273.15 QSat call (for the liquid branch), a
-frac_h2osfc > 0 state (for the h2osfc humidity branch), and the
-frac_sno_albedo values with albsnd/albsni (for the ground-albedo mixing).
-Bug #21 is fixed in the instrumentation by clm-dumps-w2 (clm `2d8e0c697`);
-re-pinning against the regenerated dumps makes
-the soiltemp dump directly usable layer-by-layer.
+The clm-dumps-w2 regeneration (bug #21 fixed) already made the soiltemp dump
+directly usable layer-by-layer and the soilfluxes t_soisno_1..3 real — the
+clm_canopy.esm pins are re-decoded and extended accordingly (vegetated
+canopy fractions from the flx stage, soil-branch QSat wiring from
+t_soisno_1). To pin the remaining branches, the stage-1 instrumentation
+should additionally dump (per step, per traced patch/column): the
+interception/throughfall fluxes (or fpiliq/fpisnow) at a stage that traces
+the vegetated patches — the hyd stage currently traces only the bare patches
+1-16, while the flx stage writes NaN for them (the vegetated fraction pins
+are exact only because the fwet clamp saturates; a vegetated hyd-stage row
+would pin the interception laws, the excess-fall fluxes and the storage ODE
+with evap off, and the pre-evap storage that the 10 rows with fwet < 0.05
+were evaluated from); the preflux h2osoi_liq/h2osoi_ice, sucsat, bsw, watsat
+and dz of the top layer (for hr/soilalpha/qg_soil and the supersaturated-
+window clamp); a T > 273.15 QSat call (for the liquid branch); a
+frac_h2osfc > 0 state (for the h2osfc humidity branch); a snow-unloading
+state (snocan > 0 with forc_t/forc_wind); the patch-level qflx_liq_grnd for
+the vegetated columns (the dumped value is the wtcol-weighted column
+aggregate); forc_th (for thv); and the frac_sno_albedo values with
+albsnd/albsni (for the ground-albedo mixing).
 
 ## Next steps (stage 2.5 / stage 3)
 
@@ -262,6 +307,9 @@ temperature/moisture, surface albedo, canopy fluxes/biogeophysics, and the
 top-level clm assembly) follow the same pattern — transcribe the Fortran
 laws into templates, mount them in the component models, and pin them against
 the remaining `stage1/dumps/clm/` files (`clm_surfalbedo.csv`,
-`clm_soiltemp.csv` exit rows, `clm_canopyflux.csv` flx stage,
-`clm_bareground.csv`, `clm_soilfluxes.csv`). Stage 3 couples the merged
+`clm_soiltemp.csv` exit rows, `clm_canopyflux.csv` flx stage (t_veg/
+eflx_sh_veg/qflx_evap_veg for the canopy-flux energy balance),
+`clm_bareground.csv`, `clm_soilfluxes.csv`). The W2 soiltemp/soilfluxes
+files are now layer-exact, so the soiltemp component can pin its layer
+temperatures directly (entry/exit j = −8..13+). Stage 3 couples the merged
 components into the top-level `eqesm.esm` model.

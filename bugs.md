@@ -326,3 +326,42 @@ Format template:
 - **Impact on results:** none on the model; breaks machine-readable dumps when such values occur (rainc garbage per #28 triggered the large-exponent case).
 - **Reproduced/corrected in .esm:** n/a (toolchain). Fork patched (med_dump_mod.F90, commit 4750efc5): dump writes `es26.17e3` and flushes subnormals to 0.0.
 - **Status:** patched locally (fork); open upstream.
+
+## TBD. CLM dump: clm_canopyflux.csv ent/hyd stages trace bare soil patches, so the vegetated interception flux split is not dump-covered
+
+- **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
+  `dump_canopyflux` — called with `num_soilp, filter_soilp` from
+  CanopyHydrologyMod.F90:228,459 (ent/hyd stages) and with
+  `num_exposedvegp, filter_exposedvegp` from CanopyFluxesMod.F90:1764 (flx
+  stage); artifact `stage1/dumps/clm/clm_canopyflux.csv` (whose description
+  reads "One row per traced vegetated patch per step").
+- **Description:** the ent/hyd stages dump the first `dump_first_cols`
+  patches of the soil-patch filter — in the traced run the 16 bare patches
+  1-16 (frac_veg_nosno = 0, check_point = 0 everywhere) — while only the flx
+  stage (CanopyFluxes exit, end of step) traces the vegetated patches 48-65
+  (frac_veg_nosno = 1). The header's "vegetated patch" wording applies only
+  to the flx rows. Because the interception/throughfall fields
+  (fpiliq/fpisnow, qflx_intercepted_*, qflx_through_*) are written only at
+  the hyd stage, they are NaN on every flx row and never dumped for a
+  vegetated patch: no row anywhere carries both a vegetated patch and the
+  interception fluxes. The flx-stage fwet/fdry/fcansno are also stale
+  relative to the flx liqcan: they were computed by this step's hydrology
+  from the pre-evap storage, while the flx liqcan is the post-evap state
+  (CanopyFluxesMod.F90:1618-1631) — on the 10 flx rows with fwet < 0.05 the
+  post-evap liqcan is 0, so those dumped fractions cannot be reproduced from
+  any dumped state.
+- **Impact on results:** none on the model (dump-only). The stage-2 pins
+  cover the vegetated fraction laws only where the fwet clamp saturates
+  (182/192 flx rows at exactly 0.05) and cannot pin the interception laws,
+  the excess-fall fluxes, the snow-unloading branch, or the storage ODE with
+  nonzero interception; the 10 fwet < 0.05 rows are unpinnable (pre-evap
+  storage not dumped).
+- **Reproduced/corrected in .esm:** stage2/clm_canopy.esm
+  `clm_canopy_fractions_veg_step*` tests pin the fraction laws at the dumped
+  post-evap state via initial_conditions (clamp-saturated, so the pin is
+  robust to the pre/post-evap ambiguity); the interception/throughfall flux
+  split and the excess-fall fluxes are documented as unpinned in
+  stage2/README-clm.md (Coverage gaps, Dump extensions). Closing the gap
+  needs the hyd-stage filter to include the vegetated patches (or the
+  interception fields to be written at the flx stage).
+- **Status:** open (instrumentation coverage note; recorded).
