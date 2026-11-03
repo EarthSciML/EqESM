@@ -19,7 +19,7 @@
     "precision": "real64 everywhere (CESM default)",
     "machine": "illinois (ctessum partition, SLURM), gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0",
     "namelist_deltas": {
-      "user_nl_cism": "dump_cism=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM-wt-cism-w0/stage1/dumps/cism/, dump_first_cells=32, dump_first_steps=8",
+      "user_nl_cism": "dump_cism=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/dumps/cism/, dump_first_cells=32, dump_first_steps=8",
       "note": "All other settings identical between the two runs (same case, same executable, startup from the same initial conditions). Verified solution-neutral: the instrumented run's cism.h0i history files and cism restart file are bit-identical (modulo title/timestamp attributes) to the reference run (stage1/analysis/compare_cism.py). Initial velocity solve at glad_initialize_instance runs before cism_dump_init and is not traced; the first traced velo 'entry' rows therefore show the initial-solve outputs. dump_first_steps=8 covers the 4 CISM steps + the 2 cap steps (first 4 CISM steps and first 2 coupling steps actually occur)."
     }
   },
