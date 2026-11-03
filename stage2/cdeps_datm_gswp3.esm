@@ -212,10 +212,20 @@
         "op": "==",
         "args": [
          "day",
-         0.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
         ]
        },
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       },
        {
         "op": "+",
         "args": [
@@ -696,7 +706,12 @@
      "rhs": {
       "op": "max",
       "args": [
-       180.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 180.0,
+        "units": "K"
+       },
        {
         "op": "+",
         "args": [
@@ -708,11 +723,26 @@
             "op": "<",
             "args": [
              "tbotmax",
-             50.0
+             {
+              "op": "const",
+              "args": [],
+              "value": 50.0,
+              "units": "K"
+             }
             ]
            },
-           273.15,
-           0.0
+           {
+            "op": "const",
+            "args": [],
+            "value": 273.15,
+            "units": "K"
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "K"
+           }
           ]
          }
         ]
@@ -733,10 +763,20 @@
         "op": "==",
         "args": [
          "pbot_present",
-         0.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
         ]
        },
-       101325.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 101325.0,
+        "units": "Pa"
+       },
        {
         "op": "ifelse",
         "args": [
@@ -744,10 +784,20 @@
           "op": "==",
           "args": [
            "strm_pbot",
-           0.0
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "Pa"
+           }
           ]
          },
-         101325.0,
+         {
+          "op": "const",
+          "args": [],
+          "value": 101325.0,
+          "units": "Pa"
+         },
          "strm_pbot"
         ]
        }
@@ -837,7 +887,12 @@
      "rhs": {
       "op": "*",
       "args": [
-       0.1,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.1,
+        "units": "1"
+       },
        "strm_precn"
       ]
      }
@@ -847,7 +902,12 @@
      "rhs": {
       "op": "*",
       "args": [
-       0.9,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.9,
+        "units": "1"
+       },
        "strm_precn"
       ]
      }
@@ -868,7 +928,12 @@
      "rhs": {
       "op": "max",
       "args": [
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/m^2/s"
+       },
        {
         "op": "*",
         "args": [
@@ -884,7 +949,12 @@
      "rhs": {
       "op": "max",
       "args": [
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/m^2/s"
+       },
        {
         "op": "*",
         "args": [
@@ -900,7 +970,12 @@
      "rhs": {
       "op": "max",
       "args": [
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/m^2/s"
+       },
        {
         "op": "*",
         "args": [
@@ -908,7 +983,12 @@
          {
           "op": "-",
           "args": [
-           1.0,
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
            "frac"
           ]
          }
@@ -922,7 +1002,12 @@
      "rhs": {
       "op": "max",
       "args": [
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/m^2/s"
+       },
        {
         "op": "*",
         "args": [
@@ -930,7 +1015,12 @@
          {
           "op": "-",
           "args": [
-           1.0,
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
            "frac"
           ]
          }
@@ -944,7 +1034,12 @@
      "rhs": {
       "op": "*",
       "args": [
-       0.5,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.5,
+        "units": "1"
+       },
        "strm_swdn"
       ]
      }
@@ -989,7 +1084,12 @@
        {
         "op": "-",
         "args": [
-         1.0,
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
          "ratio_nir"
         ]
        },
@@ -1015,7 +1115,12 @@
        {
         "op": "-",
         "args": [
-         1.0,
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
          "ratio_vis"
         ]
        },
@@ -1035,19 +1140,34 @@
           "op": "<",
           "args": [
            "anidrmax",
-           1e-08
+           {
+            "op": "const",
+            "args": [],
+            "value": 1e-08,
+            "units": "W/m^2"
+           }
           ]
          },
          {
           "op": ">",
           "args": [
            "anidrmax",
-           9e+29
+           {
+            "op": "const",
+            "args": [],
+            "value": 9e+29,
+            "units": "W/m^2"
+           }
           ]
          }
         ]
        },
-       0.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "W/m^2"
+       },
        {
         "op": "ifelse",
         "args": [
@@ -1055,7 +1175,12 @@
           "op": "<",
           "args": [
            "Sx_anidr",
-           1e+30
+           {
+            "op": "const",
+            "args": [],
+            "value": 1e+30,
+            "units": "1"
+           }
           ]
          },
          {
@@ -1070,7 +1195,12 @@
                {
                 "op": "-",
                 "args": [
-                 1.0,
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1.0,
+                  "units": "1"
+                 },
                  "Sx_anidr"
                 ]
                },
@@ -1083,7 +1213,12 @@
                {
                 "op": "-",
                 "args": [
-                 1.0,
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1.0,
+                  "units": "1"
+                 },
                  "Sx_avsdr"
                 ]
                },
@@ -1101,7 +1236,12 @@
                {
                 "op": "-",
                 "args": [
-                 1.0,
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1.0,
+                  "units": "1"
+                 },
                  "Sx_anidf"
                 ]
                },
@@ -1114,7 +1254,12 @@
                {
                 "op": "-",
                 "args": [
-                 1.0,
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1.0,
+                  "units": "1"
+                 },
                  "Sx_avsdf"
                 ]
                },
@@ -1156,29 +1301,13 @@
     {
      "lhs": "e2",
      "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "Sa_pslv",
-         "Sa_shum"
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         0.622,
-         {
-          "op": "*",
-          "args": [
-           0.378,
-           "Sa_shum"
-          ]
-         }
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "vapor_pressure",
+      "bindings": {
+       "q": "Sa_shum",
+       "pbot": "Sa_pslv"
+      }
      }
     },
     {
@@ -1186,15 +1315,30 @@
      "rhs": {
       "op": "+",
       "args": [
-       0.7,
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.7,
+        "units": "1"
+       },
        {
         "op": "*",
         "args": [
-         5.95e-05,
+         {
+          "op": "const",
+          "args": [],
+          "value": 5.95e-05,
+          "units": "1/Pa"
+         },
          {
           "op": "*",
           "args": [
-           0.01,
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.01,
+            "units": "1"
+           },
            {
             "op": "*",
             "args": [
@@ -1205,7 +1349,12 @@
                {
                 "op": "/",
                 "args": [
-                 1500.0,
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1500.0,
+                  "units": "K"
+                 },
                  "Sa_tbot"
                 ]
                }
@@ -1229,7 +1378,12 @@
         "op": "==",
         "args": [
          "lwdn_present",
-         0.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
         ]
        },
        {
@@ -1239,7 +1393,12 @@
          {
           "op": "*",
           "args": [
-           5.67e-08,
+           {
+            "op": "const",
+            "args": [],
+            "value": 5.67e-08,
+            "units": "W/(m^2*K^4)"
+           },
            {
             "op": "^",
             "args": [
@@ -1264,10 +1423,20 @@
         "op": "==",
         "args": [
          "topo_present",
-         0.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
         ]
        },
-       1e+30,
+       {
+        "op": "const",
+        "args": [],
+        "value": 1e+30,
+        "units": "m"
+       },
        "strm_topo"
       ]
      }
@@ -1281,10 +1450,20 @@
         "op": ">=",
         "args": [
          "strm_z",
-         1e+30
+         {
+          "op": "const",
+          "args": [],
+          "value": 1e+30,
+          "units": "m"
+         }
         ]
        },
-       30.0,
+       {
+        "op": "const",
+        "args": [],
+        "value": 30.0,
+        "units": "m"
+       },
        "strm_z"
       ]
      }

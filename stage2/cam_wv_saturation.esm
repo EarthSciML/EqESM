@@ -1,0 +1,1586 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_wv_saturation",
+  "description": "CAM6 saturation specific humidity qsat (stage 2 of the EqESM project): the pointwise qsat law of wv_saturation.F90 (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 of the instrumented cam6_4_212 fork) exactly as the SCAM dump window evaluates it, and the Goff-Gratch analytic laws that generate its vapor-pressure table. Two models: WvSaturation carries the run's law - es = estblf(T) from the estbl function table below (the 251-entry Goff-Gratch mixed-phase SVP table of wv_sat_init, wv_saturation.F90:191-254, generated from svp_trans of wv_sat_methods.F90:479-513 at T = 127.16..377.16 K), then qs = svp_to_qsat(es, p) and es = min(es, p) (svp_to_qsat of wv_sat_methods.F90:185-197), then the deriv_outputs chain (wv_saturation.F90:656-686): hltalt and tterm from calc_hltalt (F90:521-573, the mixed-phase branch; see cam_templates.esm), desdt = hltalt es / (rh2o t^2) + tterm, dqsdt = qs p desdt / (es (p - omeps es)) (0 when saturated), gam = dqsdt hltalt / cpair - the dumped gam (dqsdT) of qsat_line (F90:739-784). SvpTransLaw pins the analytic generation formula itself (goff_gratch_water/ice and the svp_trans blend of cam_templates.esm). The table lookup is CAM's estblf (F90:378-393): linear interpolation on t_tmp = clamp(T - tmin, 0, tmax - tmin) with flat clamps both ends (represented here as table_lookup with interpolation linear / out_of_bounds clamp on min(T, tmax); the esm blend t_i + w (t_i+1 - t_i) differs from the Fortran (1 - w) t_i + w t_i+1 by at most 1 ulp). Tests are pinned to stage1/dumps/cam/cam_qsat.csv rows (step, phase, lev cited per test; es/qs/gam expected values are the dumped ones; hltalt/tterm are the Fortran-formula values from the stage-1 validator's python replica, which reproduces the dump to 1.8e-12 Pa on es), at rel 1e-12. Constants: rh2o = RWV = AVOGAD BOLTZ / MWWV = 461.5046398201599 J/(kg K), epsilo = MWWV/MWDAIR = 0.6219705862045155, omeps = 1 - epsilo = 0.3780294137954845, cpair = 1.00464e3 J/(kg K) (shr_const_mod.F90:24-55); tmin = 127.16 K, tmax = 375.16 K (wv_saturation.F90:95-96). Coverage note: the dump window spans T = 208.7..302.5 K, p = 364..92383 Pa, both phases, with pure-ice (T < 253.15), transition (253.15-273.15) and water (>= 273.15) branches all exercised; the saturated branches (p - es <= 0, qs = 1, dqsdt = 0) and the estblf clamps are not exercised by the dump and are pinned only by the law structure."
+ },
+ "function_tables": {
+  "estbl": {
+   "description": "estbl, the Goff-Gratch mixed-phase saturation vapor pressure table of wv_sat_init (wv_saturation.F90:100-101, 191-254): plenest = ceiling(tmax - tmin) + 2 = 251 entries at T = tmin + (i - 1), i = 1..251, tmin = 127.16 K (so knots 127.16..377.16 K; the 251st knot is never reachable through estblf because T is clamped to tmax = 375.16 K, giving max index 250). Values are svp_trans(T) (wv_sat_methods.F90:479-513) evaluated in double precision - the mixed-phase blend weight es_ice + (1 - weight) es_water over the 20 K band below tmelt, Goff-Gratch formulas of wv_sat_methods.F90:569-580 (water) and 611-620 (ice). Generated from the CAM formulas by the stage-1 validator's python replica, which reproduces the dumped estblf outputs to 1.8e-12 Pa; the first/last knots are also pinned by the SvpTransLaw tests. Interpolation is estblf's: linear on t_tmp = clamp(T - tmin, 0, tmax - tmin), flat clamps at both ends.",
+   "axes": [
+    {
+     "name": "T",
+     "units": "K",
+     "values": [
+      127.16,
+      128.16,
+      129.16,
+      130.16,
+      131.16,
+      132.16,
+      133.16,
+      134.16,
+      135.16,
+      136.16,
+      137.16,
+      138.16,
+      139.16,
+      140.16,
+      141.16,
+      142.16,
+      143.16,
+      144.16,
+      145.16,
+      146.16,
+      147.16,
+      148.16,
+      149.16,
+      150.16,
+      151.16,
+      152.16,
+      153.16,
+      154.16,
+      155.16,
+      156.16,
+      157.16,
+      158.16,
+      159.16,
+      160.16,
+      161.16,
+      162.16,
+      163.16,
+      164.16,
+      165.16,
+      166.16,
+      167.16,
+      168.16,
+      169.16,
+      170.16,
+      171.16,
+      172.16,
+      173.16,
+      174.16,
+      175.16,
+      176.16,
+      177.16,
+      178.16,
+      179.16,
+      180.16,
+      181.16,
+      182.16,
+      183.16,
+      184.16,
+      185.16,
+      186.16,
+      187.16,
+      188.16,
+      189.16,
+      190.16,
+      191.16,
+      192.16,
+      193.16,
+      194.16,
+      195.16,
+      196.16,
+      197.16,
+      198.16,
+      199.16,
+      200.16,
+      201.16,
+      202.16,
+      203.16,
+      204.16,
+      205.16,
+      206.16,
+      207.16,
+      208.16,
+      209.16,
+      210.16,
+      211.16,
+      212.16,
+      213.16,
+      214.16,
+      215.16,
+      216.16,
+      217.16,
+      218.16,
+      219.16,
+      220.16,
+      221.16,
+      222.16,
+      223.16,
+      224.16,
+      225.16,
+      226.16,
+      227.16,
+      228.16,
+      229.16,
+      230.16,
+      231.16,
+      232.16,
+      233.16,
+      234.16,
+      235.16,
+      236.16,
+      237.16,
+      238.16,
+      239.16,
+      240.16,
+      241.16,
+      242.16,
+      243.16,
+      244.16,
+      245.16,
+      246.16,
+      247.16,
+      248.16,
+      249.16,
+      250.16,
+      251.16,
+      252.16,
+      253.16,
+      254.16,
+      255.16,
+      256.15999999999997,
+      257.15999999999997,
+      258.15999999999997,
+      259.15999999999997,
+      260.15999999999997,
+      261.15999999999997,
+      262.15999999999997,
+      263.15999999999997,
+      264.15999999999997,
+      265.15999999999997,
+      266.15999999999997,
+      267.15999999999997,
+      268.15999999999997,
+      269.15999999999997,
+      270.15999999999997,
+      271.15999999999997,
+      272.15999999999997,
+      273.15999999999997,
+      274.15999999999997,
+      275.15999999999997,
+      276.15999999999997,
+      277.15999999999997,
+      278.15999999999997,
+      279.15999999999997,
+      280.15999999999997,
+      281.15999999999997,
+      282.15999999999997,
+      283.15999999999997,
+      284.15999999999997,
+      285.15999999999997,
+      286.15999999999997,
+      287.15999999999997,
+      288.15999999999997,
+      289.15999999999997,
+      290.15999999999997,
+      291.15999999999997,
+      292.15999999999997,
+      293.15999999999997,
+      294.15999999999997,
+      295.15999999999997,
+      296.15999999999997,
+      297.15999999999997,
+      298.15999999999997,
+      299.15999999999997,
+      300.15999999999997,
+      301.15999999999997,
+      302.15999999999997,
+      303.15999999999997,
+      304.15999999999997,
+      305.15999999999997,
+      306.15999999999997,
+      307.15999999999997,
+      308.15999999999997,
+      309.15999999999997,
+      310.15999999999997,
+      311.15999999999997,
+      312.15999999999997,
+      313.15999999999997,
+      314.15999999999997,
+      315.15999999999997,
+      316.15999999999997,
+      317.15999999999997,
+      318.15999999999997,
+      319.15999999999997,
+      320.15999999999997,
+      321.15999999999997,
+      322.15999999999997,
+      323.15999999999997,
+      324.15999999999997,
+      325.15999999999997,
+      326.15999999999997,
+      327.15999999999997,
+      328.15999999999997,
+      329.15999999999997,
+      330.15999999999997,
+      331.15999999999997,
+      332.15999999999997,
+      333.15999999999997,
+      334.15999999999997,
+      335.15999999999997,
+      336.15999999999997,
+      337.15999999999997,
+      338.15999999999997,
+      339.15999999999997,
+      340.15999999999997,
+      341.15999999999997,
+      342.15999999999997,
+      343.15999999999997,
+      344.15999999999997,
+      345.15999999999997,
+      346.15999999999997,
+      347.15999999999997,
+      348.15999999999997,
+      349.15999999999997,
+      350.15999999999997,
+      351.15999999999997,
+      352.15999999999997,
+      353.15999999999997,
+      354.15999999999997,
+      355.15999999999997,
+      356.15999999999997,
+      357.15999999999997,
+      358.15999999999997,
+      359.15999999999997,
+      360.15999999999997,
+      361.15999999999997,
+      362.15999999999997,
+      363.15999999999997,
+      364.15999999999997,
+      365.15999999999997,
+      366.15999999999997,
+      367.15999999999997,
+      368.15999999999997,
+      369.15999999999997,
+      370.15999999999997,
+      371.15999999999997,
+      372.15999999999997,
+      373.15999999999997,
+      374.15999999999997,
+      375.15999999999997,
+      376.15999999999997,
+      377.15999999999997
+     ]
+    }
+   ],
+   "interpolation": "linear",
+   "out_of_bounds": "clamp",
+   "data": [
+    4.218158277483428e-09,
+    6.116868700806532e-09,
+    8.820231685929848e-09,
+    1.2648273602767794e-08,
+    1.8040024216503212e-08,
+    2.5594705716764813e-08,
+    3.612611909967037e-08,
+    5.0734116019946845e-08,
+    7.089808845516389e-08,
+    9.859870550305773e-08,
+    1.364757306378527e-07,
+    1.8803172815092236e-07,
+    2.5789389032582003e-07,
+    3.521491765921896e-07,
+    4.787715572798236e-07,
+    6.481645200000699e-07,
+    8.738472683947691e-07,
+    1.1733193858564578e-06,
+    1.5691463411362774e-06,
+    2.090317297422093e-06,
+    2.7739375024233565e-06,
+    3.6673303709134986e-06,
+    4.830639549456786e-06,
+    6.340039146102938e-06,
+    8.29168133468752e-06,
+    1.0806535176518401e-05,
+    1.4036299272791676e-05,
+    1.8170604364294982e-05,
+    2.34457608958744e-05,
+    3.015535160265836e-05,
+    3.866302117609287e-05,
+    4.941787494197283e-05,
+    6.297296723660788e-05,
+    8.000743890989723e-05,
+    0.00010135295333343214,
+    0.0001280251827820529,
+    0.00016126121354634968,
+    0.00020256387020995036,
+    0.0002537541089156039,
+    0.0003170327980197792,
+    0.0003950533943208821,
+    0.000491007236224333,
+    0.0006087234141280662,
+    0.0007527854454958827,
+    0.0009286672802337457,
+    0.0011428914939793765,
+    0.001403212895832525,
+    0.0017188311861588799,
+    0.0021006367528612693,
+    0.0025614941945941616,
+    0.0031165687106732938,
+    0.0037837011039797567,
+    0.0045838378092597975,
+    0.005541523089373469,
+    0.006685461340940722,
+    0.00804915832338044,
+    0.009671651076636064,
+    0.011598337328235916,
+    0.013881916315238068,
+    0.016583454166740383,
+    0.019773588313849243,
+    0.0235338868223279,
+    0.027958380084759753,
+    0.033155283970311505,
+    0.03924893531750853,
+    0.046381962575445704,
+    0.05471771645822449,
+    0.06444298768291301,
+    0.07577104121981298,
+    0.08894499900217906,
+    0.10424160572769858,
+    0.12197541524292686,
+    0.14250343804140433,
+    0.1662302936332299,
+    0.193613914965247,
+    0.22517185569341866,
+    0.2614882549390548,
+    0.30322151820472754,
+    0.35111277739033236,
+    0.405995197340778,
+    0.46880420108023885,
+    0.5405886908492102,
+    0.622523347265251,
+    0.7159220943809986,
+    0.8222528241188413,
+    0.9431534795243027,
+    1.0804496025040486,
+    1.236173458202447,
+    1.412584854926184,
+    1.6121937855514863,
+    1.837785023645554,
+    2.092444815103558,
+    2.3795898139465135,
+    2.7029984190430225,
+    3.066844676909294,
+    3.475734924405791,
+    3.9347473540835796,
+    4.44947469413619,
+    5.026070204381324,
+    5.671297199425633,
+    6.392582320152311,
+    7.1980727849081605,
+    8.096697862249735,
+    9.098234817827638,
+    10.213379598941339,
+    11.453822531467365,
+    12.832329315252048,
+    14.362827615646562,
+    16.060499560644082,
+    17.941880465037862,
+    20.02496411514838,
+    22.329314959948952,
+    24.876187566843726,
+    27.68865371290007,
+    30.791737494995854,
+    34.212558855095814,
+    37.98048592970152,
+    42.127296645408336,
+    46.68734999543408,
+    51.69776744493531,
+    57.19862492588788,
+    63.23315589523856,
+    69.84796594294532,
+    77.09325944935233,
+    85.02307880411718,
+    93.69555671155977,
+    103.18429580767774,
+    114.69043157689902,
+    127.22476892525403,
+    140.8548560732734,
+    155.6503254546551,
+    171.68269484457426,
+    189.02512784937147,
+    207.752149889716,
+    227.9393155788685,
+    249.66282316013235,
+    272.9990714230719,
+    298.02415426677334,
+    324.8132878203888,
+    353.4401647666941,
+    383.9762302434716,
+    416.4898734205361,
+    451.0455285672044,
+    487.7026791363912,
+    526.5147580973277,
+    567.5279374496766,
+    610.779764665194,
+    656.6166752496093,
+    705.475424865171,
+    757.5260046527021,
+    812.9461727702799,
+    871.921714622723,
+    934.6467076589322,
+    1001.3237906678338,
+    1072.1644374985751,
+    1147.3892351256638,
+    1227.2281659747816,
+    1311.9208944202796,
+    1401.7170573604365,
+    1496.876558772139,
+    1597.6698681419623,
+    1704.378322666244,
+    1817.2944331085223,
+    1936.7221931985146,
+    2062.977392452695,
+    2196.3879322928788,
+    2337.2941453352582,
+    2486.0491177189133,
+    2643.0190143393847,
+    2808.5834068496724,
+    2983.135604287802,
+    3167.0829861875964,
+    3360.847338026077,
+    3564.865188858792,
+    3779.588150991952,
+    4005.483261537923,
+    4243.033325698884,
+    4492.7372616217635,
+    4755.110446665693,
+    5030.685064922219,
+    5320.010455827298,
+    5623.653463702888,
+    5942.1987880656125,
+    6276.249334539097,
+    6626.4265662066155,
+    6993.370855240123,
+    7377.7418346420745,
+    7780.218749936964,
+    8201.500810649302,
+    8642.307541406271,
+    9103.379132503473,
+    9585.476789773647,
+    10089.383083599596,
+    10615.902296913267,
+    11165.86077202598,
+    11740.107256134905,
+    12339.513245354417,
+    12964.973327122,
+    13617.405520831708,
+    14297.751616549647,
+    15006.977511669655,
+    15746.073545369563,
+    16516.054830731067,
+    17317.96158439127,
+    18152.859453593865,
+    19021.839840515255,
+    19926.02022374127,
+    20866.544476775514,
+    21844.58318346366,
+    22861.33395022242,
+    23918.021714964776,
+    25015.899052618548,
+    26156.246477138575,
+    27340.372739918068,
+    28569.615124507498,
+    29845.339737556315,
+    31168.941795894574,
+    32541.845909678625,
+    33965.50636152704,
+    35441.40738158167,
+    36971.063418428115,
+    38556.01940582053,
+    40197.85102515514,
+    41898.16496364615,
+    43658.59916815975,
+    45480.82309466795,
+    47366.53795328994,
+    49317.476948889875,
+    51335.40551721121,
+    53422.121556525795,
+    55579.45565478618,
+    57809.27131227123,
+    60113.46515972152,
+    62493.967171967764,
+    64952.74087705295,
+    67491.78356086614,
+    70113.12646729645,
+    72818.83499393359,
+    75611.00888333435,
+    78491.78240989032,
+    81463.32456232696,
+    84527.8392218728,
+    87687.56533614582,
+    90944.77708880094,
+    94301.78406499061,
+    97760.93141269806,
+    101324.59999999969,
+    104995.20656832322,
+    108775.20388176915,
+    112667.08087257046,
+    116673.36278276157
+   ]
+  }
+ },
+ "models": {
+  "WvSaturation": {
+   "expression_template_imports": [
+    {
+     "ref": "./cam_templates.esm"
+    }
+   ],
+   "variables": {
+    "T": {
+     "type": "parameter",
+     "units": "K",
+     "default": 251.98635151617265,
+     "description": "state temperature at the qsat call, t (wv_saturation.F90:739), [K]; dump column T"
+    },
+    "pmid": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 364.34657080165846,
+     "description": "mid-layer pressure at the qsat call, p, [Pa]; dump column pmid"
+    },
+    "es0": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "unlimited saturation vapor pressure es = estblf(t) before the min(es, p) cap (wv_saturation.F90:741), [Pa]"
+    },
+    "es": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "saturation vapor pressure es = min(es0, p) as dumped (wv_saturation.F90:745, qsat_line), [Pa]"
+    },
+    "qs": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "saturation specific humidity qs = svp_to_qsat(es0, p) (wv_sat_methods.F90:185-197), [kg/kg]"
+    },
+    "hltalt": {
+     "type": "unknown",
+     "units": "J/kg",
+     "description": "latent heat of vaporization at t, calc_hltalt mixed-phase law (wv_saturation.F90:521-573, cam_templates.esm hltalt_mixed), [J/kg]"
+    },
+    "tterm": {
+     "type": "unknown",
+     "units": "Pa/K",
+     "description": "transition-band d(es)/dT correction of calc_hltalt (wv_saturation.F90:548-573, cam_templates.esm tterm_transition), [Pa/K]"
+    },
+    "desdt": {
+     "type": "unknown",
+     "units": "Pa/K",
+     "description": "d(es)/dT of deriv_outputs (wv_saturation.F90:671-673): desdt = hltalt es / (rh2o t^2) + tterm, [Pa/K]"
+    },
+    "dqsdt": {
+     "type": "unknown",
+     "units": "1/K",
+     "description": "d(qs)/dT of deriv_outputs (wv_saturation.F90:676-679): dqsdt = qs p desdt / (es (p - omeps es)), zero when qs == 1, [1/K]"
+    },
+    "gam": {
+     "type": "unknown",
+     "units": "1",
+     "description": "dqsdt (hltalt / cpair), the dumped gam of qsat_line (wv_saturation.F90:683-686), dimensionless (K x 1/K)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "es0",
+     "rhs": {
+      "op": "table_lookup",
+      "table": "estbl",
+      "axes": {
+       "T": {
+        "op": "min",
+        "args": [
+         "T",
+         {
+          "op": "const",
+          "args": [],
+          "value": 375.16,
+          "units": "K"
+         }
+        ]
+       }
+      },
+      "args": []
+     }
+    },
+    {
+     "lhs": "qs",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "svp_to_qsat",
+      "bindings": {
+       "es": "es0",
+       "p": "pmid"
+      }
+     }
+    },
+    {
+     "lhs": "es",
+     "rhs": {
+      "op": "min",
+      "args": [
+       "es0",
+       "pmid"
+      ]
+     }
+    },
+    {
+     "lhs": "hltalt",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "hltalt_mixed",
+      "bindings": {
+       "t": "T"
+      }
+     }
+    },
+    {
+     "lhs": "tterm",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "tterm_transition",
+      "bindings": {
+       "t": "T"
+      }
+     }
+    },
+    {
+     "lhs": "desdt",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "hltalt",
+           "es"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 461.5046398201599,
+            "units": "J/(kg*K)"
+           },
+           {
+            "op": "^",
+            "args": [
+             "T",
+             2
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "tterm"
+      ]
+     }
+    },
+    {
+     "lhs": "dqsdt",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "qs",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "kg/kg"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1/K"
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "qs",
+           {
+            "op": "*",
+            "args": [
+             "pmid",
+             "desdt"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "es",
+           {
+            "op": "-",
+            "args": [
+             "pmid",
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.3780294137954845,
+                "units": "1"
+               },
+               "es"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "gam",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "dqsdt",
+         "hltalt"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1004.64,
+        "units": "J/(kg*K)"
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "s1_bc_l12_ice",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 12): coldest sampled state, deep pure-ice branch (T = 209.3284935262289 K < tmelt - ttrice = 253.15 K): estblf ice branch, hltalt = latvap + latice = 2834700 J/kg, tterm = 0, dqsdt/gam from the ice branch.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 209.3284935262289,
+      "pmid": 12154.7331920826
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 0.6382604315121446,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 3.2661111435177774e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 0.012918454344508156,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2834700.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_bc_l1_ice",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 1): model-top state, pure-ice branch (T = 251.98635151617265 K < 253.15 K) at the lowest sampled pressure (pmid = 364.34657080165846 Pa, qs = 0.174).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 251.98635151617265,
+      "pmid": 364.34657080165846
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 92.18959407190619,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.17402087537034983,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 52.52175963373957,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2834700.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_bc_l19_ice",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 19): pure-ice branch (T = 248.41197093826497 K) at mid-tropospheric pressure (pmid = 36112.763392807356 Pa).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 248.41197093826497,
+      "pmid": 36112.763392807356
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 64.89989578940381,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.0011185316372046353,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 0.31435910954803603,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2834700.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_bc_l20_transition",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 20): mixed-phase transition band (T = 257.87972385695184 K, 253.15 < T < 273.15 K): weight = -(T - tmelt)/ttrice = 0.7635, hltalt = latvap + weight latice = 2755784.5574467583 J/kg, tterm = pcf polynomial / ttrice = 1.303087855956711 Pa/K, blend es = weight es_ice + (1 - weight) es_water.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 257.87972385695184,
+      "pmid": 42194.610532959814
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 167.1892041880444,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.0024681531435810536,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 0.6616726894326741,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2755784.5574467583,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 1.303087855956711,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_bc_l21_transition",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 21): mixed-phase transition band (T = 266.4904032559802 K): weight = 0.3330, hltalt = 2612115.37167397 J/kg, tterm = 1.1573721523433091 Pa/K.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 266.4904032559802,
+      "pmid": 49353.098229651834
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 363.529380225046,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.004594158038647046,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 0.9928028276509002,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2612115.37167397,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 1.1573721523433091,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_bc_l22_water",
+     "description": "cam_qsat.csv row (step 1, phase bc, lev 22): first water-branch level (T = 273.8949874555204 K >= tmelt): weight = 0, hltalt = latvap - 2369 (T - tmelt) = 2499235.124717872 J/kg, tterm = 0, es = es_water.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 273.8949874555204,
+      "pmid": 57099.479512724945
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 644.4693189445487,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.007050126802427535,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 1.2714914320295645,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2499235.124717872,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s1_ac_l32_water",
+     "description": "cam_qsat.csv row (step 1, phase ac, lev 32): warmest water-branch state of step 1 (T = 301.8637376908711 K) at the surface level (pmid = 92152.10177120629 Pa, es = 3938.56 Pa): the ac phase exercises the after-physics state path.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 301.8637376908711,
+      "pmid": 92152.10177120629
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 3938.5590544666507,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.027019425715001467,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 3.8478479211102474,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2432977.155410326,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s48_bc_l1_transition",
+     "description": "cam_qsat.csv row (step 48, phase bc, lev 1): transition band at the model top at the last step (T = 257.69110028737356 K, pmid = 364.34657125009244 Pa): qs = 0.338, gam = 109.49; exercises the ac/bc path difference at fixed level 1 across the window.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 257.69110028737356,
+      "pmid": 364.34657125009244
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 164.16512144492026,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.3377775640135673,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 109.4878129264136,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2758931.7417051718,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 1.2974036175197985,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "s48_ac_l25_water",
+     "description": "cam_qsat.csv row (step 48, phase ac, lev 25): water branch at the last step (T = 289.99913554462245 K, pmid = 76326.03261919951 Pa).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 289.99913554462245,
+      "pmid": 76326.03261919951
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 1917.5105116146774,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 0.015775355569022355,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 2.473981640810606,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2461084.3978947895,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s24_ac_l12_ice",
+     "description": "cam_qsat.csv row (step 24, phase ac, lev 12): pure-ice branch mid-window (T = 209.01400989862455 K), second coldest state; exercises the ac path at the coldest levels.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 209.01400989862455,
+      "pmid": 12154.73258333023
+     },
+     "assertions": [
+      {
+       "variable": "es",
+       "time": 0.0,
+       "expected": 0.610561698468911,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "qs",
+       "time": 0.0,
+       "expected": 3.124368440611636e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "gam",
+       "time": 0.0,
+       "expected": 0.012395023800713249,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "hltalt",
+       "time": 0.0,
+       "expected": 2834700.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tterm",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "SvpTransLaw": {
+   "expression_template_imports": [
+    {
+     "ref": "./cam_templates.esm"
+    }
+   ],
+   "variables": {
+    "T": {
+     "type": "parameter",
+     "units": "K",
+     "default": 220.16,
+     "description": "sampling temperature of the analytic generation formulas, [K]"
+    },
+    "es_water": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Goff-Gratch water saturation vapor pressure (wv_sat_methods.F90:569-580, cam_templates.esm goff_gratch_water), [Pa]"
+    },
+    "es_ice": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "Goff-Gratch ice saturation vapor pressure (wv_sat_methods.F90:611-620, cam_templates.esm goff_gratch_ice), [Pa]"
+    },
+    "es_trans": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "mixed-phase blend of svp_trans (wv_sat_methods.F90:479-513, cam_templates.esm svp_trans), the estbl table-generation formula, [Pa]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "es_water",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "goff_gratch_water",
+      "bindings": {
+       "t": "T"
+      }
+     }
+    },
+    {
+     "lhs": "es_ice",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "goff_gratch_ice",
+      "bindings": {
+       "t": "T"
+      }
+     }
+    },
+    {
+     "lhs": "es_trans",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "svp_trans",
+      "bindings": {
+       "t": "T"
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "t127p16_ice",
+     "description": "Analytic generation formula at T = 127.16 K, the estbl first knot (wv_sat_init, wv_saturation.F90:244-246): pure-ice branch (T < tmelt - ttrice), weight = 1, es_trans = es_ice = estbl(1) = 4.218158277483428e-09 Pa (table consistency). Values from the CAM formulas evaluated in double precision (stage-1 validator replica).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 127.16
+     },
+     "assertions": [
+      {
+       "variable": "es_water",
+       "time": 0.0,
+       "expected": 7.99728570114689e-13,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_ice",
+       "time": 0.0,
+       "expected": 4.218158277483428e-09,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_trans",
+       "time": 0.0,
+       "expected": 4.218158277483428e-09,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "t220p16_ice",
+     "description": "Analytic generation formula at T = 220.16 K: pure-ice branch (weight = 1), es_trans = es_ice = 2.7029984190430225 Pa.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 220.16
+     },
+     "assertions": [
+      {
+       "variable": "es_water",
+       "time": 0.0,
+       "expected": 4.482018249769346,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_ice",
+       "time": 0.0,
+       "expected": 2.7029984190430225,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_trans",
+       "time": 0.0,
+       "expected": 2.7029984190430225,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "t260p16_transition",
+     "description": "Analytic generation formula at T = 260.16 K: transition band, weight = (tmelt - T)/ttrice = 0.6495, es_trans = weight es_ice + (1 - weight) es_water = 207.7521498897172 Pa (between es_water = 225.1546182156843 and es_ice = 198.36097953059243).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 260.16
+     },
+     "assertions": [
+      {
+       "variable": "es_water",
+       "time": 0.0,
+       "expected": 225.1546182156843,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_ice",
+       "time": 0.0,
+       "expected": 198.36097953059243,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_trans",
+       "time": 0.0,
+       "expected": 207.7521498897172,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "t300p16_water",
+     "description": "Analytic generation formula at T = 300.16 K: water branch (T >= tmelt), weight = 0, es_trans = es_water = 3564.865188858803 Pa.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 300.16
+     },
+     "assertions": [
+      {
+       "variable": "es_water",
+       "time": 0.0,
+       "expected": 3564.865188858803,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_ice",
+       "time": 0.0,
+       "expected": 4607.641248920577,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_trans",
+       "time": 0.0,
+       "expected": 3564.865188858803,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "t375p16_water",
+     "description": "Analytic generation formula at T = 375.16 K, the highest knot reachable through estblf (tmax): water branch, es_trans = es_water = estbl(250) = 108775.2038817695 Pa (table consistency).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "T": 375.16
+     },
+     "assertions": [
+      {
+       "variable": "es_water",
+       "time": 0.0,
+       "expected": 108775.2038817695,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_ice",
+       "time": 0.0,
+       "expected": 265020.0506179604,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "es_trans",
+       "time": 0.0,
+       "expected": 108775.2038817695,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

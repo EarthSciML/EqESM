@@ -120,6 +120,28 @@ solution-neutral (bit-identical restart files vs the reference
   the datamode are documented but not traced (inactive in the GSWP3
   case); the fallback branches are implemented in `Clmncep` behind the
   `lwdn_present`/`pbot_present`/`topo_present` flags and the Sx_* spval
-  convention.
+  convention. The lwdn-fallback vapor pressure `e2`
+  (`datm_datamode_clmncep_mod.F90:440`, `e = Sa_pslv Sa_shum / (0.622 +
+  0.378 Sa_shum)`) is the same law as the density-path `vp`
+  (F90:435), so `Clmncep` computes it as
+  `apply_expression_template("vapor_pressure", {q: Sa_shum, pbot:
+  Sa_pslv})` — one law, one template, no copied formula.
 - JRA55 datamode (same stream layer, different datamode laws) is the
   next slice if time permits.
+
+## Units hygiene
+
+Every literal in `cdeps_templates.esm` and in the `Streams`/`Clmncep`
+equations of `cdeps_datm_gswp3.esm` carries an explicit `units` field
+(`{"op": "const", "args": [], "value": …, "units": …}`), so
+`./esm units stage2/cdeps_templates.esm stage2/cdeps_datm_gswp3.esm`
+reports every equation **consistent** — no
+`units_dimensionless_literal_mismatch`, no `dimensional_mismatch`, no
+undetermined operands. The dimensional readings: the esat polynomials
+are Taylor expansions in °C (temperature axis) with coefficients in
+Pa/K^n and the ×100 hPa→Pa scale dimensionless; the ratio_rvrf
+polynomials expand in s = swdn/2 [W/m^2] with coefficients in (m^2/W)^n;
+the ea formula's 5.95e-5 carries 1/Pa so the emissivity reads
+dimensionless; the rain ramp 0.5 carries 1/K; stebol carries
+W/(m^2 K^4). The 58 assertions are unchanged (same laws, same expected
+values).
