@@ -1,0 +1,419 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_flowlaw",
+  "description": "Stage-2 implementation of the CISM flow factor (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00_002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20): the Paterson & Budd (1982) rate factor A(T*) = E * a * exp(-Q/(R*T*)) of glissade_flow_factor (libglissade/glissade_therm.F90:2408-2640) for the reference option FLWA_PATERSON_BUDD (flow_law = 2, F90:2585-2606): T* = tempcor + 273.15 with tempcor = clamp(temp - pmptemp, -50, 0) degC (the CISM-specific T* construction, F90:2596-2598, cism_templates.esm cism_tempcor), the (a, Q/R) pair switching at tempcor >= -10 degC (T* >= 263.15 K): (arrmlh, actenh/gascon) = (1.733e3, 139e3/8.314) above, (arrmll, actenl/gascon) = (3.613e-13, 60e3/8.314) below (glimmer_physcon.F90:94-102, the arrfact table of F90:2502-2506), and the flow enhancement factor E multiplying the rate factor (F90:2579, 2603, 2605; which_ho_flow_enhancement_factor = 0 gives E = flow_factor_ground = 1.0 in the reference config). The softness law itself is the same as PISM's Paterson-Budd law and is imported by reference from the EqIce ice_rheology_templates.esm pb_softness (CISM_LANE.md row 4: 'same law, same constants'; PISM's A_cold = 3.61e-13 differs from CISM's arrmll = 3.613e-13 in the third digit, so the CISM constants are bound at the call site), with the CISM-specific T* construction applied before it. The pressure melting point pmptemp = -rhoi*grav*pmlt*thck*stagsigma (F90:2170) and the layer column geometry (stagsigma) live in the temperature-solve component (a later lane) and are inputs here, exactly as the trace provides them. Tests pin the stage-1 instrumented trace cism_flowlaw.csv (one row per traced cell and layer, nlayers = 10, at each step; E = 1.0 and tempcor > -10 degC on every traced row - the reference window is warm-branch only - so the cold branch and the tempcor clamp bounds are pinned synthetically from the source formula, see README-cism.md)."
+ },
+ "models": {
+  "FlowFactor": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    },
+    {
+     "ref": "../../eqice/stage2/ice_rheology_templates.esm"
+    }
+   ],
+   "variables": {
+    "temp": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "ice temperature in the layer (degC; the flowlaw trace's temp column, equal to the transport-exit temperature profile)"
+    },
+    "pmptemp": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "pressure melting point temperature in the layer (degC; pmptemp = -rhoi*grav*pmlt*thck*stagsigma, F90:2170; the flowlaw trace's pmptemp column)"
+    },
+    "E": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "flow enhancement factor (which_ho_flow_enhancement_factor = 0: E = flow_factor_ground = 1.0 everywhere in the reference run; the dumped E column is 1.0 on every row)"
+    },
+    "A_cold": {
+     "type": "parameter",
+     "units": "Pa^-3 s^-1",
+     "default": 3.613e-13,
+     "description": "Paterson-Budd cold-branch proportionality arrmll (glimmer_physcon.F90:99; Pa^-3 s^-1; note PISM's A_cold = 3.61e-13 differs in the third digit - CISM's value is bound here)"
+    },
+    "Q_cold": {
+     "type": "parameter",
+     "units": "J/mol",
+     "default": 60000.0,
+     "description": "cold-branch activation energy actenl = 60.0d3 J/mol (glimmer_physcon.F90:95)"
+    },
+    "A_warm": {
+     "type": "parameter",
+     "units": "Pa^-3 s^-1",
+     "default": 1.733e3,
+     "description": "Paterson-Budd warm-branch proportionality arrmlh = 1.733d3 (glimmer_physcon.F90:96)"
+    },
+    "Q_warm": {
+     "type": "parameter",
+     "units": "J/mol",
+     "default": 139000.0,
+     "description": "warm-branch activation energy actenh = 139.0d3 J/mol (glimmer_physcon.F90:94)"
+    },
+    "T_critical": {
+     "type": "parameter",
+     "units": "K",
+     "default": 263.15,
+     "description": "branch switch T* = 263.15 K (tempcor >= -10 degC, F90:2602); the free name of the imported pb_softness template"
+    },
+    "R_ideal_gas": {
+     "type": "parameter",
+     "units": "J/mol/K",
+     "default": 8.314,
+     "description": "universal gas constant gascon = 8.314 J/mol/K (glimmer_physcon.F90:102); the free name of the imported pb_softness template"
+    },
+    "tempcor": {
+     "type": "unknown",
+     "units": "degC",
+     "description": "temperature relative to the pressure melting point, clamp(temp - pmptemp, -50, 0) degC (F90:2596-2598)"
+    },
+    "T_star": {
+     "type": "unknown",
+     "units": "K",
+     "description": "pressure-corrected absolute temperature tempcor + celsius_to_kelvin (273.15 K, glimmer_physcon.F90:89)"
+    },
+    "flwa": {
+     "type": "unknown",
+     "units": "Pa^-3 s^-1",
+     "description": "Glen rate factor A = E * a * exp(-Q/(R*T*)) with the (a, Q) pair switching at T* = 263.15 K (F90:2602-2606)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "tempcor",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_tempcor",
+      "bindings": {
+       "temp": "temp",
+       "pmptemp": "pmptemp"
+      }
+     }
+    },
+    {
+     "lhs": "T_star",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "tempcor",
+       {
+        "op": "const",
+        "args": [],
+        "value": 273.15,
+        "units": "K"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "flwa",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "E",
+       {
+        "op": "pb_softness",
+        "args": [
+         "T_star"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "step1_cell2511_layer1",
+     "description": "cism_flowlaw.csv row (cism_step 1, cell 25,11, layer 1): temp = -1.7463224232557648 degC, pmptemp = -1.3888738158086006e-4 degC -> tempcor = temp - pmptemp = -1.746183535874184 degC (no clamp: inside [-50, 0]); T* = tempcor + 273.15 = 271.4038164641258 K >= 263.15 K, so the warm branch gives flwa = 1.0 * 1.733e3 * exp(-139e3/(8.314 * 271.4038164641258)) = 3.0602607554030868e-24 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -1.7463224232557648,
+      "pmptemp": -1.3888738158086006e-04
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -1.746183535874184,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "T_star",
+       "time": 0.0,
+       "expected": 271.4038164641258,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 3.0602607554030868e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2511_layer10",
+     "description": "cism_flowlaw.csv row (cism_step 1, cell 25,11, layer 10, the deepest layer): temp = -1.8730062714178575 degC, pmptemp = -1.1787702392600317e-3 degC -> tempcor = -1.8718275011785974 degC, flwa = 2.974182517607466e-24 Pa^-3 s^-1 (the pmptemp grows toward the bed, lowering tempcor and flwa).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -1.8730062714178575,
+      "pmptemp": -1.1787702392600317e-03
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -1.8718275011785974,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 2.974182517607466e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2612_layer1",
+     "description": "cism_flowlaw.csv row (cism_step 1, cell 26,12, layer 1): a colder column: temp = -4.673739592614364 degC, pmptemp = -8.472587688318694e-3 degC -> tempcor = -4.665267004926045 degC, flwa = 1.566345909350822e-24 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -4.673739592614364,
+      "pmptemp": -8.472587688318694e-03
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -4.665267004926045,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 1.566345909350822e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2612_layer10",
+     "description": "cism_flowlaw.csv row (cism_step 1, cell 26,12, layer 10): the deepest layer of the same column: pmptemp = -7.190886675832728e-2 degC -> tempcor = -4.996477684661026 degC, flwa = 1.4503883553105943e-24 Pa^-3 s^-1 (the largest |pmptemp| traced).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -5.068386551419353,
+      "pmptemp": -7.190886675832728e-02
+     },
+     "assertions": [
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 1.4503883553105943e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step4_cell1913_layer5",
+     "description": "cism_flowlaw.csv row (cism_step 4, cell 19,13, layer 5): a mid-column row of the last step: tempcor = -1.7892269700417425 degC, flwa = 3.030503899399558e-24 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -1.7941388838148125,
+      "pmptemp": -4.911913773069881e-03
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -1.7892269700417425,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 3.030503899399558e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step4_cell2511_layer1",
+     "description": "cism_flowlaw.csv row (cism_step 4, cell 25,11, layer 1): the step-1 cell four steps later, warmer: tempcor = -1.5279796369952778 degC, flwa = 3.215511951544603e-24 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -1.5280666392064934,
+      "pmptemp": -8.700221121560043e-05
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -1.5279796369952778,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 3.215511951544603e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "branch_cold",
+     "description": "Cold branch (tempcor < -10 degC, F90:2604-2605) pinned from the SOURCE FORMULA: every traced row is warm-branch (tempcor ranges only over [-5.16, -1.13] degC in the reference window). With temp = -15 degC, pmptemp = 0: tempcor = -15, T* = 258.15 K < 263.15 K, flwa = 1.0 * 3.613e-13 * exp(-60e3/(8.314 * 258.15)) = 2.611543297913679e-25 Pa^-3 s^-1 (arrmll/actenl pair).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -15.0,
+      "pmptemp": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -15.0
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 2.611543297913679e-25,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "branch_boundary",
+     "description": "Branch boundary pin from the SOURCE FORMULA: at tempcor = -10 degC exactly, T* = 263.15 K and the Fortran's `tempcor >= -10.d0` test (F90:2602) selects the WARM branch (EqIce's pb_softness switches at T_pa < T_critical, so 263.15 K is also warm - the two branch predicates agree). flwa = 1.733e3 * exp(-139e3/(8.314 * 263.15)) = 4.432384868490456e-25 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -10.0,
+      "pmptemp": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 4.432384868490456e-25,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "branch_pmp_exceeded",
+     "description": "tempcor upper clamp pin from the SOURCE FORMULA: with temp - pmptemp > 0 (ice at or above the pressure melting point) the min(0, .) of F90:2597 clamps tempcor to 0 degC (the traced window is entirely cold: temp - pmptemp < 0 on every row). temp = 0.5 degC, pmptemp = 0.1 degC -> tempcor = 0, T* = 273.15 K, flwa = 1.733e3 * exp(-139e3/(8.314 * 273.15)) = 4.5371622457723074e-24 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": 0.5,
+      "pmptemp": 0.1
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 4.5371622457723074e-24,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "branch_floor",
+     "description": "tempcor lower clamp pin from the SOURCE FORMULA: with temp - pmptemp < -50 degC the max(-50, .) of F90:2598 clamps tempcor to -50 degC -> T* = 223.15 K (cold branch): flwa = 3.613e-13 * exp(-60e3/(8.314 * 223.15)) = 3.2557016169108e-27 Pa^-3 s^-1.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "temp": -60.0,
+      "pmptemp": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "tempcor",
+       "time": 0.0,
+       "expected": -50.0
+      },
+      {
+       "variable": "flwa",
+       "time": 0.0,
+       "expected": 3.2557016169108e-27,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
