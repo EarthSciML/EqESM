@@ -266,7 +266,7 @@ the cap dump and are taken from the transport dumps in the topo tests
 rows). `ice_sheet_grid_mask` (the same active-grid gate) is not dumped and is
 not modeled.
 
-### Cap tests (14 tests, 43 assertions)
+### Cap tests (22 tests, 43 assertions)
 
 All instantaneous pins are rel 1e-12 `time_span {0,0}`; the average-law pins
 integrate one coupling interval [0, 3.1536e7 s] with constant integrands
@@ -278,7 +278,7 @@ integrate one coupling interval [0, 3.1536e7 s] with constant integrands
 | Import clamp (source formula) | 4 | the sentinel firing (raw 0 K — the Jer hack case), the strict-< boundary at exactly −250 °C, just below it, and the warm linear branch |
 | Export states (dump) | 6 | topo = usrf and ice_covered = 1 at both cap steps (cells 25,11 / 26,12 / 19,13 / 28,11), incl. the thinnest traced ice (thck = 1.65e-5 m, the min_thck = 0 boundary exercised from above) |
 | Export states (source formula) | 2 | the ice-free branch (thck = 0 → ice_covered = 0, topo unchanged) and the inactive-grid branch (usrf = 0 → topo = ice_covered = 0) |
-| Flux averages | 4 | the dumped zeros (all 64 export rows have hflx = rofi = rofl = 0), and the averaging law with constant integrands: solid (rofi = ρᵢ·1.75 m/yr, incl. an intermediate S_rofi pin at t = T/2), liquid, heat, and all three combined |
+| Flux averages | 5 | the dumped zeros (all 64 export rows have hflx = rofi = rofl = 0), and the averaging law with constant integrands: solid (rofi = ρᵢ·1.75 m/yr, incl. an intermediate S_rofi pin at t = T/2), liquid, heat, and all three combined |
 
 ### Coverage limitations (this data window)
 
