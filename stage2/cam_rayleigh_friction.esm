@@ -1,0 +1,758 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_rayleigh_friction",
+  "description": "CAM6 Rayleigh friction (stage 2 of the EqESM project): the pointwise tendency law of rayleigh_friction.F90 (components/cam/src/atmos_phys/schemes/rayleigh_friction/rayleigh_friction.F90 of the instrumented cam6_4_212 fork) exactly as the SCAM dump window evaluates it. The profile: with raytau0 the damping timescale in days, otau0 = 1/(86400 raytau0), otau(k) = otau0 (1 + tanh((rayk0 - k)/krange))/2 for the level index k, where krange = raykrange, or (rayk0 - 1)/2 when raykrange = 0 (rayleigh_friction.F90:50-108, 113-126). The Euler-backward implicit update (F90:149-156): c2 = 1/(1 + otau ztodt), c1 = -otau c2, c3 = 0.5 (1 - c2^2)/ztodt, then dudt = c1 u, dvdt = c1 v, dsdt = c3 (u^2 + v^2) (the kinetic-energy dissipation heating). When raytau0 = 0 the run returns zero tendencies before touching the profile (F90:113-115); the model reproduces that branch with otau = 0 exactly (c2 = 1, c1 = c3 = 0). The dump window runs raytau0 = 0 (the rayleigh_friction_run call site tphysac, physpkg.F90:1730-1755, dumps site 16), so the dump pins exercise the zero branch; the enabled-branch pins (raytau0 = 1 day, rayk0 = 2, raykrange = 0 and 10) are compiled-Fortran references: the actual subroutines compiled verbatim from the fork with gfortran 11.5 in a driver (scratch/cam_laws_driver/driver.f90, mosart-precedent style) at the dump's step-1 u/v state, ztodt = 1800 s. Note the tanh saturation: with krange = 0.5 the argument (2 - k)/0.5 reaches -20 at k = 12 and tanh(-20) = -1 exactly in glibc, so otau and all tendencies are exactly 0 at k >= 12 even when enabled; krange = 10 is pinned to exercise nonzero damping of the O(1) winds. The esm blend c3 = 0.5 (1 - c2^2)/ztodt writes the division directly where the Fortran multiplies by rztodt = 1/ztodt (equal to 1 ulp); tanh is the system libm function (identical to gfortran's on this platform). Tests cite the cam_phys_tend.csv rows (site rayleigh) for the dump pins; all tendencies are dumped [m/s^2] (dudt, dvdt) and [J/kg/s] (dsdt)."
+ },
+ "models": {
+  "RayleighFriction": {
+   "variables": {
+    "u": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.596798703981576,
+     "description": "zonal wind at the level before the rayleigh update (state%u, rayleigh_friction.F90:146), [m/s]; dump column u of the site rayleigh rows"
+    },
+    "v": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": -8.006150126686007,
+     "description": "meridional wind before the rayleigh update (state%v), [m/s]; dump column v"
+    },
+    "ztodt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 1800.0,
+     "description": "physics timestep 2*dt of this SCAM run (physpkg.F90 ztodt), [s]"
+    },
+    "rayk0": {
+     "type": "parameter",
+     "units": "1",
+     "default": 2.0,
+     "description": "center level of the damping profile, rayk0 (namelist integer; here dimensionless), [1]"
+    },
+    "raykrange": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "profile width, raykrange: 0 selects the default krange = (rayk0 - 1)/2 (rayleigh_friction.F90:89-92), [1]"
+    },
+    "raytau0": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "damping timescale in days, raytau0 (this run: 0, so the friction is disabled); 0 disables the scheme entirely (F90:113-115), [days]"
+    },
+    "k": {
+     "type": "parameter",
+     "units": "1",
+     "default": 16.0,
+     "description": "level index k = 1..pver of the pointwise law (the profile is level-indexed: otau(k) = otau0 (1 + tanh((rayk0 - k)/krange))/2), [1]"
+    },
+    "krange": {
+     "type": "unknown",
+     "units": "1",
+     "description": "profile half-width, krange = raykrange, or (rayk0 - 1)/2 when raykrange = 0 (rayleigh_friction.F90:89-92), [1]"
+    },
+    "x": {
+     "type": "unknown",
+     "units": "1",
+     "description": "profile argument x = (rayk0 - k)/krange of the tanh (F90:124), [1]"
+    },
+    "otau": {
+     "type": "unknown",
+     "units": "1/s",
+     "description": "damping rate profile otau(k) = otau0 (1 + tanh(x))/2, otau0 = 1/(86400 raytau0) (F90:123-126); 0 when raytau0 = 0 (the Fortran returns before computing it), [1/s]"
+    },
+    "c2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "Euler-backward weight c2 = 1/(1 + otau ztodt) (F90:151), [1]"
+    },
+    "c1": {
+     "type": "unknown",
+     "units": "1/s",
+     "description": "wind damping rate c1 = -otau c2 (F90:152), [1/s]"
+    },
+    "c3": {
+     "type": "unknown",
+     "units": "1/s",
+     "description": "kinetic-energy dissipation rate c3 = 0.5 (1 - c2^2)/ztodt (F90:153), [1/s]"
+    },
+    "dudt": {
+     "type": "unknown",
+     "units": "m/s^2",
+     "description": "zonal wind tendency dudt = c1 u (F90:154), [m/s^2]; dump column ptend_u"
+    },
+    "dvdt": {
+     "type": "unknown",
+     "units": "m/s^2",
+     "description": "meridional wind tendency dvdt = c1 v (F90:155), [m/s^2]; dump column ptend_v"
+    },
+    "dsdt": {
+     "type": "unknown",
+     "units": "J/(kg*s)",
+     "description": "heating tendency dsdt = c3 (u^2 + v^2) (F90:156), the dissipated kinetic energy, [J/kg/s]; dump column ptend_s"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "krange",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "raykrange",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "rayk0",
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "1"
+         }
+        ]
+       },
+       "raykrange"
+      ]
+     }
+    },
+    {
+     "lhs": "x",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "rayk0",
+         "k"
+        ]
+       },
+       "krange"
+      ]
+     }
+    },
+    {
+     "lhs": "otau",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "raytau0",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1/s"
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 86400.0,
+                "units": "s"
+               },
+               "raytau0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "tanh",
+              "args": [
+               "x"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "1"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "c2",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           "otau",
+           "ztodt"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "c1",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "otau",
+         "c2"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "c3",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.5,
+          "units": "1"
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
+           {
+            "op": "^",
+            "args": [
+             "c2",
+             2
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "ztodt"
+      ]
+     }
+    },
+    {
+     "lhs": "dudt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "c1",
+       "u"
+      ]
+     }
+    },
+    {
+     "lhs": "dvdt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "c1",
+       "v"
+      ]
+     }
+    },
+    {
+     "lhs": "dsdt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "c3",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "^",
+          "args": [
+           "u",
+           2
+          ]
+         },
+         {
+          "op": "^",
+          "args": [
+           "v",
+           2
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "dump_zero_s1_l16",
+     "description": "cam_phys_tend.csv row (step 1, site rayleigh, lev 16): the run's namelist has raytau0 = 0, so rayleigh_friction_run returns zero tendencies before the profile (rayleigh_friction.F90:113-115); the dumped ptend_u/ptend_v/ptend_s at this state (u = 0.59679870398157597, v = -8.0061501266860073 m/s, the strongest wind of the column) are all 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.596798703981576,
+      "v": -8.006150126686007,
+      "k": 16.0,
+      "raytau0": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "dump_zero_s1_l12",
+     "description": "cam_phys_tend.csv row (step 1, site rayleigh, lev 12): zero branch at the level of the strongest step-1 winds (u = 6.3888726781617704, v = -3.269084377391446 m/s): all dumped tendencies 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 6.38887267816177,
+      "v": -3.269084377391446,
+      "k": 12.0,
+      "raytau0": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "dump_zero_s48_l1",
+     "description": "cam_phys_tend.csv row (step 48, site rayleigh, lev 1): zero branch at the last step, model-top level (u = 2.7989182572886768e-67, v = -8.582915809932753e-68 m/s): all dumped tendencies 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 2.7989182572886768e-67,
+      "v": -8.582915809932753e-68,
+      "k": 1.0,
+      "raytau0": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange0_k1",
+     "description": "Compiled-Fortran pin (rayleigh_friction.F90 compiled verbatim with gfortran 11.5, scratch/cam_laws_driver/driver.f90, mosart-precedent): enabled branch raytau0 = 1 day, rayk0 = 2, raykrange = 0 (krange = 0.5), ztodt = 1800 s at the dump step-1 lev-1 state (u = 3.676249032166472e-67, v = -1.8810676760865501e-67 m/s): x = 2, otau = otau0 (1 + tanh 2)/2 ~ 1.14e-5 s^-1, dudt = -4.0946177834399142e-72 m/s^2.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 3.676249032166472e-67,
+      "v": -1.88106767608655e-67,
+      "k": 1.0,
+      "raytau0": 1.0,
+      "raykrange": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": -4.094617783439914e-72,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 2.0951391189673895e-72,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 1.8803533612573982e-138,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange0_k11",
+     "description": "Compiled-Fortran pin (enabled branch, raykrange = 0, dump step-1 lev-11 state u = 5.8845463198392067e-05, v = -3.011019088038629e-05 m/s): x = -18, tanh(-18) = -1 + 1.1e-16, otau = 6.4e-22 s^-1, dudt = -1.512305280962666e-25 m/s^2; dsdt underflows to exactly 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 5.884546319839207e-05,
+      "v": -3.011019088038629e-05,
+      "k": 11.0,
+      "raytau0": 1.0,
+      "raykrange": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": -1.512305280962666e-25,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 7.738200738718349e-26,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange0_k12_saturation",
+     "description": "Compiled-Fortran pin (enabled branch, raykrange = 0, dump step-1 lev-12 state u = 6.3888726781617704, v = -3.269084377391446 m/s): x = -20, and glibc tanh saturates to exactly -1 beyond |x| ~ 19.06, so otau = otau0 (1 + tanh)/2 = 0 exactly and all tendencies vanish even with the scheme enabled - the k >= 12 part of the default profile damps nothing. This pins the saturation branch.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 6.38887267816177,
+      "v": -3.269084377391446,
+      "k": 12.0,
+      "raytau0": 1.0,
+      "raykrange": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange10_k12",
+     "description": "Compiled-Fortran pin (enabled branch with raykrange = 10 so the profile reaches the O(1) winds, dump step-1 lev-12 state): x = -1, otau = 1.38e-6 s^-1, dudt = -8.7926584793357871e-06 m/s^2, dvdt = 4.4990632805669501e-06 m/s^2, dsdt = 7.0795195838249564e-05 J/kg/s.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 6.38887267816177,
+      "v": -3.269084377391446,
+      "k": 12.0,
+      "raytau0": 1.0,
+      "raykrange": 10.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": -8.792658479335787e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 4.49906328056695e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 7.079519583824956e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange10_k16",
+     "description": "Compiled-Fortran pin (enabled branch, raykrange = 10, dump step-1 lev-16 state u = 0.59679870398157597, v = -8.0061501266860073 m/s): x = -1.4, dudt = -3.9548826404388388e-07 m/s^2, dvdt = 5.3055383568251169e-06 m/s^2, dsdt = 4.2687488837652452e-05 J/kg/s.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.596798703981576,
+      "v": -8.006150126686007,
+      "k": 16.0,
+      "raytau0": 1.0,
+      "raykrange": 10.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": -3.954882640438839e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": 5.305538356825117e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 4.268748883765245e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_krange10_k32",
+     "description": "Compiled-Fortran pin (enabled branch, raykrange = 10, dump step-1 lev-32 state u = 1.4174766621805597, v = 5.3995330375630592 m/s): x = -3, dudt = -4.0563716216270203e-08 m/s^2, dvdt = -1.5451762394390923e-07 m/s^2, dsdt = 8.9179816743834283e-07 J/kg/s.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 1.4174766621805597,
+      "v": 5.399533037563059,
+      "k": 32.0,
+      "raytau0": 1.0,
+      "raykrange": 10.0
+     },
+     "assertions": [
+      {
+       "variable": "dudt",
+       "time": 0.0,
+       "expected": -4.05637162162702e-08,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dvdt",
+       "time": 0.0,
+       "expected": -1.5451762394390923e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 8.917981674383428e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

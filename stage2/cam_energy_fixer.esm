@@ -1,0 +1,174 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_energy_fixer",
+  "description": "CAM6 energy fixer (stage 2 of the EqESM project): the pointwise tendency law of check_energy_fix.F90 (components/cam/src/atmos_phys/schemes/conservation_adjust/check_energy/check_energy_fix.F90 of the instrumented cam6_4_212 fork) exactly as the SCAM dump window evaluates it. The fixer's closed form (check_energy_fix.F90:37-44): ptend_s = heat_glob (a uniform dry-energy tendency in J/kg/s) and the implied surface enthalpy flux eshflx = heat_glob (pint(pver+1) - pint(1))/gravit = heat_glob (ps - ptop)/gravit (the column integral of the uniform heating written over pressure: the heat_glob J/kg/s applied to a column of mass (ps - ptop)/gravit kg/m^2). In this SCAM run heat_glob = 0: check_energy_cam_fix (check_energy.F90:637-702) computes heat_glob only when the IOP file was CAM-generated (use_camiop = .false. for the ARM97_4scam.nc forcings), so the dumped ptend_s of the chkenerg rows (physpkg.F90:2399, site energy_fixer, ls = T, top_level = 1, bot_level = 32) are all zero; the dump pins exercise exactly that branch. The nonzero-branch pin (heat_glob = 0.25 J/kg/s) is a compiled-Fortran reference: check_energy_fix_run compiled verbatim from the fork with gfortran 11.5 in a driver (scratch/cam_laws_driver/driver.f90, mosart-precedent style) with pint from this run's dump-derived ps = 92848.96251956573 Pa and ptop = pint(1) = 225.5239523947239 Pa (ps - sum pdel of the cam_phys_tend.csv rows, constant across the window). ps and ptop are the fixer's pint(pver+1) and pint(1) inputs: ps is dumped (state%ps); pint(1) is not dumped, and is supplied here as the dump-derived model-top pressure. Tests cite the cam_phys_tend.csv rows (site energy_fixer) for the dump pins; ptend_s is dumped [J/kg/s], eshflx is the closed-form surface flux [W/m^2]."
+ },
+ "models": {
+  "EnergyFixer": {
+   "variables": {
+    "heat_glob": {
+     "type": "parameter",
+     "units": "J/(kg*s)",
+     "default": 0.0,
+     "description": "global-mean dry-energy heating rate heat_glob (check_energy.F90:637-702; 0 in this SCAM run because the IOP forcing is not CAM-generated), [J/kg/s]"
+    },
+    "ps": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 92848.96251956573,
+     "description": "surface pressure, the fixer's pint(pver+1) input (check_energy_fix.F90:43), [Pa]; dump column ps"
+    },
+    "ptop": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 225.5239523947239,
+     "description": "model-top pressure, the fixer's pint(1) input (check_energy_fix.F90:43), [Pa]; not dumped - derived from the dump rows as ps - sum(pdel) = 225.5239523947239 Pa, constant across the window"
+    },
+    "gravit": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravity, SHR_CONST_G = 9.80616 (shr_const_mod.F90:21), [m/s^2]"
+    },
+    "ptend_s": {
+     "type": "unknown",
+     "units": "J/(kg*s)",
+     "description": "dry static energy tendency ptend_s = heat_glob, uniform in the column (check_energy_fix.F90:40), [J/kg/s]; dump column ptend_s of the chkenerg rows"
+    },
+    "eshflx": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "implied surface enthalpy flux eshflx = heat_glob (pint(pver+1) - pint(1))/gravit (check_energy_fix.F90:44), [W/m^2]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "ptend_s",
+     "rhs": "heat_glob"
+    },
+    {
+     "lhs": "eshflx",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "heat_glob",
+         {
+          "op": "-",
+          "args": [
+           "ps",
+           "ptop"
+          ]
+         }
+        ]
+       },
+       "gravit"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "dump_zero_s1_l1",
+     "description": "cam_phys_tend.csv row (step 1, site energy_fixer, lev 1): heat_glob = 0 (SCAM, use_camiop = .false.), so ptend_s = 0 at every level and eshflx = 0; ps = 92848.96251956573 Pa (dumped), ptop = 225.5239523947239 Pa (ps - sum pdel of the step-1 rows).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "heat_glob": 0.0,
+      "ps": 92848.96251956573,
+      "ptop": 225.5239523947239
+     },
+     "assertions": [
+      {
+       "variable": "ptend_s",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "eshflx",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "dump_zero_s48_l32",
+     "description": "cam_phys_tend.csv row (step 48, site energy_fixer, lev 32): zero branch at the last step; ps = 92848.96251956573 Pa, ptop = 225.5239523947239 Pa (step-48 rows give the same ptop), ptend_s = 0, eshflx = 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "heat_glob": 0.0,
+      "ps": 92848.96251956573,
+      "ptop": 225.5239523947239
+     },
+     "assertions": [
+      {
+       "variable": "ptend_s",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "eshflx",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "enabled_heat_glob_25",
+     "description": "Compiled-Fortran pin (check_energy_fix_run compiled verbatim with gfortran 11.5, scratch/cam_laws_driver/driver.f90): nonzero branch heat_glob = 0.25 J/kg/s with this run's pint(1) = 225.5239523947239 Pa and pint(pver+1) = ps = 92848.96251956573 Pa: ptend_s = 0.25 J/kg/s at every level, eshflx = 0.25 (ps - ptop)/gravit = 2361.3585380814457 W/m^2.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "heat_glob": 0.25,
+      "ps": 92848.96251956573,
+      "ptop": 225.5239523947239
+     },
+     "assertions": [
+      {
+       "variable": "ptend_s",
+       "time": 0.0,
+       "expected": 0.25,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "eshflx",
+       "time": 0.0,
+       "expected": 2361.3585380814457,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
