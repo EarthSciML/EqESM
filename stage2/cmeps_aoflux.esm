@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_aoflux",
-  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: vmag (the minwind-clamped relative wind), wind0 = vmag (the resolved wind of F90:204; with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt((ubot-us)^2 + (vbot-vs)^2)) identically to vmag, so the alias is exact), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), cp = cpdair*(1 + cpvir*ssq), with the CESM constants cpdair = 1004.64 J/kg/K and cpvir = 1810/1004.64 - 1 declared once as named parameters of this component (shr_const_mod.F90:46, 48); (c) the neutral coefficients of F90:236-244 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290. The esm has no loop construct, so the iteration is represented compositionally: the 16-equation update law is authored ONCE in the one-step model AoFluxStep of ./cmeps_aoflux_step.esm (a single pass of the do-while: hol_raw (the unclamped Monin-Obukhov parameter of F90:252-253), hol = stability_parameter_clamp(hol_raw) (the |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn_prev, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, ustar/tstar/qstar, the per-update convergence flag conv = |(ustar - ustar_prev)/ustar| <= 0.01, and 4 frozen-state fields (ustar/tstar/qstar/rdn) pinning the first-converged state) and mounted six times by reference as top-level models step1..step5 and exit (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state feeds the next (ustar/tstar/qstar/rdn), conv and the 4 frozen fields thread the convergence state, and the fixed pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot feed every step (ren stays the constant 0.0346 of F90:277, not coupled; the CESM constants karman = 0.4, cpdair, cpvir, latvap = 2.501e6 J/kg and stebol = 5.67e-8 W/m^2/K^4 are declared once as named parameters of this component, shr_const_mod.F90:32, 46, 48, 52, 22). The 6th mount exit recomputes the exit-state fields from step5's frozen state: the exit-state fields of the first-converged update k are deterministic functions of the pre-converged state (the update k-1 outputs ustar/tstar/qstar/rdn) plus the fixed fields (Fortran do-while trace), so only these 4 states need to be threaded — exit is fed by step5.frozen_ustar_prev/frozen_tstar_prev/frozen_qstar_prev/frozen_rdn_prev (conv_prev stays at its 0 default, so the frozen selection inside exit is the identity) and the 7 fixed fields, and the parent aliases the 15 exit-state fields from its fresh unknowns (hol, stable, xsq, xqq, psimh, psixh, rd, u10n, rdn, rhn, rh, re, ustar, tstar, qstar), which coincide bit-identically with the Fortran exit state. The parent keeps the same external names as the pre-refactor unrolled model so the pinned tests are unchanged: conv_1..4 = step1..4.conv, iter = the first converged k, else 5 (nested ifelse on conv_1..4), and the 16 exit-state fields = the 15 exit.* fields (the first-converged update's values, recomputed by the exit mount from the pinned 4-state; in the no-convergence case the fresh 5th-update values) plus ren; (e) the fluxes of F90:299-311 (tau/taux/tauy/sen/lat/lwup/evap); (f) the 2-m diagnostics of F90:316-333 (hol2/xsq2/xqq2/psix2/fac_t/fac_q/tref/qref/duu10n/u10res), which consume the exit state exactly as the Fortran leaves it after the do-while."
+  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: du = ubot - us and dv = vbot - vs (the relative-wind components), vmag (the minwind-clamped relative wind), wind0 = vmag (the resolved wind of F90:204; with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt(du^2 + dv^2)) identically to vmag, so the alias is exact), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), al2 = ln(zref/ztref), cp = cpdair*(1 + cpvir*ssq), with the CESM constants cpdair = 1004.64 J/kg/K and cpvir = 1810/1004.64 - 1 declared once as named parameters of this component (shr_const_mod.F90:46, 48); (c) the neutral coefficients of F90:236-244 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290. The esm has no loop construct, so the iteration is represented compositionally: the 16-equation update law is authored ONCE in the one-step model AoFluxStep of ./cmeps_aoflux_step.esm (a single pass of the do-while: hol_raw (the unclamped Monin-Obukhov parameter of F90:252-253), hol = stability_parameter_clamp(hol_raw) (the |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn_prev, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, ustar/tstar/qstar, the per-update convergence flag conv = |(ustar - ustar_prev)/ustar| <= 0.01, and 4 frozen-state fields (ustar/tstar/qstar/rdn) pinning the first-converged state) and mounted six times by reference as top-level models step1..step5 and exit (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state feeds the next (ustar/tstar/qstar/rdn), conv and the 4 frozen fields thread the convergence state, and the fixed pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot feed every step (ren stays the constant 0.0346 of F90:277, not coupled; the CESM constants karman = 0.4, cpdair, cpvir, latvap = 2.501e6 J/kg and stebol = 5.67e-8 W/m^2/K^4 are declared once as named parameters of this component, shr_const_mod.F90:32, 46, 48, 52, 22). The 6th mount exit recomputes the exit-state fields from step5's frozen state: the exit-state fields of the first-converged update k are deterministic functions of the pre-converged state (the update k-1 outputs ustar/tstar/qstar/rdn) plus the fixed fields (Fortran do-while trace), so only these 4 states need to be threaded — exit is fed by step5.frozen_ustar_prev/frozen_tstar_prev/frozen_qstar_prev/frozen_rdn_prev (conv_prev stays at its 0 default, so the frozen selection inside exit is the identity) and the 7 fixed fields, and the parent aliases the 15 exit-state fields from its fresh unknowns (hol, stable, xsq, xqq, psimh, psixh, rd, u10n, rdn, rhn, rh, re, ustar, tstar, qstar), which coincide bit-identically with the Fortran exit state. The parent keeps the same external names as the pre-refactor unrolled model so the pinned tests are unchanged: conv_1..4 = step1..4.conv, iter = the first converged k, else 5 (nested ifelse on conv_1..4), and the 16 exit-state fields = the 15 exit.* fields (the first-converged update's values, recomputed by the exit mount from the pinned 4-state; in the no-convergence case the fresh 5th-update values) plus ren; (e) the fluxes of F90:299-311 (tau/taux/tauy/sen/lat/lwup/evap); (f) the 2-m diagnostics of F90:316-333 (hol2/xsq2/xqq2/psix2/fac_t/fac_q/tref/qref/duu10n/u10res), which consume the exit state exactly as the Fortran leaves it after the do-while."
  },
  "models": {
   "AoFlux": {
@@ -112,15 +112,25 @@
      "default": 5.67e-08,
      "description": "Stefan-Boltzmann constant = 5.67e-8 W/m^2/K^4 (shr_const_mod.F90:22), the lwup = -stebol*ts^4 of F90:306, [W/m2/K4]"
     },
+    "du": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "zonal relative wind du = ubot - us (F90:193), [m/s]"
+    },
+    "dv": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "meridional relative wind dv = vbot - vs (F90:193), [m/s]"
+    },
     "vmag": {
      "type": "unknown",
      "units": "m/s",
-     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt((ubot-us)^2 + (vbot-vs)^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added; coupled to every AoFluxStep mount, [m/s]"
+     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt(du^2 + dv^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added; coupled to every AoFluxStep mount, [m/s]"
     },
     "wind0": {
      "type": "unknown",
      "units": "m/s",
-     "description": "resolved wind without the gustiness addition (F90:204): with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt((ubot-us)^2 + (vbot-vs)^2)) identically to vmag, so the alias wind0 = vmag is exact, [m/s]"
+     "description": "resolved wind without the gustiness addition (F90:204): with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt(du^2 + dv^2)) identically to vmag, so the alias wind0 = vmag is exact, [m/s]"
     },
     "ugust": {
      "type": "unknown",
@@ -161,6 +171,11 @@
      "type": "unknown",
      "units": "1",
      "description": "ln(zbot/zref) with zref = 10 m (F90:225); coupled to every AoFluxStep mount, [-]"
+    },
+    "al2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "ln(zref/ztref) with zref = 10 m, ztref = 2 m (F90:321), [-]"
     },
     "cp": {
      "type": "unknown",
@@ -315,12 +330,12 @@
     "taux": {
      "type": "unknown",
      "units": "N/m^2",
-     "description": "zonal wind stress tau*(ubot - us)/vmag (F90:301), [N/m2]"
+     "description": "zonal wind stress tau*du/vmag (F90:301), [N/m2]"
     },
     "tauy": {
      "type": "unknown",
      "units": "N/m^2",
-     "description": "meridional wind stress tau*(vbot - vs)/vmag (F90:302), [N/m2]"
+     "description": "meridional wind stress tau*dv/vmag (F90:302), [N/m2]"
     },
     "sen": {
      "type": "unknown",
@@ -395,6 +410,26 @@
    },
    "equations": [
     {
+     "lhs": "du",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "ubot",
+       "us"
+      ]
+     }
+    },
+    {
+     "lhs": "dv",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "vbot",
+       "vs"
+      ]
+     }
+    },
+    {
      "lhs": "vmag",
      "rhs": {
       "op": "max",
@@ -408,10 +443,7 @@
            {
             "op": "^",
             "args": [
-             {
-              "op": "-",
-              "args": ["ubot", "us"]
-             },
+             "du",
              {
               "op": "const",
               "args": [],
@@ -423,10 +455,7 @@
            {
             "op": "^",
             "args": [
-             {
-              "op": "-",
-              "args": ["vbot", "vs"]
-             },
+             "dv",
              {
               "op": "const",
               "args": [],
@@ -869,10 +898,7 @@
        {
         "op": "/",
         "args": [
-         {
-          "op": "-",
-          "args": ["ubot", "us"]
-         },
+         "du",
          "vmag"
         ]
        }
@@ -888,10 +914,7 @@
        {
         "op": "/",
         "args": [
-         {
-          "op": "-",
-          "args": ["vbot", "vs"]
-         },
+         "dv",
          "vmag"
         ]
        }
@@ -1046,43 +1069,52 @@
      }
     },
     {
+     "lhs": "al2",
+     "rhs": {
+      "op": "log",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 10.0,
+          "units": "m"
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "m"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
      "lhs": "fac_t",
      "rhs": {
       "op": "*",
       "args": [
        {
         "op": "/",
-        "args": ["rh", "karman"]
+        "args": [
+         "rh",
+         "karman"
+        ]
        },
        {
         "op": "+",
         "args": [
          "alz",
-         {
-          "op": "log",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 10.0,
-              "units": "m"
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "m"
-             }
-            ]
-           }
-          ]
-         },
+         "al2",
          {
           "op": "-",
-          "args": ["psixh"]
+          "args": [
+           "psixh"
+          ]
          },
          "psix2"
         ]
@@ -1132,37 +1164,21 @@
       "args": [
        {
         "op": "/",
-        "args": ["re", "karman"]
+        "args": [
+         "re",
+         "karman"
+        ]
        },
        {
         "op": "+",
         "args": [
          "alz",
-         {
-          "op": "log",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 10.0,
-              "units": "m"
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "m"
-             }
-            ]
-           }
-          ]
-         },
+         "al2",
          {
           "op": "-",
-          "args": ["psixh"]
+          "args": [
+           "psixh"
+          ]
          },
          "psix2"
         ]

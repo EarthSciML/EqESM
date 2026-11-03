@@ -586,12 +586,12 @@
     ]
    }
   },
-  "psi_momentum": {
-   "description": "Momentum stability function at the measurement height (flux_atmocn_Large.F90:258): psimh = -5*hol*stable + (1 - stable)*psimhu(xqq). The stable branch (-5*hol, the log-law linear form) and the unstable branch (the Paulson psimhu at xqq = sqrt(sqrt(|1 - 16*hol|))) are selected by the stability factor stable = 0.5 + sign(0.5, hol) (1 stable, 0 unstable). Shares psimhu_unstable by reference.",
+  "stable_blend": {
+   "description": "The stability-flag blend of the CMEPS if/else branches: stable*stable_value + (1 - stable)*unstable_value, i.e. the stable-branch value when stable = 1 and the unstable-branch value when stable = 0 (the arithmetic rendering of the F90:238, 258-259 selections). Shared by psi_momentum, psi_scalar, and neutral_heat_coefficient.",
    "params": [
-    "hol",
     "stable",
-    "xqq"
+    "stable_value",
+    "unstable_value"
    ],
    "body": {
     "op": "+",
@@ -599,14 +599,8 @@
      {
       "op": "*",
       "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": -5.0,
-        "units": "1"
-       },
-       "hol",
-       "stable"
+       "stable",
+       "stable_value"
       ]
      },
      {
@@ -624,30 +618,26 @@
          "stable"
         ]
        },
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "psimhu_unstable",
-        "bindings": {
-         "x": "xqq"
-        }
-       }
+       "unstable_value"
       ]
      }
     ]
    }
   },
-  "psi_scalar": {
-   "description": "Scalar (heat/water) stability function at the measurement height (flux_atmocn_Large.F90:259): psixh = -5*hol*stable + (1 - stable)*psixhu(xqq), the same stable/unstable combination as psi_momentum with the scalar Paulson function. Also applied at the 2-m reference height with (hol2, stable, xqq2) for the diagnostic psix2 of F90:309. Shares psixhu_unstable by reference.",
+  "psi_momentum": {
+   "description": "Momentum stability function at the measurement height (flux_atmocn_Large.F90:258): psimh = stable_blend(stable, -5*hol, psimhu(xqq)) = -5*hol*stable + (1 - stable)*psimhu(xqq). The stable branch (-5*hol, the log-law linear form) and the unstable branch (the Paulson psimhu at xqq = sqrt(sqrt(|1 - 16*hol|))) are selected by the stability factor stable = 0.5 + sign(0.5, hol) (1 stable, 0 unstable) via the shared stable_blend template. Shares psimhu_unstable by reference.",
    "params": [
     "hol",
     "stable",
     "xqq"
    ],
    "body": {
-    "op": "+",
-    "args": [
-     {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "stable_blend",
+    "bindings": {
+     "stable": "stable",
+     "stable_value": {
       "op": "*",
       "args": [
        {
@@ -656,36 +646,54 @@
         "value": -5.0,
         "units": "1"
        },
-       "hol",
-       "stable"
+       "hol"
       ]
      },
-     {
+     "unstable_value": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "psimhu_unstable",
+      "bindings": {
+       "x": "xqq"
+      }
+     }
+    }
+   }
+  },
+  "psi_scalar": {
+   "description": "Scalar (heat/water) stability function at the measurement height (flux_atmocn_Large.F90:259): psixh = stable_blend(stable, -5*hol, psixhu(xqq)) = -5*hol*stable + (1 - stable)*psixhu(xqq), the same stable/unstable combination as psi_momentum with the scalar Paulson function. Also applied at the 2-m reference height with (hol2, stable, xqq2) for the diagnostic psix2 of F90:309. Shares psixhu_unstable by reference.",
+   "params": [
+    "hol",
+    "stable",
+    "xqq"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "stable_blend",
+    "bindings": {
+     "stable": "stable",
+     "stable_value": {
       "op": "*",
       "args": [
        {
-        "op": "-",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         },
-         "stable"
-        ]
-       },
-       {
-        "op": "apply_expression_template",
+        "op": "const",
         "args": [],
-        "name": "psixhu_unstable",
-        "bindings": {
-         "x": "xqq"
-        }
-       }
+        "value": -5.0,
+        "units": "1"
+       },
+       "hol"
       ]
+     },
+     "unstable_value": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "psixhu_unstable",
+      "bindings": {
+       "x": "xqq"
+      }
      }
-    ]
+    }
    }
   },
   "stability_parameter": {
@@ -899,49 +907,29 @@
    }
   },
   "neutral_heat_coefficient": {
-   "description": "Neutral 10-m sqrt heat exchange coefficient (flux_atmocn_Large.F90:238): rhn = (1 - stable)*0.0327 + stable*0.018, the Large & Pond ratio Ch/CD selected by the stability factor (0.0327 unstable, 0.018 stable; the commented chxcdu/chxcds names of F90:239).",
+   "description": "Neutral 10-m sqrt heat exchange coefficient (flux_atmocn_Large.F90:238): rhn = stable_blend(stable, 0.018, 0.0327) = (1 - stable)*0.0327 + stable*0.018, the Large & Pond ratio Ch/CD selected by the stability factor (0.0327 unstable, 0.018 stable; the commented chxcdu/chxcds names of F90:239).",
    "params": [
     "stable"
    ],
    "body": {
-    "op": "+",
-    "args": [
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "-",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         },
-         "stable"
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0327,
-        "units": "1"
-       }
-      ]
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "stable_blend",
+    "bindings": {
+     "stable": "stable",
+     "stable_value": {
+      "op": "const",
+      "args": [],
+      "value": 0.018,
+      "units": "1"
      },
-     {
-      "op": "*",
-      "args": [
-       "stable",
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.018,
-        "units": "1"
-       }
-      ]
+     "unstable_value": {
+      "op": "const",
+      "args": [],
+      "value": 0.0327,
+      "units": "1"
      }
-    ]
+    }
    }
   },
   "frozen_state_select": {
