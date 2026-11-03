@@ -8,8 +8,8 @@ ground-albedo blend — plus the bare-patch branch of the SurfaceRadiation
 absorbed/reflected shortwave partition. `clm_surfalbedo.esm` is the component
 file, with the pointwise laws imported by reference from the shared
 `clm_templates.esm` library; the tests pin the stage-1 instrumentation dumps
-(`stage1/dumps/clm/clm_surfalbedo.csv`, `clm_surfrad.csv`, and
-`clm_soiltemp.csv` for the wetness input reconstruction).
+(`stage1/dumps/clm/clm_surfalbedo.csv` and `clm_surfrad.csv`; the W3
+extension carries the SoilAlbedo wetness input and color class as columns).
 
 The traced run is the D-class single-point column experiment of
 README-clm.md: 16 patches on 16 columns (bare, deep snowpacks), 12 steps of
@@ -26,7 +26,7 @@ s−1's doalb).
 |---|---|---|
 | `clm_templates.esm` | 4 new pointwise laws: `soil_albedo_wetness` (inc = max(0.11 − 0.40·h2osoi_vol, 0)), `soil_albedo` (albsod = min(albsat + inc, albdry)), `ground_albedo_direct` (albgrd = albsod·(1−frac_sno_albedo) + albsnd·frac_sno_albedo), `ground_albedo_diffuse` (albgri = albsoi·(1−frac_sno_albedo) + albsni·frac_sno_albedo) | `SurfaceAlbedoMod.F90`:1244, 1249, 816-817 |
 | `clm_surfalbedo.esm` | `function_tables` albsat_20_vis/nir, albdry_20_vis/nir (the mxsoil_color = 20 branch; the reference run's surfdata has mxsoil_color = 20, so the 8-class branch at F90:204-208 is not transcribed), 1-D nearest over the discrete color class | `SurfaceAlbedoMod.F90`:210-218 |
-| | Model `GroundAlbedo` — the SoilAlbedo chain + the snow/soil blend: albsat/albdry table lookups by color class, inc, albsod/albsod = min(albsat + inc, albdry), albsoi = albsod (the direct/diffuse soil albedos are the same value, F90:1250), albgrd/albgri blends; 13 equations | `SurfaceAlbedoMod.F90`: SurfaceAlbedo 1118-1128, 1244-1250, 816-817 |
+| | Model `GroundAlbedo` — the SoilAlbedo chain + the snow/soil blend: albsat/albdry table lookups by color class, inc, albsod = min(albsat + inc, albdry), albsoi = albsod (the direct/diffuse soil albedos are the same value, F90:1250), albgrd/albgri blends; 13 equations | `SurfaceAlbedoMod.F90`: SurfaceAlbedo 1118-1128, 1244-1250, 816-817 |
 | | Model `SurfaceRadiationBare` — the bare-patch (ptype = 0) branch of the shortwave partition: sabv = 0, sabg/sabg_soil/sabg_snow = Σ_ib forc_rad·(1−albedo), fsa = sabv + sabg, fsr = Σ_ib albedo·forc_rad, parveg = 0; 7 equations | `SurfaceRadiationMod.F90`:688-711, 897-899; `SurfaceAlbedoMod.F90`:1118-1128 |
 
 Both models are the pointwise laws written scalar (one column / one patch of
@@ -235,7 +235,7 @@ are documented in `clm_instrument.json` (changelog) and CTSM_LANE.md (W2c).
 
 ## Coverage gaps
 
-The 6 tests pin exactly what the dumps support; the following branches are
+The 8 tests pin exactly what the dumps support; the following branches are
 transcribed or documented but not dump-pinned:
 
 - **Mixing-law interior 0 < frac_sno_albedo < 1.** Every nourban row is at
