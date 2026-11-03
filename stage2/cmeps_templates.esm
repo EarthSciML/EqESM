@@ -1,0 +1,1139 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cmeps_templates",
+  "description": "Expression-template library for the CMEPS atmosphere-ocean bulk flux computation (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly for use by the cmeps_aoflux component. The library carries (a) the Goff & Gratch (1946) saturation vapor pressure over water of shr_wv_sat_qsat_liquid (share/src/shr_wv_sat_mod.F90:942-956, the aofluxes_use_shr_wv_sat = .true. branch of flux_atmocn_Large.F90:217-225; tboil = 373.16 K hard-coded as in the Fortran, wv_sat_use_tables = .false. in the traced run so the analytic form is used, not the lookup table), (b) the saturation specific humidity conversion of shr_wv_sat_svp_to_qsat (shr_wv_sat_mod.F90:351-363: qs = epsilo*es/(p - omeps*es) with the p <= es guard that sets qs = 1, epsilo = 18.016/28.966 and omeps = 1 - epsilo), (c) the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6 (flux_atmocn_Large.F90:153-154), (d) the Paulson (1970) unstable stability functions psimhu(x) = log((1+x*(2+x))*(1+x^2)/8) - 2*atan(x) + 1.571 and psixhu(x) = 2*log((1+x^2)/2) (F90:163-164), (e) the combined stable/unstable psi_m and psi_h of F90:258-259 (psi = -5*hol*stable + (1-stable)*psi_unstable(xqq)), (f) the Monin-Obukhov stability parameter hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2 clamped to |hol| <= 10 (F90:252-254, sign-preserving clamp), (g) the exchange-coefficient shift from the 10-m neutral reference to the measurement height c/(1 + c/karman*(alz - psi)) (F90:282-284) and its clamped variant with max(c/karman*(alz - psi), -0.5) used for the wind-speed shift of F90:272, and (h) the neutral heat coefficient rhn = (1-stable)*0.0327 + stable*0.018 (F90:238). All coefficients carry their SI dimensions (the empirical cdn coefficients are declared m/s, s/m, (s/m)^6 so the products close as dimensionless; the Goff-Gratch 100 is declared Pa since the 10^() factor is dimensionless, with the hPa-to-Pa role documented in the description). All templates are match-less and invoked by name via apply_expression_template with bindings; the shared-math dependencies (psi_momentum -> psimhu_unstable, psi_scalar -> psixhu_unstable) are body references checked as an acyclic DAG at import (esm-spec 9.7.3). Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90 and stage1/cesm/share/src/shr_wv_sat_mod.F90."
+ },
+ "expression_templates": {
+  "goff_gratch_liquid_svp": {
+   "description": "Goff & Gratch (1946) saturation vapor pressure over water (shr_wv_sat_mod.F90:942-956, GoffGratch_svp_liquid): es = 10^(-7.90298*(tboil/t - 1) + 5.02808*log10(tboil/t) - 1.3816e-7*(10^(11.344*(1 - t/tboil)) - 1) + 8.1328e-3*(10^(-3.49149*(tboil/t - 1)) - 1) + log10(1013.246))*100 with tboil = 373.16 K (the boiling point of water at 1 atm that the scheme was designed with, hard-coded in the Fortran). The 10^() factor evaluates in hPa and the trailing *100 converts to Pa; in the unit algebra the 100 is declared [Pa] so the template closes as a pressure (the dimensionless 10^() factor multiplies it). The traced run uses the analytic form (wv_sat_use_tables = .false., esm.F90:541-547), so the lookup-table interpolation of shr_wv_sat_svp_liquid is not exercised.",
+   "params": [
+    "t"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "^",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 10.0,
+        "units": "1"
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": -7.90298,
+            "units": "1"
+           },
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 373.16,
+                "units": "K"
+               },
+               "t"
+              ]
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 5.02808,
+            "units": "1"
+           },
+           {
+            "op": "log10",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 373.16,
+                "units": "K"
+               },
+               "t"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": -1.3816e-7,
+            "units": "1"
+           },
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "^",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 10.0,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 11.344,
+                  "units": "1"
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 1.0,
+                    "units": "1"
+                   },
+                   {
+                    "op": "/",
+                    "args": [
+                     "t",
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 373.16,
+                      "units": "K"
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 8.1328e-3,
+            "units": "1"
+           },
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "^",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 10.0,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": -3.49149,
+                  "units": "1"
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "/",
+                    "args": [
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 373.16,
+                      "units": "K"
+                     },
+                     "t"
+                    ]
+                   },
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 1.0,
+                    "units": "1"
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "log10",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1013.246,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 100.0,
+      "units": "Pa"
+     }
+    ]
+   }
+  },
+  "svp_to_qsat": {
+   "description": "Saturation specific humidity from vapor pressure (shr_wv_sat_mod.F90:351-363, shr_wv_sat_svp_to_qsat): qs = epsilo*es/(p - omeps*es) when p > es, qs = 1 when p <= es (the guard of F90:357-360; the caller then caps es at p, shr_wv_sat_qsat_liquid F90:439-441, applied at the call site in the consuming component). epsilo = 18.016/28.966 and omeps = 1 - epsilo are the molecular-weight ratios of the CESM constants (shr_const_mod.F90:43-44); the ratio es/p is dimensionless so the template closes as kg/kg (= dimensionless in the unit algebra).",
+   "params": [
+    "es",
+    "p"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<=",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "p",
+         "es"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "Pa"
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     },
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.6219705862045155,
+          "units": "1"
+         },
+         "es"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         "p",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.3780294137954845,
+            "units": "1"
+           },
+           "es"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "neutral_drag_coefficient": {
+   "description": "Large & Yeager (2009) neutral 10-m drag coefficient (flux_atmocn_Large.F90:153-154): cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6, with the wind capped at 33 m/s inside each term (the Fortran's min(33.0000,Umps)). The empirical coefficients are declared with the SI dimensions that make each term dimensionless: 0.0027 [m/s] over a velocity, 0.0000764 [s/m] times a velocity, and 3.14807e-13 [(s/m)^6] times a velocity to the sixth.",
+   "params": [
+    "u"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0027,
+        "units": "m/s"
+       },
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 33.0,
+          "units": "m/s"
+         },
+         "u"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.000142,
+      "units": "1"
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0000764,
+        "units": "s/m"
+       },
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 33.0,
+          "units": "m/s"
+         },
+         "u"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 3.14807e-13,
+          "units": "s^6/m^6"
+         },
+         {
+          "op": "^",
+          "args": [
+           {
+            "op": "min",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 33.0,
+              "units": "m/s"
+             },
+             "u"
+            ]
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 6.0,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "psimhu_unstable": {
+   "description": "Paulson (1970) unstable momentum stability function (flux_atmocn_Large.F90:163): psimhu(x) = log((1 + x*(2 + x))*(1 + x^2)/8) - 2*atan(x) + 1.571, evaluated at x = xqq = sqrt(sqrt(|1 - 16*hol|)) in the iteration. The 1.571 is the Fortran's approximation of pi/2 (not a computed constant), transcribed as written.",
+   "params": [
+    "x"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "log",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 "x",
+                 {
+                  "op": "+",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 2.0,
+                    "units": "1"
+                   },
+                   "x"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "^",
+                "args": [
+                 "x",
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 2.0,
+                  "units": "1"
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 8.0,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "1"
+         },
+         {
+          "op": "atan",
+          "args": [
+           "x"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": -1.571,
+      "units": "1"
+     }
+    ]
+   }
+  },
+  "psixhu_unstable": {
+   "description": "Paulson (1970) unstable scalar stability function (flux_atmocn_Large.F90:164): psixhu(x) = 2*log((1 + x^2)/2), evaluated at x = xqq for the heat/water stability function psixh and at x = xqq2 for the 2-m diagnostic psix2.",
+   "params": [
+    "x"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "const",
+      "args": [],
+      "value": 2.0,
+      "units": "1"
+     },
+     {
+      "op": "log",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
+           {
+            "op": "^",
+            "args": [
+             "x",
+             {
+              "op": "const",
+              "args": [],
+              "value": 2.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "1"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "psi_momentum": {
+   "description": "Momentum stability function at the measurement height (flux_atmocn_Large.F90:258): psimh = -5*hol*stable + (1 - stable)*psimhu(xqq). The stable branch (-5*hol, the log-law linear form) and the unstable branch (the Paulson psimhu at xqq = sqrt(sqrt(|1 - 16*hol|))) are selected by the stability factor stable = 0.5 + sign(0.5, hol) (1 stable, 0 unstable). Shares psimhu_unstable by reference.",
+   "params": [
+    "hol",
+    "stable",
+    "xqq"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": -5.0,
+        "units": "1"
+       },
+       "hol",
+       "stable"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "stable"
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "psimhu_unstable",
+        "bindings": {
+         "x": "xqq"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "psi_scalar": {
+   "description": "Scalar (heat/water) stability function at the measurement height (flux_atmocn_Large.F90:259): psixh = -5*hol*stable + (1 - stable)*psixhu(xqq), the same stable/unstable combination as psi_momentum with the scalar Paulson function. Also applied at the 2-m reference height with (hol2, stable, xqq2) for the diagnostic psix2 of F90:309. Shares psixhu_unstable by reference.",
+   "params": [
+    "hol",
+    "stable",
+    "xqq"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": -5.0,
+        "units": "1"
+       },
+       "hol",
+       "stable"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "stable"
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "psixhu_unstable",
+        "bindings": {
+         "x": "xqq"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "stability_parameter": {
+   "description": "Monin-Obukhov stability parameter at zbot (flux_atmocn_Large.F90:252-254): hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2, then hol = sign(min(|hol|,10), hol) — the |hol| <= 10 clamp of F90:254 with the sign preserved (transcribed as the sign-preserving min/max selection; the esm sign op is unary and returns +-1, so the two-argument Fortran sign is emulated by the conditional). karman = 0.4 and g = 9.80616 m/s^2 are the CESM constants (shr_const_mod.F90:32, 21), zvir = 28.966/18.016 - 1 (F90:31). The ratio tstar/thbot is K/K and qstar/(1/zvir + qbot) is kg/kg over kg/kg, so hol is dimensionless.",
+   "params": [
+    "ustar",
+    "tstar",
+    "qstar",
+    "thbot",
+    "qbot",
+    "zbot"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">=",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.4,
+            "units": "1"
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 9.80616,
+            "units": "m/s^2"
+           },
+           "zbot",
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               "tstar",
+               "thbot"
+              ]
+             },
+             {
+              "op": "/",
+              "args": [
+               "qstar",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 1.0,
+                    "units": "1"
+                   },
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.6077930728241565,
+                    "units": "1"
+                   }
+                  ]
+                 },
+                 "qbot"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "^",
+          "args": [
+           "ustar",
+           {
+            "op": "const",
+            "args": [],
+            "value": 2.0,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "min",
+      "args": [
+       {
+        "op": "abs",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.4,
+              "units": "1"
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 9.80616,
+              "units": "m/s^2"
+             },
+             "zbot",
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 "tstar",
+                 "thbot"
+                ]
+               },
+               {
+                "op": "/",
+                "args": [
+                 "qstar",
+                 {
+                  "op": "+",
+                  "args": [
+                   {
+                    "op": "/",
+                    "args": [
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 1.0,
+                      "units": "1"
+                     },
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 0.6077930728241565,
+                      "units": "1"
+                     }
+                    ]
+                   },
+                   "qbot"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "^",
+            "args": [
+             "ustar",
+             {
+              "op": "const",
+              "args": [],
+              "value": 2.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 10.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "abs",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.4,
+                "units": "1"
+               },
+               {
+                "op": "const",
+                "args": [],
+                "value": 9.80616,
+                "units": "m/s^2"
+               },
+               "zbot",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   "tstar",
+                   "thbot"
+                  ]
+                 },
+                 {
+                  "op": "/",
+                  "args": [
+                   "qstar",
+                   {
+                    "op": "+",
+                    "args": [
+                     {
+                      "op": "/",
+                      "args": [
+                       {
+                        "op": "const",
+                        "args": [],
+                        "value": 1.0,
+                        "units": "1"
+                       },
+                       {
+                        "op": "const",
+                        "args": [],
+                        "value": 0.6077930728241565,
+                        "units": "1"
+                       }
+                      ]
+                     },
+                     "qbot"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "^",
+              "args": [
+               "ustar",
+               {
+                "op": "const",
+                "args": [],
+                "value": 2.0,
+                "units": "1"
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 10.0,
+          "units": "1"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "exchange_coefficient_shift": {
+   "description": "Shift of a sqrt exchange coefficient from the 10-m neutral reference to the measurement height and stability (flux_atmocn_Large.F90:282-284): c(zbot) = c_n / (1 + c_n/karman*(alz - psi)), applied to rd (momentum, psi = psimh), rh (heat, psi = psixh) and re (water, psi = psixh) with the neutral values rdn/rhn/ren. alz = ln(zbot/10) and psi are dimensionless and c is a sqrt coefficient, so the template is dimensionless.",
+   "params": [
+    "c",
+    "alz",
+    "psi"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "c",
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "c",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.4,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           "alz",
+           "psi"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "exchange_coefficient_shift_clamped": {
+   "description": "The clamped variant of the coefficient shift used for the 10-m neutral wind reconstruction (flux_atmocn_Large.F90:272): rd = rdn / (1 + max(rdn/karman*(alz - psimh), -0.5)), u10n = vmag*rd/rdn. The max(..., -0.5) clamp of F90:272 (a guard against the denominator collapsing for very unstable conditions) applies to the momentum shift only, and only in this wind-shift step; the unclamped shift of F90:282-284 is exchange_coefficient_shift.",
+   "params": [
+    "c",
+    "alz",
+    "psi"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "c",
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "c",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.4,
+              "units": "1"
+             }
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             "alz",
+             "psi"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": -0.5,
+          "units": "1"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "neutral_heat_coefficient": {
+   "description": "Neutral 10-m sqrt heat exchange coefficient (flux_atmocn_Large.F90:238): rhn = (1 - stable)*0.0327 + stable*0.018, the Large & Pond ratio Ch/CD selected by the stability factor (0.0327 unstable, 0.018 stable; the commented chxcdu/chxcds names of F90:239).",
+   "params": [
+    "stable"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "stable"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0327,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "stable",
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.018,
+        "units": "1"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}
