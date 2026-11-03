@@ -122,6 +122,26 @@
     {"op": "and", "args": [{"op": "<=", "args": ["h2osoi_liq_top", 0.0]}, {"op": ">", "args": ["h2osoi_ice_top", 0.0]}]},
     "hsub", "hvap"
    ]}
+  },
+  "soil_albedo_wetness": {
+   "description": "Soil albedo wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) [1]: the SoilAlbedo soil water factor of SurfaceAlbedoMod.F90:1244, h2osoi_vol the top-layer volumetric soil water [m3/m3].",
+   "params": ["h2osoi_vol"],
+   "body": {"op": "max", "args": [{"op": "-", "args": [0.11, {"op": "*", "args": [0.4, "h2osoi_vol"]}]}, 0.0]}
+  },
+  "soil_albedo": {
+   "description": "Direct-beam soil albedo albsod = min(albsat + inc, albdry) [1]: SurfaceAlbedoMod.F90:1249 (SoilAlbedo), albsat/albdry the saturated/dry soil albedo of the column's color class and waveband (SurfaceAlbedoMod.F90:205-218) and inc the wetness correction (soil_albedo_wetness). The diffuse soil albedo is the same value, albsoi = albsod (SurfaceAlbedoMod.F90:1250), written as an identity at the call sites.",
+   "params": ["albsat", "inc", "albdry"],
+   "body": {"op": "min", "args": [{"op": "+", "args": ["albsat", "inc"]}, "albdry"]}
+  },
+  "ground_albedo_direct": {
+   "description": "Direct-beam ground albedo albgrd = albsod*(1 - frac_sno_albedo) + albsnd*frac_sno_albedo [1]: the snow/soil ground albedo blend of SurfaceAlbedoMod.F90:816, albsnd the SNICAR direct-beam snow albedo.",
+   "params": ["albsod", "albsnd", "frac_sno_albedo"],
+   "body": {"op": "+", "args": [{"op": "*", "args": ["albsod", {"op": "-", "args": [1.0, "frac_sno_albedo"]}]}, {"op": "*", "args": ["albsnd", "frac_sno_albedo"]}]}
+  },
+  "ground_albedo_diffuse": {
+   "description": "Diffuse ground albedo albgri = albsoi*(1 - frac_sno_albedo) + albsni*frac_sno_albedo [1]: the snow/soil ground albedo blend of SurfaceAlbedoMod.F90:817, albsni the SNICAR diffuse snow albedo.",
+   "params": ["albsoi", "albsni", "frac_sno_albedo"],
+   "body": {"op": "+", "args": [{"op": "*", "args": ["albsoi", {"op": "-", "args": [1.0, "frac_sno_albedo"]}]}, {"op": "*", "args": ["albsni", "frac_sno_albedo"]}]}
   }
  }
 }
