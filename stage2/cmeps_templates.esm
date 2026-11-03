@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_templates",
-  "description": "Expression-template library for the CMEPS atmosphere-ocean bulk flux computation (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly for use by the cmeps_aoflux component. The library carries (a) the Goff & Gratch (1946) saturation vapor pressure over water of shr_wv_sat_qsat_liquid (share/src/shr_wv_sat_mod.F90:942-956, the aofluxes_use_shr_wv_sat = .true. branch of flux_atmocn_Large.F90:217-225; tboil = 373.16 K hard-coded as in the Fortran, wv_sat_use_tables = .false. in the traced run so the analytic form is used, not the lookup table), (b) the saturation specific humidity conversion of shr_wv_sat_svp_to_qsat (shr_wv_sat_mod.F90:351-363: qs = epsilo*es/(p - omeps*es) with the p <= es guard that sets qs = 1, epsilo = 18.016/28.966 and omeps = 1 - epsilo), (c) the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6 (flux_atmocn_Large.F90:153-154), (d) the Paulson (1970) unstable stability functions psimhu(x) = log((1+x*(2+x))*(1+x^2)/8) - 2*atan(x) + 1.571 and psixhu(x) = 2*log((1+x^2)/2) (F90:163-164), (e) the combined stable/unstable psi_m and psi_h of F90:258-259 (psi = -5*hol*stable + (1-stable)*psi_unstable(xqq)), (f) the Monin-Obukhov stability parameter hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2 clamped to |hol| <= 10 (F90:252-254, sign-preserving clamp), (g) the exchange-coefficient shift from the 10-m neutral reference to the measurement height c/(1 + c/karman*(alz - psi)) (F90:282-284) and its clamped variant with max(c/karman*(alz - psi), -0.5) used for the wind-speed shift of F90:272, and (h) the neutral heat coefficient rhn = (1-stable)*0.0327 + stable*0.018 (F90:238). All coefficients carry their SI dimensions (the empirical cdn coefficients are declared m/s, s/m, (s/m)^6 so the products close as dimensionless; the Goff-Gratch 100 is declared Pa since the 10^() factor is dimensionless, with the hPa-to-Pa role documented in the description). All templates are match-less and invoked by name via apply_expression_template with bindings; the shared-math dependencies (psi_momentum -> psimhu_unstable, psi_scalar -> psixhu_unstable) are body references checked as an acyclic DAG at import (esm-spec 9.7.3). Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90 and stage1/cesm/share/src/shr_wv_sat_mod.F90."
+  "description": "Expression-template library for the CMEPS atmosphere-ocean bulk flux computation (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly for use by the cmeps_aoflux component. The library carries (a) the Goff & Gratch (1946) saturation vapor pressure over water of shr_wv_sat_qsat_liquid (share/src/shr_wv_sat_mod.F90:942-956, the aofluxes_use_shr_wv_sat = .true. branch of flux_atmocn_Large.F90:217-225; tboil = 373.16 K hard-coded as in the Fortran, wv_sat_use_tables = .false. in the traced run so the analytic form is used, not the lookup table), (b) the saturation specific humidity conversion of shr_wv_sat_svp_to_qsat (shr_wv_sat_mod.F90:351-363: qs = epsilo*es/(p - omeps*es) with the p <= es guard that sets qs = 1, epsilo = 18.016/28.966 and omeps = 1 - epsilo), (c) the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6 (flux_atmocn_Large.F90:153-154), (d) the Paulson (1970) unstable stability functions psimhu(x) = log((1+x*(2+x))*(1+x^2)/8) - 2*atan(x) + 1.571 and psixhu(x) = 2*log((1+x^2)/2) (F90:163-164), (e) the combined stable/unstable psi_m and psi_h of F90:258-259 (psi = -5*hol*stable + (1-stable)*psi_unstable(xqq)), (f) the Monin-Obukhov stability parameter hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2 of F90:252-253 as the unclamped stability_parameter, with the CESM constants karman = 0.4, g = 9.80616 m/s^2 and zvir = 28.966/18.016 - 1 as named parameters (shr_const_mod.F90:32, 21, 31), and the sign-preserving |hol| <= 10 clamp of F90:254 as the separate stability_parameter_clamp (sign(hol_raw)*min(|hol_raw|,10)) so the raw value is available to the composed iteration, (g) the exchange-coefficient shift from the 10-m neutral reference to the measurement height c/(1 + c/karman*(alz - psi)) (F90:282-284) and its clamped variant with max(c/karman*(alz - psi), -0.5) used for the wind-speed shift of F90:272, both with karman as a named parameter, and (h) the neutral heat coefficient rhn = (1-stable)*0.0327 + stable*0.018 (F90:238). All coefficients carry their SI dimensions (the empirical cdn coefficients are declared m/s, s/m, (s/m)^6 so the products close as dimensionless; the Goff-Gratch 100 is declared Pa since the 10^() factor is dimensionless, with the hPa-to-Pa role documented in the description). All templates are match-less and invoked by name via apply_expression_template with bindings; the shared-math dependencies (psi_momentum -> psimhu_unstable, psi_scalar -> psixhu_unstable) are body references checked as an acyclic DAG at import (esm-spec 9.7.3). Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90 and stage1/cesm/share/src/shr_wv_sat_mod.F90."
  },
  "expression_templates": {
   "goff_gratch_liquid_svp": {
@@ -689,103 +689,92 @@
    }
   },
   "stability_parameter": {
-   "description": "Monin-Obukhov stability parameter at zbot (flux_atmocn_Large.F90:252-254): hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2, then hol = sign(min(|hol|,10), hol) — the |hol| <= 10 clamp of F90:254 with the sign preserved (transcribed as the sign-preserving min/max selection; the esm sign op is unary and returns +-1, so the two-argument Fortran sign is emulated by the conditional). karman = 0.4 and g = 9.80616 m/s^2 are the CESM constants (shr_const_mod.F90:32, 21), zvir = 28.966/18.016 - 1 (F90:31). The ratio tstar/thbot is K/K and qstar/(1/zvir + qbot) is kg/kg over kg/kg, so hol is dimensionless.",
+   "description": "Monin-Obukhov stability parameter at zbot, unclamped (flux_atmocn_Large.F90:252-253): hol_raw = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2. karman = 0.4 and g = 9.80616 m/s^2 are the CESM constants (shr_const_mod.F90:32, 21), zvir = 28.966/18.016 - 1 (F90:31); all three are named parameters so the consuming component declares the constants once. The ratio tstar/thbot is K/K and qstar/(1/zvir + qbot) is kg/kg over kg/kg, so hol is dimensionless. The |hol| <= 10 sign-preserving clamp of F90:254 is applied separately by stability_parameter_clamp, so the raw value is available to the composed iteration.",
    "params": [
     "ustar",
     "tstar",
     "qstar",
     "thbot",
     "qbot",
-    "zbot"
+    "zbot",
+    "karman",
+    "g",
+    "zvir"
    ],
    "body": {
-    "op": "ifelse",
+    "op": "/",
     "args": [
      {
-      "op": ">=",
+      "op": "*",
       "args": [
+       "karman",
+       "g",
+       "zbot",
        {
-        "op": "/",
+        "op": "+",
         "args": [
          {
-          "op": "*",
+          "op": "/",
           "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 0.4,
-            "units": "1"
-           },
-           {
-            "op": "const",
-            "args": [],
-            "value": 9.80616,
-            "units": "m/s^2"
-           },
-           "zbot",
+           "tstar",
+           "thbot"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           "qstar",
            {
             "op": "+",
             "args": [
              {
               "op": "/",
               "args": [
-               "tstar",
-               "thbot"
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               "zvir"
               ]
              },
-             {
-              "op": "/",
-              "args": [
-               "qstar",
-               {
-                "op": "+",
-                "args": [
-                 {
-                  "op": "/",
-                  "args": [
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": 1.0,
-                    "units": "1"
-                   },
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": 0.6077930728241565,
-                    "units": "1"
-                   }
-                  ]
-                 },
-                 "qbot"
-                ]
-               }
-              ]
-             }
+             "qbot"
             ]
-           }
-          ]
-         },
-         {
-          "op": "^",
-          "args": [
-           "ustar",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
            }
           ]
          }
         ]
-       },
+       }
+      ]
+     },
+     {
+      "op": "^",
+      "args": [
+       "ustar",
        {
         "op": "const",
         "args": [],
-        "value": 0.0,
+        "value": 2.0,
         "units": "1"
        }
+      ]
+     }
+    ]
+   }
+  },
+  "stability_parameter_clamp": {
+   "description": "Sign-preserving |hol| <= 10 clamp of flux_atmocn_Large.F90:254 (the Fortran hol = sign(min(|hol|,10), hol)): hol = sign(hol_raw)*min(|hol_raw|,10). The esm sign op is unary and returns +-1 (and 0 at hol_raw = 0, where 0*min = 0 anyway), so the two-argument Fortran sign is emulated exactly: on every value, including hol_raw = 0, the clamp coincides bit-identically with the conditional ifelse(hol_raw >= 0, min(|hol_raw|,10), -min(|hol_raw|,10)).",
+   "params": [
+    "hol_raw"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "sign",
+      "args": [
+       "hol_raw"
       ]
      },
      {
@@ -794,82 +783,7 @@
        {
         "op": "abs",
         "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 0.4,
-              "units": "1"
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 9.80616,
-              "units": "m/s^2"
-             },
-             "zbot",
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "/",
-                "args": [
-                 "tstar",
-                 "thbot"
-                ]
-               },
-               {
-                "op": "/",
-                "args": [
-                 "qstar",
-                 {
-                  "op": "+",
-                  "args": [
-                   {
-                    "op": "/",
-                    "args": [
-                     {
-                      "op": "const",
-                      "args": [],
-                      "value": 1.0,
-                      "units": "1"
-                     },
-                     {
-                      "op": "const",
-                      "args": [],
-                      "value": 0.6077930728241565,
-                      "units": "1"
-                     }
-                    ]
-                   },
-                   "qbot"
-                  ]
-                 }
-                ]
-               }
-              ]
-             }
-            ]
-           },
-           {
-            "op": "^",
-            "args": [
-             "ustar",
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "1"
-             }
-            ]
-           }
-          ]
-         }
+         "hol_raw"
         ]
        },
        {
@@ -879,113 +793,17 @@
         "units": "1"
        }
       ]
-     },
-     {
-      "op": "-",
-      "args": [
-       {
-        "op": "min",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 0.4,
-                "units": "1"
-               },
-               {
-                "op": "const",
-                "args": [],
-                "value": 9.80616,
-                "units": "m/s^2"
-               },
-               "zbot",
-               {
-                "op": "+",
-                "args": [
-                 {
-                  "op": "/",
-                  "args": [
-                   "tstar",
-                   "thbot"
-                  ]
-                 },
-                 {
-                  "op": "/",
-                  "args": [
-                   "qstar",
-                   {
-                    "op": "+",
-                    "args": [
-                     {
-                      "op": "/",
-                      "args": [
-                       {
-                        "op": "const",
-                        "args": [],
-                        "value": 1.0,
-                        "units": "1"
-                       },
-                       {
-                        "op": "const",
-                        "args": [],
-                        "value": 0.6077930728241565,
-                        "units": "1"
-                       }
-                      ]
-                     },
-                     "qbot"
-                    ]
-                   }
-                  ]
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "op": "^",
-              "args": [
-               "ustar",
-               {
-                "op": "const",
-                "args": [],
-                "value": 2.0,
-                "units": "1"
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": 10.0,
-          "units": "1"
-         }
-        ]
-       }
-      ]
      }
     ]
    }
   },
   "exchange_coefficient_shift": {
-   "description": "Shift of a sqrt exchange coefficient from the 10-m neutral reference to the measurement height and stability (flux_atmocn_Large.F90:282-284): c(zbot) = c_n / (1 + c_n/karman*(alz - psi)), applied to rd (momentum, psi = psimh), rh (heat, psi = psixh) and re (water, psi = psixh) with the neutral values rdn/rhn/ren. alz = ln(zbot/10) and psi are dimensionless and c is a sqrt coefficient, so the template is dimensionless.",
+   "description": "Shift of a sqrt exchange coefficient from the 10-m neutral reference to the measurement height and stability (flux_atmocn_Large.F90:282-284): c(zbot) = c_n / (1 + c_n/karman*(alz - psi)), applied to rd (momentum, psi = psimh), rh (heat, psi = psixh) and re (water, psi = psixh) with the neutral values rdn/rhn/ren. alz = ln(zbot/10) and psi are dimensionless and c is a sqrt coefficient, so the template is dimensionless. karman = 0.4 (shr_const_mod.F90:32) is a named parameter so the consuming component declares the constant once.",
    "params": [
     "c",
     "alz",
-    "psi"
+    "psi",
+    "karman"
    ],
    "body": {
     "op": "/",
@@ -1007,12 +825,7 @@
           "op": "/",
           "args": [
            "c",
-           {
-            "op": "const",
-            "args": [],
-            "value": 0.4,
-            "units": "1"
-           }
+           "karman"
           ]
          },
          {
@@ -1030,11 +843,12 @@
    }
   },
   "exchange_coefficient_shift_clamped": {
-   "description": "The clamped variant of the coefficient shift used for the 10-m neutral wind reconstruction (flux_atmocn_Large.F90:272): rd = rdn / (1 + max(rdn/karman*(alz - psimh), -0.5)), u10n = vmag*rd/rdn. The max(..., -0.5) clamp of F90:272 (a guard against the denominator collapsing for very unstable conditions) applies to the momentum shift only, and only in this wind-shift step; the unclamped shift of F90:282-284 is exchange_coefficient_shift.",
+   "description": "The clamped variant of the coefficient shift used for the 10-m neutral wind reconstruction (flux_atmocn_Large.F90:272): rd = rdn / (1 + max(rdn/karman*(alz - psimh), -0.5)), u10n = vmag*rd/rdn. The max(..., -0.5) clamp of F90:272 (a guard against the denominator collapsing for very unstable conditions) applies to the momentum shift only, and only in this wind-shift step; the unclamped shift of F90:282-284 is exchange_coefficient_shift. karman = 0.4 (shr_const_mod.F90:32) is a named parameter so the consuming component declares the constant once.",
    "params": [
     "c",
     "alz",
-    "psi"
+    "psi",
+    "karman"
    ],
    "body": {
     "op": "/",
@@ -1059,12 +873,7 @@
             "op": "/",
             "args": [
              "c",
-             {
-              "op": "const",
-              "args": [],
-              "value": 0.4,
-              "units": "1"
-             }
+             "karman"
             ]
            },
            {
@@ -1136,7 +945,7 @@
    }
   },
   "frozen_state_select": {
-   "description": "Frozen-state selection for the unrolled stability iteration of cmeps_aoflux_step: frozen = frozen_prev when the previous update already converged (conv = 1), else the freshly computed value. The Fortran do-while of flux_atmocn_Large.F90:242-290 exits at the FIRST update that satisfies |(ustar_k - ustar_{k-1})/ustar_k| <= flux_convergence, so the converged state must be pinned at the first passing update and carried unchanged through the remaining updates of the unrolled chain (the iteration states do not repeat after convergence: on the pinned rows ustar_2 differs from ustar_4 at the 1.8e-4 level). Each unrolled update threads the previous frozen state and the previous convergence flag; on every reachable trajectory of this contraction map the flags are prefix-0s-then-1s, so the 5th update's frozen outputs are exactly the state the Fortran leaves in the iteration variables — and in the no-convergence case conv stays 0 throughout, so the fresh 5th-update values are selected, which is also what the do-while leaves after its final pass.",
+   "description": "Frozen-state selection for the unrolled stability iteration of cmeps_aoflux_step: frozen = frozen_prev when the previous update already converged (conv = 1), else the freshly passed value. The AoFluxStep applies it to its 4 state INPUTS (ustar_prev/tstar_prev/qstar_prev/rdn_prev), not to its outputs: the Fortran do-while of flux_atmocn_Large.F90:242-290 exits at the FIRST update that satisfies |(ustar_k - ustar_{k-1})/ustar_k| <= flux_convergence, leaving the exit-state fields of update k, which are functions of the pre-converged state (the update k-1 outputs) plus the fixed fields. The input state of the first passing update must therefore be pinned and carried unchanged through the remaining updates of the unrolled chain (the iteration states do not repeat after convergence: on the pinned rows ustar_2 differs from ustar_4 at the 1.8e-4 level), so the parent's 6th mount exit can be fed the pinned 4-input state and recompute the 15 exit-state fields bit-identically. Each unrolled update threads the previous frozen state and the previous convergence flag; on every reachable trajectory of this contraction map the flags are prefix-0s-then-1s, so the 5th mount's frozen outputs are the input state of the first-converged update — and in the no-convergence case conv stays 0 throughout, so the fresh 4th-update values are selected, which reproduce the 5th update through the exit mount, exactly what the do-while leaves after its final pass.",
    "params": [
     "value",
     "frozen",
