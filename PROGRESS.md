@@ -1101,3 +1101,41 @@ below; **no combined `./esm test stage2/` has been run on main yet**.
   output is flat, readable math and was accepted. clm-soiltemp's output
   was not. The clm-soiltemp2 prompt now says outright that a Python program
   printing the JSON counts as generation.
+
+## Lane round 2026-11-03 (afternoon: first results from the 10-task batch)
+
+- **CLM surface albedo** ✅ (`clm-surfalbedo`, merged `fe220e7`, 3.4 h) —
+  `stage2/clm_surfalbedo.esm`: `GroundAlbedo` (SoilAlbedo wetness law,
+  albsat/albdry mxsoil_color=20 `function_tables`, snow/soil blend) and
+  `SurfaceRadiationBare` (bare-patch sabg/sabg_soil/sabg_snow/fsa/fsr);
+  46 assertions. W3 dump extension (fork clm `3d7038304` + NaN-write fix,
+  superproject `527ab5d`/`fe38241`): `clm_surfalbedo.csv` now carries
+  albsnd/albsni, h2osoi_vol_1, isoicol; shared columns bit-identical.
+  **Manager fix during review:** the worker wrote the absorbed-shortwave
+  law out inline three times and had two identical blend templates. These
+  are now `snow_soil_albedo`, `absorbed_shortwave`, `reflected_shortwave`
+  in `clm_templates.esm` (`8dfe5a2`). Verified by slurm job 12045618 on
+  `secondary`: 1217P/0F/0E, validate/units clean. bugs.md **#31**
+  (instrumentation: derived-type NaN in a formatted write aborts the run).
+  Not covered: two-stream vegetated branch (no vegetated patches in the
+  dump), blend interior 0<frac_sno<1, urban rows (they are UrbanAlbedo
+  output); see `stage2/README-clm-albedo.md`.
+- **cam-surface / cism-thermo** ✗ infra failures on ccc0234: llama-server
+  degraded to ~1 t/s and opencode aborted on inactivity after 1.5 h
+  (cam-surface); the next job on that node never got a healthy server in
+  1200 s (cism-thermo). Neither made commits. Resubmitted unchanged as
+  `cam-surface2` (12045591, 8 h) and `cism-thermo2` (12045594, 16 h).
+  ccc0234 was checked later and is healthy (mom6-kpp ~25 t/s, one server).
+- **Queue:** `cism-cap` yielded its node to another user's job at 14:08
+  and, after requeue, ranked below the fresh agent jobs (age reset). The
+  not-yet-started jobs were reniced 100 → 130 so it resumes first.
+- **Pending main-checkout edit:** `stage1/runs/clm_instrument.json` holds
+  the surfalbedo W3 changelog *and* `clm-soiltemp2`'s in-progress soiltemp
+  extension (clm `1c0d375dd`). Commit it when clm-soiltemp2 is reviewed.
+- **Tooling note:** opencode's built-in `grep` tool returns "ripgrep
+  execution failed" intermittently (7× each in clm-surfalbedo and
+  clm-soiltemp2; agents fall back to bash grep).
+- **Next:** review mom6-kpp, clmu-verify, clm-soiltemp2, factoring-cleanup
+  as they finish; then cism-cap (resumes) and the queued cmeps-wide,
+  cice-assembly-tests, cam-vdiff, clm-bareground, cam-surface2,
+  cism-thermo2.
