@@ -21,6 +21,9 @@ stage1/analysis/mosart_geometry/
 .work/
 __pycache__/
 
+# Working probes and tuple-extraction scratch (medium-horizon, not committed)
+scratch/
+
 # slurm subagent run dirs (tools/slurm-agent/dispatch.py)
 .slurm-agents/
 /.ast/
