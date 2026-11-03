@@ -1,0 +1,889 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_basal",
+  "description": "Stage-2 implementation of the CISM basal physics (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00_002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20): (a) Effecpress - the cell-centered effective pressure of glissade_calc_effecpress (libglissade/glissade_basal_traction.F90:668-1114) for the reference option HO_EFFECPRESS_BWAT_BVP (which_ho_effecpress = 4, F90:944-985): the Bueler & van Pelt (2015) Eq. 23 law N = N0*(delta*P/N0)^s * 10^((e0/Cc)*(1-s)) with s = clamp(bwat/bwat_till_max, 0, 1), imported by reference from the EqIce basal_templates.esm mohr_coulomb_N_interior (the identical functional form, CISM_LANE.md row 9), plus the two CISM-specific branches: the min(., overburden) cap and the bwat = 0 initialization (N = overburden when the bwat > 0 branch does not fire, F90:784), and the floating-cell zeroing (F90:982-985). The final 0..overburden capping of F90:1082-1086 is a no-op on this construction (N is already in [0, P]) and is documented, not transcribed. The cell-to-vertex stagger (effecpress_stag = 4-cell average of effecpress with stagger_margin = 0, F90:1096-1098; the plain average over all four neighboring cells, glissade_grid_operators.F90:125-133) is a grid discretization step and lives in the stage-3 assembly, not here; the traced N column of cism_basal_traction.csv is that staggered value and is carried into the drag law as the input N_stag. (b) BasalTraction - the pseudo-plastic drag of glissade_calcbeta (F90:69-664) for the reference option HO_BABC_PSEUDO_PLASTIC_OLD (which_ho_babc = 3, F90:250-292): phi(bed) from the bed-elevation ramp (cism_templates.esm cism_phi_ramp, with the CELL-CENTER topg quirk, F90:261-263, bugs.md #23), tanphi = tan(phi*pi/180), yield stress tau_c = tanphi * N_stag, regularized speed = sqrt(u^2 + v^2 + 0.01^2) (the Fortran smallnum = 1.0d-2 m/yr of F90:136,189), and beta = tau_c / (u0^q * speed^(1-q)) - the identical formula to EqIce's pseudo-plastic drag beta = tauc*(eps^2+vx^2+vy^2)^((q-1)/2)*u_threshold^(-q) with eps = 0.01 m/yr (CISM_LANE.md row 8: 'same drag law'), imported by reference from ../../eqice/stage2/basal_templates.esm. Not transcribed (documented coverage gaps): the beta_grounded_min floor and f_ground weighting of F90:597-633 (which_ho_beta_limit = 0 in the reference run; f_ground = 1 at every traced vertex so the floor at 100 Pa yr/m never fires on the traced rows) and the speed cap of F90:196-198 (beta_powerlaw_umax = 0 in the reference config). Tests pin the stage-1 instrumented trace cism_basal_traction.csv (one row per traced vertex and Picard iteration of the velocity solve; q = 0.5, u0 = 100 m/yr, phimin = 5 deg, phimax = 40 deg, bedmin = -300 m, bedmax = 700 m on every row) and the velo-trace overburden chain (the effecpress trace is empty in this run - gland20 starts with bwat = 0 everywhere and the 2-year cold-base run melts nothing, so N is pinned via N = rhoi*g*thck with thck from cism_velo.csv and the source formula for the bwat > 0 branches, see README-cism.md)."
+ },
+ "models": {
+  "Effecpress": {
+   "expression_template_imports": [
+    {
+     "ref": "../../eqice/stage2/basal_templates.esm"
+    }
+   ],
+   "variables": {
+    "bwat": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "basal water thickness (glide_basal_hydro%bwat, m); 0 everywhere in the reference run"
+    },
+    "thck": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness (m)"
+    },
+    "rhoi": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 917.0,
+     "description": "ice density (glide_types default 917.0 kg/m3)"
+    },
+    "g": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration (glide_types default 9.80616 m/s2)"
+    },
+    "floating_mask": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 where the cell is floating (topg - eus < 0 and thck > 0); the reference window has no floating traced cells"
+    },
+    "W_till_max": {
+     "type": "parameter",
+     "units": "m",
+     "default": 2.0,
+     "description": "maximum water depth in till, bwat_till_max (glide_types.F90:2297 default 2.0 m); free name of the imported mohr_coulomb_N_interior template"
+    },
+    "N0": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 1000.0,
+     "description": "reference effective pressure N_0 (glide_types.F90:2302 default 1000 Pa); free name of the imported mohr_coulomb_N_interior template"
+    },
+    "e0": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.69,
+     "description": "reference void ratio e_0 (glide_types.F90:2303 default 0.69); free name of the imported mohr_coulomb_N_interior template"
+    },
+    "Cc": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.12,
+     "description": "till compressibility C_c (glide_types.F90:2304 default 0.12); free name of the imported mohr_coulomb_N_interior template"
+    },
+    "delta": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.02,
+     "description": "minimum N relative to overburden, effecpress_delta (glide_types.F90:2330 default 0.02)"
+    },
+    "P": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "overburden pressure P = rhoi*g*thck (glissade_calc_effecpress, F90:777-783)"
+    },
+    "s_bwat": {
+     "type": "unknown",
+     "units": "m",
+     "description": "clamped basal water thickness max(0, min(bwat, W_till_max)): the Fortran clamps the ratio s = bwat/bwat_till_max to [0, 1] (F90:960); clamping the water thickness itself is algebraically identical since W_till_max > 0"
+    },
+    "N_interior": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "un-capped Bueler & van Pelt (2015) Eq. 23 value N0*(delta*P/N0)^s * 10^((e0/Cc)*(1-s)) with s = s_bwat/W_till_max (the EqIce mohr_coulomb_N_interior rule, the identical functional form)"
+    },
+    "N": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "cell-centered effective pressure: overburden when bwat = 0 (the F90:784 initialization, unchanged because the bwat > 0 branch does not fire), min(N_interior, P) when bwat > 0 (the F90:974-975 cap), and 0 for floating ice (the F90:982-985 zeroing)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "P",
+     "rhs": {
+      "op": "overburden_pressure",
+      "args": [
+       "rhoi",
+       "g",
+       "thck"
+      ]
+     }
+    },
+    {
+     "lhs": "s_bwat",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m"
+       },
+       {
+        "op": "min",
+        "args": [
+         "bwat",
+         "W_till_max"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "N_interior",
+     "rhs": {
+      "op": "mohr_coulomb_N_interior",
+      "args": [
+       "delta",
+       "P",
+       "s_bwat"
+      ]
+     }
+    },
+    {
+     "lhs": "N",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "floating_mask",
+         1.0
+        ]
+       },
+       0.0,
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "bwat",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m"
+           }
+          ]
+         },
+         {
+          "op": "min",
+          "args": [
+           "N_interior",
+           "P"
+          ]
+         },
+         "P"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "bwat0_overburden_step1_cell2511",
+     "description": "bwat = 0 branch pinned from the dump: velo entry row (cism_step 1, cell 25,11) of cism_velo.csv has thck = 1.36975606502431813 m, and with bwat = 0 the BWAT_BVP branch does not fire, so N = P = rhoi*g*thck = 12317.187222427161 Pa (the F90:784 overburden initialization). The same vertex's staggered N (the 4-cell average used by the drag law) is the basal row's N column = effecpress_stag = 239143.1427941269 Pa = rhoi*g*stagthck (stagthck = 26.594364795786802 m in the velo row, the plain all-cells average of glissade_stagger, F90:1096-1098) - the stagger itself is a stage-3 grid operation, documented in README-cism.md.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 1.3697560650243181
+     },
+     "assertions": [
+      {
+       "variable": "P",
+       "time": 0.0,
+       "expected": 12317.187222427161,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 12317.187222427161,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "bwat0_overburden_step1_cell2612",
+     "description": "bwat = 0 branch, thick-cell pin: velo entry row (cism_step 1, cell 26,12) thck = 83.55963112291998 m -> N = P = 751388.9860087493 Pa.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 83.55963112291998
+     },
+     "assertions": [
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 751388.9860087493,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "bwat0_overburden_step4_cell1913",
+     "description": "bwat = 0 branch, last-step pin: velo entry row (cism_step 4, cell 19,13) thck = 8.042716577407948 m -> N = P = 72322.1078485194 Pa (the overburden grows as the thickness evolves).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 8.042716577407948
+     },
+     "assertions": [
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 72322.1078485194,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "bwat_partial_plateau",
+     "description": "bwat > 0 branch, mid-range pin from the SOURCE FORMULA (the effecpress trace is empty in this run - gland20 starts with bwat = 0 everywhere and the cold base melts nothing, cism_thermo.csv bwat = bmlt_ground = 0 on every row; see README-cism.md 'how N is pinned'): with bwat = 0.5 m at the cell overburden P = rhoi*g*thck = 12317.187222427161 Pa (thck = 1.3697560650243181 m from the velo entry row of cell 25,11, step 1; the same cell's VERTEX N_stag is 239143.14 Pa, the 4-cell average, not a cell value), s = 0.25, N_interior = N0*(delta*P/N0)^s * 10^((e0/Cc)*(1-s)) = 1000*(0.02*P/1000)^0.25 * 10^(5.75*0.75) = 14467229.956136435 Pa - far above overburden, so the min(., P) cap of F90:974-975 holds N at P: this is the Bueler & van Pelt (2015) plateau where N stays at overburden for bwat up to ~0.6*bwat_till_max (F90:952-953). N0 = 1000 Pa, e0 = 0.69, Cc = 0.12, delta = 0.02, W_till_max = 2.0 m are the glide_types defaults (F90:2297-2330).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "bwat": 0.5,
+      "thck": 1.3697560650243181
+     },
+     "assertions": [
+      {
+       "variable": "s_bwat",
+       "time": 0.0,
+       "expected": 0.5
+      },
+      {
+       "variable": "N_interior",
+       "time": 0.0,
+       "expected": 14467229.956136435,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 12317.187222427161,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "bwat_saturated",
+     "description": "bwat > 0 branch, saturated pin from the SOURCE FORMULA: with bwat = bwat_till_max = 2.0 m (s = 1) at the same overburden P = 12317.187222427161 Pa, N_interior = N0*(delta*P/N0) = delta*P = 246.34374444854322 Pa - now below overburden, so N = N_interior (the reduced-N branch of F90:962-975; N = delta*P = 0.02*P at full saturation).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "bwat": 2.0,
+      "thck": 1.3697560650243181
+     },
+     "assertions": [
+      {
+       "variable": "s_bwat",
+       "time": 0.0,
+       "expected": 2.0
+      },
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 246.34374444854322,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "bwat_clamped",
+     "description": "bwat > 0 branch, clamp pin from the SOURCE FORMULA: with bwat = 3.0 m > bwat_till_max = 2.0 m the Fortran clamps s to 1 (F90:960), so the saturated value N = 246.34374444854322 Pa is unchanged (s_bwat = 2.0 m after the clamp).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "bwat": 3.0,
+      "thck": 1.3697560650243181
+     },
+     "assertions": [
+      {
+       "variable": "s_bwat",
+       "time": 0.0,
+       "expected": 2.0
+      },
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 246.34374444854322,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "floating_zero",
+     "description": "Floating-cell zeroing (F90:982-985) pinned from the SOURCE FORMULA: with floating_mask = 1 the effective pressure is zeroed regardless of bwat (here bwat = 2.0 m would otherwise give N = 246.34 Pa) - the reference window has no floating traced cells (all 256 velo rows have floating_mask = 0), so this branch is not dump-covered.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "bwat": 2.0,
+      "thck": 1.3697560650243181,
+      "floating_mask": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "N",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    }
+   ]
+  },
+  "BasalTraction": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    },
+    {
+     "ref": "../../eqice/stage2/basal_templates.esm"
+    }
+   ],
+   "variables": {
+    "u": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal velocity x-component at the vertex (m/yr), the current Picard iterate"
+    },
+    "v": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal velocity y-component at the vertex (m/yr)"
+    },
+    "bed": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "bed elevation topg - eus at the CELL CENTER (the PSEUDO_PLASTIC_OLD quirk: beta is computed from the cell-center topg, not the staggered stagtopg, F90:261-263, bugs.md #23)"
+    },
+    "N_stag": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 0.0,
+     "description": "effective pressure at the vertex (the staggered effecpress_stag of the velocity solve, F90:1096-1098; the traced N column of cism_basal_traction.csv)"
+    },
+    "q": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.5,
+     "description": "pseudo-plastic exponent pseudo_plastic_q (glide_types.F90:2373 default 0.5; the dumped q column is 0.5 on every row)"
+    },
+    "u0": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 100.0,
+     "description": "threshold velocity pseudo_plastic_u0 (glide_types.F90:2375 default 100 m/yr; the dumped u0 column is 100 on every row)"
+    },
+    "eps": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.01,
+     "description": "speed regularization smallnum = 1.0d-2 m/yr (F90:136): speed = sqrt(u^2 + v^2 + smallnum^2), F90:189; this is the same Schoof epsilon of EqIce's pseudo_plastic_drag"
+    },
+    "phimin": {
+     "type": "parameter",
+     "units": "degrees",
+     "default": 5.0,
+     "description": "min friction angle pseudo_plastic_phimin (glide_types.F90:2380 default 5 deg)"
+    },
+    "phimax": {
+     "type": "parameter",
+     "units": "degrees",
+     "default": 40.0,
+     "description": "max friction angle pseudo_plastic_phimax (glide_types.F90:2381 default 40 deg)"
+    },
+    "bedmin": {
+     "type": "parameter",
+     "units": "m",
+     "default": -300.0,
+     "description": "bed elevation below which phi = phimin, pseudo_plastic_bedmin (glide_types.F90:2382 default -300 m)"
+    },
+    "bedmax": {
+     "type": "parameter",
+     "units": "m",
+     "default": 700.0,
+     "description": "bed elevation above which phi = phimax, pseudo_plastic_bedmax (glide_types.F90:2383 default 700 m)"
+    },
+    "phi": {
+     "type": "unknown",
+     "units": "degrees",
+     "description": "friction angle from the bed-elevation ramp (F90:268-276)"
+    },
+    "tanphi": {
+     "type": "unknown",
+     "units": "1",
+     "description": "tan(phi) with phi in degrees (F90:277)"
+    },
+    "speed": {
+     "type": "unknown",
+     "units": "m/yr",
+     "description": "regularized ice speed sqrt(u^2 + v^2 + 0.01^2) (F90:189)"
+    },
+    "tau_c": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "yield stress tau_c = tanphi * N_stag (F90:280)"
+    },
+    "beta": {
+     "type": "unknown",
+     "units": "Pa yr/m",
+     "description": "basal traction coefficient beta = tau_c / (u0^q * speed^(1-q)) (F90:281), the same pseudo-plastic drag as EqIce's pseudo_plastic_drag with eps = 0.01 m/yr"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "phi",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_phi_ramp",
+      "bindings": {
+       "bed": "bed",
+       "phimin": "phimin",
+       "phimax": "phimax",
+       "bedmin": "bedmin",
+       "bedmax": "bedmax"
+      }
+     }
+    },
+    {
+     "lhs": "tanphi",
+     "rhs": {
+      "op": "tan",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "phi",
+         {
+          "op": "/",
+          "args": [
+           3.141592653589793,
+           180.0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "speed",
+     "rhs": {
+      "op": "basal_speed",
+      "args": [
+       "eps",
+       "u",
+       "v"
+      ]
+     }
+    },
+    {
+     "lhs": "tau_c",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "tanphi",
+       "N_stag"
+      ]
+     }
+    },
+    {
+     "lhs": "beta",
+     "rhs": {
+      "op": "pseudo_plastic_drag",
+      "args": [
+       "tau_c",
+       "q",
+       "u0",
+       "eps",
+       "u",
+       "v"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "step1_cell2213_iter1_ramp",
+     "description": "cism_basal_traction.csv row (cism_step 1, cell 22,13, velo_iter 1): bed = 538.0499877929688 m is inside the ramp (between bedmin = -300 and bedmax = 700), so phi = 5 + (bed + 300)/1000 * 35 = 34.33174957275391 deg and tanphi = 0.6829660486015453; N_stag = 452193.46653451095 Pa (the velo-entry effecpress_stag of the same vertex) gives tau_c = 308832.7850425101 Pa, and speed = sqrt(u^2 + v^2 + 0.01^2) = 0.1985937339061685 m/yr gives beta = tau_c/(u0^q * speed^(1-q)) = 69301.17964177231 Pa yr/m. q = 0.5, u0 = 100 m/yr are the run values (the dumped q/u0 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.03649814617456908,
+      "v": -0.1949547549371747,
+      "bed": 538.0499877929688,
+      "N_stag": 452193.46653451095
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 34.33174957275391,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tanphi",
+       "time": 0.0,
+       "expected": 0.6829660486015453,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.1985937339061685,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 308832.7850425101,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 69301.17964177231,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2213_iter2",
+     "description": "cism_basal_traction.csv row (cism_step 1, cell 22,13, velo_iter 2): the Picard iterate u, v has moved (u = 0.036574094731719, v = -0.19500952167451643) so speed and beta change (beta = 69289.36483789686 Pa yr/m) while N_stag, phi, tanphi and tau_c are iteration-invariant (N is recomputed once per solve, before the Picard loop).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.036574094731719,
+      "v": -0.19500952167451643,
+      "bed": 538.0499877929688,
+      "N_stag": 452193.46653451095
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 34.33174957275391,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.19866146568765786,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 69289.36483789686,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2213_iter3",
+     "description": "cism_basal_traction.csv row (cism_step 1, cell 22,13, velo_iter 3): third Picard iterate, u = 0.03551339129282068, v = -0.18922188498396986 -> speed = 0.19278517245370222 m/yr, beta = 70337.44422256357 Pa yr/m.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.03551339129282068,
+      "v": -0.18922188498396986,
+      "bed": 538.0499877929688,
+      "N_stag": 452193.46653451095
+     },
+     "assertions": [
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.19278517245370222,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 70337.44422256357,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2511_iter1_phimax",
+     "description": "cism_basal_traction.csv row (cism_step 1, cell 25,11, velo_iter 1): bed = 1082.0 m >= bedmax = 700 m -> phi = phimax = 40 deg, tanphi = tan(40 deg) = 0.8390996311772799; N_stag = 239143.1427941269 Pa (the velo-entry effecpress_stag = rhoi*g*stagthck of the same vertex) -> tau_c = 200664.92291712746 Pa; speed = 0.05970704267801483 m/yr -> beta = 82121.8420169373 Pa yr/m. The phimax branch pin.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": -0.058233403771395534,
+      "v": -0.008590787539678785,
+      "bed": 1082.0,
+      "N_stag": 239143.1427941269
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 40.0
+      },
+      {
+       "variable": "tanphi",
+       "time": 0.0,
+       "expected": 0.8390996311772799,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.05970704267801483,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 200664.92291712746,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 82121.8420169373,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step1_cell2612_iter1_largeN",
+     "description": "cism_basal_traction.csv row (cism_step 1, cell 26,12, velo_iter 1): the highest-N traced vertex, N_stag = 1792132.1941786127 Pa (velo entry effecpress_stag = rhoi*g*stagthck with stagthck = 199.2974449419603 m) at bed = 1785.9 m -> tau_c = 1503777.4631562033 Pa, beta = 1060770.9491729552 Pa yr/m at the near-frozen speed 0.020096661101139186 m/yr.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": -0.016714798113099248,
+      "v": -0.004948869714629256,
+      "bed": 1785.9000244140625,
+      "N_stag": 1792132.1941786127
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 40.0
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 1503777.4631562033,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 1060770.9491729552,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step2_cell2811_iter1",
+     "description": "cism_basal_traction.csv row (cism_step 2, cell 28,11, velo_iter 1): a step-2 row; the cell is ice-free at solve time (velo entry ice_mask = 0, thck = 1.65e-5 m) but the traced vertex still carries N_stag = 78357.35970008482 Pa from its neighbors (effecpress is the overburden of all cells, F90:784) -> tau_c = 65749.63162436664 Pa, beta = 47725.541361728465 Pa yr/m.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.013052192685070345,
+      "v": -0.00947955388395866,
+      "bed": 921.1400146484375,
+      "N_stag": 78357.35970008482
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 40.0
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 65749.63162436664,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 47725.541361728465,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step4_cell1913_iter39",
+     "description": "cism_basal_traction.csv row (cism_step 4, cell 19,13, velo_iter 39, the last traced Picard iteration of the last solve): converged state u = 0.004696179028551737, v = -0.04407246548412945, N_stag = 1168699.017599082 Pa -> tau_c = 980654.9146246392 Pa, beta = 460061.44255729334 Pa yr/m.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": 0.004696179028551737,
+      "v": -0.04407246548412945,
+      "bed": 1107.9000244140625,
+      "N_stag": 1168699.017599082
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 40.0
+      },
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.04543606839635215,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 980654.9146246392,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 460061.44255729334,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "step4_cell2511_iter39",
+     "description": "cism_basal_traction.csv row (cism_step 4, cell 25,11, velo_iter 39): the same cell as the step-1 phimax pin, four steps later: N_stag has grown to 250317.3236931863 Pa (thicker ice) -> tau_c = 210041.17398823643 Pa, beta = 80777.44843505582 Pa yr/m at speed 0.06761275191976918 m/yr; the bed (1082 m) and phi (40 deg) are unchanged (topg is fixed).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "u": -0.06621956605320506,
+      "v": -0.009298026343771191,
+      "bed": 1082.0,
+      "N_stag": 250317.3236931863
+     },
+     "assertions": [
+      {
+       "variable": "phi",
+       "time": 0.0,
+       "expected": 40.0
+      },
+      {
+       "variable": "speed",
+       "time": 0.0,
+       "expected": 0.06761275191976918,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tau_c",
+       "time": 0.0,
+       "expected": 210041.17398823643,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "beta",
+       "time": 0.0,
+       "expected": 80777.44843505582,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
