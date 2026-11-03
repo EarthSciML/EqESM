@@ -1,0 +1,2753 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_soiltemp",
+  "description": "CTSM/CLM snow/soil temperature (stage 2 of the EqESM project): the SoilThermProp thermal-property laws of SoilTemperatureMod.F90 (ctsm5.4.063, cesm3.0-alphabranch checkout, fork commit ab94ab484), pinned against the W3 stage-1 dump stage1/dumps/clm/clm_soiltemp.csv (LID 261103-111900; 16 traced columns, ctype = 1 soil, snl = -9, 34 layers, 12 steps; the tests pin column 1 at step 1). SoilThermProp (F90:604-903) computes, per layer: the snow bulk density bw (:744), the Sturm1997 snow thermal conductivity (:774-778; the snow_thermal_cond_method of the traced run; the five coefficients lack _r8 in the Fortran and execute as float32-rounded values, bugs.md #31, reproduced here to rel 1.6e-16), the snow heat capacity with the thin-layer floor (:892-895), the Johansen (1975) soil thermal conductivity (:712-727) composed of the saturation water content (:712-713), the Kersten number (:715-719), the liquid fraction (:720-721) and the saturated conductivity (:722), with the bedrock override (:727), the de Vries (1963) soil heat capacity (:852-854) with the bedrock override (:854), and the harmonic-mean interface thermal conductivity with the zero bottom boundary (:825-828). The layer index set is the CLM top-down column: layer = 1..34 maps to j = -8..25 (snow j = -8..0, soil j = 1..25). All four outputs are pinned per layer at rel 1e-12: the dumped values are reproduced to the dump's full double precision (max rel residual 3.1e-16, verified independently in Python before pinning). Coverage gaps of the traced dump, each with its reason: imelt = 0 on every row (no phase change in the 12 traced steps), so the Phasechange laws are not exercised; snow_thermal_cond_method = 'Sturm1997' only (the Jordan1991 template exists but is untested); frac_sno_fluxes = 1 exactly; excess_ice = 0 and h2osoi_liq = 0 in the snow layers (the excess-ice and snow-liquid terms never bind); h2osno_no_layers = 0 (the cv(c,1) += cpice*h2osno_no_layers addition of :880-882 is not exercised). The top snow layer carries a ~3e-5 m inconsistency between (z, dz) and the dumped interface depths (bugs.md #32); the harmonic formula absorbs it exactly when fed the dumped zi. Reference: stage1/cesm/components/clm/src/biogeophys/SoilTemperatureMod.F90 and stage1/cesm/components/clm/src/main/clm_varcon.F90.",
+  "license": "MIT"
+ },
+ "index_sets": {
+  "layer": {
+   "kind": "interval",
+   "size": "N_LAYER"
+  }
+ },
+ "metaparameters": {
+  "N_LAYER": {
+   "type": "integer",
+   "default": 34,
+   "description": "number of snow + soil layers in the stage-2 skeleton (snl = -9 snow layers plus nlevgrnd = 25 soil layers), [-]"
+  }
+ },
+ "models": {
+  "SoilThermProp": {
+   "expression_template_imports": [
+    {
+     "ref": "./clm_templates.esm"
+    }
+   ],
+   "variables": {
+    "dz": {
+     "type": "parameter",
+     "units": "m",
+     "description": "layer thickness dz(j) [m] (SoilThermProp input; dump column dz, entry stage)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "z": {
+     "type": "parameter",
+     "units": "m",
+     "description": "layer center depth z(j) [m], negative in snow, positive in soil (dump column z, entry stage)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "zi_below": {
+     "type": "parameter",
+     "units": "m",
+     "description": "depth of the interface below layer j, zi(c,j) [m] (dump column zi_bot, entry stage; the 34th entry zi(25) is unused, the bottom boundary carries no interface)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "h2osoi_liq": {
+     "type": "parameter",
+     "units": "kg/m^2",
+     "description": "layer liquid water mass (dump column h2osoi_liq, entry stage; 0 in all snow layers of the dump)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "h2osoi_ice": {
+     "type": "parameter",
+     "units": "kg/m^2",
+     "description": "layer ice mass (dump column h2osoi_ice, entry stage; unchanged entry to exit since imelt = 0 everywhere)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "excess_ice": {
+     "type": "parameter",
+     "units": "kg/m^2",
+     "description": "excess-ice water equivalent (use_excess_ice = .true. in the run; 0 for all dumped layers), [kg/m2]",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "t_soisno": {
+     "type": "parameter",
+     "units": "K",
+     "description": "layer temperature at the entry stage, the value SoilThermProp consumes (dump column t_soisno, entry stage; the phase-change flag imelt = 0 on every dumped row)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "tkmg": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "saturated thermal conductivity of the mineral matrix, tkmg = tkm^(1-watsat) (SoilStateInitTimeConstMod.F90:581; dump column tkmg, entry stage: uniform 3.019245073504738 across j = 1..25; NaN for snow layers in the dump, replaced here by 0.0 dummies that sit in the discarded branch of the layer ifelse)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "tkdry": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "dry soil thermal conductivity (SoilStateInitTimeConstMod.F90:585; dump column tkdry, entry stage: uniform 0.2157223650051119 across j = 1..25; 0.0 dummy for snow)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "watsat": {
+     "type": "parameter",
+     "units": "1",
+     "description": "soil porosity (soil dataset; dump column watsat, entry stage: uniform 0.43482 across j = 1..25; 0.0 dummy for snow)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "csol": {
+     "type": "parameter",
+     "units": "J/m^3/K",
+     "description": "soil matrix volumetric heat capacity (soil dataset; dump column csol, entry stage: uniform 2.20383606557377e6 across j = 1..25; 0.0 dummy for snow)",
+     "shape": [
+      "layer"
+     ],
+     "default": 0.0
+    },
+    "frac_sno_fluxes": {
+     "type": "parameter",
+     "units": "1",
+     "description": "fraction of the ground covered by snow for heat-flux calculations (waterdiagnosticbulk_inst%frac_sno_fluxes_col; the dump pins 1 exactly via the snow heat-capacity law)",
+     "default": 1.0
+    },
+    "nbedrock": {
+     "type": "parameter",
+     "units": "1",
+     "description": "layer index at which bedrock begins: layers j > nbedrock are bedrock (col%nbedrock; the dump pins nbedrock = 20, i.e. bedrock at j = 21..25, layer = 30..34)",
+     "default": 20.0
+    },
+    "denh2o": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "description": "density of liquid water SHR_CONST_RHOFW (clm_varcon.F90:64)",
+     "default": 1000.0
+    },
+    "denice": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "description": "density of ice SHR_CONST_RHOICE (clm_varcon.F90:65)",
+     "default": 917.0
+    },
+    "cpice": {
+     "type": "parameter",
+     "units": "J/kg/K",
+     "description": "specific heat of ice SHR_CONST_CPICE (clm_varcon.F90:58)",
+     "default": 2117.27
+    },
+    "cpliq": {
+     "type": "parameter",
+     "units": "J/kg/K",
+     "description": "specific heat of liquid water SHR_CONST_CPFW (clm_varcon.F90:57)",
+     "default": 4188.0
+    },
+    "tfrz": {
+     "type": "parameter",
+     "units": "K",
+     "description": "freezing point of water SHR_CONST_TKFRZ (clm_varcon.F90:76)",
+     "default": 273.15
+    },
+    "tkair": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "thermal conductivity of air (clm_varcon.F90:73)",
+     "default": 0.023
+    },
+    "tkice": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "thermal conductivity of ice (clm_varcon.F90:74)",
+     "default": 2.29
+    },
+    "tkwat": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "thermal conductivity of liquid water (clm_varcon.F90:75)",
+     "default": 0.57
+    },
+    "thk_bedrock": {
+     "type": "parameter",
+     "units": "W/m/K",
+     "description": "bedrock thermal conductivity (clm_varcon.F90:121)",
+     "default": 3.0
+    },
+    "csol_bedrock": {
+     "type": "parameter",
+     "units": "J/m^3/K",
+     "description": "bedrock volumetric heat capacity (clm_varcon.F90:123)",
+     "default": 2000000.0
+    },
+    "thin_sfclayer": {
+     "type": "parameter",
+     "units": "J/m^2/K",
+     "description": "heat-capacity floor for thin surface layers, thin_sfclayer = 1.0e-6 (SoilTemperatureMod.F90:85): a J/m2/K floor in the snow heat-capacity law (:892-895), never binding in the dump (every snow layer has cv >> 1e-6)",
+     "default": 1e-06
+    },
+    "bw": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "snow bulk density (0 outside the snow layers), [kg/m3]",
+     "shape": [
+      "layer"
+     ]
+    },
+    "thk_layer": {
+     "type": "unknown",
+     "units": "W/m/K",
+     "description": "layer thermal conductivity: Sturm1997 for snow, Johansen 1975 for soil, thk_bedrock for bedrock (SoilThermProp), [W/m/K]",
+     "shape": [
+      "layer"
+     ]
+    },
+    "cv": {
+     "type": "unknown",
+     "units": "J/m^2/K",
+     "description": "layer heat capacity per unit ground area (SoilThermProp; dump column cv, exit stage), [J/m2/K]",
+     "shape": [
+      "layer"
+     ]
+    },
+    "tk": {
+     "type": "unknown",
+     "units": "W/m/K",
+     "description": "thermal conductivity at the interface below the layer, harmonic mean of the adjacent layer conductivities; 0 at the bottom boundary (SoilThermProp :825-828; dump column tk, exit stage), [W/m/K]",
+     "shape": [
+      "layer"
+     ]
+    }
+   },
+   "equations": [
+    {
+     "lhs": "bw",
+     "rhs": {
+      "op": "faq",
+      "args": [
+       "h2osoi_liq",
+       "h2osoi_ice",
+       "frac_sno_fluxes",
+       "dz"
+      ],
+      "output_idx": [
+       "layer"
+      ],
+      "ranges": {
+       "layer": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "<=",
+         "args": [
+          "layer",
+          9
+         ]
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "snow_bulk_density",
+         "bindings": {
+          "h2osoi_ice": {
+           "op": "index",
+           "args": [
+            "h2osoi_ice",
+            "layer"
+           ]
+          },
+          "h2osoi_liq": {
+           "op": "index",
+           "args": [
+            "h2osoi_liq",
+            "layer"
+           ]
+          },
+          "frac_sno_fluxes": "frac_sno_fluxes",
+          "dz": {
+           "op": "index",
+           "args": [
+            "dz",
+            "layer"
+           ]
+          }
+         }
+        },
+        0.0
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "thk_layer",
+     "rhs": {
+      "op": "faq",
+      "args": [
+       "bw",
+       "h2osoi_liq",
+       "h2osoi_ice",
+       "excess_ice",
+       "dz",
+       "watsat",
+       "t_soisno",
+       "tkmg",
+       "tkdry",
+       "nbedrock",
+       "thk_bedrock",
+       "denh2o",
+       "denice",
+       "tfrz",
+       "tkwat",
+       "tkice"
+      ],
+      "output_idx": [
+       "layer"
+      ],
+      "ranges": {
+       "layer": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "<=",
+         "args": [
+          "layer",
+          9
+         ]
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "snow_thermal_cond_sturm1997",
+         "bindings": {
+          "bw": {
+           "op": "index",
+           "args": [
+            "bw",
+            "layer"
+           ]
+          }
+         }
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              "layer",
+              9
+             ]
+            },
+            "nbedrock"
+           ]
+          },
+          "thk_bedrock",
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "soil_thermal_cond",
+           "bindings": {
+            "h2osoi_liq": {
+             "op": "index",
+             "args": [
+              "h2osoi_liq",
+              "layer"
+             ]
+            },
+            "h2osoi_ice": {
+             "op": "index",
+             "args": [
+              "h2osoi_ice",
+              "layer"
+             ]
+            },
+            "excess_ice": {
+             "op": "index",
+             "args": [
+              "excess_ice",
+              "layer"
+             ]
+            },
+            "dz": {
+             "op": "index",
+             "args": [
+              "dz",
+              "layer"
+             ]
+            },
+            "watsat": {
+             "op": "index",
+             "args": [
+              "watsat",
+              "layer"
+             ]
+            },
+            "t_soisno": {
+             "op": "index",
+             "args": [
+              "t_soisno",
+              "layer"
+             ]
+            },
+            "tkmg": {
+             "op": "index",
+             "args": [
+              "tkmg",
+              "layer"
+             ]
+            },
+            "tkdry": {
+             "op": "index",
+             "args": [
+              "tkdry",
+              "layer"
+             ]
+            },
+            "denh2o": "denh2o",
+            "denice": "denice",
+            "tfrz": "tfrz",
+            "tkwat": "tkwat",
+            "tkice": "tkice"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "cv",
+     "rhs": {
+      "op": "faq",
+      "args": [
+       "h2osoi_liq",
+       "h2osoi_ice",
+       "excess_ice",
+       "dz",
+       "frac_sno_fluxes",
+       "cpliq",
+       "cpice",
+       "thin_sfclayer",
+       "csol",
+       "watsat",
+       "csol_bedrock",
+       "nbedrock"
+      ],
+      "output_idx": [
+       "layer"
+      ],
+      "ranges": {
+       "layer": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "<=",
+         "args": [
+          "layer",
+          9
+         ]
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "snow_heat_capacity",
+         "bindings": {
+          "h2osoi_liq": {
+           "op": "index",
+           "args": [
+            "h2osoi_liq",
+            "layer"
+           ]
+          },
+          "h2osoi_ice": {
+           "op": "index",
+           "args": [
+            "h2osoi_ice",
+            "layer"
+           ]
+          },
+          "frac_sno_fluxes": "frac_sno_fluxes",
+          "cpliq": "cpliq",
+          "cpice": "cpice",
+          "thin_sfclayer": "thin_sfclayer"
+         }
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              "layer",
+              9
+             ]
+            },
+            "nbedrock"
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            "csol_bedrock",
+            {
+             "op": "index",
+             "args": [
+              "dz",
+              "layer"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "soil_heat_capacity",
+           "bindings": {
+            "csol": {
+             "op": "index",
+             "args": [
+              "csol",
+              "layer"
+             ]
+            },
+            "watsat": {
+             "op": "index",
+             "args": [
+              "watsat",
+              "layer"
+             ]
+            },
+            "dz": {
+             "op": "index",
+             "args": [
+              "dz",
+              "layer"
+             ]
+            },
+            "h2osoi_ice": {
+             "op": "index",
+             "args": [
+              "h2osoi_ice",
+              "layer"
+             ]
+            },
+            "h2osoi_liq": {
+             "op": "index",
+             "args": [
+              "h2osoi_liq",
+              "layer"
+             ]
+            },
+            "excess_ice": {
+             "op": "index",
+             "args": [
+              "excess_ice",
+              "layer"
+             ]
+            },
+            "cpice": "cpice",
+            "cpliq": "cpliq"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "tk",
+     "rhs": {
+      "op": "faq",
+      "args": [
+       "thk_layer",
+       "z",
+       "zi_below"
+      ],
+      "output_idx": [
+       "layer"
+      ],
+      "ranges": {
+       "layer": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "==",
+         "args": [
+          "layer",
+          "N_LAYER"
+         ]
+        },
+        0.0,
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "clm_interface_conductivity",
+         "bindings": {
+          "thk1": {
+           "op": "index",
+           "args": [
+            "thk_layer",
+            "layer"
+           ]
+          },
+          "thk2": {
+           "op": "index",
+           "args": [
+            "thk_layer",
+            {
+             "op": "min",
+             "args": [
+              "N_LAYER",
+              {
+               "op": "+",
+               "args": [
+                "layer",
+                1
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          "z1": {
+           "op": "index",
+           "args": [
+            "z",
+            "layer"
+           ]
+          },
+          "z2": {
+           "op": "index",
+           "args": [
+            "z",
+            {
+             "op": "min",
+             "args": [
+              "N_LAYER",
+              {
+               "op": "+",
+               "args": [
+                "layer",
+                1
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          "zi": {
+           "op": "index",
+           "args": [
+            "zi_below",
+            "layer"
+           ]
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "clm_soiltemp_snow_cv_step1_col1",
+     "description": "Snow-layer heat capacity cv (SoilThermProp snow branch, SoilTemperatureMod.F90:892-895) pinned against clm_soiltemp.csv (column 1, step 1): layers j = -8..0 (layer = 1..9). cv = max(thin_sfclayer, (cpliq*h2osoi_liq + cpice*h2osoi_ice)/frac_sno_fluxes) with h2osoi_liq = 0 and the dumped h2osoi_ice; the reproduction to rel 1.6e-16 pins frac_sno_fluxes = 1 exactly (any other value scales every snow-layer cv). The thin_sfclayer floor never binds (all dumped snow layers have cv >> 1e-6).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "dz": [
+       0.015578352833079012,
+       0.04132087814442469,
+       0.10721675565897938,
+       0.2286516998925609,
+       0.46924129929131064,
+       0.9496152853357108,
+       1.9098121587164305,
+       3.8297878071162117,
+       14.580399602071962,
+       0.02,
+       0.04,
+       0.06,
+       0.08,
+       0.12,
+       0.16,
+       0.2,
+       0.24,
+       0.28,
+       0.32,
+       0.36000000000000004,
+       0.4,
+       0.44,
+       0.54,
+       0.64,
+       0.74,
+       0.8400000000000001,
+       0.94,
+       1.04,
+       1.1400000000000001,
+       2.39,
+       4.675533905932738,
+       7.635190528383291,
+       11.14,
+       15.115424859373686
+      ],
+      "z": [
+       -22.123804434814364,
+       -22.09538504715538,
+       -22.02111623025368,
+       -21.853182002477908,
+       -21.504235502885972,
+       -20.79480721057246,
+       -19.36509348854639,
+       -16.495293505630066,
+       -7.290199801035981,
+       0.01,
+       0.04,
+       0.09,
+       0.16,
+       0.26,
+       0.4,
+       0.58,
+       0.7999999999999999,
+       1.06,
+       1.3599999999999999,
+       1.7000000000000002,
+       2.08,
+       2.5,
+       2.99,
+       3.58,
+       4.2700000000000005,
+       5.0600000000000005,
+       5.95,
+       6.9399999999999995,
+       8.03,
+       9.795,
+       13.32776695296637,
+       19.483129170124386,
+       28.87072443431603,
+       41.99843686400287
+      ],
+      "zi_below": [
+       -22.11604548622759,
+       -22.074724608083166,
+       -21.967507852424188,
+       -21.73885615253163,
+       -21.269614853240316,
+       -20.319999567904606,
+       -18.410187409188175,
+       -14.580399602071962,
+       0.0,
+       0.02,
+       0.06,
+       0.12,
+       0.2,
+       0.32,
+       0.48,
+       0.6799999999999999,
+       0.9199999999999999,
+       1.2,
+       1.52,
+       1.8800000000000001,
+       2.2800000000000002,
+       2.72,
+       3.2600000000000002,
+       3.9000000000000004,
+       4.640000000000001,
+       5.48,
+       6.42,
+       7.46,
+       8.6,
+       10.99,
+       15.665533905932739,
+       23.30072443431603,
+       34.44072443431603,
+       49.556149293689714
+      ],
+      "h2osoi_liq": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000004,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "h2osoi_ice": [
+       5.394391177197031,
+       14.228407097997286,
+       36.395052026883796,
+       82.52232584715773,
+       179.9051166423746,
+       387.3168167151688,
+       833.9355151590363,
+       1742.229086716401,
+       6718.082688507029,
+       2.751,
+       5.502,
+       8.252999999999998,
+       11.004,
+       16.505999999999997,
+       22.008,
+       27.51,
+       33.01199999999999,
+       38.514,
+       44.016,
+       49.51800000000001,
+       55.02,
+       60.522,
+       74.277,
+       88.032,
+       101.787,
+       115.542,
+       129.29699999999997,
+       143.052,
+       156.80700000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "t_soisno": [
+       247.89440355155978,
+       248.14020129572185,
+       246.48156197475373,
+       242.25368559415364,
+       236.49676831349456,
+       229.15948480552564,
+       224.12383847850862,
+       224.55974638255734,
+       225.69332136014845,
+       225.7397141306359,
+       225.73975556244687,
+       225.73982312127976,
+       225.73991454966128,
+       225.74003917850857,
+       225.7402011834291,
+       225.7403883250648,
+       225.7405852203885,
+       225.74077360831967,
+       225.74093267433648,
+       225.7410394313207,
+       225.7410691490196,
+       225.74099581973556,
+       225.74077939489067,
+       225.74033448164968,
+       225.739573376378,
+       225.73840519816144,
+       225.73674081924898,
+       225.73449850871114,
+       225.7316103751676,
+       225.72793585729707,
+       225.72061761915572,
+       225.70453060768742,
+       225.67856677471335,
+       225.65303955437463
+      ],
+      "tkmg": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738
+      ],
+      "tkdry": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119
+      ],
+      "watsat": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482
+      ],
+      "csol": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377
+      ],
+      "nbedrock": 20.0,
+      "frac_sno_fluxes": 1.0
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 11421.382607743957,
+       "coords": {
+        "layer": 1
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 30125.379496376714,
+       "coords": {
+        "layer": 2
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 77058.15180496026,
+       "coords": {
+        "layer": 3
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 174722.04484641165,
+       "coords": {
+        "layer": 4
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 380907.7063134005,
+       "coords": {
+        "layer": 5
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 820054.2765265254,
+       "coords": {
+        "layer": 6
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1765666.6481807728,
+       "coords": {
+        "layer": 7
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 3688769.3784320345,
+       "coords": {
+        "layer": 8
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 14223994.933895277,
+       "coords": {
+        "layer": 9
+       }
+      }
+     ]
+    },
+    {
+     "id": "clm_soiltemp_snow_tk_step1_col1",
+     "description": "Snow interface thermal conductivity tk (bulk density bw = (ice+liq)/(frac_sno_fluxes*dz) at :744, the Sturm1997 layer law :774-778 with the float32-rounded coefficients of bugs.md #31, composed with the harmonic interface mean :825-826) pinned against the dumped interface tk below layers j = -8..0 (layer = 1..9) of column 1 step 1, to the dump's full double precision (rel 1.6e-16). The top snow layer's (z, dz, zi) triple carries a ~3e-5 m state inconsistency (bugs.md #32), which the harmonic formula absorbs exactly because the dumped interface depth zi is fed through.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "dz": [
+       0.015578352833079012,
+       0.04132087814442469,
+       0.10721675565897938,
+       0.2286516998925609,
+       0.46924129929131064,
+       0.9496152853357108,
+       1.9098121587164305,
+       3.8297878071162117,
+       14.580399602071962,
+       0.02,
+       0.04,
+       0.06,
+       0.08,
+       0.12,
+       0.16,
+       0.2,
+       0.24,
+       0.28,
+       0.32,
+       0.36000000000000004,
+       0.4,
+       0.44,
+       0.54,
+       0.64,
+       0.74,
+       0.8400000000000001,
+       0.94,
+       1.04,
+       1.1400000000000001,
+       2.39,
+       4.675533905932738,
+       7.635190528383291,
+       11.14,
+       15.115424859373686
+      ],
+      "z": [
+       -22.123804434814364,
+       -22.09538504715538,
+       -22.02111623025368,
+       -21.853182002477908,
+       -21.504235502885972,
+       -20.79480721057246,
+       -19.36509348854639,
+       -16.495293505630066,
+       -7.290199801035981,
+       0.01,
+       0.04,
+       0.09,
+       0.16,
+       0.26,
+       0.4,
+       0.58,
+       0.7999999999999999,
+       1.06,
+       1.3599999999999999,
+       1.7000000000000002,
+       2.08,
+       2.5,
+       2.99,
+       3.58,
+       4.2700000000000005,
+       5.0600000000000005,
+       5.95,
+       6.9399999999999995,
+       8.03,
+       9.795,
+       13.32776695296637,
+       19.483129170124386,
+       28.87072443431603,
+       41.99843686400287
+      ],
+      "zi_below": [
+       -22.11604548622759,
+       -22.074724608083166,
+       -21.967507852424188,
+       -21.73885615253163,
+       -21.269614853240316,
+       -20.319999567904606,
+       -18.410187409188175,
+       -14.580399602071962,
+       0.0,
+       0.02,
+       0.06,
+       0.12,
+       0.2,
+       0.32,
+       0.48,
+       0.6799999999999999,
+       0.9199999999999999,
+       1.2,
+       1.52,
+       1.8800000000000001,
+       2.2800000000000002,
+       2.72,
+       3.2600000000000002,
+       3.9000000000000004,
+       4.640000000000001,
+       5.48,
+       6.42,
+       7.46,
+       8.6,
+       10.99,
+       15.665533905932739,
+       23.30072443431603,
+       34.44072443431603,
+       49.556149293689714
+      ],
+      "h2osoi_liq": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000004,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "h2osoi_ice": [
+       5.394391177197031,
+       14.228407097997286,
+       36.395052026883796,
+       82.52232584715773,
+       179.9051166423746,
+       387.3168167151688,
+       833.9355151590363,
+       1742.229086716401,
+       6718.082688507029,
+       2.751,
+       5.502,
+       8.252999999999998,
+       11.004,
+       16.505999999999997,
+       22.008,
+       27.51,
+       33.01199999999999,
+       38.514,
+       44.016,
+       49.51800000000001,
+       55.02,
+       60.522,
+       74.277,
+       88.032,
+       101.787,
+       115.542,
+       129.29699999999997,
+       143.052,
+       156.80700000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "t_soisno": [
+       247.89440355155978,
+       248.14020129572185,
+       246.48156197475373,
+       242.25368559415364,
+       236.49676831349456,
+       229.15948480552564,
+       224.12383847850862,
+       224.55974638255734,
+       225.69332136014845,
+       225.7397141306359,
+       225.73975556244687,
+       225.73982312127976,
+       225.73991454966128,
+       225.74003917850857,
+       225.7402011834291,
+       225.7403883250648,
+       225.7405852203885,
+       225.74077360831967,
+       225.74093267433648,
+       225.7410394313207,
+       225.7410691490196,
+       225.74099581973556,
+       225.74077939489067,
+       225.74033448164968,
+       225.739573376378,
+       225.73840519816144,
+       225.73674081924898,
+       225.73449850871114,
+       225.7316103751676,
+       225.72793585729707,
+       225.72061761915572,
+       225.70453060768742,
+       225.67856677471335,
+       225.65303955437463
+      ],
+      "tkmg": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738
+      ],
+      "tkdry": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119
+      ],
+      "watsat": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482
+      ],
+      "csol": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377
+      ],
+      "nbedrock": 20.0,
+      "frac_sno_fluxes": 1.0
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.1741925750100798,
+       "coords": {
+        "layer": 1
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.16927765541497602,
+       "coords": {
+        "layer": 2
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.18511320957663754,
+       "coords": {
+        "layer": 3
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.21464874327658412,
+       "coords": {
+        "layer": 4
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.25002048951701455,
+       "coords": {
+        "layer": 5
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.29502246317674174,
+       "coords": {
+        "layer": 6
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.3354244258724071,
+       "coords": {
+        "layer": 7
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.35656693378028304,
+       "coords": {
+        "layer": 8
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.35938427703581544,
+       "coords": {
+        "layer": 9
+       }
+      }
+     ]
+    },
+    {
+     "id": "clm_soiltemp_soil_cv_step1_col1",
+     "description": "Soil and bedrock layer heat capacity cv (SoilThermProp soil branch, de Vries 1963, SoilTemperatureMod.F90:852-854, bedrock override :854) pinned against column 1 step 1 for all soil layers j = 1..25 (layer = 10..34). cv = csol*(1-watsat)*dz + h2osoi_ice*cpice + h2osoi_liq*cpliq with the dumped csol/watsat (uniform across j = 1..25; the dump pins the product csol*(1-watsat) = 1.2455640675409837e6 J/m3/K exactly); the bedrock branch cv = csol_bedrock*dz (csol_bedrock = 2e6 J/m3/K) pins nbedrock = 20 (layer 30, j = 21, cv = 4.78e6 = 2e6*2.39 J/m2/K exactly).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "dz": [
+       0.015578352833079012,
+       0.04132087814442469,
+       0.10721675565897938,
+       0.2286516998925609,
+       0.46924129929131064,
+       0.9496152853357108,
+       1.9098121587164305,
+       3.8297878071162117,
+       14.580399602071962,
+       0.02,
+       0.04,
+       0.06,
+       0.08,
+       0.12,
+       0.16,
+       0.2,
+       0.24,
+       0.28,
+       0.32,
+       0.36000000000000004,
+       0.4,
+       0.44,
+       0.54,
+       0.64,
+       0.74,
+       0.8400000000000001,
+       0.94,
+       1.04,
+       1.1400000000000001,
+       2.39,
+       4.675533905932738,
+       7.635190528383291,
+       11.14,
+       15.115424859373686
+      ],
+      "z": [
+       -22.123804434814364,
+       -22.09538504715538,
+       -22.02111623025368,
+       -21.853182002477908,
+       -21.504235502885972,
+       -20.79480721057246,
+       -19.36509348854639,
+       -16.495293505630066,
+       -7.290199801035981,
+       0.01,
+       0.04,
+       0.09,
+       0.16,
+       0.26,
+       0.4,
+       0.58,
+       0.7999999999999999,
+       1.06,
+       1.3599999999999999,
+       1.7000000000000002,
+       2.08,
+       2.5,
+       2.99,
+       3.58,
+       4.2700000000000005,
+       5.0600000000000005,
+       5.95,
+       6.9399999999999995,
+       8.03,
+       9.795,
+       13.32776695296637,
+       19.483129170124386,
+       28.87072443431603,
+       41.99843686400287
+      ],
+      "zi_below": [
+       -22.11604548622759,
+       -22.074724608083166,
+       -21.967507852424188,
+       -21.73885615253163,
+       -21.269614853240316,
+       -20.319999567904606,
+       -18.410187409188175,
+       -14.580399602071962,
+       0.0,
+       0.02,
+       0.06,
+       0.12,
+       0.2,
+       0.32,
+       0.48,
+       0.6799999999999999,
+       0.9199999999999999,
+       1.2,
+       1.52,
+       1.8800000000000001,
+       2.2800000000000002,
+       2.72,
+       3.2600000000000002,
+       3.9000000000000004,
+       4.640000000000001,
+       5.48,
+       6.42,
+       7.46,
+       8.6,
+       10.99,
+       15.665533905932739,
+       23.30072443431603,
+       34.44072443431603,
+       49.556149293689714
+      ],
+      "h2osoi_liq": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000004,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "h2osoi_ice": [
+       5.394391177197031,
+       14.228407097997286,
+       36.395052026883796,
+       82.52232584715773,
+       179.9051166423746,
+       387.3168167151688,
+       833.9355151590363,
+       1742.229086716401,
+       6718.082688507029,
+       2.751,
+       5.502,
+       8.252999999999998,
+       11.004,
+       16.505999999999997,
+       22.008,
+       27.51,
+       33.01199999999999,
+       38.514,
+       44.016,
+       49.51800000000001,
+       55.02,
+       60.522,
+       74.277,
+       88.032,
+       101.787,
+       115.542,
+       129.29699999999997,
+       143.052,
+       156.80700000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "t_soisno": [
+       247.89440355155978,
+       248.14020129572185,
+       246.48156197475373,
+       242.25368559415364,
+       236.49676831349456,
+       229.15948480552564,
+       224.12383847850862,
+       224.55974638255734,
+       225.69332136014845,
+       225.7397141306359,
+       225.73975556244687,
+       225.73982312127976,
+       225.73991454966128,
+       225.74003917850857,
+       225.7402011834291,
+       225.7403883250648,
+       225.7405852203885,
+       225.74077360831967,
+       225.74093267433648,
+       225.7410394313207,
+       225.7410691490196,
+       225.74099581973556,
+       225.74077939489067,
+       225.74033448164968,
+       225.739573376378,
+       225.73840519816144,
+       225.73674081924898,
+       225.73449850871114,
+       225.7316103751676,
+       225.72793585729707,
+       225.72061761915572,
+       225.70453060768742,
+       225.67856677471335,
+       225.65303955437463
+      ],
+      "tkmg": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738
+      ],
+      "tkdry": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119
+      ],
+      "watsat": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482
+      ],
+      "csol": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377
+      ],
+      "nbedrock": 20.0,
+      "frac_sno_fluxes": 1.0
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 30777.77112081967,
+       "coords": {
+        "layer": 10
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 61513.66224163934,
+       "coords": {
+        "layer": 11
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 92249.553362459,
+       "coords": {
+        "layer": 12
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 122985.44448327868,
+       "coords": {
+        "layer": 13
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 184457.226724918,
+       "coords": {
+        "layer": 14
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 245929.00896655736,
+       "coords": {
+        "layer": 15
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 307400.7912081967,
+       "coords": {
+        "layer": 16
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 368872.573449836,
+       "coords": {
+        "layer": 17
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 430344.35569147544,
+       "coords": {
+        "layer": 18
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 491816.1379331147,
+       "coords": {
+        "layer": 19
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 553287.9201747541,
+       "coords": {
+        "layer": 20
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 614759.7024163934,
+       "coords": {
+        "layer": 21
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 676231.4846580328,
+       "coords": {
+        "layer": 22
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 829910.9402621312,
+       "coords": {
+        "layer": 23
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 983590.3958662294,
+       "coords": {
+        "layer": 24
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1137269.8514703277,
+       "coords": {
+        "layer": 25
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1290949.3070744262,
+       "coords": {
+        "layer": 26
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1444628.7626785242,
+       "coords": {
+        "layer": 27
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1598308.218282623,
+       "coords": {
+        "layer": 28
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 1751987.6738867213,
+       "coords": {
+        "layer": 29
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 4780000.0,
+       "coords": {
+        "layer": 30
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 9351067.811865477,
+       "coords": {
+        "layer": 31
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 15270381.05676658,
+       "coords": {
+        "layer": 32
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 22280000.0,
+       "coords": {
+        "layer": 33
+       }
+      },
+      {
+       "variable": "cv",
+       "time": 0.0,
+       "expected": 30230849.718747374,
+       "coords": {
+        "layer": 34
+       }
+      }
+     ]
+    },
+    {
+     "id": "clm_soiltemp_soil_tk_step1_col1",
+     "description": "Soil and bedrock interface thermal conductivity tk (Johansen 1975 layer law SoilTemperatureMod.F90:712-727 with the frozen-branch Kersten number dke = satw (t_soisno = 225.7 K < tfrz), the bedrock override :727, and the harmonic interface mean :825-826) pinned against the dumped interface tk below soil layers j = 1..24 (layer = 10..33) and the zero bottom boundary (layer = 34) of column 1 step 1, to the dump's full double precision (rel 3.1e-16): the dumped tkmg/tkdry/watsat reproduce the soil-layer conductivities exactly (uniform texture across j = 1..20; no fitting). The bedrock interfaces (j = 21..24, layer = 30..33) carry thk_bedrock = 3.0 exactly, and layer 34 pins the tk(c,nlevgrnd) = 0 bottom boundary (:828).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "dz": [
+       0.015578352833079012,
+       0.04132087814442469,
+       0.10721675565897938,
+       0.2286516998925609,
+       0.46924129929131064,
+       0.9496152853357108,
+       1.9098121587164305,
+       3.8297878071162117,
+       14.580399602071962,
+       0.02,
+       0.04,
+       0.06,
+       0.08,
+       0.12,
+       0.16,
+       0.2,
+       0.24,
+       0.28,
+       0.32,
+       0.36000000000000004,
+       0.4,
+       0.44,
+       0.54,
+       0.64,
+       0.74,
+       0.8400000000000001,
+       0.94,
+       1.04,
+       1.1400000000000001,
+       2.39,
+       4.675533905932738,
+       7.635190528383291,
+       11.14,
+       15.115424859373686
+      ],
+      "z": [
+       -22.123804434814364,
+       -22.09538504715538,
+       -22.02111623025368,
+       -21.853182002477908,
+       -21.504235502885972,
+       -20.79480721057246,
+       -19.36509348854639,
+       -16.495293505630066,
+       -7.290199801035981,
+       0.01,
+       0.04,
+       0.09,
+       0.16,
+       0.26,
+       0.4,
+       0.58,
+       0.7999999999999999,
+       1.06,
+       1.3599999999999999,
+       1.7000000000000002,
+       2.08,
+       2.5,
+       2.99,
+       3.58,
+       4.2700000000000005,
+       5.0600000000000005,
+       5.95,
+       6.9399999999999995,
+       8.03,
+       9.795,
+       13.32776695296637,
+       19.483129170124386,
+       28.87072443431603,
+       41.99843686400287
+      ],
+      "zi_below": [
+       -22.11604548622759,
+       -22.074724608083166,
+       -21.967507852424188,
+       -21.73885615253163,
+       -21.269614853240316,
+       -20.319999567904606,
+       -18.410187409188175,
+       -14.580399602071962,
+       0.0,
+       0.02,
+       0.06,
+       0.12,
+       0.2,
+       0.32,
+       0.48,
+       0.6799999999999999,
+       0.9199999999999999,
+       1.2,
+       1.52,
+       1.8800000000000001,
+       2.2800000000000002,
+       2.72,
+       3.2600000000000002,
+       3.9000000000000004,
+       4.640000000000001,
+       5.48,
+       6.42,
+       7.46,
+       8.6,
+       10.99,
+       15.665533905932739,
+       23.30072443431603,
+       34.44072443431603,
+       49.556149293689714
+      ],
+      "h2osoi_liq": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.010000000000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.010000000000000004,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.010000000000000009,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "h2osoi_ice": [
+       5.394391177197031,
+       14.228407097997286,
+       36.395052026883796,
+       82.52232584715773,
+       179.9051166423746,
+       387.3168167151688,
+       833.9355151590363,
+       1742.229086716401,
+       6718.082688507029,
+       2.751,
+       5.502,
+       8.252999999999998,
+       11.004,
+       16.505999999999997,
+       22.008,
+       27.51,
+       33.01199999999999,
+       38.514,
+       44.016,
+       49.51800000000001,
+       55.02,
+       60.522,
+       74.277,
+       88.032,
+       101.787,
+       115.542,
+       129.29699999999997,
+       143.052,
+       156.80700000000002,
+       0.01,
+       0.01,
+       0.01,
+       0.01,
+       0.01
+      ],
+      "t_soisno": [
+       247.89440355155978,
+       248.14020129572185,
+       246.48156197475373,
+       242.25368559415364,
+       236.49676831349456,
+       229.15948480552564,
+       224.12383847850862,
+       224.55974638255734,
+       225.69332136014845,
+       225.7397141306359,
+       225.73975556244687,
+       225.73982312127976,
+       225.73991454966128,
+       225.74003917850857,
+       225.7402011834291,
+       225.7403883250648,
+       225.7405852203885,
+       225.74077360831967,
+       225.74093267433648,
+       225.7410394313207,
+       225.7410691490196,
+       225.74099581973556,
+       225.74077939489067,
+       225.74033448164968,
+       225.739573376378,
+       225.73840519816144,
+       225.73674081924898,
+       225.73449850871114,
+       225.7316103751676,
+       225.72793585729707,
+       225.72061761915572,
+       225.70453060768742,
+       225.67856677471335,
+       225.65303955437463
+      ],
+      "tkmg": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738,
+       3.019245073504738
+      ],
+      "tkdry": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119,
+       0.2157223650051119
+      ],
+      "watsat": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482,
+       0.43482
+      ],
+      "csol": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377,
+       2203836.06557377
+      ],
+      "nbedrock": 20.0,
+      "frac_sno_fluxes": 1.0
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6357410842993776,
+       "coords": {
+        "layer": 10
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.635281595525548,
+       "coords": {
+        "layer": 11
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.635084822044148,
+       "coords": {
+        "layer": 12
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6349372981971944,
+       "coords": {
+        "layer": 13
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6348389721829477,
+       "coords": {
+        "layer": 14
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6347843556715285,
+       "coords": {
+        "layer": 15
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6347496029944024,
+       "coords": {
+        "layer": 16
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6347255449285856,
+       "coords": {
+        "layer": 17
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6347079031118432,
+       "coords": {
+        "layer": 18
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346944127458751,
+       "coords": {
+        "layer": 19
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346837627226538,
+       "coords": {
+        "layer": 20
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346751414467096,
+       "coords": {
+        "layer": 21
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346634414066645,
+       "coords": {
+        "layer": 22
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346515433220021,
+       "coords": {
+        "layer": 23
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346430941370302,
+       "coords": {
+        "layer": 24
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346367840829794,
+       "coords": {
+        "layer": 25
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.6346318920753529,
+       "coords": {
+        "layer": 26
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.634627988387579,
+       "coords": {
+        "layer": 27
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 1.634624800996114,
+       "coords": {
+        "layer": 28
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 2.3626658566058496,
+       "coords": {
+        "layer": 29
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 3.0,
+       "coords": {
+        "layer": 30
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 2.9999999999999996,
+       "coords": {
+        "layer": 31
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 3.0,
+       "coords": {
+        "layer": 32
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 3.0,
+       "coords": {
+        "layer": 33
+       }
+      },
+      {
+       "variable": "tk",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "layer": 34
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
