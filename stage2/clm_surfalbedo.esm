@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_surfalbedo",
-  "description": "CTSM/CLM ground surface albedo and the bare-ground shortwave partition (stage 2 of the EqESM project), transcribed from ctsm5.4.063 (cesm3.0-alphabranch). GroundAlbedo is SurfaceAlbedo's ground albedo chain: the SoilAlbedo soil law - the wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) and albsod = min(albsat + inc, albdry) with albsat/albdry the wet/dry soil albedo tables by color class and waveband (SurfaceAlbedoMod.F90:1244, 1249-1250; the mxsoil_color = 20 tables of F90:210-218, the active branch for the reference run's surfdata mxsoil_color = 20), albsoi = albsod (F90:1250) - and the snow/soil ground albedo blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo, albgri = albsoi*(1-frac_sno_albedo) + albsni*frac_sno_albedo (F90:816-817), with albsnd/albsni the SNICAR snow albedos (SnowSnicarMod; their computation is a separate component - here they are inputs). SurfaceRadiationBare is the bare-patch branch of SurfaceRadiation (SurfaceRadiationMod.F90:688-711, 897-899): with fabd = fabi = 0, ftdd = ftii = 1, ftid = 0 and albd = albgrd, albi = albgri (SurfaceAlbedoMod.F90:1118-1128) the absorbed/reflected partition sabv = 0, sabg = sum_ib [forc_solad_ib*(1-albgrd_ib) + forc_solai_ib*(1-albgri_ib)], sabg_soil = sum_ib [forc_solad_ib*(1-albsod_ib) + forc_solai_ib*(1-albsoi_ib)], sabg_snow = sum_ib [forc_solad_ib*(1-albsnd_ib) + forc_solai_ib*(1-albsni_ib)] (F90:707-708), fsa = sabv + sabg, fsr = sum_ib [albd_ib*forc_solad_ib + albi_ib*forc_solai_ib] and parveg = 0. Both models are the pointwise laws evaluated on the stage-2 skeleton (one column, one patch; the Fortran runs them per column/patch, SurfaceAlbedoMod.F90:201-218, 816-817, 1244-1250, SurfaceRadiationMod.F90:688-711), written scalar like the other table-using stage-2 law (cam_wv_saturation.esm): the surface-data color class is a scalar table query. The vegetation (two-stream) branch of SurfaceAlbedo/SurfaceRadiation is NOT traced by the stage-1 dumps (the traced patches are all bare: sabv = parveg = 0 on every clm_surfrad.csv row) and is therefore not implemented here; see README-clm-albedo.md for the dump extension the two-stream law would need. The pointwise laws are imported by reference from ./clm_templates.esm (soil_albedo_wetness, soil_albedo, ground_albedo_direct, ground_albedo_diffuse); the albsat/albdry color-class tables are transcribed from SurfaceAlbedoMod.F90:210-218 as function_tables (soil color class is the discrete table index, so interpolation is nearest). Tests pin the stage-1 CLM dumps (stage1/dumps/clm/, W3 regeneration, fork clm 3d7038304): clm_surfalbedo.csv (kind=nourban rows; the W3 extension adds the SNICAR albsnd/albsni, h2osoi_vol_1 and isoicol columns, so the soil-law inputs and the all-snow endpoint of the mixing law are pinned directly from the dump; the kind=urban rows are the previous step's UrbanAlbedo sref output - UrbanAlbedoMod.F90:442-463 overrides albgrd for urban columns, so the soil/snow mixing law does not apply there and those rows pin no law of this component; see README-clm-albedo.md) and clm_surfrad.csv (bare-patch rows; the albedo inputs come from the previous step's clm_surfalbedo.csv row, since SurfaceRadiation runs before the doalb call of its step, SurfaceRadiationMod.F90:658 vs clm_driver.F90:1325-1364).",
+  "description": "CTSM/CLM ground surface albedo and the bare-ground shortwave partition (stage 2 of the EqESM project), transcribed from ctsm5.4.063 (cesm3.0-alphabranch). GroundAlbedo is SurfaceAlbedo's ground albedo chain: the SoilAlbedo soil law - the wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) and albsod = min(albsat + inc, albdry) with albsat/albdry the wet/dry soil albedo tables by color class and waveband (SurfaceAlbedoMod.F90:1244, 1249-1250; the mxsoil_color = 20 tables of F90:210-218, the active branch for the reference run's surfdata mxsoil_color = 20), albsoi = albsod (F90:1250) - and the snow/soil ground albedo blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo, albgri = albsoi*(1-frac_sno_albedo) + albsni*frac_sno_albedo (F90:816-817), with albsnd/albsni the SNICAR snow albedos (SnowSnicarMod; their computation is a separate component - here they are inputs). SurfaceRadiationBare is the bare-patch branch of SurfaceRadiation (SurfaceRadiationMod.F90:688-711, 897-899): with fabd = fabi = 0, ftdd = ftii = 1, ftid = 0 and albd = albgrd, albi = albgri (SurfaceAlbedoMod.F90:1118-1128) the absorbed/reflected partition sabv = 0, sabg = sum_ib [forc_solad_ib*(1-albgrd_ib) + forc_solai_ib*(1-albgri_ib)], sabg_soil = sum_ib [forc_solad_ib*(1-albsod_ib) + forc_solai_ib*(1-albsoi_ib)], sabg_snow = sum_ib [forc_solad_ib*(1-albsnd_ib) + forc_solai_ib*(1-albsni_ib)] (F90:707-708), fsa = sabv + sabg, fsr = sum_ib [albd_ib*forc_solad_ib + albi_ib*forc_solai_ib] and parveg = 0. Both models are the pointwise laws evaluated on the stage-2 skeleton (one column, one patch; the Fortran runs them per column/patch, SurfaceAlbedoMod.F90:201-218, 816-817, 1244-1250, SurfaceRadiationMod.F90:688-711), written scalar like the other table-using stage-2 law (cam_wv_saturation.esm): the surface-data color class is a scalar table query. The vegetation (two-stream) branch of SurfaceAlbedo/SurfaceRadiation is NOT traced by the stage-1 dumps (the traced patches are all bare: sabv = parveg = 0 on every clm_surfrad.csv row) and is therefore not implemented here; see README-clm-albedo.md for the dump extension the two-stream law would need. The pointwise laws are imported by reference from ./clm_templates.esm (soil_albedo_wetness, soil_albedo, snow_soil_albedo, absorbed_shortwave, reflected_shortwave); the albsat/albdry color-class tables are transcribed from SurfaceAlbedoMod.F90:210-218 as function_tables (soil color class is the discrete table index, so interpolation is nearest). Tests pin the stage-1 CLM dumps (stage1/dumps/clm/, W3 regeneration, fork clm 3d7038304): clm_surfalbedo.csv (kind=nourban rows; the W3 extension adds the SNICAR albsnd/albsni, h2osoi_vol_1 and isoicol columns, so the soil-law inputs and the all-snow endpoint of the mixing law are pinned directly from the dump; the kind=urban rows are the previous step's UrbanAlbedo sref output - UrbanAlbedoMod.F90:442-463 overrides albgrd for urban columns, so the soil/snow mixing law does not apply there and those rows pin no law of this component; see README-clm-albedo.md) and clm_surfrad.csv (bare-patch rows; the albedo inputs come from the previous step's clm_surfalbedo.csv row, since SurfaceRadiation runs before the doalb call of its step, SurfaceRadiationMod.F90:658 vs clm_driver.F90:1325-1364).",
   "license": "MIT"
  },
  "function_tables": {
@@ -72,10 +72,10 @@
     {"lhs": "albsod_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "soil_albedo", "bindings": {"albsat": "albsat_nir", "inc": "inc", "albdry": "albdry_nir"}}},
     {"lhs": "albsoi_vis", "rhs": "albsod_vis"},
     {"lhs": "albsoi_nir", "rhs": "albsod_nir"},
-    {"lhs": "albgrd_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "ground_albedo_direct", "bindings": {"albsod": "albsod_vis", "albsnd": "albsnd_vis", "frac_sno_albedo": "frac_sno_albedo"}}},
-    {"lhs": "albgrd_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "ground_albedo_direct", "bindings": {"albsod": "albsod_nir", "albsnd": "albsnd_nir", "frac_sno_albedo": "frac_sno_albedo"}}},
-    {"lhs": "albgri_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "ground_albedo_diffuse", "bindings": {"albsoi": "albsoi_vis", "albsni": "albsni_vis", "frac_sno_albedo": "frac_sno_albedo"}}},
-    {"lhs": "albgri_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "ground_albedo_diffuse", "bindings": {"albsoi": "albsoi_nir", "albsni": "albsni_nir", "frac_sno_albedo": "frac_sno_albedo"}}}
+    {"lhs": "albgrd_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsod_vis", "alb_snow": "albsnd_vis", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgrd_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsod_nir", "alb_snow": "albsnd_nir", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgri_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsoi_vis", "alb_snow": "albsni_vis", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgri_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsoi_nir", "alb_snow": "albsni_nir", "frac_sno": "frac_sno_albedo"}}}
    ],
    "tests": [
     {
@@ -207,38 +207,18 @@
    "equations": [
     {"lhs": "sabv", "rhs": {"op": "const", "args": [], "value": 0.0, "units": "W/m^2"}},
     {"lhs": "sabg", "rhs": {"op": "+", "args": [
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albgrd_vis"]}]},
-      {"op": "*", "args": ["forc_solai_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albgri_vis"]}]}]},
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albgrd_nir"]}]},
-      {"op": "*", "args": ["forc_solai_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albgri_nir"]}]}]}
-    ]}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albgrd_vis", "albi": "albgri_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albgrd_nir", "albi": "albgri_nir"}}]}},
     {"lhs": "sabg_soil", "rhs": {"op": "+", "args": [
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsod_vis"]}]},
-      {"op": "*", "args": ["forc_solai_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsoi_vis"]}]}]},
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsod_nir"]}]},
-      {"op": "*", "args": ["forc_solai_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsoi_nir"]}]}]}
-    ]}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albsod_vis", "albi": "albsoi_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albsod_nir", "albi": "albsoi_nir"}}]}},
     {"lhs": "sabg_snow", "rhs": {"op": "+", "args": [
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsnd_vis"]}]},
-      {"op": "*", "args": ["forc_solai_vis", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsni_vis"]}]}]},
-     {"op": "+", "args": [
-      {"op": "*", "args": ["forc_solad_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsnd_nir"]}]},
-      {"op": "*", "args": ["forc_solai_nir", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albsni_nir"]}]}]}
-    ]}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albsnd_vis", "albi": "albsni_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albsnd_nir", "albi": "albsni_nir"}}]}},
     {"lhs": "fsa", "rhs": {"op": "+", "args": ["sabv", "sabg"]}},
     {"lhs": "fsr", "rhs": {"op": "+", "args": [
-     {"op": "+", "args": [
-      {"op": "*", "args": ["albgrd_vis", "forc_solad_vis"]},
-      {"op": "*", "args": ["albgri_vis", "forc_solai_vis"]}]},
-     {"op": "+", "args": [
-      {"op": "*", "args": ["albgrd_nir", "forc_solad_nir"]},
-      {"op": "*", "args": ["albgri_nir", "forc_solai_nir"]}]}
-    ]}},
+     {"op": "apply_expression_template", "args": [], "name": "reflected_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albgrd_vis", "albi": "albgri_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "reflected_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albgrd_nir", "albi": "albgri_nir"}}]}},
     {"lhs": "parveg", "rhs": {"op": "const", "args": [], "value": 0.0, "units": "W/m^2"}}
    ],
    "tests": [

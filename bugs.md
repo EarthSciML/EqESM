@@ -366,7 +366,7 @@ Format template:
   interception fields to be written at the flx stage).
 - **Status:** open (instrumentation coverage note; recorded).
 
-## TBD. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
+## 31. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
 
 - **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
   `dump_surfalbedo` (urban branch, fork clm `3d7038304`): the write

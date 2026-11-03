@@ -270,7 +270,7 @@ ram/rah, snow_albedo_two_stream_approx). None of these is exercised by the
 canopy hydrology/flux-interface component, so they were removed to keep the
 library to what is exercised. Four of them have since returned with the
 surface-albedo stage-2 component (`soil_albedo_wetness`, `soil_albedo`,
-`ground_albedo_direct`, `ground_albedo_diffuse` — see README-clm-albedo.md);
+`snow_soil_albedo`, `absorbed_shortwave`, `reflected_shortwave` — see README-clm-albedo.md);
 the rest will return with their stage-2 components (soil hydrology and
 temperature, snow hydrology), where they will be tested against the
 corresponding dumps. Two of the removed laws are documented in bugs.md: the
