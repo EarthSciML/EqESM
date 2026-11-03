@@ -365,3 +365,30 @@ Format template:
   needs the hyd-stage filter to include the vegetated patches (or the
   interception fields to be written at the flx stage).
 - **Status:** open (instrumentation coverage note; recorded).
+
+## 31. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
+
+- **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
+  `dump_surfalbedo` (urban branch, fork clm `3d7038304`): the write
+  statement passed the module's `nan` (the renamed derived-type parameter
+  `shr_infnan_nan` of `shr_infnan_mod`, a `type(shr_infnan_nan_type)` whose
+  single component is LOGICAL) directly in an `es26.17` data list.
+- **Description:** `shr_infnan_nan` is a derived-type parameter, not a
+  real: it can only be converted to a real through the module's
+  `assignment(=)` interface (the module header says "cannot be passed to
+  functions that expect real arguments"). gfortran's formatted transfer
+  therefore failed at runtime with "Expected REAL for item 14 in formatted
+  transfer, got LOGICAL" (item 14 = the first albsnd/albsni slot) the first
+  time the urban branch ran with the extended dump (LID
+  12027802.261103-131613, step 2), aborting the whole run: the run's CSVs
+  were truncated mid-step-2. (The earlier runs never hit it because they
+  predated the extension's albsnd/albsni columns.)
+- **Impact on results:** the aborted run wrote truncated dumps (the
+  complete pre-extension dumps were preserved). Fix verified by a rerun
+  (LID 12027802.261103-133002): with the NaN materialized to a real local
+  (`nanval = nan` via the assignment interface) all 11 dumps complete and
+  the urban albsnd/albsni slots read `NaN` as designed.
+- **Reproduced/corrected in .esm:** n/a (instrumentation defect, dump-only;
+  no model state affected).
+- **Status:** patched locally (uncommitted in the fork working tree; to be
+  committed with the surfalbedo dump work).
