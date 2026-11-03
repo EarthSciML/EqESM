@@ -49,7 +49,7 @@ Last updated: 2026-11-02.
   unfolded two folded ρ·Lvap constants. **Follow-ups found:** (a) MOSART
   `channel_depth` trapezoid factor `0.1*(2.0/1.0)` = 0.2 vs Fortran
   SLOPE1 0.05 (mosart_physics.F90:501-532) — an untested .esm
-  deviation, also in EarthSciModels#33; (b) salinity is declared `ppt`,
+  deviation, also in EarthSciModels#33 (**fixed 2026-11-02**, `e013d2c`); (b) salinity is declared `ppt`,
   which the esm unit registry reads as parts-per-trillion (CICE means
   parts per thousand, g/kg) — harmless while nothing converts it, but
   wrong; (c) `atmo_constant_tau` coefficient has velocity units while
@@ -979,3 +979,50 @@ Started 2026-11-02 as the MOM6 stage-1 instrumentation lane (this worktree,
 - **Next:** stage-2 EOS component first (`mom6_eos.esm` — closed-form
   pointwise law, the dump pins it to 1e-12 relative), then KPP, then the
   surface forcing mapping (PLAN.md M7).
+
+## Lane round 2026-11-02 (manager review of 6 workers)
+
+- **MOSART channel_depth fix** ✅ (`mosart-channel-depth`, merged `e013d2c`,
+  0.9 h) — GRHR trapezoid branch had two transcription defects: the
+  `0.1·(2/1)` factor (4× too deep) **and** a dropped `rdepth` offset.
+  SLOPE1 is now a named dimensionless template parameter; 5 new tests / 20
+  assertions pin every nonzero GRHR/GRPR/GRRR branch against a compiled
+  gfortran driver of the verbatim F90 routines (rel 1e-12). `stage2/`
+  269P/0F/0E. Ported to EarthSciModels `mosart-routing` as local commit
+  `705518c` (**not pushed**; PR #33 still needs the push).
+- **CDEPS DATM** ✅ (`cdeps-datm`, merged `64b7b38`) — instrumented
+  strdata + GSWP3/CLMNCEP export dumps (4800 + 192 + 192 rows),
+  solution-neutral on a different PE layout, 4992 rows law-checked. Stage 2:
+  `stage2/cdeps_datm_gswp3.esm` (Streams/Clmncep/GSWP3Files, 4 netcdf
+  `data_sources`) + `cdeps_templates.esm` (10 templates), 58P/0F/0E. First
+  working netcdf `data_sources` recipe (see README-cdeps.md). Small
+  follow-ups: `Faxa_lwdn`'s `e2` repeats the `vapor_pressure` law; bare
+  literals lack units (check `./esm units`).
+- **CISM lane start** ✅ (`cism-w0`, merged `94c330f`, 11.9 h) — glissade
+  instrumentation fork (`instrument/cism-dumps`), 7 validated traces,
+  solution-neutral; `stage1/runs/CISM_LANE.md`, `cism_instrument.json`.
+  bugs.md #23–26.
+- **CAM6 SCAM lane start** ✅ (`cam-scam-w1`, merged `5f7f674`) — 26
+  site-calls/step ptend/cam_in/cam_out/qsat dumps (FSCAMARM97, 48 steps),
+  bit-neutral vs pristine; qsat law round-off on 3072 rows. Reconstructed
+  the missing `domain.lnd.ne3np4_gx3v7.230718.nc` (ocean column). bugs.md
+  #27 (CMEPS single-column driver unchecked netCDF errors). Open: the
+  land-column flwds→0 abort is unexplained.
+- **MOM6 lane start** ✅ (`mom6-w1`, merged `48db9bd`) — see the MOM6
+  section above.
+- **CMEPS aoflux** ◐ (`cmeps-aoflux`, partial merge `da3c97c`) — stage 1
+  merged: 288-row dump of flux_atmOcn_large on C_JRA_t62_inst, all 46
+  computed columns replayed to 4.4e-15, restarts md5-identical; bugs.md
+  #28 (rainc uninitialized allocation) / #29 (gfortran es26.17 format).
+  Stage 2 **sent back**: the stability iteration was unrolled by copying a
+  16-equation block 5 times (136 equations) and the commit title "6P/312F"
+  mislabeled 312 passes. Follow-up `cmeps-aoflux-refactor` (job 12016134)
+  rewrites it as a recurrence over an iteration index (esm-spec §4.3.1.1).
+- **Bookkeeping:** three parallel branches all claimed bugs.md #20+; they
+  were renumbered on the branches before merge (CISM 23–26, CAM 27, CMEPS
+  28–29). Three `st_archive.FSCAMARM97_ne3*` jobs (11987659, 11987710,
+  12001102) from failed CAM runs are stuck at DependencyNeverSatisfied
+  and need `scancel`.
+- **Next:** review `cmeps-aoflux-refactor`; push MOSART `705518c` to
+  EarthSciModels#33; stage-2 starts for MOM6 EOS, CAM qsat/process
+  tendencies, CISM; cdeps unit/vp cleanup; CLM W2 re-pin (above).
