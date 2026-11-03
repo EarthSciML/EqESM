@@ -1023,6 +1023,17 @@ Started 2026-11-02 as the MOM6 stage-1 instrumentation lane (this worktree,
   28–29). Three `st_archive.FSCAMARM97_ne3*` jobs (11987659, 11987710,
   12001102) from failed CAM runs are stuck at DependencyNeverSatisfied
   and need `scancel`.
-- **Next:** review `cmeps-aoflux-refactor`; push MOSART `705518c` to
-  EarthSciModels#33; stage-2 starts for MOM6 EOS, CAM qsat/process
-  tendencies, CISM; cdeps unit/vp cleanup; CLM W2 re-pin (above).
+- **Follow-ups (same day):** `cmeps-aoflux-refactor` failed silently (a
+  reasoning turn hit the 32,768-token output cap; status "done", empty
+  result). It found that coupled multi-variable recurrences are rejected as
+  observed cycles (esm-spec §4.9.6). Resubmitted as `cmeps-aoflux-refactor2`
+  (job 12017252: a one-step model chained 5× as subsystems). MOSART
+  `705518c` **pushed** to EarthSciModels#33 (comment explains the GRHR fix;
+  CI pending). **CISM dumps were lost:** `dump_dir` pointed inside the
+  cism-w0 worktree, which `cleanup` deleted; `cism-basal` regenerates them
+  into `$M/stage1/dumps/cism/` (1-minute rerun of the existing exe). All
+  prompts now say that dumps live in the main checkout, and that bugs.md
+  entries are written as `## TBD.` and numbered at merge.
+- **Submitted:** `mom6-eos` (12017293), `cam-qsat` (12017294, includes the
+  cdeps vp/units cleanup), `cism-basal` (12017295), `clm-w2-repin`
+  (12017296), `clm-soiltemp` (12017297).
