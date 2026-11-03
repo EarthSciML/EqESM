@@ -327,7 +327,7 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (toolchain). Fork patched (med_dump_mod.F90, commit 4750efc5): dump writes `es26.17e3` and flushes subnormals to 0.0.
 - **Status:** patched locally (fork); open upstream.
 
-## TBD. CLM dump: clm_canopyflux.csv ent/hyd stages trace bare soil patches, so the vegetated interception flux split is not dump-covered
+## 30. CLM dump: clm_canopyflux.csv ent/hyd stages trace bare soil patches, so the vegetated interception flux split is not dump-covered
 
 - **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
   `dump_canopyflux` — called with `num_soilp, filter_soilp` from
