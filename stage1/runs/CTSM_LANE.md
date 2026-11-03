@@ -109,7 +109,21 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
     (290/292 vars identical, 2 differ only in embedded path strings).
     bugs.md: SoilWaterMovementMod negative-h2osoi_liq print (endrun
     commented out) candidate entry.
-- **W3 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
+- **W3 — soiltemp dump extension (2026-11-03, lane wt/clm-soiltemp2).**
+  `dump_soiltemp` extended (clm `1c0d375dd` / superproject `687355c`):
+  per-layer tkmg/tkdry/watsat/csol, sabg_lyr_col, fn; per-column nbedrock,
+  frac_sno_fluxes, hs_top_snow, hs_soil, dhsdT, eflx_bot; the `zi` column
+  split into correctly-labelled `zi_top` = zi(j−1) and `zi_bot` = zi(j)
+  (the old column carried the interface *above* layer j — see the
+  clm_instrument.json `w3.zi_labelling_defect`). Rerun in-node `--no-batch`
+  in allocation 12027055 (LID 261103-111900); neutrality re-verified
+  bit-identical vs the I2000Clm60Sp_f19 reference restart (290/292 vars,
+  2 path-string-only diffs). NOTE: the fork checkout is shared with the
+  concurrent clm-surfalbedo lane; their clm `3d7038304` / superproject
+  `527ab5d` commits (surfalbedo albsnd/albsni + soil color + h2osoi_vol_1)
+  are the parents of the soiltemp W3 commits and their clm_dump_mod.F90
+  diff contains both lanes' dump changes.
+- **W4 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
   existing files, plus fixing the 2 invalid files).
 
 ## Risks
