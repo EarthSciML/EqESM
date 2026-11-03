@@ -29,5 +29,6 @@ Do not put files directly in /projects/.../ctessum, that is a shared directory w
 Key files: `PLAN.md` is the implementation plan (CESM inventory, stage playbooks, milestones); `PROGRESS.md` records what has been done, what was decided, and what is next; `bugs.md` is the centralized CESM bug list.
 
 For examples of other projects following the same approach, see:
+
 	* github.com/earthsciml/eqwefic
 	* github.com/earthsciml/eqice
