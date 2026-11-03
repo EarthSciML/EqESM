@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_surfalbedo",
-  "description": "CTSM/CLM ground surface albedo and the bare-ground shortwave partition (stage 2 of the EqESM project), transcribed from ctsm5.4.063 (cesm3.0-alphabranch). GroundAlbedo is SurfaceAlbedo's ground albedo chain: the SoilAlbedo soil law - the wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) and albsod = min(albsat + inc, albdry) with albsat/albdry the wet/dry soil albedo tables by color class and waveband (SurfaceAlbedoMod.F90:1244, 1249-1250; the mxsoil_color = 20 tables of F90:210-218, the active branch for the reference run's surfdata mxsoil_color = 20), albsoi = albsod (F90:1250) - and the snow/soil ground albedo blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo, albgri = albsoi*(1-frac_sno_albedo) + albsni*frac_sno_albedo (F90:816-817), with albsnd/albsni the SNICAR snow albedos (SnowSnicarMod; their computation is a separate component - here they are inputs). SurfaceRadiationBare is the bare-patch branch of SurfaceRadiation (SurfaceRadiationMod.F90:688-711, 897-899): with fabd = fabi = 0, ftdd = ftii = 1, ftid = 0 and albd = albgrd, albi = albgri (SurfaceAlbedoMod.F90:1118-1128) the absorbed/reflected partition sabv = 0, sabg = sum_ib [forc_solad_ib*(1-albgrd_ib) + forc_solai_ib*(1-albgri_ib)], sabg_soil = sum_ib [forc_solad_ib*(1-albsod_ib) + forc_solai_ib*(1-albsoi_ib)], sabg_snow = sum_ib [forc_solad_ib*(1-albsnd_ib) + forc_solai_ib*(1-albsni_ib)] (F90:707-708), fsa = sabv + sabg, fsr = sum_ib [albd_ib*forc_solad_ib + albi_ib*forc_solai_ib] and parveg = 0. Both models are the pointwise laws evaluated on the stage-2 skeleton (one column, one patch; the Fortran runs them per column/patch, SurfaceAlbedoMod.F90:201-218, 816-817, 1244-1250, SurfaceRadiationMod.F90:688-711), written scalar like the other table-using stage-2 law (cam_wv_saturation.esm): the surface-data color class is a scalar table query. The vegetation (two-stream) branch of SurfaceAlbedo/SurfaceRadiation is NOT traced by the stage-1 dumps (the traced patches are all bare: sabv = parveg = 0 on every clm_surfrad.csv row) and is therefore not implemented here; see README-clm-albedo.md for the dump extension the two-stream law would need. The pointwise laws are imported by reference from ./clm_templates.esm (soil_albedo_wetness, soil_albedo, ground_albedo_direct, ground_albedo_diffuse); the albsat/albdry color-class tables are transcribed from SurfaceAlbedoMod.F90:210-218 as function_tables (soil color class is the discrete table index, so interpolation is nearest). Tests pin the stage-1 CLM dumps (stage1/dumps/clm/): clm_surfalbedo.csv (kind=nourban rows; the kind=urban rows are the previous step's UrbanAlbedo sref output - UrbanAlbedoMod.F90:442-463 overrides albgrd for urban columns, so the soil/snow mixing law does not apply there and those rows pin no law of this component; see README-clm-albedo.md), clm_soiltemp.csv (exit j = 1 h2osoi_liq/h2osoi_ice/dz, the reconstruction source of the SoilAlbedo wetness input) and clm_surfrad.csv (bare-patch rows; the albedo inputs come from the previous step's clm_surfalbedo.csv row, since SurfaceRadiation runs before the doalb call of its step, SurfaceRadiationMod.F90:658 vs clm_driver.F90:1325-1364).",
+  "description": "CTSM/CLM ground surface albedo and the bare-ground shortwave partition (stage 2 of the EqESM project), transcribed from ctsm5.4.063 (cesm3.0-alphabranch). GroundAlbedo is SurfaceAlbedo's ground albedo chain: the SoilAlbedo soil law - the wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) and albsod = min(albsat + inc, albdry) with albsat/albdry the wet/dry soil albedo tables by color class and waveband (SurfaceAlbedoMod.F90:1244, 1249-1250; the mxsoil_color = 20 tables of F90:210-218, the active branch for the reference run's surfdata mxsoil_color = 20), albsoi = albsod (F90:1250) - and the snow/soil ground albedo blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo, albgri = albsoi*(1-frac_sno_albedo) + albsni*frac_sno_albedo (F90:816-817), with albsnd/albsni the SNICAR snow albedos (SnowSnicarMod; their computation is a separate component - here they are inputs). SurfaceRadiationBare is the bare-patch branch of SurfaceRadiation (SurfaceRadiationMod.F90:688-711, 897-899): with fabd = fabi = 0, ftdd = ftii = 1, ftid = 0 and albd = albgrd, albi = albgri (SurfaceAlbedoMod.F90:1118-1128) the absorbed/reflected partition sabv = 0, sabg = sum_ib [forc_solad_ib*(1-albgrd_ib) + forc_solai_ib*(1-albgri_ib)], sabg_soil = sum_ib [forc_solad_ib*(1-albsod_ib) + forc_solai_ib*(1-albsoi_ib)], sabg_snow = sum_ib [forc_solad_ib*(1-albsnd_ib) + forc_solai_ib*(1-albsni_ib)] (F90:707-708), fsa = sabv + sabg, fsr = sum_ib [albd_ib*forc_solad_ib + albi_ib*forc_solai_ib] and parveg = 0. Both models are the pointwise laws evaluated on the stage-2 skeleton (one column, one patch; the Fortran runs them per column/patch, SurfaceAlbedoMod.F90:201-218, 816-817, 1244-1250, SurfaceRadiationMod.F90:688-711), written scalar like the other table-using stage-2 law (cam_wv_saturation.esm): the surface-data color class is a scalar table query. The vegetation (two-stream) branch of SurfaceAlbedo/SurfaceRadiation is NOT traced by the stage-1 dumps (the traced patches are all bare: sabv = parveg = 0 on every clm_surfrad.csv row) and is therefore not implemented here; see README-clm-albedo.md for the dump extension the two-stream law would need. The pointwise laws are imported by reference from ./clm_templates.esm (soil_albedo_wetness, soil_albedo, ground_albedo_direct, ground_albedo_diffuse); the albsat/albdry color-class tables are transcribed from SurfaceAlbedoMod.F90:210-218 as function_tables (soil color class is the discrete table index, so interpolation is nearest). Tests pin the stage-1 CLM dumps (stage1/dumps/clm/, W3 regeneration, fork clm 3d7038304): clm_surfalbedo.csv (kind=nourban rows; the W3 extension adds the SNICAR albsnd/albsni, h2osoi_vol_1 and isoicol columns, so the soil-law inputs and the all-snow endpoint of the mixing law are pinned directly from the dump; the kind=urban rows are the previous step's UrbanAlbedo sref output - UrbanAlbedoMod.F90:442-463 overrides albgrd for urban columns, so the soil/snow mixing law does not apply there and those rows pin no law of this component; see README-clm-albedo.md) and clm_surfrad.csv (bare-patch rows; the albedo inputs come from the previous step's clm_surfalbedo.csv row, since SurfaceRadiation runs before the doalb call of its step, SurfaceRadiationMod.F90:658 vs clm_driver.F90:1325-1364).",
   "license": "MIT"
  },
  "function_tables": {
@@ -80,7 +80,7 @@
    "tests": [
     {
      "id": "clm_groundalbedo_soil_step2_c1",
-     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 2, column 1, kind=nourban): the column's soil color class is 10 (surfdata_1.9x2.5_hist_2000_78pfts_c251022.nc SOIL_COLOR = 10 on the traced gridcells, mxsoil_color = 20; class 10 is also the only color class consistent with the dumped albsod at the traced h2osoi_vol) and the top-layer volumetric soil water h2osoi_vol_1 = 0.1505 m3/m3 is reconstructed from clm_soiltemp.csv (step 2, exit, j = 1): h2osoi_liq = 0.01, h2osoi_ice = 2.751 kg/m2, dz = 0.02 m, evaluated as h2osoi_liq/(dz*denh2o) + h2osoi_ice/(dz*denice) (HydrologyNoDrainageMod.F90:580, denh2o = 1000, denice = 917 kg/m3); the traced columns' layer-1 water is unchanged across the hydrology call (soiltemp exit(step) == entry(step+1) bit-identical), so this is the value SoilAlbedo reads at the doalb call. Then inc = max(0.11 - 0.40*0.1505, 0) = 0.0498 (SurfaceAlbedoMod.F90:1244), albsod_vis = min(0.14 + 0.0498, 0.25) = 0.1898 and albsod_nir = min(0.28 + 0.0498, 0.39) = 0.3298 (F90:1249, class-10 albsat/albdry of F90:211-218), matching the dumped albsod_vis/albsod_nir = 1.89800000000000024E-01/3.29800000000000038E-01 to the last bit, and albsoi = albsod (F90:1250, dumped equal on every row).",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 2, column 1, kind=nourban): the W3 dump extension carries the law's inputs directly - h2osoi_vol_1 = 1.50499999999999995E-01 m3/m3 and isoicol = 10 on every nourban row (the same 0.1505 m3/m3 reconstructed from clm_soiltemp.csv exit j = 1 and the surfdata SOIL_COLOR = 10, mxsoil_color = 20; the reconstruction is still cited as the cross-check). Then inc = max(0.11 - 0.40*0.1505, 0) = 0.0498 (SurfaceAlbedoMod.F90:1244), albsod_vis = min(0.14 + 0.0498, 0.25) = 0.1898 and albsod_nir = min(0.28 + 0.0498, 0.39) = 0.3298 (F90:1249, class-10 albsat/albdry of F90:211-218), matching the dumped albsod_vis/albsod_nir = 1.89800000000000024E-01/3.29800000000000038E-01 to the last bit, and albsoi = albsod (F90:1250, dumped equal on every row).",
      "time_span": {"start": 0.0, "end": 0.0},
      "parameter_overrides": {
       "soilcol": 10,
@@ -101,7 +101,7 @@
     },
     {
      "id": "clm_groundalbedo_soil_step7_c8",
-     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 7, column 8, kind=nourban): the same color class 10 and reconstructed h2osoi_vol_1 = 0.1505 (clm_soiltemp.csv step 7, exit, j = 1: h2osoi_liq = 0.01, h2osoi_ice = 2.751, dz = 0.02) reproduce the dumped albsod_vis/albsod_nir (identical on all 176 nourban rows: the soil state and color class are constant across the traced columns and steps), with albsoi = albsod. Pins the same law at a different step/column of the dump.",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 7, column 8, kind=nourban): the dumped h2osoi_vol_1 = 0.1505 m3/m3 and isoicol = 10 (constant on all 176 nourban rows: the soil state and color class do not change across the traced columns and steps) reproduce the dumped albsod_vis/albsod_nir, with albsoi = albsod. Pins the same law at a different step/column of the dump.",
      "time_span": {"start": 0.0, "end": 0.0},
      "parameter_overrides": {
       "soilcol": 10,
@@ -117,7 +117,7 @@
     },
     {
      "id": "clm_groundalbedo_soil_step12_c16",
-     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 12, column 16, kind=nourban): the last traced step, same law and inputs as clm_groundalbedo_soil_step2_c1 (h2osoi_vol_1 = 0.1505 from clm_soiltemp.csv step 12, exit, j = 1).",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 12, column 16, kind=nourban): the last traced step, same law and inputs as clm_groundalbedo_soil_step2_c1 (dumped h2osoi_vol_1 = 0.1505 m3/m3 and isoicol = 10).",
      "time_span": {"start": 0.0, "end": 0.0},
      "parameter_overrides": {
       "soilcol": 10,
@@ -129,6 +129,48 @@
       {"variable": "albsod_nir", "time": 0.0, "expected": 0.32980000000000004},
       {"variable": "albsoi_vis", "time": 0.0, "expected": 0.18980000000000002},
       {"variable": "albsoi_nir", "time": 0.0, "expected": 0.32980000000000004}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_mix_allsnow_step2_c1",
+     "description": "Instantaneous pin of the snow/soil ground-albedo blend at its all-snow endpoint against clm_surfalbedo.csv (step 2, column 1, kind=nourban): the W3 dump extension adds the SNICAR snow albedos as columns, and on every nourban row the dumped albsnd_vis = albgrd_vis = 9.84056006521105808E-01, albsnd_nir = albgrd_nir = 7.07167867393178495E-01, albsni_vis = albgri_vis = 9.80136507492165632E-01 and albsni_nir = albgri_nir = 7.78258834298133695E-01 are bit-identical (all rows carry frac_sno_albedo = 1, so the F90:816-817 blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo reduces to albgrd = albsnd and albgri = albgri = albsni with the real SNICAR values; the dump's equality confirms there are no further contributions to albgrd/albgri on the traced bare columns). The blend interior (0 < frac_sno_albedo < 1) is not exercised by the dump; see README-clm-albedo.md.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505,
+      "frac_sno_albedo": 1.0,
+      "albsnd_vis": 9.84056006521105808e-01,
+      "albsnd_nir": 7.07167867393178495e-01,
+      "albsni_vis": 9.80136507492165632e-01,
+      "albsni_nir": 7.78258834298133695e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albgrd_vis", "time": 0.0, "expected": 9.84056006521105808e-01},
+      {"variable": "albgrd_nir", "time": 0.0, "expected": 7.07167867393178495e-01},
+      {"variable": "albgri_vis", "time": 0.0, "expected": 9.80136507492165632e-01},
+      {"variable": "albgri_nir", "time": 0.0, "expected": 7.78258834298133695e-01}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_mix_allsnow_step7_c8",
+     "description": "Instantaneous pin of the all-snow endpoint of the ground-albedo blend against clm_surfalbedo.csv (step 7, column 8, kind=nourban): the dumped albsnd/albsni columns of this row (albsnd_vis = albgrd_vis = 9.84760966905754653E-01, albsnd_nir = albgrd_nir = 7.14341884504990032E-01, albsni_vis = albgri_vis = 9.81119976149716355E-01, albsni_nir = albgri_nir = 7.85889504897399283E-01; the SNICAR snow albedo ages between steps, so these differ from the step-2 row) reproduce albgrd = albsnd and albgri = albsni at frac_sno_albedo = 1.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505,
+      "frac_sno_albedo": 1.0,
+      "albsnd_vis": 9.84760966905754653e-01,
+      "albsnd_nir": 7.14341884504990032e-01,
+      "albsni_vis": 9.81119976149716355e-01,
+      "albsni_nir": 7.85889504897399283e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albgrd_vis", "time": 0.0, "expected": 9.84760966905754653e-01},
+      {"variable": "albgrd_nir", "time": 0.0, "expected": 7.14341884504990032e-01},
+      {"variable": "albgri_vis", "time": 0.0, "expected": 9.81119976149716355e-01},
+      {"variable": "albgri_nir", "time": 0.0, "expected": 7.85889504897399283e-01}
      ]
     }
    ]
@@ -202,7 +244,7 @@
    "tests": [
     {
      "id": "clm_surfrad_bare_step3_p1",
-     "description": "Instantaneous pin of the bare-patch SurfaceRadiation partition against clm_surfrad.csv (step 3, patch 1): a bare patch (ptype = 0, sabv = parveg = 0 on every traced row) with the incident radiation of the step-3 row and the ground/soil albedos of clm_surfalbedo.csv step 2 (SurfaceRadiation runs before the doalb call of its step - clm_driver.F90:658 vs :1325-1364 - so step s uses the albedo computed at step s-1's doalb). Then sabg = forc_solad_vis*(1-albgrd_vis) + forc_solai_vis*(1-albgri_vis) + forc_solad_nir*(1-albgrd_nir) + forc_solai_nir*(1-albgri_nir) = 64.1493509908771570 W/m2, sabg_soil = 318.225002092635634 W/m2, fsa = sabv + sabg = sabg, fsr = albgrd_vis*forc_solad_vis + albgri_vis*forc_solai_vis + albgrd_nir*forc_solad_nir + albgri_nir*forc_solai_nir = 365.768237676828392 W/m2 (all matching the dumped values to round-off), sabg_snow = sabg because frac_sno_albedo = 1 makes albsnd_hst = albsnd = albgrd (SurfaceAlbedoMod.F90:816 with frac_sno_albedo = 1; the dumped sabg_snow equals sabg on all 192 rows), and sabv = parveg = 0 (dumped exactly).",
+     "description": "Instantaneous pin of the bare-patch SurfaceRadiation partition against clm_surfrad.csv (step 3, patch 1): a bare patch (ptype = 0, sabv = parveg = 0 on every traced row) with the incident radiation of the step-3 row and the ground/soil albedos of clm_surfalbedo.csv step 2 (SurfaceRadiation runs before the doalb call of its step - clm_driver.F90:658 vs :1325-1364 - so step s uses the albedo computed at step s-1's doalb). Then sabg = forc_solad_vis*(1-albgrd_vis) + forc_solai_vis*(1-albgri_vis) + forc_solad_nir*(1-albgrd_nir) + forc_solai_nir*(1-albgri_nir) = 64.1493509908771570 W/m2, sabg_soil = 318.225002092635634 W/m2, fsa = sabv + sabg = sabg, fsr = albgrd_vis*forc_solad_vis + albgri_vis*forc_solai_vis + albgrd_nir*forc_solad_nir + albgri_nir*forc_solai_nir = 365.768237676828392 W/m2 (all matching the dumped values to round-off), sabg_snow = sabg because frac_sno_albedo = 1 makes albsnd_hst = albsnd = albgrd (SurfaceAlbedoMod.F90:816 with frac_sno_albedo = 1; the W3 albsnd/albsni columns of the clm_surfalbedo.csv step-2 row equal albgrd/albgri bit-exactly, and the dumped sabg_snow equals sabg on all 192 rows), and sabv = parveg = 0 (dumped exactly).",
      "time_span": {"start": 0.0, "end": 0.0},
      "parameter_overrides": {
       "forc_solad_vis": 1.41440923402172501e+02,
