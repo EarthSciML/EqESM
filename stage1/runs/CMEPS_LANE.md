@@ -34,8 +34,8 @@ submodule on the same branch):
 | Commit (cmeps submodule) | Change |
 |---|---|
 | `10741c34` | dump header: `iter` column position fixed to right after `gid` (data write order); subnormal flush to 0.0 |
-| `4750efc5` | `es26.17e3` float format (gfortran `es26.17` omits the exponent letter, bugs.md #21); `rainc` fallback init `aoflux_in%rainc(1) = 0.0` (bugs.md #20) |
-| `bd88a843` | dump passes a sanitized `rainc` (= 0 when `add_gusts = .false.`) instead of the out-of-bounds `rainc(n)` read of the mediator's 1-element dummy array (bugs.md #20) |
+| `4750efc5` | `es26.17e3` float format (gfortran `es26.17` omits the exponent letter, bugs.md #29); `rainc` fallback init `aoflux_in%rainc(1) = 0.0` (bugs.md #28) |
+| `bd88a843` | dump passes a sanitized `rainc` (= 0 when `add_gusts = .false.`) instead of the out-of-bounds `rainc(n)` read of the mediator's 1-element dummy array (bugs.md #28) |
 
 Pointer commits in `EqESM-cesm-cmeps`: `5d367e0`, `0403cf3`, `735eb8b`.
 
@@ -66,7 +66,7 @@ pre-2m-rescale values (`hol0`/`xsq0`/`xqq0` of the instrumentation), `hol2`/`xsq
   all 5 updates unrolled, `conv_k = |(ustar_k − ustar_{k−1})/ustar_k| ≤ 0.01`
   (k = 1..4), `iter` = first converged k else 5, exit state selected by `iter`.
 - **Structure.** 2 header lines, 288 rows, 67 columns, zero wrong-arity rows,
-  zero NaN, zero spval-like values (`rainc = 0` on every row after the #20 fix).
+  zero NaN, zero spval-like values (`rainc = 0` on every row after the #28 fix).
 - **Coverage (and its limits).** All 288 rows are unstable Antarctic-coast cells
   with low-to-moderate wind: `hol ∈ [−10.0, −1.16]` (21 rows pinned at the
   |hol| ≤ 10 clamp), `vmag ∈ [0.5, 4.8]` m/s (17 rows pinned at the minwind
@@ -96,11 +96,11 @@ pre-2m-rescale values (`hol0`/`xsq0`/`xqq0` of the instrumentation), `hol2`/`xsq
 
 ## Bugs found in the CESM code
 
-- bugs.md #20: `med_phases_aofluxes_mod.F90` `set_aoflux_in_pointers` allocates
+- bugs.md #28: `med_phases_aofluxes_mod.F90` `set_aoflux_in_pointers` allocates
   `aoflux_in%rainc(1)` uninitialized when `add_gusts = .false.` (benign in
   pristine code — rainc is never read on the no-gusts path — but the dump
   exposed it as an out-of-bounds read).
-- bugs.md #21: gfortran `es26.17` omits the exponent letter for subnormals and
+- bugs.md #29: gfortran `es26.17` omits the exponent letter for subnormals and
   3-digit exponents (unparseable CSV); `es26.17e3` fixed.
 
 ## Status

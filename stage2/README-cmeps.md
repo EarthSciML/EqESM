@@ -96,7 +96,7 @@ stresses N/m²; fluxes W/m²; water flux kg/m²/s.
    so the representation is pinned, not just the laws.
 2. **rainc unused.** With `add_gusts = .false.` the physics never reads rainc;
    the stage-1 dump sanitizes it to 0 after the mediator's 1-element dummy
-   allocation was exposed as an out-of-bounds read (bugs.md #20). The
+   allocation was exposed as an out-of-bounds read (bugs.md #28). The
    gustiness law `ugust(min(rainc, 6.94444e-4))` of F90:197-202 is not
    transcribed (no dump coverage); `ugust = 0` is a plain equation.
 3. **Coverage limits.** All 288 dump rows are unstable Antarctic-coast cells
