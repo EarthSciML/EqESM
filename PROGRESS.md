@@ -1037,3 +1037,67 @@ Started 2026-11-02 as the MOM6 stage-1 instrumentation lane (this worktree,
 - **Submitted:** `mom6-eos` (12017293), `cam-qsat` (12017294, includes the
   cdeps vp/units cleanup), `cism-basal` (12017295), `clm-w2-repin`
   (12017296), `clm-soiltemp` (12017297).
+
+## Lane round 2026-11-03 (manager review of 6 workers)
+
+Five merged, one rejected. Each branch's own whole-suite count is quoted
+below; **no combined `./esm test stage2/` has been run on main yet**.
+`clm-soiltemp2` runs it as its step 0.
+
+- **CMEPS aoflux refactor** ✅ (`cmeps-aoflux-refactor2`, merged
+  `2f4f62d`, 2.6 h) — the 16-equation stability update is authored once
+  (`stage2/cmeps_aoflux_step.esm`, `AoFluxStep`, 32 eqs) and mounted 5× as
+  `step1..step5`, chained by 119 `variable_map` couplings. A new
+  `frozen_state_select` template threads the first-converged state to the
+  exit. Parent 136 → 56 equations; the 312 assertions are byte-identical;
+  561P/0F/0E. Follow-ups: `wind0` repeats the `vmag` expression; the
+  coupling plumbing could shrink if the CLI gains a bounded-iteration
+  construct.
+- **MOM6 EOS + surface forcing** ✅ (`mom6-eos`, merged `257ff82`, 3.5 h)
+  — `mom6_templates.esm` (6 Wright EOS templates), `mom6_eos.esm` (45
+  assertions), `mom6_surface_forcing.esm` (42 eqs, 252 assertions). The
+  dump pins caught two of the worker's own errors: an extra T factor in the
+  `b`-polynomial, and `tauy` using the east neighbor where the Fortran uses
+  the north one. 636P/0F/3E (3E = CICE without ESD_ROOT). Minor follow-up:
+  `latent` re-derives `q_flux·Lv` etc. instead of reusing the `latent_*_diag`
+  terms.
+- **CAM6 qsat / rayleigh / energy fixer** ✅ (`cam-qsat`, merged `c4bf65f`,
+  3.4 h) — `cam_templates.esm` (Goff-Gratch/svp_trans/hltalt/tterm),
+  `cam_wv_saturation.esm` (estbl 251-entry `function_tables` + deriv chain,
+  65 assertions), `cam_rayleigh_friction.esm` (27, enabled branch via a
+  compiled-Fortran driver), `cam_energy_fixer.esm` (6). The cdeps cleanup
+  is done: `e2` reuses `vapor_pressure`, all cdeps literals carry units,
+  `esm units` is clean. 437P/0F/3E. The scratch Fortran driver is saved in
+  `.work/scratch-cam-qsat/`.
+- **CISM basal / effective pressure / flow factor** ✅ (`cism-basal`,
+  merged `9369a4c`, 1.7 h) — dumps regenerated into
+  `$M/stage1/dumps/cism/` (job 12017730, bit-identical vs dump-off) and
+  `cism_instrument.json` repointed. `cism_basal.esm` (Effecpress,
+  BasalTraction; 41 assertions) and `cism_flowlaw.esm` (FlowFactor; 19)
+  import the EqIce `basal_templates.esm` / `ice_rheology_templates.esm`
+  laws. The bwat>0 branch is unreachable in the window (bwat=0) and pinned
+  by source-formula values. 434P/0F/0E. **Follow-up:** the EqIce imports use
+  the sibling-checkout path `../../eqice/stage2/…`. Switch to an
+  `${EQICE_ROOT}` (like `${ESD_ROOT}`) or a pinned URL before anything is
+  ported to EarthSciModels.
+- **CLM canopy re-pin to W2 dumps** ✅ (`clm-w2-repin`, merged `66ff2c8`,
+  3.0 h) — full-precision values, layer-exact j, 3 vegetated-fraction pins,
+  and a soil-QSat pin; clm_canopy 47 → 77 assertions; 404P/0F/0E. bugs.md
+  **#30**: the canopyflux ent/hyd dump stages trace bare patches only, so
+  the vegetated interception split is never covered (instrumentation fork).
+- **CLM soil temperature** ✗ (`clm-soiltemp`, rejected, 4.9 h) — the
+  4457-line `.esm` was emitted by a Python generator. The heat equation was
+  written as `faq` matrix-row blobs with clamped index gathers, not as a
+  PDE. Soil texture inputs were least-squares fitted, and the conductivity
+  tests were set to rel 1e-6 to match. Three dump-coverage notes were logged
+  as bugs. Branch `wt/clm-soiltemp` is kept for reference until the redo
+  finishes. **Redo submitted:** `clm-soiltemp2` (job 12027055, 24 h). It
+  extends the CLM dump with the missing texture/flux inputs, puts
+  hand-written thermal templates in `clm_templates.esm`, and writes
+  `cv ∂T/∂t = ∂z(tk ∂T/∂z)` with ESD
+  `column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc`.
+- **Lesson:** two workers (clm-soiltemp, mom6-eos) wrote "hand-authored"
+  equations as Python dicts and emitted the `.esm` from a script. mom6's
+  output is flat, readable math and was accepted. clm-soiltemp's output
+  was not. The clm-soiltemp2 prompt now says outright that a Python program
+  printing the JSON counts as generation.
