@@ -219,3 +219,19 @@ Format template:
 - **Status:** open (numerical-precision note; no code change proposed — tightening the tolerance would only cost runtime).
 - **Note (2026-11-01):** renumbered from #13 to #19 when the CICE lowering bugs (#13-#18) landed from the same numbering space.
 
+
+## 20. CMEPS: aoflux rainc fallback allocation is uninitialized when add_gusts=.false.
+
+- **Location:** `components/cmeps/mediator/med_phases_aofluxes_mod.F90:1616-1622` (`set_aoflux_in_pointers`).
+- **Description:** when `add_gusts` is false the code allocates the `aoflux_in%rainc` pointer with `allocate(aoflux_in%rainc(1))` and never initializes it, so `aoflux_in%rainc(1)` is an uninitialized allocation. In the pristine code this is benign (rainc is never read on the no-gusts path — `flux_atmOcn_large` only touches it inside `if (add_gusts)`), but the stage-1 dump traces rainc as a boundary input and read garbage: values seen across runs include a subnormal 1.27887920104815652e-315 and a 2.5e180 (both unparseable with gfortran es26.17, see #21).
+- **Impact on results:** none on the coupled model (rainc unused without gusts); affects only the instrumentation dump's rainc column.
+- **Reproduced/corrected in .esm:** n/a (fork-only). Patched in the fork (med_phases_aofluxes_mod.F90, commit 4750efc5): the fallback allocation is initialized to 0.0, so the dump writes rainc = 0 for the no-gusts C_JRA_t62 run.
+- **Status:** patched locally (fork); benign in pristine code.
+
+## 21. gfortran es26.17 omits the exponent letter for subnormals and 3-digit exponents
+
+- **Location:** toolchain — gfortran (GNU Fortran) list-directed-free formatted output; triggered by the stage-1 CMEPS dump (`med_dump_mod.F90`).
+- **Description:** gfortran's `es26.17` writes subnormal values (|x| < 2.2e-308) as e.g. `1.27887920104815652-315` and values with 3-digit exponents (|x| >= 1e100) as e.g. `2.51968629031625108+180`, both without the `E` — unparseable by standard CSV/float readers. `es26.17e3` always prints the exponent letter (reproduced with a 12-line standalone test).
+- **Impact on results:** none on the model; breaks machine-readable dumps when such values occur (rainc garbage per #20 triggered the large-exponent case).
+- **Reproduced/corrected in .esm:** n/a (toolchain). Fork patched (med_dump_mod.F90, commit 4750efc5): dump writes `es26.17e3` and flushes subnormals to 0.0.
+- **Status:** patched locally (fork); open upstream.
