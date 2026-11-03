@@ -932,11 +932,6 @@ existing EarthSciModels land/urban corpus is **presumptively unverified**.
   now that l=255 is fully traced; (c) next CTSM slices (soil temperature
   solve from `clm_soiltemp`, bare-ground / canopy fluxes).
 
-- **Next (W2 cont.)** — verify the remaining CLMU leaves (`temps/`, `hydro/`,
-  `clmu_atmosphere`, `offline_mode_forcing`) after extending the dump slice
-  to urban thermal/hydrology + snow/soil/canopy; then the remaining CTSM
-  slices + `stage2/clm_*.esm` skeletons (W1b, `wt/stage2-clm`).
-
 ## MOM6 lane (M7 stage-1) — see `stage1/runs/MOM6_LANE.md`
 
 Started 2026-11-02 as the MOM6 stage-1 instrumentation lane (this worktree,
