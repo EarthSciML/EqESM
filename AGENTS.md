@@ -30,5 +30,6 @@ Key files: `PLAN.md` is the implementation plan (CESM inventory, stage playbooks
 
 For examples of other projects following the same approach, see:
 
-	* github.com/earthsciml/eqwefic
-	* github.com/earthsciml/eqice
+* github.com/earthsciml/eqwefic
+* github.com/earthsciml/eqice
+* github.com/earthsciml/eqesm
