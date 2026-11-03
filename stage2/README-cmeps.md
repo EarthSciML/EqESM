@@ -28,12 +28,13 @@ so the analytic form is used, not the lookup table), `flux_convergence = 0.01`,
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `cmeps_templates.esm` | Expression-template library (11 templates): the Goff & Gratch (1946) liquid-water saturation vapor pressure (`shr_wv_sat_mod.F90:942-956`) and the epsilo·es/(p−omeps·es) saturation-humidity conversion with the p ≤ es guard (`F90:351-363`), the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764·min(33,U) − 3.14807e-13·min(33,U)⁶ (`flux_atmocn_Large.F90:153-154`), the Paulson (1970) unstable psimhu/psixhu (`F90:163-164`), the combined stable/unstable psi_m/psi_h (`F90:258-259`), the Monin-Obukhov stability parameter with the sign-preserving |hol| ≤ 10 clamp (`F90:252-254`), the exchange-coefficient height shift c/(1 + c/karman·(alz − psi)) (`F90:282-284`) and its clamped variant with max(..., −0.5) used for the wind-speed shift (`F90:272`), and the neutral heat coefficient (1−stable)·0.0327 + stable·0.018 (`F90:238`) | `flux_atmocn_Large.F90`, `shr_wv_sat_mod.F90` |
-| `cmeps_aoflux.esm` | Model `AoFlux` — the full pointwise chain, 136 equations: the 12 raw inputs; the derived inputs vmag/wind0 (minwind-clamped relative wind, gustiness absent so vmag = wind0), esat_raw/esat (the min(es, pslv) cap), qsat (from the RAW es, as shr_wv_sat_qsat_liquid calls svp_to_qsat before the cap), ssq = 0.98·qsat, delt, delq, alz, cp; the neutral first estimates stable0/rdn0/rhn0/ren0/ustar0/tstar0/qstar0 (`F90:236-244`); the stability iteration unrolled to 5 updates (`F90:242-290`, 16 states per update: hol, stable, xsq, xqq, psimh, psixh, the clamped wind-shift rdw, u10n, rdn, rhn, rd, rh, re, ustar, tstar, qstar) with the convergence flags conv_1..4 and iter and the 16 exit-state selections (hol, stable, xsq, xqq, psimh, psixh, rd, u10n, rdn, rhn, ren, rh, re, ustar, tstar, qstar); the 7 fluxes (`F90:299-311`); the 10 diagnostics (`F90:316-333`) | `flux_atmocn_Large.F90` |
+| `cmeps_templates.esm` | Expression-template library (12 templates): the Goff & Gratch (1946) liquid-water saturation vapor pressure (`shr_wv_sat_mod.F90:942-956`) and the epsilo·es/(p−omeps·es) saturation-humidity conversion with the p ≤ es guard (`F90:351-363`), the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764·min(33,U) − 3.14807e-13·min(33,U)⁶ (`flux_atmocn_Large.F90:153-154`), the Paulson (1970) unstable psimhu/psixhu (`F90:163-164`), the combined stable/unstable psi_m/psi_h (`F90:258-259`), the Monin-Obukhov stability parameter with the sign-preserving |hol| ≤ 10 clamp (`F90:252-254`), the exchange-coefficient height shift c/(1 + c/karman·(alz − psi)) (`F90:282-284`) and its clamped variant with max(..., −0.5) used for the wind-speed shift (`F90:272`), the neutral heat coefficient (1−stable)·0.0327 + stable·0.018 (`F90:238`), and the frozen-state selection (first-converged state pinning for the composed iteration) | `flux_atmocn_Large.F90`, `shr_wv_sat_mod.F90` |
+| `cmeps_aoflux_step.esm` | Model `AoFluxStep` — ONE pass of the stability do-while (`F90:242-290`), authored once and mounted 5× by reference (models.step1..step5 of `cmeps_aoflux.esm`): 32 equations = the 16 update states (hol, stable, xsq, xqq, psimh, psixh, the clamped wind-shift rdw, u10n, rdn, rhn, rd, rh, re, ustar, tstar, qstar), the per-update convergence flag conv = |(ustar − ustar_prev)/ustar| ≤ 0.01, and 15 frozen-state fields pinning the first-converged state (via the `frozen_state_select` template); 28 parameters = the 7 fixed pointwise fields (vmag, delt, delq, alz, zbot, thbot, qbot) + ren, the previous state (ustar_prev, tstar_prev, qstar_prev, rdn_prev), conv_prev, and the 15 frozen prev fields | `flux_atmocn_Large.F90` |
+| `cmeps_aoflux.esm` | Model `AoFlux` — the full pointwise chain, composed: 56 equations = the 12 raw inputs; the derived inputs vmag/wind0 (minwind-clamped relative wind, gustiness absent so vmag = wind0), esat_raw/esat (the min(es, pslv) cap), qsat (from the RAW es, as shr_wv_sat_qsat_liquid calls svp_to_qsat before the cap), ssq = 0.98·qsat, delt, delq, alz, cp; the neutral first estimates stable0/rdn0/rhn0/ren0/ustar0/tstar0/qstar0 (`F90:236-244`); the convergence representation conv_1..4 = step1..4.conv and iter = first converged k, else 5; the 16 exit-state fields = the 15 step5.frozen_* fields + ren (the iteration of `F90:242-290` is reproduced by the 5 top-level mounts of `./cmeps_aoflux_step.esm` chained by 119 variable_map couplings: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state/conv/frozen fields feed the next, the 7 fixed fields feed every step); the 7 fluxes (`F90:299-311`); the 10 diagnostics (`F90:316-333`) | `flux_atmocn_Large.F90` |
 
 The `ren = 0.0346` water coefficient is constant across the iteration and is
-carried once (`ren0`, the final `ren`, and all five `re_k` shifts bind the same
-0.0346 value).
+carried once (`ren0`, the final `ren`, and each AoFluxStep mount's `ren`
+parameter bind the same 0.0346 value; the parameter is not coupled).
 
 ## Units
 
@@ -84,16 +85,48 @@ stresses N/m²; fluxes W/m²; water flux kg/m²/s.
 
 ## Documented divergences (all annotated in file metadata)
 
-1. **Iteration unrolled and exit-selected.** The Fortran do-while of F90:242-290
-   runs until |(ustar − ustar_prev)/ustar| ≤ flux_convergence (checked after
-   each update, at most flux_max_iteration = 5). esm 1.3.0 has no loop
-   construct, so the component unrolls all 5 updates unconditionally, carries
-   the per-update convergence flags `conv_k = |(ustar_k − ustar_{k−1})/ustar_k|
-   ≤ 0.01` (k = 1..4), defines `iter` = the first converged k, else 5, and
-   selects the 16 exit-state fields by nested `ifelse` on `iter`. The stage-1
-   replay (`stage1/analysis/validate_cmeps_dump.py`) mirrors this exact
-   structure and reproduces the dumped `iter` and exit state on all 288 rows,
-   so the representation is pinned, not just the laws.
+1. **Iteration unrolled and exit-selected, composed by reference.** The
+   Fortran do-while of F90:242-290 runs until |(ustar − ustar_prev)/ustar| ≤
+   flux_convergence (checked after each update, at most flux_max_iteration =
+   5). esm 1.3.0 has no loop construct, so the 16-equation update law is
+   authored ONCE in the one-step model `AoFluxStep` (`cmeps_aoflux_step.esm`)
+   and mounted five times by reference in `AoFlux` as top-level models
+   step1..step5 (esm-spec §4.7), chained by variable_map couplings. Each mount
+   threads the previous state (ustar/tstar/qstar/rdn), the previous
+   convergence flag, and 15 frozen-state fields that pin the FIRST-converged
+   state: the Fortran exits at the first passing update, and the iteration
+   states do not repeat after convergence (ustar_2 differs from ustar_4 at the
+   1.8e-4 level on the pinned rows), so the exit selection must carry the
+   converged values forward through the remaining mounts
+   (`frozen_state_select` in `cmeps_templates.esm`). The parent exposes the
+   same external names as the pre-refactor unrolled model, so the pinned tests
+   are unchanged: `conv_1..4 = step1..4.conv`, `iter` = the first converged k,
+   else 5, and the 16 exit-state fields = the 15 `step5.frozen_*` fields +
+   ren. The all-5-iterations case keeps conv_prev = 0 throughout, so the fresh
+   5th-update values are selected — exactly what the do-while leaves in the
+   iteration variables after its final pass. The stage-1 replay
+   (`stage1/analysis/validate_cmeps_dump.py`) mirrors this exact structure and
+   reproduces the dumped `iter` and exit state on all 288 rows, so the
+   representation is pinned, not just the laws.
+   - **Why top-level mounts and not subsystems.** The pinned CLI (esm 0.7.0)
+     silently drops variable_map couplings whose targets live under
+     `subsystems` in the single-top-level-model build path
+     (`build_array_compiled` builds via `from_file` when the document has one
+     top-level model and applies couplings only when flattening documents
+     with several top-level models). Probes in `scratch/` confirmed the §4.7
+     top-level form works (`probe_toplevel.esm`, 8/8) while the subsystem form
+     leaves values at their defaults.
+   - **Why not a coupled recurrence.** A direct coupled-recurrence formulation
+     (each update referencing the previous update through the mount boundary)
+     trips the §4.9.6 cycle rule; the CLI reports: `Observed dependency cycle:
+     x -> y -> x. Each of these observed variables is defined in terms of the
+     next, so no evaluation order satisfies every definition (esm-spec
+     §4.9.6). Break the cycle by splitting one observed into a pre-value and a
+     post-value.` The step model therefore splits every chained state into a
+     pre-value parameter (x_prev) and a post-value unknown (x) — precisely the
+     split the rule prescribes. `scratch/recur_probe2.esm` is the minimal
+     failing probe (a single-variable recurrence, `scratch/recur_probe.esm`,
+     passes 4/4, but the coupled multi-variable form does not).
 2. **rainc unused.** With `add_gusts = .false.` the physics never reads rainc;
    the stage-1 dump sanitizes it to 0 after the mediator's 1-element dummy
    allocation was exposed as an out-of-bounds read (bugs.md #28). The
@@ -118,8 +151,11 @@ stresses N/m²; fluxes W/m²; water flux kg/m²/s.
 The stage-2 `tests` block pins the stage-1 instrumentation dump
 (`stage1/dumps/cmeps/cmeps_aoflux.csv`) with instantaneous laws
 (`time_span {0,0}`, MOSART pattern): 6 tests × 52 assertions = 312 assertions,
-all `rel 1e-12`. Run `./esm test stage2/` for the full suite (561 assertions
-with the MOSART/CICE lanes; this component needs no `ESD_ROOT`).
+all `rel 1e-12`, byte-identical to the pre-refactor unrolled model (the
+composition keeps the same external variable names). The full stage-2 suite —
+`./esm test` on `cmeps_aoflux.esm` plus the CICE and MOSART files — reports
+561 assertions (312 aoflux + 249 CICE/MOSART); this component needs no
+`ESD_ROOT`.
 
 | test | dump row (step, gid) | what is pinned |
 |---|---|---|

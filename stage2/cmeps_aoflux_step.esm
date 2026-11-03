@@ -1,0 +1,828 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cmeps_aoflux_step",
+  "description": "One-step update of the CMEPS atmosphere-ocean stability iteration (stage 2 of the EqESM project): a single pass of the do-while of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90:242-290 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly and mounted five times by reference in cmeps_aoflux.esm (top-level models.step1..step5, esm-spec section 4.7) so the 16-equation update law is authored once and the unrolled iteration is composed. Inputs are the update-invariant pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot (the wind magnitude, the temperature and humidity differences, the height logarithm ln(zbot/10) and the Monin-Obukhov inputs of F90:252-254) and the water coefficient ren = 0.0346 (constant across the iteration, F90:277), the previous update's state (ustar_prev/tstar_prev/qstar_prev feeding the stability parameter and the convergence test |(ustar - ustar_prev)/ustar| <= flux_convergence = 0.01 of F90:286-287, and rdn_prev, the pre-update neutral drag used by the clamped wind shift rdw of F90:272; the heat coefficient rhn is recomputed from this update's stability each pass, F90:278, so no rhn_prev is needed), the previous convergence flag conv_prev, and the 15 previous frozen-state fields. Outputs are the 16 update states (hol, stable, xsq, xqq, psimh, psixh, rdw, u10n, rdn, rhn, rd, rh, re, ustar, tstar, qstar), this update's own convergence flag conv, and 15 frozen-state fields that pin the first-converged state (frozen_state_select: once conv_prev = 1 the frozen fields stop updating, so the 5th mount's frozen outputs are exactly the state the Fortran leaves in the iteration variables when the do-while exits, and the all-5-iterations case leaves the fresh 5th-update values). The frozen threading is required because the iteration states do not repeat after convergence (ustar_2 differs from ustar_4 at the 1.8e-4 level on the pinned rows) while the dump pins the first-converged state. The expression templates of ./cmeps_templates.esm are imported by reference."
+ },
+ "models": {
+  "AoFluxStep": {
+   "expression_template_imports": [
+    { "ref": "./cmeps_templates.esm" }
+   ],
+   "variables": {
+    "vmag": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 2.7173990384428897,
+     "description": "wind magnitude used in the update (F90:193-196), coupled from the parent for every mount, [m/s]"
+    },
+    "delt": {
+     "type": "parameter",
+     "units": "K",
+     "default": -3.3865700201501454,
+     "description": "potential temperature difference thbot - ts (F90:223), coupled from the parent for every mount, [K]"
+    },
+    "delq": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": -0.0022648194698895925,
+     "description": "specific humidity difference qbot - ssq (F90:224), coupled from the parent for every mount, [kg/kg]"
+    },
+    "alz": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ln(zbot/zref) with zref = 10 m (F90:225), coupled from the parent for every mount, [-]"
+    },
+    "zbot": {
+     "type": "parameter",
+     "units": "m",
+     "default": 10.0,
+     "description": "height of the lowest atmosphere model level (F90:56), used by the Monin-Obukhov stability parameter of F90:252-254, coupled from the parent for every mount, [m]"
+    },
+    "thbot": {
+     "type": "parameter",
+     "units": "K",
+     "default": 271.666139623882,
+     "description": "potential temperature at zbot (F90:59), used by the Monin-Obukhov stability parameter, coupled from the parent for every mount, [K]"
+    },
+    "qbot": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0020241880033025007,
+     "description": "specific humidity at zbot (F90:60), used by the Monin-Obukhov stability parameter, coupled from the parent for every mount, [kg/kg]"
+    },
+    "ren": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0346,
+     "description": "neutral 10-m sqrt water exchange coefficient = 0.0346, constant across the iteration (F90:277), not coupled (the parent carries the same constant), [-]"
+    },
+    "ustar_prev": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.09959207536705793,
+     "description": "previous update's friction velocity (ustar0 for the 1st mount, ustar_{k-1} for the k-th): input of the stability parameter and of the convergence test |(ustar - ustar_prev)/ustar| <= 0.01 (F90:286-287), [m/s]"
+    },
+    "tstar_prev": {
+     "type": "parameter",
+     "units": "K",
+     "default": -0.11074083965890975,
+     "description": "previous update's friction temperature (tstar0 for the 1st mount), input of the stability parameter of F90:252-254, [K]"
+    },
+    "qstar_prev": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": -7.83627536581799e-05,
+     "description": "previous update's friction humidity (qstar0 for the 1st mount), input of the stability parameter of F90:252-254, [kg/kg]"
+    },
+    "rdn_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.03664977942441817,
+     "description": "pre-update neutral 10-m sqrt drag coefficient (rdn0 for the 1st mount, rdn_{k-1} for the k-th): used by the clamped wind shift rdw of F90:272 and the 10-m neutral wind u10n = vmag*rdw/rdn_prev of F90:273, [-]"
+    },
+    "conv_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous update's convergence flag (0 for the 1st mount, conv_{k-1} for the k-th): when 1, the frozen-state fields stop updating and carry the first-converged state, [-]"
+    },
+    "frozen_hol_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state Monin-Obukhov stability parameter, [-]"
+    },
+    "frozen_stable_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state stability factor, [-]"
+    },
+    "frozen_xsq_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state sqrt(|1 - 16*hol|) floored at 1, [-]"
+    },
+    "frozen_xqq_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state sqrt(xsq), [-]"
+    },
+    "frozen_psimh_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state momentum stability function at zbot, [-]"
+    },
+    "frozen_psixh_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state scalar stability function at zbot, [-]"
+    },
+    "frozen_rd_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state sqrt momentum exchange coefficient at zbot, [-]"
+    },
+    "frozen_u10n_prev": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "previous frozen-state 10-m neutral wind, [m/s]"
+    },
+    "frozen_rdn_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state neutral 10-m sqrt drag coefficient, [-]"
+    },
+    "frozen_rhn_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state neutral 10-m sqrt heat coefficient, [-]"
+    },
+    "frozen_rh_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state sqrt heat exchange coefficient at zbot, [-]"
+    },
+    "frozen_re_prev": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous frozen-state sqrt water exchange coefficient at zbot, [-]"
+    },
+    "frozen_ustar_prev": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "previous frozen-state friction velocity, [m/s]"
+    },
+    "frozen_tstar_prev": {
+     "type": "parameter",
+     "units": "K",
+     "default": 0.0,
+     "description": "previous frozen-state friction temperature, [K]"
+    },
+    "frozen_qstar_prev": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "previous frozen-state friction humidity, [kg/kg]"
+    },
+    "hol": {
+     "type": "unknown",
+     "units": "1",
+     "description": "Monin-Obukhov stability parameter z/L at zbot of this update (F90:252-254), computed from the previous update's state, [-]"
+    },
+    "stable": {
+     "type": "unknown",
+     "units": "1",
+     "description": "stability factor of this update (F90:255), 1 stable / 0 unstable, [-]"
+    },
+    "xsq": {
+     "type": "unknown",
+     "units": "1",
+     "description": "sqrt(|1 - 16*hol|) floored at 1 of this update (F90:256), [-]"
+    },
+    "xqq": {
+     "type": "unknown",
+     "units": "1",
+     "description": "sqrt(xsq), the Paulson function argument, of this update (F90:257), [-]"
+    },
+    "psimh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "momentum stability function at zbot of this update (F90:258), [-]"
+    },
+    "psixh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "scalar (heat/water) stability function at zbot of this update (F90:259), [-]"
+    },
+    "rdw": {
+     "type": "unknown",
+     "units": "1",
+     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp of this update (F90:272), computed from the pre-update rdn_prev, [-]"
+    },
+    "u10n": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "10-m neutral wind from the pre-update drag coefficient of this update (F90:273), [m/s]"
+    },
+    "rdn": {
+     "type": "unknown",
+     "units": "1",
+     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)) of this update (F90:276), [-]"
+    },
+    "rhn": {
+     "type": "unknown",
+     "units": "1",
+     "description": "updated neutral 10-m sqrt heat coefficient of this update (F90:278), recomputed from this update's stability, [-]"
+    },
+    "rd": {
+     "type": "unknown",
+     "units": "1",
+     "description": "sqrt momentum exchange coefficient shifted to zbot of this update (F90:282), [-]"
+    },
+    "rh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "sqrt heat exchange coefficient shifted to zbot of this update (F90:283), [-]"
+    },
+    "re": {
+     "type": "unknown",
+     "units": "1",
+     "description": "sqrt water exchange coefficient shifted to zbot of this update (F90:284), [-]"
+    },
+    "ustar": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "friction velocity rd*vmag of this update (F90:286), [m/s]"
+    },
+    "tstar": {
+     "type": "unknown",
+     "units": "K",
+     "description": "friction temperature rh*delt of this update (F90:287), [K]"
+    },
+    "qstar": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "friction humidity re*delq of this update (F90:288), [kg/kg]"
+    },
+    "conv": {
+     "type": "unknown",
+     "units": "1",
+     "description": "convergence flag of this update: |(ustar - ustar_prev)/ustar| <= flux_convergence = 0.01 (the Fortran exit test of F90:286-287), 1 converged / 0 not, [-]"
+    },
+    "frozen_hol": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state Monin-Obukhov stability parameter: hol of the first-converged update, carried unchanged by the subsequent updates (frozen_state_select on conv_prev), [-]"
+    },
+    "frozen_stable": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state stability factor of the first-converged update, [-]"
+    },
+    "frozen_xsq": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state sqrt(|1 - 16*hol|) floored at 1 of the first-converged update, [-]"
+    },
+    "frozen_xqq": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state sqrt(xsq) of the first-converged update, [-]"
+    },
+    "frozen_psimh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state momentum stability function at zbot of the first-converged update, [-]"
+    },
+    "frozen_psixh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state scalar stability function at zbot of the first-converged update, [-]"
+    },
+    "frozen_rd": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state sqrt momentum exchange coefficient at zbot of the first-converged update, [-]"
+    },
+    "frozen_u10n": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "frozen-state 10-m neutral wind of the first-converged update, [m/s]"
+    },
+    "frozen_rdn": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state neutral 10-m sqrt drag coefficient of the first-converged update, [-]"
+    },
+    "frozen_rhn": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state neutral 10-m sqrt heat coefficient of the first-converged update, [-]"
+    },
+    "frozen_rh": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state sqrt heat exchange coefficient at zbot of the first-converged update, [-]"
+    },
+    "frozen_re": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state sqrt water exchange coefficient at zbot of the first-converged update, [-]"
+    },
+    "frozen_ustar": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "frozen-state friction velocity of the first-converged update, [m/s]"
+    },
+    "frozen_tstar": {
+     "type": "unknown",
+     "units": "K",
+     "description": "frozen-state friction temperature of the first-converged update, [K]"
+    },
+    "frozen_qstar": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "frozen-state friction humidity of the first-converged update, [kg/kg]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "hol",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "stability_parameter",
+      "bindings": {
+       "ustar": "ustar_prev",
+       "tstar": "tstar_prev",
+       "qstar": "qstar_prev",
+       "thbot": "thbot",
+       "qbot": "qbot",
+       "zbot": "zbot"
+      }
+     }
+    },
+    {
+     "lhs": "stable",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">=",
+        "args": [
+         "hol",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "xsq",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "sqrt",
+        "args": [
+         {
+          "op": "abs",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 16.0,
+                "units": "1"
+               },
+               "hol"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "xqq",
+     "rhs": {
+      "op": "sqrt",
+      "args": ["xsq"]
+     }
+    },
+    {
+     "lhs": "psimh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "psi_momentum",
+      "bindings": {
+       "hol": "hol",
+       "stable": "stable",
+       "xqq": "xqq"
+      }
+     }
+    },
+    {
+     "lhs": "psixh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "psi_scalar",
+      "bindings": {
+       "hol": "hol",
+       "stable": "stable",
+       "xqq": "xqq"
+      }
+     }
+    },
+    {
+     "lhs": "rdw",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "exchange_coefficient_shift_clamped",
+      "bindings": {
+       "c": "rdn_prev",
+       "alz": "alz",
+       "psi": "psimh"
+      }
+     }
+    },
+    {
+     "lhs": "u10n",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": ["vmag", "rdw"]
+       },
+       "rdn_prev"
+      ]
+     }
+    },
+    {
+     "lhs": "rdn",
+     "rhs": {
+      "op": "sqrt",
+      "args": [
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "neutral_drag_coefficient",
+        "bindings": {
+         "u": "u10n"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "rhn",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "neutral_heat_coefficient",
+      "bindings": {
+       "stable": "stable"
+      }
+     }
+    },
+    {
+     "lhs": "rd",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "exchange_coefficient_shift",
+      "bindings": {
+       "c": "rdn",
+       "alz": "alz",
+       "psi": "psimh"
+      }
+     }
+    },
+    {
+     "lhs": "rh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "exchange_coefficient_shift",
+      "bindings": {
+       "c": "rhn",
+       "alz": "alz",
+       "psi": "psixh"
+      }
+     }
+    },
+    {
+     "lhs": "re",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "exchange_coefficient_shift",
+      "bindings": {
+       "c": "ren",
+       "alz": "alz",
+       "psi": "psixh"
+      }
+     }
+    },
+    {
+     "lhs": "ustar",
+     "rhs": {
+      "op": "*",
+      "args": ["rd", "vmag"]
+     }
+    },
+    {
+     "lhs": "tstar",
+     "rhs": {
+      "op": "*",
+      "args": ["rh", "delt"]
+     }
+    },
+    {
+     "lhs": "qstar",
+     "rhs": {
+      "op": "*",
+      "args": ["re", "delq"]
+     }
+    },
+    {
+     "lhs": "conv",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "abs",
+            "args": [
+             {
+              "op": "-",
+              "args": ["ustar", "ustar_prev"]
+             }
+            ]
+           },
+           "ustar"
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.01,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "frozen_hol",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "hol",
+       "frozen": "frozen_hol_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_stable",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "stable",
+       "frozen": "frozen_stable_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_xsq",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "xsq",
+       "frozen": "frozen_xsq_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_xqq",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "xqq",
+       "frozen": "frozen_xqq_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_psimh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "psimh",
+       "frozen": "frozen_psimh_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_psixh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "psixh",
+       "frozen": "frozen_psixh_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_rd",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "rd",
+       "frozen": "frozen_rd_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_u10n",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "u10n",
+       "frozen": "frozen_u10n_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_rdn",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "rdn",
+       "frozen": "frozen_rdn_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_rhn",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "rhn",
+       "frozen": "frozen_rhn_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_rh",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "rh",
+       "frozen": "frozen_rh_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_re",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "re",
+       "frozen": "frozen_re_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_ustar",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "ustar",
+       "frozen": "frozen_ustar_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_tstar",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "tstar",
+       "frozen": "frozen_tstar_prev",
+       "conv": "conv_prev"
+      }
+     }
+    },
+    {
+     "lhs": "frozen_qstar",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "frozen_state_select",
+      "bindings": {
+       "value": "qstar",
+       "frozen": "frozen_qstar_prev",
+       "conv": "conv_prev"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

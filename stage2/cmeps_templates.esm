@@ -1134,6 +1134,33 @@
      }
     ]
    }
+  },
+  "frozen_state_select": {
+   "description": "Frozen-state selection for the unrolled stability iteration of cmeps_aoflux_step: frozen = frozen_prev when the previous update already converged (conv = 1), else the freshly computed value. The Fortran do-while of flux_atmocn_Large.F90:242-290 exits at the FIRST update that satisfies |(ustar_k - ustar_{k-1})/ustar_k| <= flux_convergence, so the converged state must be pinned at the first passing update and carried unchanged through the remaining updates of the unrolled chain (the iteration states do not repeat after convergence: on the pinned rows ustar_2 differs from ustar_4 at the 1.8e-4 level). Each unrolled update threads the previous frozen state and the previous convergence flag; on every reachable trajectory of this contraction map the flags are prefix-0s-then-1s, so the 5th update's frozen outputs are exactly the state the Fortran leaves in the iteration variables — and in the no-convergence case conv stays 0 throughout, so the fresh 5th-update values are selected, which is also what the do-while leaves after its final pass.",
+   "params": [
+    "value",
+    "frozen",
+    "conv"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "conv",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     "frozen",
+     "value"
+    ]
+   }
   }
  }
 }

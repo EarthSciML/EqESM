@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_aoflux",
-  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: vmag and wind0 (the minwind-clamped relative wind, gustiness absent here so vmag = wind0), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), cp = cpdair*(1 + cpvir*ssq); (c) the neutral coefficients of F90:236-240 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290 unrolled to the fixed flux_max_iteration = 5 updates (the esm has no loop construct; each update computes hol (the Monin-Obukhov stability parameter, |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, and ustar/tstar/qstar), with the per-update convergence flags conv_k = |(ustar_k - ustar_{k-1})/ustar_k| <= 0.01 for k = 1..4 (the Fortran exit test of F90:286-287) and the iteration count iter = the first converged k, else 5; the 16 exit-state fields (hol/stable/xsq/xqq/psimh/psixh/rd/u10n/rdn/rhn/ren/rh/re/ustar/tstar/qstar) are selected from the unrolled updates by nested ifelse on iter (the Fortran leaves the last-update values in the variables at exit); (e) the fluxes of F90:299-311 (tau = rbot*ustar^2, taux/tauy = tau*(ubot-us)/vmag etc., sen, lat = latvap*tau*qstar/ustar, lwup = -stebol*ts^4, evap = lat/latvap); (f) the diagnostics of F90:316-333 (hol2 = hol*ztref/zbot and the 2-m psi, the fac_t/fac_q interpolation factors, tref = thbot - delt*fac_t - 0.01*ztref, qref, duu10n = u10n^2, u10res = u10n*wind0/vmag). Constants are the CESM shr_const values the nuopc cap uses (cpdair = 1004.64, cpvir = 1810/1004.64 - 1, latvap = 2.501e6, stebol = 5.67e-8, karman = 0.4, grav = 9.80616, zvir = 28.966/18.016 - 1, epsilo = 18.016/28.966, omeps = 1 - epsilo). The ren = 0.0346 water coefficient is constant across the iteration and is carried once (ren0, ren and the re_k shifts all bind it). Documented divergences: (1) the iteration is unrolled and exit-selected instead of looped (algebraically identical; conv_k and iter are explicit); (2) the rainc input is unused in this configuration (add_gusts = .false.); the stage-1 dump sanitizes it to 0 after the mediator's 1-element dummy allocation was exposed as an out-of-bounds read (bugs.md #28); (3) the traced window (12 PET-0 ocean cells of the 24 coupling steps, all ~69 S Antarctic coast, 288 rows) is entirely unstable with low-to-moderate wind: the stable branch (stable0 = 1, the rhn = 0.018 ratio, the -5*hol stable psi), the cdn 33 m/s wind cap, the gustiness path and the cold-air-outbreak path are NOT exercised by the dump and carry no dump pins; the minwind = 0.5 m/s floor and the |hol| <= 10 clamp ARE exercised (rows with vmag = 0.5 and hol = -10.0 pinned). The tests block pins 6 dump rows (convergence at iterations 2/3/4/5/5/2, including the two clamp rows) at time_span {0,0} with all 47 dumped columns at full dump precision (rel 1e-12) plus the conv_k/iter representation. Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90; the replay that reproduces all 288 dump rows to <= 4.4e-15 relative is stage1/analysis/validate_cmeps_dump.py."
+  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: vmag and wind0 (the minwind-clamped relative wind, gustiness absent here so vmag = wind0), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), cp = cpdair*(1 + cpvir*ssq); (c) the neutral coefficients of F90:236-244 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290. The esm has no loop construct, so the iteration is represented compositionally: the 16-equation update law is authored ONCE in the one-step model AoFluxStep of ./cmeps_aoflux_step.esm (a single pass of the do-while: hol (the Monin-Obukhov stability parameter, |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn_prev, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, ustar/tstar/qstar, the per-update convergence flag conv = |(ustar - ustar_prev)/ustar| <= 0.01, and 15 frozen-state fields pinning the first-converged state) and mounted five times by reference as top-level models step1..step5 (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state feeds the next (ustar/tstar/qstar/rdn), conv and the 15 frozen fields thread the convergence state, and the fixed pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot feed every step (ren stays the constant 0.0346 of F90:277, not coupled). The parent keeps the same external names as the pre-refactor unrolled model so the pinned tests are unchanged: conv_1..4 = step1..4.conv, iter = the first converged k, else 5 (nested ifelse on conv_1..4), and the 16 exit-state fields = the 15 step5.frozen_* fields (the first-converged update's values, carried unchanged through the remaining updates by the frozen-state threading; in the no-convergence case the fresh 5th-update values) plus ren; (e) the fluxes of F90:299-311 (tau/taux/tauy/sen/lat/lwup/evap); (f) the 2-m diagnostics of F90:316-333 (hol2/xsq2/xqq2/psix2/fac_t/fac_q/tref/qref/duu10n/u10res), which consume the exit state exactly as the Fortran leaves it after the do-while."
  },
  "models": {
   "AoFlux": {
@@ -85,7 +85,7 @@
     "vmag": {
      "type": "unknown",
      "units": "m/s",
-     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt((ubot-us)^2 + (vbot-vs)^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added, [m/s]"
+     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt((ubot-us)^2 + (vbot-vs)^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added; coupled to every AoFluxStep mount, [m/s]"
     },
     "wind0": {
      "type": "unknown",
@@ -120,17 +120,17 @@
     "delt": {
      "type": "unknown",
      "units": "K",
-     "description": "potential temperature difference thbot - ts (F90:223), [K]"
+     "description": "potential temperature difference thbot - ts (F90:223); coupled to every AoFluxStep mount, [K]"
     },
     "delq": {
      "type": "unknown",
      "units": "kg/kg",
-     "description": "specific humidity difference qbot - ssq (F90:224), [kg/kg]"
+     "description": "specific humidity difference qbot - ssq (F90:224); coupled to every AoFluxStep mount, [kg/kg]"
     },
     "alz": {
      "type": "unknown",
      "units": "1",
-     "description": "ln(zbot/zref) with zref = 10 m (F90:225), [-]"
+     "description": "ln(zbot/zref) with zref = 10 m (F90:225); coupled to every AoFluxStep mount, [-]"
     },
     "cp": {
      "type": "unknown",
@@ -145,7 +145,7 @@
     "rdn0": {
      "type": "unknown",
      "units": "1",
-     "description": "neutral 10-m sqrt drag coefficient sqrt(cdn(vmag)) (F90:238), [-]"
+     "description": "neutral 10-m sqrt drag coefficient sqrt(cdn(vmag)) (F90:238); seeds step1.rdn_prev, [-]"
     },
     "rhn0": {
      "type": "unknown",
@@ -160,437 +160,37 @@
     "ustar0": {
      "type": "unknown",
      "units": "m/s",
-     "description": "first-estimate friction velocity rdn0*vmag (F90:242), [m/s]"
+     "description": "first-estimate friction velocity rdn0*vmag (F90:242); seeds step1.ustar_prev, [m/s]"
     },
     "tstar0": {
      "type": "unknown",
      "units": "K",
-     "description": "first-estimate friction temperature rhn0*delt (F90:243), [K]"
+     "description": "first-estimate friction temperature rhn0*delt (F90:243); seeds step1.tstar_prev, [K]"
     },
     "qstar0": {
      "type": "unknown",
      "units": "kg/kg",
-     "description": "first-estimate friction humidity ren0*delq (F90:244), [kg/kg]"
-    },
-    "hol_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "Monin-Obukhov stability parameter z/L at zbot, iteration 1 (F90:252-254), [-]"
-    },
-    "stable_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "stability factor of iteration 1 (F90:255), 1 stable / 0 unstable, [-]"
-    },
-    "xsq_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(|1 - 16*hol|) floored at 1, iteration 1 (F90:256), [-]"
-    },
-    "xqq_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(xsq), the Paulson function argument, iteration 1 (F90:257), [-]"
-    },
-    "psimh_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "momentum stability function at zbot, iteration 1 (F90:258), [-]"
-    },
-    "psixh_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "scalar (heat/water) stability function at zbot, iteration 1 (F90:259), [-]"
-    },
-    "rdw_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp, iteration 1 (F90:272), [-]"
-    },
-    "u10n_1": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "10-m neutral wind from the pre-update drag coefficient, iteration 1 (F90:273), [m/s]"
-    },
-    "rdn_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)), iteration 1 (F90:276), [-]"
-    },
-    "rhn_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt heat coefficient, iteration 1 (F90:278), [-]"
-    },
-    "rd_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt momentum exchange coefficient shifted to zbot, iteration 1 (F90:282), [-]"
-    },
-    "rh_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt heat exchange coefficient shifted to zbot, iteration 1 (F90:283), [-]"
-    },
-    "re_1": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt water exchange coefficient shifted to zbot, iteration 1 (F90:284), [-]"
-    },
-    "ustar_1": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "friction velocity rd*vmag, iteration 1 (F90:286), [m/s]"
-    },
-    "tstar_1": {
-     "type": "unknown",
-     "units": "K",
-     "description": "friction temperature rh*delt, iteration 1 (F90:287), [K]"
-    },
-    "qstar_1": {
-     "type": "unknown",
-     "units": "kg/kg",
-     "description": "friction humidity re*delq, iteration 1 (F90:288), [kg/kg]"
-    },
-    "hol_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "Monin-Obukhov stability parameter at zbot, iteration 2 (F90:252-254), [-]"
-    },
-    "stable_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "stability factor of iteration 2 (F90:255), 1 stable / 0 unstable, [-]"
-    },
-    "xsq_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(|1 - 16*hol|) floored at 1, iteration 2 (F90:256), [-]"
-    },
-    "xqq_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(xsq), the Paulson function argument, iteration 2 (F90:257), [-]"
-    },
-    "psimh_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "momentum stability function at zbot, iteration 2 (F90:258), [-]"
-    },
-    "psixh_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "scalar (heat/water) stability function at zbot, iteration 2 (F90:259), [-]"
-    },
-    "rdw_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp, iteration 2 (F90:272), [-]"
-    },
-    "u10n_2": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "10-m neutral wind from the pre-update drag coefficient, iteration 2 (F90:273), [m/s]"
-    },
-    "rdn_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)), iteration 2 (F90:276), [-]"
-    },
-    "rhn_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt heat coefficient, iteration 2 (F90:278), [-]"
-    },
-    "rd_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt momentum exchange coefficient shifted to zbot, iteration 2 (F90:282), [-]"
-    },
-    "rh_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt heat exchange coefficient shifted to zbot, iteration 2 (F90:283), [-]"
-    },
-    "re_2": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt water exchange coefficient shifted to zbot, iteration 2 (F90:284), [-]"
-    },
-    "ustar_2": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "friction velocity rd*vmag, iteration 2 (F90:286), [m/s]"
-    },
-    "tstar_2": {
-     "type": "unknown",
-     "units": "K",
-     "description": "friction temperature rh*delt, iteration 2 (F90:287), [K]"
-    },
-    "qstar_2": {
-     "type": "unknown",
-     "units": "kg/kg",
-     "description": "friction humidity re*delq, iteration 2 (F90:288), [kg/kg]"
-    },
-    "hol_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "Monin-Obukhov stability parameter at zbot, iteration 3 (F90:252-254), [-]"
-    },
-    "stable_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "stability factor of iteration 3 (F90:255), 1 stable / 0 unstable, [-]"
-    },
-    "xsq_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(|1 - 16*hol|) floored at 1, iteration 3 (F90:256), [-]"
-    },
-    "xqq_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(xsq), the Paulson function argument, iteration 3 (F90:257), [-]"
-    },
-    "psimh_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "momentum stability function at zbot, iteration 3 (F90:258), [-]"
-    },
-    "psixh_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "scalar (heat/water) stability function at zbot, iteration 3 (F90:259), [-]"
-    },
-    "rdw_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp, iteration 3 (F90:272), [-]"
-    },
-    "u10n_3": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "10-m neutral wind from the pre-update drag coefficient, iteration 3 (F90:273), [m/s]"
-    },
-    "rdn_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)), iteration 3 (F90:276), [-]"
-    },
-    "rhn_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt heat coefficient, iteration 3 (F90:278), [-]"
-    },
-    "rd_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt momentum exchange coefficient shifted to zbot, iteration 3 (F90:282), [-]"
-    },
-    "rh_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt heat exchange coefficient shifted to zbot, iteration 3 (F90:283), [-]"
-    },
-    "re_3": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt water exchange coefficient shifted to zbot, iteration 3 (F90:284), [-]"
-    },
-    "ustar_3": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "friction velocity rd*vmag, iteration 3 (F90:286), [m/s]"
-    },
-    "tstar_3": {
-     "type": "unknown",
-     "units": "K",
-     "description": "friction temperature rh*delt, iteration 3 (F90:287), [K]"
-    },
-    "qstar_3": {
-     "type": "unknown",
-     "units": "kg/kg",
-     "description": "friction humidity re*delq, iteration 3 (F90:288), [kg/kg]"
-    },
-    "hol_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "Monin-Obukhov stability parameter at zbot, iteration 4 (F90:252-254), [-]"
-    },
-    "stable_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "stability factor of iteration 4 (F90:255), 1 stable / 0 unstable, [-]"
-    },
-    "xsq_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(|1 - 16*hol|) floored at 1, iteration 4 (F90:256), [-]"
-    },
-    "xqq_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(xsq), the Paulson function argument, iteration 4 (F90:257), [-]"
-    },
-    "psimh_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "momentum stability function at zbot, iteration 4 (F90:258), [-]"
-    },
-    "psixh_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "scalar (heat/water) stability function at zbot, iteration 4 (F90:259), [-]"
-    },
-    "rdw_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp, iteration 4 (F90:272), [-]"
-    },
-    "u10n_4": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "10-m neutral wind from the pre-update drag coefficient, iteration 4 (F90:273), [m/s]"
-    },
-    "rdn_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)), iteration 4 (F90:276), [-]"
-    },
-    "rhn_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt heat coefficient, iteration 4 (F90:278), [-]"
-    },
-    "rd_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt momentum exchange coefficient shifted to zbot, iteration 4 (F90:282), [-]"
-    },
-    "rh_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt heat exchange coefficient shifted to zbot, iteration 4 (F90:283), [-]"
-    },
-    "re_4": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt water exchange coefficient shifted to zbot, iteration 4 (F90:284), [-]"
-    },
-    "ustar_4": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "friction velocity rd*vmag, iteration 4 (F90:286), [m/s]"
-    },
-    "tstar_4": {
-     "type": "unknown",
-     "units": "K",
-     "description": "friction temperature rh*delt, iteration 4 (F90:287), [K]"
-    },
-    "qstar_4": {
-     "type": "unknown",
-     "units": "kg/kg",
-     "description": "friction humidity re*delq, iteration 4 (F90:288), [kg/kg]"
-    },
-    "hol_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "Monin-Obukhov stability parameter at zbot, iteration 5 (F90:252-254), [-]"
-    },
-    "stable_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "stability factor of iteration 5 (F90:255), 1 stable / 0 unstable, [-]"
-    },
-    "xsq_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(|1 - 16*hol|) floored at 1, iteration 5 (F90:256), [-]"
-    },
-    "xqq_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt(xsq), the Paulson function argument, iteration 5 (F90:257), [-]"
-    },
-    "psimh_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "momentum stability function at zbot, iteration 5 (F90:258), [-]"
-    },
-    "psixh_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "scalar (heat/water) stability function at zbot, iteration 5 (F90:259), [-]"
-    },
-    "rdw_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "wind-shift sqrt momentum coefficient with the max(..., -0.5) clamp, iteration 5 (F90:272), [-]"
-    },
-    "u10n_5": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "10-m neutral wind from the pre-update drag coefficient, iteration 5 (F90:273), [m/s]"
-    },
-    "rdn_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt drag coefficient sqrt(cdn(u10n)), iteration 5 (F90:276), [-]"
-    },
-    "rhn_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "updated neutral 10-m sqrt heat coefficient, iteration 5 (F90:278), [-]"
-    },
-    "rd_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt momentum exchange coefficient shifted to zbot, iteration 5 (F90:282), [-]"
-    },
-    "rh_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt heat exchange coefficient shifted to zbot, iteration 5 (F90:283), [-]"
-    },
-    "re_5": {
-     "type": "unknown",
-     "units": "1",
-     "description": "sqrt water exchange coefficient shifted to zbot, iteration 5 (F90:284), [-]"
-    },
-    "ustar_5": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "friction velocity rd*vmag, iteration 5 (F90:286), [m/s]"
-    },
-    "tstar_5": {
-     "type": "unknown",
-     "units": "K",
-     "description": "friction temperature rh*delt, iteration 5 (F90:287), [K]"
-    },
-    "qstar_5": {
-     "type": "unknown",
-     "units": "kg/kg",
-     "description": "friction humidity re*delq, iteration 5 (F90:288), [kg/kg]"
+     "description": "first-estimate friction humidity ren0*delq (F90:244); seeds step1.qstar_prev, [kg/kg]"
     },
     "conv_1": {
      "type": "unknown",
      "units": "1",
-     "description": "convergence flag of update 1: |(ustar_1 - ustar0)/ustar_1| <= flux_convergence = 0.01 (the Fortran exit test of F90:286-287 after update 1), 1 converged / 0 not, [-]"
+     "description": "convergence flag of update 1 = step1.conv (the 1st mount of the AoFluxStep update law): |(ustar_1 - ustar0)/ustar_1| <= flux_convergence = 0.01 (the Fortran exit test of F90:286-287 after update 1), 1 converged / 0 not, [-]"
     },
     "conv_2": {
      "type": "unknown",
      "units": "1",
-     "description": "convergence flag of update 2: |(ustar_2 - ustar_1)/ustar_2| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
+     "description": "convergence flag of update 2 = step2.conv: |(ustar_2 - ustar_1)/ustar_2| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
     },
     "conv_3": {
      "type": "unknown",
      "units": "1",
-     "description": "convergence flag of update 3: |(ustar_3 - ustar_2)/ustar_3| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
+     "description": "convergence flag of update 3 = step3.conv: |(ustar_3 - ustar_2)/ustar_3| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
     },
     "conv_4": {
      "type": "unknown",
      "units": "1",
-     "description": "convergence flag of update 4: |(ustar_4 - ustar_3)/ustar_4| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
+     "description": "convergence flag of update 4 = step4.conv: |(ustar_4 - ustar_3)/ustar_4| <= 0.01 (F90:286-287), 1 converged / 0 not, [-]"
     },
     "iter": {
      "type": "unknown",
@@ -600,52 +200,52 @@
     "hol": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state Monin-Obukhov stability parameter at zbot (the value the Fortran leaves in hol when the do-while exits; dumped pre-2m-rescale as the hol column), [-]"
+     "description": "exit-state Monin-Obukhov stability parameter at zbot = step5.frozen_hol (the value the Fortran leaves in hol when the do-while exits: the first-converged update's value, pinned and carried unchanged through the remaining updates by the frozen-state threading; dumped pre-2m-rescale as the hol column), [-]"
     },
     "stable": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state stability factor (F90:255), 1 stable / 0 unstable, [-]"
+     "description": "exit-state stability factor = step5.frozen_stable (F90:255), 1 stable / 0 unstable, [-]"
     },
     "xsq": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state sqrt(|1 - 16*hol|) floored at 1 (F90:256), [-]"
+     "description": "exit-state sqrt(|1 - 16*hol|) floored at 1 = step5.frozen_xsq (F90:256), [-]"
     },
     "xqq": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state sqrt(xsq) (F90:257), [-]"
+     "description": "exit-state sqrt(xsq) = step5.frozen_xqq (F90:257), [-]"
     },
     "psimh": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state momentum stability function at zbot (F90:258), [-]"
+     "description": "exit-state momentum stability function at zbot = step5.frozen_psimh (F90:258), [-]"
     },
     "psixh": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state scalar stability function at zbot (F90:259), [-]"
+     "description": "exit-state scalar stability function at zbot = step5.frozen_psixh (F90:259), [-]"
     },
     "rd": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state sqrt momentum exchange coefficient at zbot (F90:282), [-]"
+     "description": "exit-state sqrt momentum exchange coefficient at zbot = step5.frozen_rd (F90:282), [-]"
     },
     "u10n": {
      "type": "unknown",
      "units": "m/s",
-     "description": "exit-state 10-m neutral wind (F90:273), [m/s]"
+     "description": "exit-state 10-m neutral wind = step5.frozen_u10n (F90:273), [m/s]"
     },
     "rdn": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state neutral 10-m sqrt drag coefficient (F90:276), [-]"
+     "description": "exit-state neutral 10-m sqrt drag coefficient = step5.frozen_rdn (F90:276), [-]"
     },
     "rhn": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state neutral 10-m sqrt heat coefficient (F90:278), [-]"
+     "description": "exit-state neutral 10-m sqrt heat coefficient = step5.frozen_rhn (F90:278), [-]"
     },
     "ren": {
      "type": "unknown",
@@ -655,27 +255,27 @@
     "rh": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state sqrt heat exchange coefficient at zbot (F90:283), [-]"
+     "description": "exit-state sqrt heat exchange coefficient at zbot = step5.frozen_rh (F90:283), [-]"
     },
     "re": {
      "type": "unknown",
      "units": "1",
-     "description": "exit-state sqrt water exchange coefficient at zbot (F90:284), [-]"
+     "description": "exit-state sqrt water exchange coefficient at zbot = step5.frozen_re (F90:284), [-]"
     },
     "ustar": {
      "type": "unknown",
      "units": "m/s",
-     "description": "exit-state friction velocity rd*vmag (F90:286), [m/s]"
+     "description": "exit-state friction velocity rd*vmag = step5.frozen_ustar (F90:286), [m/s]"
     },
     "tstar": {
      "type": "unknown",
      "units": "K",
-     "description": "exit-state friction temperature rh*delt (F90:287), [K]"
+     "description": "exit-state friction temperature rh*delt = step5.frozen_tstar (F90:287), [K]"
     },
     "qstar": {
      "type": "unknown",
      "units": "kg/kg",
-     "description": "exit-state friction humidity re*delq (F90:288), [kg/kg]"
+     "description": "exit-state friction humidity re*delq = step5.frozen_qstar (F90:288), [kg/kg]"
     },
     "tau": {
      "type": "unknown",
@@ -1087,1393 +687,20 @@
      }
     },
     {
-     "lhs": "hol_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "stability_parameter",
-      "bindings": {
-       "ustar": "ustar0",
-       "tstar": "tstar0",
-       "qstar": "qstar0",
-       "thbot": "thbot",
-       "qbot": "qbot",
-       "zbot": "zbot"
-      }
-     }
-    },
-    {
-     "lhs": "stable_1",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         "hol_1",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xsq_1",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 16.0,
-                "units": "1"
-               },
-               "hol_1"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xqq_1",
-     "rhs": {
-      "op": "sqrt",
-      "args": ["xsq_1"]
-     }
-    },
-    {
-     "lhs": "psimh_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_momentum",
-      "bindings": {
-       "hol": "hol_1",
-       "stable": "stable_1",
-       "xqq": "xqq_1"
-      }
-     }
-    },
-    {
-     "lhs": "psixh_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_scalar",
-      "bindings": {
-       "hol": "hol_1",
-       "stable": "stable_1",
-       "xqq": "xqq_1"
-      }
-     }
-    },
-    {
-     "lhs": "rdw_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift_clamped",
-      "bindings": {
-       "c": "rdn0",
-       "alz": "alz",
-       "psi": "psimh_1"
-      }
-     }
-    },
-    {
-     "lhs": "u10n_1",
-     "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": ["vmag", "rdw_1"]
-       },
-       "rdn0"
-      ]
-     }
-    },
-    {
-     "lhs": "rdn_1",
-     "rhs": {
-      "op": "sqrt",
-      "args": [
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "neutral_drag_coefficient",
-        "bindings": {
-         "u": "u10n_1"
-        }
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "rhn_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "neutral_heat_coefficient",
-      "bindings": {
-       "stable": "stable_1"
-      }
-     }
-    },
-    {
-     "lhs": "rd_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rdn_1",
-       "alz": "alz",
-       "psi": "psimh_1"
-      }
-     }
-    },
-    {
-     "lhs": "rh_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rhn_1",
-       "alz": "alz",
-       "psi": "psixh_1"
-      }
-     }
-    },
-    {
-     "lhs": "re_1",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "ren",
-       "alz": "alz",
-       "psi": "psixh_1"
-      }
-     }
-    },
-    {
-     "lhs": "ustar_1",
-     "rhs": {
-      "op": "*",
-      "args": ["rd_1", "vmag"]
-     }
-    },
-    {
-     "lhs": "tstar_1",
-     "rhs": {
-      "op": "*",
-      "args": ["rh_1", "delt"]
-     }
-    },
-    {
-     "lhs": "qstar_1",
-     "rhs": {
-      "op": "*",
-      "args": ["re_1", "delq"]
-     }
-    },
-    {
-     "lhs": "hol_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "stability_parameter",
-      "bindings": {
-       "ustar": "ustar_1",
-       "tstar": "tstar_1",
-       "qstar": "qstar_1",
-       "thbot": "thbot",
-       "qbot": "qbot",
-       "zbot": "zbot"
-      }
-     }
-    },
-    {
-     "lhs": "stable_2",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         "hol_2",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xsq_2",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 16.0,
-                "units": "1"
-               },
-               "hol_2"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xqq_2",
-     "rhs": {
-      "op": "sqrt",
-      "args": ["xsq_2"]
-     }
-    },
-    {
-     "lhs": "psimh_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_momentum",
-      "bindings": {
-       "hol": "hol_2",
-       "stable": "stable_2",
-       "xqq": "xqq_2"
-      }
-     }
-    },
-    {
-     "lhs": "psixh_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_scalar",
-      "bindings": {
-       "hol": "hol_2",
-       "stable": "stable_2",
-       "xqq": "xqq_2"
-      }
-     }
-    },
-    {
-     "lhs": "rdw_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift_clamped",
-      "bindings": {
-       "c": "rdn_1",
-       "alz": "alz",
-       "psi": "psimh_2"
-      }
-     }
-    },
-    {
-     "lhs": "u10n_2",
-     "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": ["vmag", "rdw_2"]
-       },
-       "rdn_1"
-      ]
-     }
-    },
-    {
-     "lhs": "rdn_2",
-     "rhs": {
-      "op": "sqrt",
-      "args": [
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "neutral_drag_coefficient",
-        "bindings": {
-         "u": "u10n_2"
-        }
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "rhn_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "neutral_heat_coefficient",
-      "bindings": {
-       "stable": "stable_2"
-      }
-     }
-    },
-    {
-     "lhs": "rd_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rdn_2",
-       "alz": "alz",
-       "psi": "psimh_2"
-      }
-     }
-    },
-    {
-     "lhs": "rh_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rhn_2",
-       "alz": "alz",
-       "psi": "psixh_2"
-      }
-     }
-    },
-    {
-     "lhs": "re_2",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "ren",
-       "alz": "alz",
-       "psi": "psixh_2"
-      }
-     }
-    },
-    {
-     "lhs": "ustar_2",
-     "rhs": {
-      "op": "*",
-      "args": ["rd_2", "vmag"]
-     }
-    },
-    {
-     "lhs": "tstar_2",
-     "rhs": {
-      "op": "*",
-      "args": ["rh_2", "delt"]
-     }
-    },
-    {
-     "lhs": "qstar_2",
-     "rhs": {
-      "op": "*",
-      "args": ["re_2", "delq"]
-     }
-    },
-    {
-     "lhs": "hol_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "stability_parameter",
-      "bindings": {
-       "ustar": "ustar_2",
-       "tstar": "tstar_2",
-       "qstar": "qstar_2",
-       "thbot": "thbot",
-       "qbot": "qbot",
-       "zbot": "zbot"
-      }
-     }
-    },
-    {
-     "lhs": "stable_3",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         "hol_3",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xsq_3",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 16.0,
-                "units": "1"
-               },
-               "hol_3"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xqq_3",
-     "rhs": {
-      "op": "sqrt",
-      "args": ["xsq_3"]
-     }
-    },
-    {
-     "lhs": "psimh_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_momentum",
-      "bindings": {
-       "hol": "hol_3",
-       "stable": "stable_3",
-       "xqq": "xqq_3"
-      }
-     }
-    },
-    {
-     "lhs": "psixh_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_scalar",
-      "bindings": {
-       "hol": "hol_3",
-       "stable": "stable_3",
-       "xqq": "xqq_3"
-      }
-     }
-    },
-    {
-     "lhs": "rdw_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift_clamped",
-      "bindings": {
-       "c": "rdn_2",
-       "alz": "alz",
-       "psi": "psimh_3"
-      }
-     }
-    },
-    {
-     "lhs": "u10n_3",
-     "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": ["vmag", "rdw_3"]
-       },
-       "rdn_2"
-      ]
-     }
-    },
-    {
-     "lhs": "rdn_3",
-     "rhs": {
-      "op": "sqrt",
-      "args": [
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "neutral_drag_coefficient",
-        "bindings": {
-         "u": "u10n_3"
-        }
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "rhn_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "neutral_heat_coefficient",
-      "bindings": {
-       "stable": "stable_3"
-      }
-     }
-    },
-    {
-     "lhs": "rd_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rdn_3",
-       "alz": "alz",
-       "psi": "psimh_3"
-      }
-     }
-    },
-    {
-     "lhs": "rh_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rhn_3",
-       "alz": "alz",
-       "psi": "psixh_3"
-      }
-     }
-    },
-    {
-     "lhs": "re_3",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "ren",
-       "alz": "alz",
-       "psi": "psixh_3"
-      }
-     }
-    },
-    {
-     "lhs": "ustar_3",
-     "rhs": {
-      "op": "*",
-      "args": ["rd_3", "vmag"]
-     }
-    },
-    {
-     "lhs": "tstar_3",
-     "rhs": {
-      "op": "*",
-      "args": ["rh_3", "delt"]
-     }
-    },
-    {
-     "lhs": "qstar_3",
-     "rhs": {
-      "op": "*",
-      "args": ["re_3", "delq"]
-     }
-    },
-    {
-     "lhs": "hol_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "stability_parameter",
-      "bindings": {
-       "ustar": "ustar_3",
-       "tstar": "tstar_3",
-       "qstar": "qstar_3",
-       "thbot": "thbot",
-       "qbot": "qbot",
-       "zbot": "zbot"
-      }
-     }
-    },
-    {
-     "lhs": "stable_4",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         "hol_4",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xsq_4",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 16.0,
-                "units": "1"
-               },
-               "hol_4"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xqq_4",
-     "rhs": {
-      "op": "sqrt",
-      "args": ["xsq_4"]
-     }
-    },
-    {
-     "lhs": "psimh_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_momentum",
-      "bindings": {
-       "hol": "hol_4",
-       "stable": "stable_4",
-       "xqq": "xqq_4"
-      }
-     }
-    },
-    {
-     "lhs": "psixh_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_scalar",
-      "bindings": {
-       "hol": "hol_4",
-       "stable": "stable_4",
-       "xqq": "xqq_4"
-      }
-     }
-    },
-    {
-     "lhs": "rdw_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift_clamped",
-      "bindings": {
-       "c": "rdn_3",
-       "alz": "alz",
-       "psi": "psimh_4"
-      }
-     }
-    },
-    {
-     "lhs": "u10n_4",
-     "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": ["vmag", "rdw_4"]
-       },
-       "rdn_3"
-      ]
-     }
-    },
-    {
-     "lhs": "rdn_4",
-     "rhs": {
-      "op": "sqrt",
-      "args": [
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "neutral_drag_coefficient",
-        "bindings": {
-         "u": "u10n_4"
-        }
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "rhn_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "neutral_heat_coefficient",
-      "bindings": {
-       "stable": "stable_4"
-      }
-     }
-    },
-    {
-     "lhs": "rd_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rdn_4",
-       "alz": "alz",
-       "psi": "psimh_4"
-      }
-     }
-    },
-    {
-     "lhs": "rh_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rhn_4",
-       "alz": "alz",
-       "psi": "psixh_4"
-      }
-     }
-    },
-    {
-     "lhs": "re_4",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "ren",
-       "alz": "alz",
-       "psi": "psixh_4"
-      }
-     }
-    },
-    {
-     "lhs": "ustar_4",
-     "rhs": {
-      "op": "*",
-      "args": ["rd_4", "vmag"]
-     }
-    },
-    {
-     "lhs": "tstar_4",
-     "rhs": {
-      "op": "*",
-      "args": ["rh_4", "delt"]
-     }
-    },
-    {
-     "lhs": "qstar_4",
-     "rhs": {
-      "op": "*",
-      "args": ["re_4", "delq"]
-     }
-    },
-    {
-     "lhs": "hol_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "stability_parameter",
-      "bindings": {
-       "ustar": "ustar_4",
-       "tstar": "tstar_4",
-       "qstar": "qstar_4",
-       "thbot": "thbot",
-       "qbot": "qbot",
-       "zbot": "zbot"
-      }
-     }
-    },
-    {
-     "lhs": "stable_5",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         "hol_5",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xsq_5",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "abs",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 16.0,
-                "units": "1"
-               },
-               "hol_5"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "xqq_5",
-     "rhs": {
-      "op": "sqrt",
-      "args": ["xsq_5"]
-     }
-    },
-    {
-     "lhs": "psimh_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_momentum",
-      "bindings": {
-       "hol": "hol_5",
-       "stable": "stable_5",
-       "xqq": "xqq_5"
-      }
-     }
-    },
-    {
-     "lhs": "psixh_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "psi_scalar",
-      "bindings": {
-       "hol": "hol_5",
-       "stable": "stable_5",
-       "xqq": "xqq_5"
-      }
-     }
-    },
-    {
-     "lhs": "rdw_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift_clamped",
-      "bindings": {
-       "c": "rdn_4",
-       "alz": "alz",
-       "psi": "psimh_5"
-      }
-     }
-    },
-    {
-     "lhs": "u10n_5",
-     "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "*",
-        "args": ["vmag", "rdw_5"]
-       },
-       "rdn_4"
-      ]
-     }
-    },
-    {
-     "lhs": "rdn_5",
-     "rhs": {
-      "op": "sqrt",
-      "args": [
-       {
-        "op": "apply_expression_template",
-        "args": [],
-        "name": "neutral_drag_coefficient",
-        "bindings": {
-         "u": "u10n_5"
-        }
-       }
-      ]
-     }
-    },
-    {
-     "lhs": "rhn_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "neutral_heat_coefficient",
-      "bindings": {
-       "stable": "stable_5"
-      }
-     }
-    },
-    {
-     "lhs": "rd_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rdn_5",
-       "alz": "alz",
-       "psi": "psimh_5"
-      }
-     }
-    },
-    {
-     "lhs": "rh_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "rhn_5",
-       "alz": "alz",
-       "psi": "psixh_5"
-      }
-     }
-    },
-    {
-     "lhs": "re_5",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "exchange_coefficient_shift",
-      "bindings": {
-       "c": "ren",
-       "alz": "alz",
-       "psi": "psixh_5"
-      }
-     }
-    },
-    {
-     "lhs": "ustar_5",
-     "rhs": {
-      "op": "*",
-      "args": ["rd_5", "vmag"]
-     }
-    },
-    {
-     "lhs": "tstar_5",
-     "rhs": {
-      "op": "*",
-      "args": ["rh_5", "delt"]
-     }
-    },
-    {
-     "lhs": "qstar_5",
-     "rhs": {
-      "op": "*",
-      "args": ["re_5", "delq"]
-     }
-    },
-    {
      "lhs": "conv_1",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "<=",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "abs",
-            "args": [
-             {
-              "op": "-",
-              "args": ["ustar_1", "ustar0"]
-             }
-            ]
-           },
-           "ustar_1"
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.01,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
+     "rhs": "step1.conv"
     },
     {
      "lhs": "conv_2",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "<=",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "abs",
-            "args": [
-             {
-              "op": "-",
-              "args": ["ustar_2", "ustar_1"]
-             }
-            ]
-           },
-           "ustar_2"
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.01,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
+     "rhs": "step2.conv"
     },
     {
      "lhs": "conv_3",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "<=",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "abs",
-            "args": [
-             {
-              "op": "-",
-              "args": ["ustar_3", "ustar_2"]
-             }
-            ]
-           },
-           "ustar_3"
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.01,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
+     "rhs": "step3.conv"
     },
     {
      "lhs": "conv_4",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "<=",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "abs",
-            "args": [
-             {
-              "op": "-",
-              "args": ["ustar_4", "ustar_3"]
-             }
-            ]
-           },
-           "ustar_4"
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.01,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       }
-      ]
-     }
+     "rhs": "step4.conv"
     },
     {
      "lhs": "iter",
@@ -2578,763 +805,43 @@
     },
     {
      "lhs": "hol",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "hol_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "hol_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "hol_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "hol_4",
-             "hol_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_hol"
     },
     {
      "lhs": "stable",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "stable_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "stable_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "stable_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "stable_4",
-             "stable_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_stable"
     },
     {
      "lhs": "xsq",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "xsq_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "xsq_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "xsq_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "xsq_4",
-             "xsq_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_xsq"
     },
     {
      "lhs": "xqq",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "xqq_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "xqq_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "xqq_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "xqq_4",
-             "xqq_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_xqq"
     },
     {
      "lhs": "psimh",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "psimh_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "psimh_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "psimh_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "psimh_4",
-             "psimh_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_psimh"
     },
     {
      "lhs": "psixh",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "psixh_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "psixh_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "psixh_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "psixh_4",
-             "psixh_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_psixh"
     },
     {
      "lhs": "rd",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "rd_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "rd_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "rd_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "rd_4",
-             "rd_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_rd"
     },
     {
      "lhs": "u10n",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "u10n_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "u10n_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "u10n_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "u10n_4",
-             "u10n_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_u10n"
     },
     {
      "lhs": "rdn",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "rdn_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "rdn_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "rdn_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "rdn_4",
-             "rdn_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_rdn"
     },
     {
      "lhs": "rhn",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "rhn_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "rhn_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "rhn_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "rhn_4",
-             "rhn_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_rhn"
     },
     {
      "lhs": "ren",
@@ -3347,383 +854,23 @@
     },
     {
      "lhs": "rh",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "rh_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "rh_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "rh_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "rh_4",
-             "rh_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_rh"
     },
     {
      "lhs": "re",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "re_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "re_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "re_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "re_4",
-             "re_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_re"
     },
     {
      "lhs": "ustar",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "ustar_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "ustar_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "ustar_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "ustar_4",
-             "ustar_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_ustar"
     },
     {
      "lhs": "tstar",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "tstar_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "tstar_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "tstar_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "tstar_4",
-             "tstar_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_tstar"
     },
     {
      "lhs": "qstar",
-     "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "iter",
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         }
-        ]
-       },
-       "qstar_1",
-       {
-        "op": "ifelse",
-        "args": [
-         {
-          "op": "==",
-          "args": [
-           "iter",
-           {
-            "op": "const",
-            "args": [],
-            "value": 2.0,
-            "units": "1"
-           }
-          ]
-         },
-         "qstar_2",
-         {
-          "op": "ifelse",
-          "args": [
-           {
-            "op": "==",
-            "args": [
-             "iter",
-             {
-              "op": "const",
-              "args": [],
-              "value": 3.0,
-              "units": "1"
-             }
-            ]
-           },
-           "qstar_3",
-           {
-            "op": "ifelse",
-            "args": [
-             {
-              "op": "==",
-              "args": [
-               "iter",
-               {
-                "op": "const",
-                "args": [],
-                "value": 4.0,
-                "units": "1"
-               }
-              ]
-             },
-             "qstar_4",
-             "qstar_5"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
+     "rhs": "step5.frozen_qstar"
     },
     {
      "lhs": "tau",
@@ -5859,6 +3006,727 @@
      ]
     }
    ]
+  },
+  "step1": { "ref": "./cmeps_aoflux_step.esm" },
+  "step2": { "ref": "./cmeps_aoflux_step.esm" },
+  "step3": { "ref": "./cmeps_aoflux_step.esm" },
+  "step4": { "ref": "./cmeps_aoflux_step.esm" },
+  "step5": { "ref": "./cmeps_aoflux_step.esm" }
+ },
+ "coupling": [
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "step1.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "step1.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "step1.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "step1.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "step1.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "step1.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "step1.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "step2.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "step2.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "step2.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "step2.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "step2.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "step2.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "step2.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "step3.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "step3.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "step3.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "step3.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "step3.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "step3.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "step3.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "step4.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "step4.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "step4.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "step4.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "step4.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "step4.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "step4.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "step5.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "step5.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "step5.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "step5.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "step5.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "step5.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "step5.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.ustar0",
+   "to": "step1.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.tstar0",
+   "to": "step1.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qstar0",
+   "to": "step1.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.rdn0",
+   "to": "step1.rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.ustar",
+   "to": "step2.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.tstar",
+   "to": "step2.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.qstar",
+   "to": "step2.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.rdn",
+   "to": "step2.rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.conv",
+   "to": "step2.conv_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_hol",
+   "to": "step2.frozen_hol_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_stable",
+   "to": "step2.frozen_stable_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_xsq",
+   "to": "step2.frozen_xsq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_xqq",
+   "to": "step2.frozen_xqq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_psimh",
+   "to": "step2.frozen_psimh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_psixh",
+   "to": "step2.frozen_psixh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_rd",
+   "to": "step2.frozen_rd_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_u10n",
+   "to": "step2.frozen_u10n_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_rdn",
+   "to": "step2.frozen_rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_rhn",
+   "to": "step2.frozen_rhn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_rh",
+   "to": "step2.frozen_rh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_re",
+   "to": "step2.frozen_re_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_ustar",
+   "to": "step2.frozen_ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_tstar",
+   "to": "step2.frozen_tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.frozen_qstar",
+   "to": "step2.frozen_qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.ustar",
+   "to": "step3.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.tstar",
+   "to": "step3.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.qstar",
+   "to": "step3.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.rdn",
+   "to": "step3.rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.conv",
+   "to": "step3.conv_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_hol",
+   "to": "step3.frozen_hol_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_stable",
+   "to": "step3.frozen_stable_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_xsq",
+   "to": "step3.frozen_xsq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_xqq",
+   "to": "step3.frozen_xqq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_psimh",
+   "to": "step3.frozen_psimh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_psixh",
+   "to": "step3.frozen_psixh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_rd",
+   "to": "step3.frozen_rd_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_u10n",
+   "to": "step3.frozen_u10n_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_rdn",
+   "to": "step3.frozen_rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_rhn",
+   "to": "step3.frozen_rhn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_rh",
+   "to": "step3.frozen_rh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_re",
+   "to": "step3.frozen_re_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_ustar",
+   "to": "step3.frozen_ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_tstar",
+   "to": "step3.frozen_tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.frozen_qstar",
+   "to": "step3.frozen_qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.ustar",
+   "to": "step4.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.tstar",
+   "to": "step4.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.qstar",
+   "to": "step4.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.rdn",
+   "to": "step4.rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.conv",
+   "to": "step4.conv_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_hol",
+   "to": "step4.frozen_hol_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_stable",
+   "to": "step4.frozen_stable_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_xsq",
+   "to": "step4.frozen_xsq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_xqq",
+   "to": "step4.frozen_xqq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_psimh",
+   "to": "step4.frozen_psimh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_psixh",
+   "to": "step4.frozen_psixh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_rd",
+   "to": "step4.frozen_rd_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_u10n",
+   "to": "step4.frozen_u10n_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_rdn",
+   "to": "step4.frozen_rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_rhn",
+   "to": "step4.frozen_rhn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_rh",
+   "to": "step4.frozen_rh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_re",
+   "to": "step4.frozen_re_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_ustar",
+   "to": "step4.frozen_ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_tstar",
+   "to": "step4.frozen_tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step3.frozen_qstar",
+   "to": "step4.frozen_qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.ustar",
+   "to": "step5.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.tstar",
+   "to": "step5.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.qstar",
+   "to": "step5.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.rdn",
+   "to": "step5.rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.conv",
+   "to": "step5.conv_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_hol",
+   "to": "step5.frozen_hol_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_stable",
+   "to": "step5.frozen_stable_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_xsq",
+   "to": "step5.frozen_xsq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_xqq",
+   "to": "step5.frozen_xqq_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_psimh",
+   "to": "step5.frozen_psimh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_psixh",
+   "to": "step5.frozen_psixh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_rd",
+   "to": "step5.frozen_rd_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_u10n",
+   "to": "step5.frozen_u10n_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_rdn",
+   "to": "step5.frozen_rdn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_rhn",
+   "to": "step5.frozen_rhn_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_rh",
+   "to": "step5.frozen_rh_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_re",
+   "to": "step5.frozen_re_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_ustar",
+   "to": "step5.frozen_ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_tstar",
+   "to": "step5.frozen_tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_qstar",
+   "to": "step5.frozen_qstar_prev",
+   "transform": "param_to_var"
   }
- }
+ ]
 }
