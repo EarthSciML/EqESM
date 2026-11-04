@@ -172,5 +172,123 @@ messages.
    (velo-exit uvel/vvel vs the solve, `btractx/btracty` = β·u·f_ground).
 2. A wetter stage-1 window (nonzero bwat / basal melt) to dump-pin the
    bwat > 0 effecpress branch and the cold flow-law branch.
-3. The temperature-step lane (row 5) supplies pmptemp/stagsigma internally;
-   the hydrology lane (row 10) supplies bwat.
+3. The temperature-step lane (row 5) is implemented (see
+   [Temperature step](#temperature-step-cism_lanemd-2-row-5) below): it supplies
+   pmptemp/stagsigma internally; the hydrology lane (row 10) supplies bwat.
+
+## Temperature step (CISM_LANE.md §2 row 5)
+
+The prognostic temperature solve (`whichtemp = TEMP_PROGNOSTIC`) as
+`IceTemperatureColumn` (`cism_thermo.esm`): the vertical heat equation
+ρᵢcᵢ ∂T/∂t = ∂/∂z(kᵢ ∂T/∂z) + ρᵢcᵢΦ on CISM's σ coordinate, the pointwise laws of
+the step, and the local EarthSciDiscretizations-format rule that lowers the
+diffusion term (`cism_thermo_discretization.esm`, a candidate ESD PR). Pinned
+against the extended `cism_thermo.csv` dump (256 rows × 78 columns). The dump
+extension — `dttem`, `dissip_001..010`, `sigma_001..011`, `stagsigma_001..010`
+(fork branch `instrument/cism-dumps`, committed at all three submodule levels,
+not pushed) — was required: a dissip = 0 reproduction fails the operator
+identity at 3–5% of the step-1 temperature change, and a pin needs the exit
+rows and the grid geometry, not just the entry rows. Source:
+`glissade_therm.F90` (glissade_therm_driver, glissade_temperature_matrix_elements
+F90:1324-1507, glissade_basal_melting_ground F90:1930-2012,
+glissade_basal_melting_internal F90:2032-2159, glissade_pressure_melting_point
+F90:2163-2192).
+
+### Representation: 12-node σ grid, node-centered finite volumes
+
+CISM's temperature lives on UPN+1 = 12 nodes per column: the surface and bed
+faces σ(1) = 0, σ(11) = 1 and the 10 layer midpoints stagsigma(1..10)
+(glide_calc_sigma, SIGMA_COMPUTE_GLIDE). The model carries them on `lev_nodes`
+with sigma_node = [0, stagsigma, 1]; the control volume of node n is the CISM
+layer [σ(n−1), σ(n)] of width thck·dsigma_cv[n] (dsigma_cv[1] = dsigma_cv[12] =
+0 — the boundary nodes carry no diffusion row). The diffusion term lowers, by
+the rule `cism_sigma_diffusion` (priority 10, match-scoped to lev_nodes-shaped
+u), to the exact dups stencil of glissade_temperature_matrix_elements:
+L·T[n] = (G[n+1] − G[n])/(thck·dsigma_cv[n]) with the interface flux
+G[n] = coni·(T[n] − T[n−1])/(thck·(sigma_node[n] − sigma_node[n−1])) (the
+node-to-node gradient; stagsigma(0) ≡ σ(1), stagsigma(upn) ≡ σ(upn), F90:151-163).
+Boundary rows: node 1 (surface) lowers to 0 — the matrix row holds the Dirichlet
+value T(0) = min(0, artm) (F90:843, 1405-1408) — and node 12 (bed) lowers to 0 —
+CISM's bed row is not a diffusion row but the algebraic basal BC (frozen: flux
+balance; thawed: T = bpmp; F90:1473-1476, 1497-1504), carried as the `temp_bed`
+law. dTdt = L·T/(ρᵢcᵢ) + dissip on the interior nodes; the surface and bed dTdt
+rows are 0.
+
+### Pin strategy: the instantaneous operator identity at the exit state
+
+The CISM step is ONE backward-Euler solve of the tridiagonal system
+(diag − dt·L)·T_exit = T_entry + dt·Φ. The harness integrators cannot reproduce
+one exact stiff backward-Euler step, so the model does not integrate the
+entry→exit map; instead the operator is pinned INSTANTANEOUSLY at the exit
+state: for the interior rows the identity (T_exit − T_entry)/dttem = L·T_exit + Φ
+holds exactly (the dump round-trips at 1e-13..6e-9 relative), and
+`IceTemperatureColumn`'s dTdt is asserted against (T_exit − T_entry)/dttem with
+the ICs set to the exit profile and the dumped dissip. Five such pins span the
+window (step 1 and step 4 of cell (27,14), step 1 of cells (27,13) and (25,11) —
+the thinnest solved column at thck = 1.3 m — and step 4 of cell (19,13));
+per-node residuals ≤ 6.0e-9 relative → rel 1e-8 tolerances. The algebraic laws
+of the step are pinned at rel 1e-12: temp_sfc = min(0, artm) (all 128 exit
+rows), bpmp = −ρᵢg·pmlt·thck, the frozen basal row temp_bed = temp[11] +
+(bfricflx + bhydroflx − bheatflx)·dsigbot·thck/coni (closes to 6.2e-17 W/m² in
+flux terms), lcondflx_ground = −(coni/thck)·(temp_bed − temp[11])/dsigbot (one
+thin-column assertion at rel 1e-8 — there the flux is the ratio of two cancelling
+differences, temp_bed − temp[11] = 2.5e-8 K from ~1.87 degC values), and the melt
+chain bmlt_raw / bmlt_ground / btemp_ground (all-zero in the window: the closed
+basal balance |bfricflx + lcondflx_ground| ≤ 1.5e-15 W/m² is zeroed by the eps11
+guard). The thawed-bed row, the freeze-on branch, and the internal-melt cap are
+pinned synthetically from the source formulas (see gaps); the thin-cell surface
+law is pinned on cell (28,11) (thck = 0.02 m ≤ thklim_temp = 1 m: the column
+bypasses the solve — temp = min(0, artm) on all 12 nodes, dissip = 0).
+
+### Files
+
+| File | Contents | Fortran source |
+|---|---|---|
+| `cism_templates.esm` | +5 templates: `cism_pmp_temp` (Clapeyron pmp −ρᵢg·pmlt·depth), `cism_internal_melt_rate` (layer rate rhoi·shci·(T−Tpmp)·layer_thck/(rhoi·lhci·dt) with the max(0, ·) branch guard), `cism_basal_melt_rate` (flux balance with the eps11 zeroing applied to the RATE), `cism_basal_freeze_on` (predicate bmlt < 0 ∧ bwat = 0 ∧ btemp ≥ bpmp − eps08), `cism_basal_melt_cap` (btemp_ground = min(btemp, bpmp); freeze-on drop to min(bpmp − 2·pmp_threshold, bpmp − eps08)) | `glissade_therm.F90`: 2163-2174, 2127-2155, 1930-1967, 2007-2012, 1979 |
+| `cism_thermo_discretization.esm` | Local ESD-format rule file: the `cism_sigma_diffusion` lowering rule + the `cism_interface_flux` stencil template, with the UPN/lev_nodes grid contract | `glissade_therm.F90`: 1324-1507, 151-163 |
+| `cism_thermo.esm` | Model `IceTemperatureColumn` (the ODE d(temp)/dt = dTdt, the 12-node geometry parameters from the dump, the algebraic laws above) + 10 tests (5 operator pins, thin-cell law, thawed bed, internal melt, freeze-on, eps11) | `glissade_therm.F90` as above |
+
+Constants (CCSMCOUPLED): rhoi = 917 kg/m³, shci = 2117.27 J/kg/K, lhci = 333700
+J/kg, coni = 2.1 W/m/K, grav = 9.80616 m/s², pmlt = 9.7456e-8 K/Pa,
+scyr = 31536000 s, pmp_threshold = 1e-3 degC, eps08 = 1e-8, eps11 = 1e-11,
+dttem = 1.5768e7 s (the 0.5-yr glissade step).
+
+### Gaps and deferrals
+
+- **Entry→exit backward-Euler map**: not integrated (see pin strategy). A
+  stage-3 coupling that must reproduce the CISM trajectory exactly would
+  transcribe the tridiagonal solve itself (an algebraic map, not an ODE) or
+  accept first-order-in-dt trajectory differences.
+- **Surface re-pin jump**: the surface value is re-pinned inside the solve, so
+  the ENTRY rows of steps 1 and 3 carry the previous value (the initial 0 and
+  the previous year's artm); the surface law is pinned on the exit rows (all
+  128).
+- **waterfrac ≡ 0**: TEMP_PROGNOSTIC carries no internal water (the dump's
+  waterfrac columns are all 0); the enthalpy scheme (waterfrac > 0) is deferred.
+- **Thin-ice bypass**: cells with thck ≤ thklim_temp = 1 m skip the solve
+  entirely (temp = min(0, artm) on all nodes; bpmp/btemp_ground = 0; the basal
+  melt laws do not apply). 21 of 128 traced rows are such cells; cell (28,11)
+  is pinned.
+- **Thawed-bed / freeze-on / internal-melt branches**: no traced row exercises
+  them (the window is frozen: every entry temp_011 < bpmp − pmp_threshold, worst
+  margin −1.425 degC; bmlt = bwat = bheatflx = bhydroflx = 0); pinned
+  synthetically from the source formulas.
+- **Internal-melt temperature reset**: the melt cap's paired state update
+  temp → pmptemp (F90:2148) is a post-solve mutation, documented, not
+  transcribed as an equation.
+- **pmptemp profile**: the dump carries only the bed value bpmp; the per-node
+  profile law −ρᵢg·pmlt·thck·sigma_node is a model computation, pinned at the
+  bed against the dumped bpmp and synthetically for the interior (the
+  internal_melt_rate test).
+- **Dump extension**: dttem, dissip_001..010, sigma_001..011, stagsigma_001..010
+  were added to `cism_thermo.csv`; sigma/stagsigma are derivable from the grid
+  construction, but dissip and dttem are not, and the operator pins need them.
+
+### Next steps for this lane
+
+Mount `IceTemperatureColumn` (+ `Effecpress`/`BasalTraction`/`FlowFactor` and
+the cap lanes) into the CISM subassembly: wire artm/thck/bwat/bfricflx/
+bhydroflx/bheatflx from the surface/velocity components, the dissip heating from
+the velocity solve, and the temperature state into the flow factor; the
+hydrology lane (row 10) supplies bwat. The basal-melt outputs (bmlt_ground,
+btemp_ground) feed the thickness/geometry evolution (not in this window).
