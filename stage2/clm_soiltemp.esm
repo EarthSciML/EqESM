@@ -16,6 +16,11 @@
    "type": "integer",
    "default": 34,
    "description": "number of snow + soil layers in the stage-2 skeleton (snl = -9 snow layers plus nlevgrnd = 25 soil layers), [-]"
+  },
+  "NLEV": {
+   "type": "integer",
+   "default": 34,
+   "description": "number of snow + soil layers of the SoilTemperature column, the column_nonuniform_1d grid's NLEV bound at the import edge (equal to N_LAYER = 34 in the stage-2 skeleton), [-]"
   }
  },
  "models": {
@@ -2748,6 +2753,3747 @@
      ]
     }
    ]
-  }
+  },
+ "SoilTemperature": {
+  "expression_template_imports": [
+   {
+    "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/grid.esm",
+    "bindings": {
+     "NLEV": "NLEV"
+    }
+   },
+   {
+    "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc.esm",
+    "bindings": {
+     "NLEV": "NLEV"
+    }
+   }
+  ],
+  "variables": {
+   "t_entry": {
+    "type": "parameter",
+    "units": "K",
+    "description": "layer temperature at the ENTRY stage, the state ComputeHeatDiffFluxAndFactor, SetRHSVec_* and SetMatrix_* consume (dump column t_soisno, entry stage), reversed to the ESD lev order (ESD lev n = CLM j = 26 - n; lev 1 = the deepest soil layer j = 25, lev 34 = the top snow layer j = -8), [K]",
+    "shape": [
+     "lev"
+    ],
+    "default": 0.0
+   },
+   "t_exit": {
+    "type": "parameter",
+    "units": "K",
+    "description": "layer temperature at the EXIT stage, the converged solution of the CLM tridiagonal solve (dump column t_soisno, exit stage), reversed to lev order, [K]",
+    "shape": [
+     "lev"
+    ],
+    "default": 0.0
+   },
+   "cv": {
+    "type": "parameter",
+    "units": "J/m^2/K",
+    "description": "layer heat capacity per unit ground area, the SoilThermProp output (dump column cv, exit stage), reversed to lev order, [J/m2/K]",
+    "shape": [
+     "lev"
+    ],
+    "default": 0.0
+   },
+   "K": {
+    "type": "parameter",
+    "units": "W/m/K",
+    "description": "interface thermal conductivity on the lev_nodes axis: K[n] = tk(26 - n) (the SoilThermProp output, dump column tk; node n is the interface between ESD layers n - 1 and n, the CLM interface zi(26 - n) below layer j = 26 - n), with K[1] = tk(25) = 0 the zero bottom boundary of SoilThermProp and K[NLEV+1] = 0 a dummy that the flux stencil never reads (the rule's face closures use the prescribed kdudz fluxes instead), [W/m/K]",
+    "shape": [
+     "lev_nodes"
+    ],
+    "default": 0.0
+   },
+   "ze": {
+    "type": "parameter",
+    "units": "m",
+    "description": "interface coordinates on lev_nodes, the negated CLM interface depths below ground: ze[n] = -zi(26 - n), ze[1] = -zi(25) = -49.556 m the column bottom and ze[NLEV+1] = -zi(-8) = +22.132 m the snow surface, monotone increasing with lev as the grid requires (lev 1 = the bottom), [m]",
+    "shape": [
+     "lev_nodes"
+    ],
+    "default": 0.0
+   },
+   "dz": {
+    "type": "parameter",
+    "units": "m",
+    "description": "layer thickness on lev, the dumped CLM dz(j) reversed. Supplied as a parameter rather than derived from ze on purpose: the top snow layer's (z, dz, zi) triple is internally inconsistent in the dump (bugs.md #32) and the CLM rows use the dumped dz, so the rule's finite-volume measure is fed the CLM values (deriving dz from ze would shift the top-layer L by ~0.2 W/m3 and break the row reproduction), [m]",
+    "shape": [
+     "lev"
+    ],
+    "default": 0.0
+   },
+   "sabg": {
+    "type": "parameter",
+    "units": "W/m^2",
+    "description": "solar radiation absorbed in the layer (dump column sabg_lyr_col, exit stage; the NaN soil rows are read as 0). The traced run deposits solar radiation only in ESD layers 30..33 (CLM j = -4..-7); the top snow layer's absorption is inside hs_top_snow (SetRHSVec_Snow adds no sabg term to the top row), [W/m2]",
+    "shape": [
+     "lev"
+    ],
+    "default": 0.0
+   },
+   "hs_top_snow": {
+    "type": "parameter",
+    "units": "W/m^2",
+    "description": "heat flux into the snow pack at the snow surface (dump column hs_top_snow, exit stage), the constant part of the top boundary flux, [W/m2]",
+    "default": 0.0
+   },
+   "dhsdT": {
+    "type": "parameter",
+    "units": "W/m^2/K",
+    "description": "temperature derivative of the surface heat flux (dump column dhsdT), the linear part of the top boundary flux, [W/m2/K]",
+    "default": 0.0
+   },
+   "eflx_bot": {
+    "type": "parameter",
+    "units": "W/m^2",
+    "description": "heat flux from beneath the soil column (dump column eflx_bot = 0 in the traced run: the CLM bottom boundary carries no geothermal flux), fn(nlevgrnd) = eflx_bot and the rule's kdudz_bot, [W/m2]",
+    "default": 0.0
+   },
+   "cnfac": {
+    "type": "parameter",
+    "units": "1",
+    "description": "Crank-Nicolson weighting of the CLM implicit solve (clm_varcon.F90:88; the traced run uses cnfac = 0.5), [-]",
+    "default": 0.5
+   },
+   "capr": {
+    "type": "parameter",
+    "units": "1",
+    "description": "top snow layer surface-flux weighting capr = 0.34 (SoilTemperatureMod.F90:86), [-]",
+    "default": 0.34
+   },
+   "dt": {
+    "type": "parameter",
+    "units": "s",
+    "description": "land-model time step dtime = 1800 s of the traced run, [s]",
+    "default": 1800.0
+   },
+   "u_cn": {
+    "type": "unknown",
+    "units": "K",
+    "description": "Crank-Nicolson weighted layer temperature u_cn = cnfac*t_entry + (1 - cnfac)*t_exit, the implicit-average state of the CLM solve; because the fluxes are linear in temperature, evaluating every interface flux at u_cn reproduces the CLM row system exactly (the identity cnfac*fn(entry) + (1 - cnfac)*fn(exit) = fn(u_cn), SetRHSVec_Soil/SetRHSVec_Snow with SetMatrix_Soil/SetMatrix_Snow), [K]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "du": {
+    "type": "unknown",
+    "units": "K",
+    "description": "u_cn - t_entry, the Crank-Nicolson temperature change from the entry state, [K]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "zc": {
+    "type": "unknown",
+    "units": "m",
+    "description": "layer centres, grid-derived from ze by the column_nonuniform_1d column_cell_center template: zc[n] = (ze[n] + ze[n+1])/2 = -z(26 - n) exactly (the dumped layer centre is the arithmetic mean of its interface depths), [m]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "A_capr": {
+    "type": "unknown",
+    "units": "1",
+    "description": "top snow layer surface-flux weight A = 0.5*((ze[NLEV+1] - zc[NLEV]) + capr*(ze[NLEV+1] - zc[NLEV-1]))/dz[NLEV] of the CLM top-row factor, fact(-8) = dtime/cv/A (ComputeHeatDiffFluxAndFactor :1927-1928, 0.5*(z(j) - zi(j-1) + capr*(z(j+1) - zi(j-1)))/dz(j) measured from the snow surface), the capr-weighted distance of the top-layer centre from the snow surface in units of the top-layer thickness, [-]"
+   },
+   "L_cn": {
+    "type": "unknown",
+    "units": "W/m^3",
+    "description": "the diffusion operator D(K*D(u_cn, lev), lev) lowered by the EarthSciDiscretizations rule varcoeff_face_laplacian_lev_flux_bc to the CLM row flux differences: L u[n] = (G[n+1] - G[n])/dz[n] with the interface fluxes G[n] = K[n]*(u[n] - u[n-1])/(zc[n] - zc[n-1]) and the prescribed face fluxes kdudz_top/kdudz_bot, so dz[n]*L_cn[n] = fn_cn(26 - n) - fn_cn(27 - n) with fn_cn the CLM interface fluxes evaluated at u_cn, [W/m3]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "fn_esd": {
+    "type": "unknown",
+    "units": "W/m^2",
+    "description": "the CLM interface heat fluxes fn(j) at the ENTRY state (the dump's fn column, computed in ComputeHeatDiffFluxAndFactor :1875-1926 at t_soisno = entry: fn(j) = tk(j)*(t(j+1) - t(j))/(z(j+1) - z(j)) with fn(nlevgrnd) = eflx_bot), reversed to lev order and written fn_esd[n] = -G(t_entry, n) with G the ESD +lev-positive interface flux (the CLM fn is positive downward), [W/m2]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "fact_esd": {
+    "type": "unknown",
+    "units": "K*m^2/W",
+    "description": "the CLM tridiagonal factor fact(j) = dtime/cv(j) with the top snow layer's capr-weighted factor dtime/(cv*A) (ComputeHeatDiffFluxAndFactor :1925-1928), reversed to lev order, [K m2/W]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "kdudz_top": {
+    "type": "unknown",
+    "units": "W/m^2",
+    "description": "the rule's prescribed K du/dz on the snow-surface face ze[NLEV+1], positive in the +lev (upward) direction: the CLM surface flux evaluated at the CN temperature, hs_top_snow + dhsdT*(u_cn[NLEV] - t_entry[NLEV]). The top-layer residual's (1/(2A)) weighting doubles the dhsdT term and restores the CLM top row's FULLY IMPLICIT surface flux dhsdT*(t_exit - t_entry) (SetMatrix_Snow's -fact*dhsdT coefficient, not (1 - cnfac)*fact*dhsdT), [W/m2]"
+   },
+   "kdudz_bot": {
+    "type": "unknown",
+    "units": "W/m^2",
+    "description": "the rule's prescribed K du/dz on the column-bottom face ze[1], positive in the +lev (upward) direction: the CLM bottom boundary flux eflx_bot (zero in the traced run), [W/m2]"
+   },
+   "cv_dudt": {
+    "type": "unknown",
+    "units": "W/m^2",
+    "description": "cv*(u_cn - t_entry)/dt, the CLM row's heat-storage term at the CN temperature, [W/m2]",
+    "shape": [
+     "lev"
+    ]
+   },
+   "resid": {
+    "type": "unknown",
+    "units": "W/m^2",
+    "description": "the per-row residual of the CLM energy-balance system, in the residual form cv*du/dt - 0.5*(dz*L_cn + sabg) = 0: with the dumped entry/exit states it evaluates to round-off (max |resid| = 3.2e-10 W/m2), pinning that the dumped t_exit solves the CLM tridiagonal system exactly. Interior rows (lev 2..NLEV-1): cv*du/dt = 0.5*(dz*L_cn + sabg); the bottom row adds -eflx_bot, which combined with the eflx_bot already inside dz*L_cn[1] (through kdudz_bot) restores the row's eflx_bot; the top row is the capr-weighted surface-flux balance cv*du/dt = (1/(2A))*(dhsdT*du + dz*L_cn) with no sabg (the top-layer solar absorption is inside hs_top_snow), [W/m2]",
+    "shape": [
+     "lev"
+    ]
+   }
+  },
+  "equations": [
+   {
+    "lhs": "u_cn",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "cnfac",
+      "t_entry",
+      "t_exit"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "cnfac",
+         {
+          "op": "index",
+          "args": [
+           "t_entry",
+           "lev"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           1,
+           "cnfac"
+          ]
+         },
+         {
+          "op": "index",
+          "args": [
+           "t_exit",
+           "lev"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "lhs": "du",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "u_cn",
+      "t_entry"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "-",
+      "args": [
+       {
+        "op": "index",
+        "args": [
+         "u_cn",
+         "lev"
+        ]
+       },
+       {
+        "op": "index",
+        "args": [
+         "t_entry",
+         "lev"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "lhs": "zc",
+    "rhs": {
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "column_cell_center",
+     "bindings": {
+      "ze": "ze"
+     }
+    }
+   },
+   {
+    "lhs": "A_capr",
+    "rhs": {
+     "op": "/",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        0.5,
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "ze",
+              {
+               "op": "+",
+               "args": [
+                "NLEV",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "zc",
+              "NLEV"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            "capr",
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "ze",
+                {
+                 "op": "+",
+                 "args": [
+                  "NLEV",
+                  1
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "zc",
+                {
+                 "op": "-",
+                 "args": [
+                  "NLEV",
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "index",
+       "args": [
+        "dz",
+        "NLEV"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "lhs": "kdudz_top",
+    "rhs": {
+     "op": "+",
+     "args": [
+      "hs_top_snow",
+      {
+       "op": "*",
+       "args": [
+        "dhsdT",
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "u_cn",
+            "NLEV"
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "t_entry",
+            "NLEV"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "lhs": "kdudz_bot",
+    "rhs": "eflx_bot"
+   },
+   {
+    "lhs": "L_cn",
+    "rhs": {
+     "op": "D",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        "K",
+        {
+         "op": "D",
+         "args": [
+          "u_cn"
+         ],
+         "wrt": "lev"
+        }
+       ]
+      }
+     ],
+     "wrt": "lev"
+    }
+   },
+   {
+    "lhs": "cv_dudt",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "cv",
+      "u_cn",
+      "t_entry",
+      "dt"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "index",
+          "args": [
+           "cv",
+           "lev"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "index",
+            "args": [
+             "u_cn",
+             "lev"
+            ]
+           },
+           {
+            "op": "index",
+            "args": [
+             "t_entry",
+             "lev"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "dt"
+      ]
+     }
+    }
+   },
+   {
+    "lhs": "fn_esd",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "eflx_bot",
+      "t_entry",
+      "K"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "lev",
+         1
+        ]
+       },
+       "eflx_bot",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "interface_flux_K_lev",
+          "bindings": {
+           "u": "t_entry",
+           "K": "K",
+           "n": "lev"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "lhs": "fact_esd",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "dt",
+      "cv",
+      "A_capr"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "lev",
+         "NLEV"
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "dt",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "index",
+            "args": [
+             "cv",
+             "lev"
+            ]
+           },
+           "A_capr"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         "dt",
+         {
+          "op": "index",
+          "args": [
+           "cv",
+           "lev"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "lhs": "resid",
+    "rhs": {
+     "op": "faq",
+     "args": [
+      "cv",
+      "u_cn",
+      "t_entry",
+      "dt",
+      "dz",
+      "L_cn",
+      "sabg",
+      "A_capr",
+      "dhsdT",
+      "eflx_bot"
+     ],
+     "output_idx": [
+      "lev"
+     ],
+     "ranges": {
+      "lev": {
+       "from": "lev"
+      }
+     },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "lev",
+         "NLEV"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "index",
+              "args": [
+               "cv",
+               "lev"
+              ]
+             },
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "index",
+                "args": [
+                 "u_cn",
+                 "lev"
+                ]
+               },
+               {
+                "op": "index",
+                "args": [
+                 "t_entry",
+                 "lev"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "dt"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             1,
+             {
+              "op": "*",
+              "args": [
+               2,
+               "A_capr"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               "dhsdT",
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "u_cn",
+                   "lev"
+                  ]
+                 },
+                 {
+                  "op": "index",
+                  "args": [
+                   "t_entry",
+                   "lev"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "index",
+                "args": [
+                 "dz",
+                 "lev"
+                ]
+               },
+               {
+                "op": "index",
+                "args": [
+                 "L_cn",
+                 "lev"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           "lev",
+           1
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "cv",
+                   "lev"
+                  ]
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "index",
+                    "args": [
+                     "u_cn",
+                     "lev"
+                    ]
+                   },
+                   {
+                    "op": "index",
+                    "args": [
+                     "t_entry",
+                     "lev"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               },
+               "dt"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               0.5,
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "index",
+                    "args": [
+                     "dz",
+                     "lev"
+                    ]
+                   },
+                   {
+                    "op": "index",
+                    "args": [
+                     "L_cn",
+                     "lev"
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "op": "index",
+                  "args": [
+                   "sabg",
+                   "lev"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "eflx_bot"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "index",
+                "args": [
+                 "cv",
+                 "lev"
+                ]
+               },
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "u_cn",
+                   "lev"
+                  ]
+                 },
+                 {
+                  "op": "index",
+                  "args": [
+                   "t_entry",
+                   "lev"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             "dt"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             0.5,
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "dz",
+                   "lev"
+                  ]
+                 },
+                 {
+                  "op": "index",
+                  "args": [
+                   "L_cn",
+                   "lev"
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "index",
+                "args": [
+                 "sabg",
+                 "lev"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "tests": [
+   {
+    "id": "clm_soiltemp_geometry_step1_col1",
+    "description": "Grid geometry of the SoilTemperature column (column_nonuniform_1d edge-array contract): the layer centres zc = column_cell_center(ze) pinned against the dumped layer centres, zc[n] = -z(26 - n), at the deepest soil layer (lev 1), the bottom soil layer (lev 25, z = 0.01 m) and the top snow layer (lev 34). The reproduction is exact to the dump's double precision (the dumped z is the arithmetic mean of its interface depths).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 0.0
+    },
+    "assertions": [
+     {
+      "variable": "zc",
+      "time": 0.0,
+      "expected": -41.99843686400287,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "zc",
+      "time": 0.0,
+      "expected": -0.01,
+      "coords": {
+       "lev": 25
+      }
+     },
+     {
+      "variable": "zc",
+      "time": 0.0,
+      "expected": 22.123804434814364,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   },
+   {
+    "id": "clm_soiltemp_fn_esd_step1_col1",
+    "description": "Entry-state interface heat fluxes fn_esd = -G(t_entry) (the dump's fn column at the exit stage, computed by ComputeHeatDiffFluxAndFactor at the entry temperature), pinned for all 34 layers: fn_esd[n] = fn(26 - n) = tk(26 - n)*(t(27 - n) - t(26 - n))/(z(27 - n) - z(26 - n)), with the bottom flux fn(25) = eflx_bot = 0. Reproduced to the dump's full double precision (worst rel residual 4.8e-14 at the snow/soil interface, the float32-rounding zone of bugs.md #31).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 0.0
+    },
+    "assertions": [
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.005833587643416732,
+      "coords": {
+       "lev": 2
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.008297279199852698,
+      "coords": {
+       "lev": 3
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.007840486506281457,
+      "coords": {
+       "lev": 4
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.006214594598610665,
+      "coords": {
+       "lev": 5
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0049187863525231475,
+      "coords": {
+       "lev": 6
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0043312061640847594,
+      "coords": {
+       "lev": 7
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0037023672361680272,
+      "coords": {
+       "lev": 8
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0030569065739485227,
+      "coords": {
+       "lev": 9
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0024171482064930284,
+      "coords": {
+       "lev": 10
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.001803094893164362,
+      "coords": {
+       "lev": 11
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0012326747729110702,
+      "coords": {
+       "lev": 12
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.0007220036362438401,
+      "coords": {
+       "lev": 13
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -0.00028540370898942364,
+      "coords": {
+       "lev": 14
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.00012783957860592465,
+      "coords": {
+       "lev": 15
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0005132795459755866,
+      "coords": {
+       "lev": 16
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0008667549159657377,
+      "coords": {
+       "lev": 17
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.001184471397786496,
+      "coords": {
+       "lev": 18
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.001463066146673023,
+      "coords": {
+       "lev": 19
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0016996456574849736,
+      "coords": {
+       "lev": 20
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0018917996982922413,
+      "coords": {
+       "lev": 21
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0020376035086325348,
+      "coords": {
+       "lev": 22
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.002135616556185993,
+      "coords": {
+       "lev": 23
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.0022095543205354388,
+      "coords": {
+       "lev": 24
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.002259057180820247,
+      "coords": {
+       "lev": 25
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.002283887117576203,
+      "coords": {
+       "lev": 26
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.04390996625791966,
+      "coords": {
+       "lev": 27
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 0.05094925058163858,
+      "coords": {
+       "lev": 28
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -1.0391092707553837,
+      "coords": {
+       "lev": 29
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -2.5858444528694045,
+      "coords": {
+       "lev": 30
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -3.5412736934910933,
+      "coords": {
+       "lev": 31
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -4.660370770580195,
+      "coords": {
+       "lev": 32
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": -3.7804638224435063,
+      "coords": {
+       "lev": 33
+      }
+     },
+     {
+      "variable": "fn_esd",
+      "time": 0.0,
+      "expected": 1.5065821438880866,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   },
+   {
+    "id": "clm_soiltemp_fact_esd_step1_col1",
+    "description": "CLM tridiagonal factors fact(j) = dtime/cv(j), with the top snow layer's capr-weighted factor dtime/(cv*A) (ComputeHeatDiffFluxAndFactor :1925-1928), pinned for all 34 layers to the dump's full double precision (rel 1.1e-16): the top-layer factor 0.24478424258537892 s*K*m2/W pins the capr-weighted A = 0.643828751513956 exactly, and the soil-layer factors pin the SoilThermProp cv values.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 0.0
+    },
+    "assertions": [
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 5.954182620555806e-05,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 8.078994614003591e-05,
+      "coords": {
+       "lev": 2
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.00011787525100445267,
+      "coords": {
+       "lev": 3
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.00019249138560582332,
+      "coords": {
+       "lev": 4
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0003765690376569038,
+      "coords": {
+       "lev": 5
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0010274044885297425,
+      "coords": {
+       "lev": 6
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0011261907931213006,
+      "coords": {
+       "lev": 7
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0012459948510664932,
+      "coords": {
+       "lev": 8
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.001394322759333745,
+      "coords": {
+       "lev": 9
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0015827378151921083,
+      "coords": {
+       "lev": 10
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0018300300689849398,
+      "coords": {
+       "lev": 11
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0021689074244899843,
+      "coords": {
+       "lev": 12
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.002661810401966498,
+      "coords": {
+       "lev": 13
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0029279733087983232,
+      "coords": {
+       "lev": 14
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0032532790512243177,
+      "coords": {
+       "lev": 15
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.003659904304003936,
+      "coords": {
+       "lev": 16
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.004182696894229664,
+      "coords": {
+       "lev": 17
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.004879733896086983,
+      "coords": {
+       "lev": 18
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.005855547713216178,
+      "coords": {
+       "lev": 19
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.007319185351756421,
+      "coords": {
+       "lev": 20
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.009758359875399998,
+      "coords": {
+       "lev": 21
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.01463587831521584,
+      "coords": {
+       "lev": 22
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.019512289592640033,
+      "coords": {
+       "lev": 23
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.029261792167879712,
+      "coords": {
+       "lev": 24
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.058483767162151236,
+      "coords": {
+       "lev": 25
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.00012654672673642929,
+      "coords": {
+       "lev": 26
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.000487967616117307,
+      "coords": {
+       "lev": 27
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0010194449795235144,
+      "coords": {
+       "lev": 28
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0021949766637693736,
+      "coords": {
+       "lev": 29
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.004725554170119648,
+      "coords": {
+       "lev": 30
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.01030207723119472,
+      "coords": {
+       "lev": 31
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.0233589822470169,
+      "coords": {
+       "lev": 32
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.05975028464675416,
+      "coords": {
+       "lev": 33
+      }
+     },
+     {
+      "variable": "fact_esd",
+      "time": 0.0,
+      "expected": 0.24478424258537892,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   },
+   {
+    "id": "clm_soiltemp_L_cn_step1_col1",
+    "description": "The diffusion operator L_cn = D(K*D(u_cn, lev), lev) lowered by the EarthSciDiscretizations rule varcoeff_face_laplacian_lev_flux_bc, pinned for all 34 layers at the CN temperature u_cn: the interior rows are the CLM flux differences (G[n+1] - G[n])/dz[n], the bottom row (G[2] - kdudz_bot)/dz[1] carries the eflx_bot closure and the top row (kdudz_top - G[NLEV])/dz[NLEV] the surface-flux closure; the huge top-layer value -53.4 W/m3 over the 1.6 cm snow layer exercises both closures. The values reproduce the CLM row system to round-off (verified independently against the tridiagonal rows, max abs deviation 2e-14 K).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 0.0
+    },
+    "assertions": [
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 0.00038593494740638836,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 0.00022115512514552752,
+      "coords": {
+       "lev": 2
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -5.983025969583096e-05,
+      "coords": {
+       "lev": 3
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.00034774703689635845,
+      "coords": {
+       "lev": 4
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.00054218050171987,
+      "coords": {
+       "lev": 5
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0005154220174798953,
+      "coords": {
+       "lev": 6
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0006046537096411615,
+      "coords": {
+       "lev": 7
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0006866616893267764,
+      "coords": {
+       "lev": 8
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0007616194827695155,
+      "coords": {
+       "lev": 9
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.000829805381725581,
+      "coords": {
+       "lev": 10
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0008912860841834938,
+      "coords": {
+       "lev": 11
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0009456923363386043,
+      "coords": {
+       "lev": 12
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0009922772657276688,
+      "coords": {
+       "lev": 13
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0010331120543278928,
+      "coords": {
+       "lev": 14
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0010706692018074755,
+      "coords": {
+       "lev": 15
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0011046118880040031,
+      "coords": {
+       "lev": 16
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0011347020362317297,
+      "coords": {
+       "lev": 17
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0011608111389369011,
+      "coords": {
+       "lev": 18
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0011828969090816731,
+      "coords": {
+       "lev": 19
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0012009619692995269,
+      "coords": {
+       "lev": 20
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0012150311447347763,
+      "coords": {
+       "lev": 21
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0012251627923587165,
+      "coords": {
+       "lev": 22
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0012322959123999058,
+      "coords": {
+       "lev": 23
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0012375712180154167,
+      "coords": {
+       "lev": 24
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.001241412332174635,
+      "coords": {
+       "lev": 25
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.0028549251218382564,
+      "coords": {
+       "lev": 26
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -0.001821032808193384,
+      "coords": {
+       "lev": 27
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 0.5708566613222257,
+      "coords": {
+       "lev": 28
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 1.6288451235241272,
+      "coords": {
+       "lev": 29
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 2.0428936617594187,
+      "coords": {
+       "lev": 30
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": 4.867827698383636,
+      "coords": {
+       "lev": 31
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -8.953159256676924,
+      "coords": {
+       "lev": 32
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -130.37252915616213,
+      "coords": {
+       "lev": 33
+      }
+     },
+     {
+      "variable": "L_cn",
+      "time": 0.0,
+      "expected": -53.40892987959229,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   },
+   {
+    "id": "clm_soiltemp_kdudz_step1_col1",
+    "description": "The rule's prescribed face fluxes and the CN temperature: kdudz_top = hs_top_snow + dhsdT*(u_cn[NLEV] - t_entry[NLEV]) = -2.521290958937191 W/m2 (the CLM surface flux at the CN temperature; its (1/(2A))-doubled dhsdT contribution reproduces the top row's fully implicit surface flux), kdudz_bot = eflx_bot = 0 (the insulated bottom), the capr weight A_capr = 0.643828751513956, and the CN temperature u_cn at the deepest and top layers.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 1e-12
+    },
+    "assertions": [
+     {
+      "variable": "kdudz_top",
+      "time": 0.0,
+      "expected": -2.521290958937191
+     },
+     {
+      "variable": "kdudz_bot",
+      "time": 0.0,
+      "expected": 0.0
+     },
+     {
+      "variable": "A_capr",
+      "time": 0.0,
+      "expected": 0.643828751513956
+     },
+     {
+      "variable": "u_cn",
+      "time": 0.0,
+      "expected": 225.65303972804537,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "u_cn",
+      "time": 0.0,
+      "expected": 247.8340903582334,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   },
+   {
+    "id": "clm_soiltemp_resid_step1_col1",
+    "description": "The per-row residuals resid of the CLM energy-balance system at the dumped entry/exit states: every one of the 34 rows (interior, bottom with eflx_bot, and the capr-weighted fully-implicit top row) is satisfied to round-off, max |resid| = 3.15e-10 W/m2 in the Python reference (the harness's evaluation order differs only at the round-off level, hence the abs 1e-8 tolerance): the dumped t_exit is the exact solution of the CLM tridiagonal system built on the dumped properties.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+    },
+    "parameter_overrides": {
+     "t_entry": [
+      225.65303955437463,
+      225.67856677471335,
+      225.70453060768742,
+      225.72061761915572,
+      225.72793585729707,
+      225.7316103751676,
+      225.73449850871114,
+      225.73674081924898,
+      225.73840519816144,
+      225.739573376378,
+      225.74033448164968,
+      225.74077939489067,
+      225.74099581973556,
+      225.7410691490196,
+      225.7410394313207,
+      225.74093267433648,
+      225.74077360831967,
+      225.7405852203885,
+      225.7403883250648,
+      225.7402011834291,
+      225.74003917850857,
+      225.73991454966128,
+      225.73982312127976,
+      225.73975556244687,
+      225.7397141306359,
+      225.69332136014845,
+      224.55974638255734,
+      224.12383847850862,
+      229.15948480552564,
+      236.49676831349456,
+      242.25368559415364,
+      246.48156197475373,
+      248.14020129572185,
+      247.89440355155978
+     ],
+     "t_exit": [
+      225.65303990171608,
+      225.6785669737529,
+      225.7045305538402,
+      225.7206173061834,
+      225.7279353693346,
+      225.73160977148416,
+      225.73449780051746,
+      225.7367400150067,
+      225.73840430612898,
+      225.73957240448837,
+      225.74033343775832,
+      225.74077828728636,
+      225.74099465758383,
+      225.7410679390498,
+      225.74103817737387,
+      225.74093138064885,
+      225.74077227940754,
+      225.74058386092065,
+      225.7403869397629,
+      225.74019977701903,
+      225.7400377557032,
+      225.7399131151546,
+      225.73982167858492,
+      225.7397541139047,
+      225.73971267858664,
+      225.69331609252086,
+      224.55974297938857,
+      224.12494990698173,
+      229.16287994324742,
+      236.50173352661534,
+      242.26989227502608,
+      246.49304669958678,
+      248.0791849655587,
+      247.77377716490702
+     ],
+     "cv": [
+      30230849.718747374,
+      22280000.0,
+      15270381.05676658,
+      9351067.811865477,
+      4780000.0,
+      1751987.6738867213,
+      1598308.218282623,
+      1444628.7626785242,
+      1290949.3070744262,
+      1137269.8514703277,
+      983590.3958662294,
+      829910.9402621312,
+      676231.4846580328,
+      614759.7024163934,
+      553287.9201747541,
+      491816.1379331147,
+      430344.35569147544,
+      368872.573449836,
+      307400.7912081967,
+      245929.00896655736,
+      184457.226724918,
+      122985.44448327868,
+      92249.553362459,
+      61513.66224163934,
+      30777.77112081967,
+      14223994.933895277,
+      3688769.3784320345,
+      1765666.6481807728,
+      820054.2765265254,
+      380907.7063134005,
+      174722.04484641165,
+      77058.15180496026,
+      30125.379496376714,
+      11421.382607743957
+     ],
+     "K": [
+      0.0,
+      3.0,
+      3.0,
+      2.9999999999999996,
+      3.0,
+      2.3626658566058496,
+      1.634624800996114,
+      1.634627988387579,
+      1.6346318920753529,
+      1.6346367840829794,
+      1.6346430941370302,
+      1.6346515433220021,
+      1.6346634414066645,
+      1.6346751414467096,
+      1.6346837627226538,
+      1.6346944127458751,
+      1.6347079031118432,
+      1.6347255449285856,
+      1.6347496029944024,
+      1.6347843556715285,
+      1.6348389721829477,
+      1.6349372981971944,
+      1.635084822044148,
+      1.635281595525548,
+      1.6357410842993776,
+      0.35938427703581544,
+      0.35656693378028304,
+      0.3354244258724071,
+      0.29502246317674174,
+      0.25002048951701455,
+      0.21464874327658412,
+      0.18511320957663754,
+      0.16927765541497602,
+      0.1741925750100798,
+      0.0
+     ],
+     "ze": [
+      -49.556149293689714,
+      -34.44072443431603,
+      -23.30072443431603,
+      -15.665533905932739,
+      -10.99,
+      -8.6,
+      -7.46,
+      -6.42,
+      -5.48,
+      -4.640000000000001,
+      -3.9000000000000004,
+      -3.2600000000000002,
+      -2.72,
+      -2.2800000000000002,
+      -1.8800000000000001,
+      -1.52,
+      -1.2,
+      -0.9199999999999999,
+      -0.6799999999999999,
+      -0.48,
+      -0.32,
+      -0.2,
+      -0.12,
+      -0.06,
+      -0.02,
+      -0.0,
+      14.580399602071962,
+      18.410187409188175,
+      20.319999567904606,
+      21.269614853240316,
+      21.73885615253163,
+      21.967507852424188,
+      22.074724608083166,
+      22.11604548622759,
+      22.131563383401136
+     ],
+     "dz": [
+      15.115424859373686,
+      11.14,
+      7.635190528383291,
+      4.675533905932738,
+      2.39,
+      1.1400000000000001,
+      1.04,
+      0.94,
+      0.8400000000000001,
+      0.74,
+      0.64,
+      0.54,
+      0.44,
+      0.4,
+      0.36000000000000004,
+      0.32,
+      0.28,
+      0.24,
+      0.2,
+      0.16,
+      0.12,
+      0.08,
+      0.06,
+      0.04,
+      0.02,
+      14.580399602071962,
+      3.8297878071162117,
+      1.9098121587164305,
+      0.9496152853357108,
+      0.46924129929131064,
+      0.2286516998925609,
+      0.10721675565897938,
+      0.04132087814442469,
+      0.015578352833079012
+     ],
+     "sabg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.09210544672848364,
+      0.46010982320569455,
+      1.4515907270787336,
+      4.3659184452868836,
+      57.7903194708345
+     ],
+     "hs_top_snow": -2.860527545656507,
+     "dhsdT": -5.624583412182582,
+     "eflx_bot": 0.0,
+     "cnfac": 0.5,
+     "capr": 0.34,
+     "dt": 1800.0
+    },
+    "tolerance": {
+     "rel": 1e-12,
+     "abs": 1e-08
+    },
+    "assertions": [
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 2.5956159183798677e-10,
+      "coords": {
+       "lev": 1
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -3.150743665535777e-10,
+      "coords": {
+       "lev": 2
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -1.0761302986954727e-10,
+      "coords": {
+       "lev": 3
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 7.567565183438235e-11,
+      "coords": {
+       "lev": 4
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -5.80919513881728e-11,
+      "coords": {
+       "lev": 5
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 2.0205796074940913e-11,
+      "coords": {
+       "lev": 6
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -1.0219485251528743e-11,
+      "coords": {
+       "lev": 7
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 9.239346971962742e-12,
+      "coords": {
+       "lev": 8
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -7.94980254585978e-12,
+      "coords": {
+       "lev": 9
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.4725244678118199e-12,
+      "coords": {
+       "lev": 10
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.494718763908956e-11,
+      "coords": {
+       "lev": 11
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 5.7183409483269054e-12,
+      "coords": {
+       "lev": 12
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 6.062344772234454e-12,
+      "coords": {
+       "lev": 13
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -2.819482928378969e-13,
+      "coords": {
+       "lev": 14
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.8817553580890295e-12,
+      "coords": {
+       "lev": 15
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -5.887820531689028e-12,
+      "coords": {
+       "lev": 16
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -6.137729674548023e-12,
+      "coords": {
+       "lev": 17
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 4.1024249156172005e-12,
+      "coords": {
+       "lev": 18
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -4.771626995435374e-12,
+      "coords": {
+       "lev": 19
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 5.810177602168405e-12,
+      "coords": {
+       "lev": 20
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -2.1739171470998644e-12,
+      "coords": {
+       "lev": 21
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -1.0481307729831753e-12,
+      "coords": {
+       "lev": 22
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.1309221788213808e-12,
+      "coords": {
+       "lev": 23
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -2.32541034158088e-12,
+      "coords": {
+       "lev": 24
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.514099028513999e-12,
+      "coords": {
+       "lev": 25
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.9739097162352337e-10,
+      "coords": {
+       "lev": 26
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -2.1454613259586086e-11,
+      "coords": {
+       "lev": 27
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -3.290701044988964e-12,
+      "coords": {
+       "lev": 28
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 1.723066134218243e-12,
+      "coords": {
+       "lev": 29
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -2.0827783941967937e-13,
+      "coords": {
+       "lev": 30
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -1.0618173007514997e-12,
+      "coords": {
+       "lev": 31
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 5.90361093344427e-14,
+      "coords": {
+       "lev": 32
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": -5.808686864838819e-13,
+      "coords": {
+       "lev": 33
+      }
+     },
+     {
+      "variable": "resid",
+      "time": 0.0,
+      "expected": 4.087286065157514e-13,
+      "coords": {
+       "lev": 34
+      }
+     }
+    ]
+   }
+  ]
+ }
  }
 }
