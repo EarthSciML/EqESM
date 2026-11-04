@@ -28,6 +28,14 @@
   "snow_layer": {
    "kind": "interval",
    "size": "N_SLYR"
+  },
+  "i": {
+   "kind": "interval",
+   "size": "N_I"
+  },
+  "j": {
+   "kind": "interval",
+   "size": "N_J"
   }
  },
  "metaparameters": {
@@ -35,6 +43,16 @@
    "type": "integer",
    "default": 1,
    "description": "number of ice grid cells in the stage-2 skeleton (one cell; the full model runs the block-decomposed B grid), [-]"
+  },
+  "N_I": {
+   "type": "integer",
+   "default": 3,
+   "description": "number of T cells along the B-grid x axis of the traced subdomain (global cells 2..4 of the stage-1 dump; declared here so the mounted dynamics/transport grids fold to the traced 3x5 size), [-]"
+  },
+  "N_J": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of T cells along the B-grid y axis (global cells 4..8 of the dump; see N_I), [-]"
   },
   "N_CAT": {
    "type": "integer",
@@ -53,14 +71,14 @@
   }
  },
  "models": {
-  "Thermodynamics": {
-   "ref": "./cice_thermodynamics.esm"
+  "Transport": {
+   "ref": "./cice_transport.esm"
   },
   "Dynamics": {
    "ref": "./cice_dynamics.esm"
   },
-  "Transport": {
-   "ref": "./cice_transport.esm"
+  "Thermodynamics": {
+   "ref": "./cice_thermodynamics.esm"
   },
   "IceCap": {
    "ref": "./cice_coupling.esm"
@@ -234,7 +252,7 @@
      }
     }
    ],
-   "tests": []
+  "tests": []
   }
  },
  "coupling": [
@@ -277,15 +295,15 @@
    "type": "variable_map",
    "from": "Control.strairx",
    "to": "Dynamics.strairx",
-   "transform": "param_to_var",
-   "description": "T-point air-ice stress mapped to the U-point momentum balance (grid_average_X2Y of strairxT, ice_dyn_evp.F90:474-475; identity on the single-cell skeleton)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "Control.strairx", "args": ["Control.strairx"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "T-point air-ice stress mapped to the U-point momentum balance (grid_average_X2Y of strairxT, ice_dyn_evp.F90:474-475; the single-cell value broadcast over the traced 3x5 dynamics grid by the faq full-map transform)"
   },
   {
    "type": "variable_map",
    "from": "Control.strairy",
    "to": "Dynamics.strairy",
-   "transform": "param_to_var",
-   "description": "T-point air-ice stress mapped to the U-point momentum balance"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "Control.strairy", "args": ["Control.strairy"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "T-point air-ice stress mapped to the U-point momentum balance (broadcast over the 3x5 grid)"
   },
   {
    "type": "variable_map",
@@ -305,127 +323,127 @@
    "type": "variable_map",
    "from": "Control.shcoef",
    "to": "Thermodynamics.shcoef",
-   "transform": "param_to_var",
-   "description": "sensible-heat transfer coefficient into the surface energy balance (atmo_boundary_const F90:493)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "Control.shcoef", "args": ["Control.shcoef"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sensible-heat transfer coefficient into the surface energy balance (atmo_boundary_const F90:493; the single-cell value broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Control.lhcoef",
    "to": "Thermodynamics.lhcoef",
-   "transform": "param_to_var",
-   "description": "latent-heat transfer coefficient into the surface energy balance (F90:494)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "Control.lhcoef", "args": ["Control.lhcoef"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "latent-heat transfer coefficient into the surface energy balance (F90:494; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.potT",
    "to": "Thermodynamics.potT",
-   "transform": "param_to_var",
-   "description": "air potential temperature into the surface energy balance (ice_import Sa_ptem or the Sa_pbot branch)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.potT", "args": ["IceCap.potT"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air potential temperature into the surface energy balance (ice_import Sa_ptem or the Sa_pbot branch; the single-cell value broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.Qa",
    "to": "Thermodynamics.Qa",
-   "transform": "param_to_var",
-   "description": "air specific humidity into the surface energy balance (ice_import Sa_shum)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.Qa", "args": ["IceCap.Qa"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air specific humidity into the surface energy balance (ice_import Sa_shum; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.rhoa",
    "to": "Thermodynamics.rhoa",
-   "transform": "param_to_var",
-   "description": "air density into the saturation humidity and surface energy balance"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.rhoa", "args": ["IceCap.rhoa"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air density into the saturation humidity and surface energy balance (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swvdr",
    "to": "Thermodynamics.swvdr",
-   "transform": "param_to_var",
-   "description": "visible direct shortwave into the absorbed_solar/prep_radiation step"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swvdr", "args": ["IceCap.swvdr"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "visible direct shortwave into the absorbed_solar/prep_radiation step (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swvdf",
    "to": "Thermodynamics.swvdf",
-   "transform": "param_to_var",
-   "description": "visible diffuse shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swvdf", "args": ["IceCap.swvdf"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "visible diffuse shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swidr",
    "to": "Thermodynamics.swidr",
-   "transform": "param_to_var",
-   "description": "near-IR direct shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swidr", "args": ["IceCap.swidr"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "near-IR direct shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swidf",
    "to": "Thermodynamics.swidf",
-   "transform": "param_to_var",
-   "description": "near-IR diffuse shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swidf", "args": ["IceCap.swidf"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "near-IR diffuse shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.flw",
    "to": "Thermodynamics.flw",
-   "transform": "param_to_var",
-   "description": "downward longwave into the surface energy balance (ice_import Faxa_lwdn)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.flw", "args": ["IceCap.flw"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "downward longwave into the surface energy balance (ice_import Faxa_lwdn; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.sst",
    "to": "Thermodynamics.sst",
-   "transform": "param_to_var",
-   "description": "sea surface temperature into the ocean heat flux fbot (ice_import So_t)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.sst", "args": ["IceCap.sst"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sea surface temperature into the ocean heat flux fbot (ice_import So_t; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.sss",
    "to": "Thermodynamics.sss",
-   "transform": "param_to_var",
-   "description": "sea surface salinity into the bottom liquidus (ice_import So_s)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.sss", "args": ["IceCap.sss"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sea surface salinity into the bottom liquidus (ice_import So_s; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.frzmlt",
    "to": "Thermodynamics.frzmlt",
-   "transform": "param_to_var",
-   "description": "ocean-to-ice heat flux into fbot (ice_import Fioo_q)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.frzmlt", "args": ["IceCap.frzmlt"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "ocean-to-ice heat flux into fbot (ice_import Fioo_q; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.frain",
    "to": "Thermodynamics.frain",
-   "transform": "param_to_var",
-   "description": "rain rate (m/s) into the melt-pond volume change (ice_import Faxa_rain divided by rhofresh)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.frain", "args": ["IceCap.frain"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "rain rate (m/s) into the melt-pond volume change (ice_import Faxa_rain divided by rhofresh; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.fsnow",
    "to": "Thermodynamics.fsnow",
-   "transform": "param_to_var",
-   "description": "snowfall rate into the new-snow thickness (ice_import Faxa_snow)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.fsnow", "args": ["IceCap.fsnow"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "snowfall rate into the new-snow thickness (ice_import Faxa_snow; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Transport.aicen",
    "to": "Thermodynamics.aicen",
-   "transform": "param_to_var",
-   "description": "advected category area into the column physics (the Fortran advects aicen before step_therm1 of the next step)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.aicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.aicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category area into the column physics (the Fortran advects aicen before step_therm1 of the next step; the single-cell skeleton selects the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vicen",
    "to": "Thermodynamics.vicen",
-   "transform": "param_to_var",
-   "description": "advected category ice volume into the column physics"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category ice volume into the column physics (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vsnon",
    "to": "Thermodynamics.vsnon",
-   "transform": "param_to_var",
-   "description": "advected category snow volume into the column physics"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vsnon", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vsnon"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category snow volume into the column physics (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
@@ -452,22 +470,22 @@
    "type": "variable_map",
    "from": "Transport.aicen",
    "to": "IceCap.aicen",
-   "transform": "param_to_var",
-   "description": "category area into the export aggregation (ailohi, Tsrf, fluxes)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.aicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.aicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category area into the export aggregation (ailohi, Tsrf, fluxes; single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vicen",
    "to": "IceCap.vicen",
-   "transform": "param_to_var",
-   "description": "category ice volume into the Si_vice export"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category ice volume into the Si_vice export (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vsnon",
    "to": "IceCap.vsnon",
-   "transform": "param_to_var",
-   "description": "category snow volume into the Si_vsno/Si_snowh exports"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vsnon", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vsnon"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category snow volume into the Si_vsno/Si_snowh exports (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
@@ -501,57 +519,57 @@
    "type": "variable_map",
    "from": "IceCap.uocn",
    "to": "Dynamics.uocn",
-   "transform": "param_to_var",
-   "description": "ocean surface current into the ocean stress vrel (ice_import So_u)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.uocn", "args": ["IceCap.uocn"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_u; the single-cell value broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.vocn",
    "to": "Dynamics.vocn",
-   "transform": "param_to_var",
-   "description": "ocean surface current into the ocean stress vrel (ice_import So_v)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.vocn", "args": ["IceCap.vocn"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_v; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.ss_tltx",
    "to": "Dynamics.ss_tltx",
-   "transform": "param_to_var",
-   "description": "sea-surface slope into the tilt stress (ice_import So_dhdx)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.ss_tltx", "args": ["IceCap.ss_tltx"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdx; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.ss_tlty",
    "to": "Dynamics.ss_tlty",
-   "transform": "param_to_var",
-   "description": "sea-surface slope into the tilt stress (ice_import So_dhdy)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.ss_tlty", "args": ["IceCap.ss_tlty"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdy; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.taux",
    "to": "Thermodynamics.strocnxT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the ustar of fbot (the single-cell skeleton collapses the T-point average of strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Dynamics.taux", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]}, "args": ["Dynamics.taux"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "full ocean stress into the ustar of fbot (the single-cell skeleton collapses the T-point average of strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072, to the traced cell's NE-corner U point (2,2), broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.tauy",
    "to": "Thermodynamics.strocnyT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the ustar of fbot"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Dynamics.tauy", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]}, "args": ["Dynamics.tauy"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "full ocean stress into the ustar of fbot (traced cell's NE-corner U point (2,2), broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.taux",
    "to": "IceCap.strocnxT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the Fioi_taux sign flip (tauxo = -strocnxT_iavg, ice_import_export.F90:966-968)"
+   "transform": {"op": "index", "args": ["Dynamics.taux", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]},
+   "description": "full ocean stress into the Fioi_taux sign flip (tauxo = -strocnxT_iavg, ice_import_export.F90:966-968; the T-point average collapsed to the traced cell's NE-corner U point (2,2))"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.tauy",
    "to": "IceCap.strocnyT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the Fioi_tauy sign flip"
+   "transform": {"op": "index", "args": ["Dynamics.tauy", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]},
+   "description": "full ocean stress into the Fioi_tauy sign flip (T-point average collapsed to the traced cell's NE-corner U point (2,2))"
   },
   {
    "type": "variable_map",
