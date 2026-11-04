@@ -44,10 +44,32 @@ ROWS = [
      'unstable, 23 coupling steps later)'),
 ]
 
-# wide dump rows: hand-picked (step, gid) pairs exercising the branches
-# the fixed window cannot reach (stable regime, strongest wind, new
-# iteration counts); filled after the wide run lands
-ROWS_WIDE = []
+# wide dump rows: hand-picked (step, gid) pairs from the dynamic
+# (per-step stable/wind ranked) selection of cmeps_aoflux_wide.csv.
+# The stable branch and the cdn 33 m/s cap are NOT in this window (no
+# PET-0 cell has delt > 0 and the domain wind maximum is 4.8 m/s; the
+# selection ranks all 12 masked PET-0 cells every step, so this is
+# exhaustive, not a sampling artifact) -- the pins below are the
+# iteration-count variants the wide rows produce (2/3/4) plus the
+# strongest-wind row the run offers.
+ROWS_WIDE = [
+    (4, 42667, 'wide_maxwind_cell',
+     'the strongest-wind row of the wide dump (step 4, gid 42667, n 7117, '
+     '~69.0 S): the wind-ranked selection\'s domain maximum vmag 4.81 m/s, '
+     'the strongest wind this run\'s PET-0 slice offers (the cdn 33 m/s cap '
+     'of F90:153-154 is not reached anywhere in the run), converged at '
+     'iteration 2 with hol -1.16'),
+    (13, 42126, 'wide_iter3_coldest_cell',
+     'wide dump row (step 13, gid 42126, n 7026, ~69.3 S): convergence at '
+     'iteration 3 with delt -4.54 K, vmag 1.75 m/s, hol -4.21, at one of the '
+     'domain\'s coldest cells (its delt reaches -5.86 K over the 24 steps)'),
+    (19, 41583, 'wide_iter4_holclamp_adj',
+     'wide dump row (step 19, gid 41583, n 6933, ~69.5 S): convergence at '
+     'iteration 4 with hol -9.901, a tenth off the |hol| <= 10 clamp '
+     '(F90:254), at the wind-ranked selection\'s weakest-wind step '
+     '(vmag 0.64 m/s; the same cell as iter2_typical_unstable at step 1 of '
+     'the fixed dump)'),
+]
 
 
 def main(path, rows):
@@ -57,6 +79,14 @@ def main(path, rows):
     INUM = ('step', 'ymd', 'tod', 'n', 'gid', 'iter')
     recs = [dict(zip(COLS, l.strip().split(','))) for l in data]
     bykey = {(r['step'], r['gid'].strip()): r for r in recs}
+    # 'lat' names both the latitude metadata (first occurrence) and the
+    # latent-heat flux (second); the dict above keeps only the last, so the
+    # true cell coordinates for the description come from the raw fields
+    lat_idx = COLS.index('lat')
+    lon_idx = COLS.index('lon')
+    meta = {(r['step'], r['gid'].strip()): (r['n'].strip(),
+            l.strip().split(',')[lat_idx], l.strip().split(',')[lon_idx])
+            for r, l in zip(recs, data)}
 
     # assertion order: the model's equation order
     ASSERT_VARS = [
@@ -106,7 +136,9 @@ def main(path, rows):
                 'replay (which reproduces the dump rows to <= 4.4e-15 '
                 'relative; see stage1/analysis/validate_cmeps_dump.py).'
             ) % (path.rsplit('/', 1)[-1], r['step'], r['gid'].strip(),
-                 r['n'].strip(), r['lat'].strip(), r['lon'].strip(), desc),
+                 meta[(r['step'], r['gid'].strip())][0],
+                 meta[(r['step'], r['gid'].strip())][1],
+                 meta[(r['step'], r['gid'].strip())][2], desc),
             'time_span': {'start': 0.0, 'end': 0.0},
             'parameter_overrides': params,
             'tolerance': {'rel': 1e-12, 'abs': 0.0},
