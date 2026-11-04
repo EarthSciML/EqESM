@@ -962,6 +962,74 @@
      }
     ]
    }
+  },
+  "density_dry_air": {
+   "description": "Dry-air density of cam_export (camsrfexch.F90:503): rho = pbot / (rair tbot). The cdeps density template is the moist variant (rho = p / (rair t (1 + zvir q))) and is a different law; this dry form is the one cam_export computes with SHR_CONST_RDAIR = AVOGAD * BOLTZ / MWDAIR = 287.0423113650487 J/(kg K) (shr_const_mod.F90:28-32, 46-48).",
+   "params": [
+    "p",
+    "t"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "p",
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 287.0423113650487,
+        "units": "J/(kg*K)"
+       },
+       "t"
+      ]
+     }
+    ]
+   }
+  },
+  "exner_surface": {
+   "description": "Bottom-level Exner function used by cam_export (camsrfexch.F90:496): thbot = tbot * exner, exner = (pint(pver+1)/pmid(pver))^cappav, from the SE dycore pressure-temperature coupling (dp_coupling.F90:731-733); pint(pver+1) is the surface pressure. cappav = rairv/cpairv; with dry_air_species = '' (this run) rairv = rair and cpairv = cpair (air_composition.F90:354), so the exponent is the quotient SHR_CONST_RDAIR/SHR_CONST_CPDAIR, computed as a runtime division of the two constants.",
+   "params": [
+    "p",
+    "p_surf"
+   ],
+   "body": {
+    "op": "^",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       "p_surf",
+       "p"
+      ]
+     },
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 287.0423113650487,
+        "units": "J/(kg*K)"
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1004.64,
+        "units": "J/(kg*K)"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "identity": {
+   "description": "The pass-through export bookkeeping of cam_export (camsrfexch.F90:495-525): exports that are copied from the physics state or another component's outputs without transformation (tbot/zbot/ubot/vbot/qbot/pbot from the state, netsw/flwds/soll/sols/solld/solsd from radiation_tend, ozone from the pbuf SRFOZONE field).",
+   "params": [
+    "x"
+   ],
+   "body": "x"
   }
  }
 }
