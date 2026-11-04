@@ -162,3 +162,154 @@ dimension — inherent to the checker, documented); no
 
 None. (The 251-entry table with a never-used last knot is faithful
 Fortran behavior, not a bug; the tanh saturation is glibc behavior.)
+
+## Vertical diffusion (vertical_diffusion.F90, diffusion_solver.F90; site vdiff)
+
+`cam_vertical_diffusion.esm` transcribes the CAM6 vertical-diffusion solve
+(the implicit Euler-backward finite-volume solve of `diffusion_solver.F90`
+called by `vertical_diffusion_solver.F90`) as four PDEs on the
+EarthSciDiscretizations `column_nonuniform_1d` grid:
+
+    du/dt = d/dz(K_mom du/dz) + tau_damp u + src_u        (v mirrored)
+    ds/dt = d/dz(K_th   ds/dz) + dtk/dt + src_s
+    dq/dt = d/dz(K_q    dq/dz) + src_q
+
+with `K_* = kv_* * dpidz_sq` on the interfaces and the surface sources
+`src_u = g*tauresx_enter*ramda/dz[1]` (the pver injection of
+diffusion_solver.F90:491-499), `src_s = g*shflux/dz[1]`,
+`src_q = g*cflx*dryfac/dz[1]` (the explicit q surface flux, F90:974-975,
+with the pdel/pdeldry conversion of dry constituents, F90:1056-1061).
+The diffusion term is lowered by the ESD rule
+`varcoeff_face_laplacian_lev_flux_bc`, whose stencil (interface-valued
+coefficient, no face averaging, layer-centre gradient spacing, prescribed
+domain-face fluxes) is exactly the CAM `linear_1d_operators.F90`
+finite-volume operator (spr/sub/diag, deriv_diag) — verified term by term.
+The wind damping is the solver's `tau_damp_rate` (nonzero only at CAM
+lev 32 in the window) and the residual-stress memory is
+`tauresx = tauresx_enter − tauimpx` with
+`tauimpx = ∫ (u−u0)/(g·dt) dz` over the column (F90:536-589; taux,
+tautmsx, taubljx, dragblj ≡ 0 in the window), lowered by the ESD rule
+`integral_lev_whole`; tauimpy mirrors v. `dtk = 0.5(u0²+v0²) −
+0.5(u²+v²)` is the do_beljaars kinetic-energy dissipation (F90:598-646),
+bit-exact against the dump.
+
+### Representation (esd order ↔ dump order)
+
+All parameters and states are stored in esd order (lev 1 = surface),
+reversed from the dump rows of `stage1/dumps/cam/cam_vdiff_prof.csv`
+(one row per (step, lev), CAM lev 1 = model top) and
+`cam_vdiff_q.csv` (one row per (step, lev, constituent)):
+
+| esd | CAM | quantity |
+| --- | --- | -------- |
+| lev i        | k = 33−i     | u, v, s, q, tau_damp, u0/v0/s0, dz[i] = pdel(k) |
+| interface n  | interface 34−n | ze[n] = −pint(34−n), dpidz_sq, K_* (kv = 0 in the window) |
+| ze           | −pint reversed | Pa, increasing upward; zc[i] = −mid(33−i), z_sfc = ze[1], z_top = ze[33] = −pint(1) |
+
+The double sign flip (coordinate reversal plus the flux-direction flip of
+the conservative stencil) makes the esd operator row i equal to the CAM
+matrix row 33−i exactly: `L u[i] = (A·u)[33−i]`, re-derived and confirmed
+against spr/sub/diag and deriv_diag by hand and by the compiled reference.
+
+### Verified laws (dump window, steps 1/2/48, site vdiff)
+
+All rel errors from the independent Python re-verification
+(`/scratch.local/ctessum/vdiff_verify.py`) of the instrumented run:
+
+- `ptend_u/v = (u1−u0)/dt` EXACT (rel 0); the implicit identity
+  `τ·u1 + g·taures_enter·ramda/pdel` matches the dumped ptend_u/v to rel
+  2.0e-12 (step 1), 1.05e-13 (step 2), 1.019e-11 (step 48 v); the dump's
+  ptend is the solver's own `(u1−u0)·rdt`, so the residual is dump-side
+  rounding.
+- `dtk = 0.5(u0²+v0²) − 0.5(u1²+v1²)` bit-equal (rel 0); `s1 = s0 + dtk`
+  to ±1 ulp(s0), so the dumped `ptend_s = (s1−s0)·rdt` is `dtk/dt` ±
+  ≤ 6.4e-15.
+- taures law `taures = taures_enter − tauimpx` to rel 2.7e-12 (x) /
+  7.9e-13 (y); step-1 taures_enter is the observed pbuf initial
+  (1.4478837360691117e-4 Pa) inverted from the law — the pbuf is
+  zero-initialized at nstep == 0, and the run's first vdiff step already
+  carries this value, so it is treated as data, not a bug.
+- q: `q1(32) − q0(32) = dt·g·cflx/pdel32` (≤ 3.8e-15) and
+  `ptend_q(32) = g·cflx·dryfac/pdel32` (≤ 3.9e-15) for Q, DMS, bc_a4,
+  SOAE at step 1 and DMS at steps 2/48; dryfac = pdel/pdeldry =
+  1.0113874330578143 / 1.0115819043995633 / 1.0182904760308067 for the
+  dry constituents (17 of them; Q is moist with cflx = 0).
+
+### Tolerances (dump-side rounding is real and quantified)
+
+- ptend_u/v at lev 1: rel 1e-9 (dump noise up to 1.019e-11 from
+  cancellation in the dumped `(u1−u0)/dt`).
+- tauresx/y: rel 1e-9 (law noise ~2.7e-12).
+- dtk: rel 1e-12 (bit-exact).
+- ptend_s: {rel 1e-12, abs 1e-14} — principled as ≤ ulp(s1)/dt.
+- ptend_q: rel 1e-12 (noise ≤ 3.9e-15).
+- nonzero-K operator pin: rel 1e-12 (compiled reference, no dump noise).
+
+### The nonzero-K operator pin (compiled Fortran, not dumps)
+
+The dump window runs all kvh/kvm/kvq ≡ 0, so no dump row exercises the
+diffusion operator. The operator is pinned by a compiled-Fortran
+reference driver (`scratch/cam_vdiff_driver/`): `coords_1d.F90` and
+`linear_1d_operators.F90` verbatim from the fork with minimal
+shr_kind/shr_log/shr_sys stubs, built with the CAM gfortran configuration
+(`-cpp -DUSE_CONTIGUOUS=` empty — CAM turns the F2008 contiguous
+attribute off for gfortran, cam/doc/ChangeLog:84560; with
+`-DUSE_CONTIGUOUS=contiguous` the source `real(r8), USE_CONTIGUOUS
+intent(in)` lacks the comma the attribute requires and does not compile).
+The driver builds `Coords1D` from the dumped step-1 pint (CAM order),
+applies `diffusion_operator` with K = dpidz_sq (kv ≡ 1 m²/s) and the
+default BoundaryFixedFlux conditions at both ends (zero prescribed flux —
+exactly the esm's kdudz_bot = kdudz_top = 0) to the dumped u0, and prints
+A·u0. The esm pin test reverses the rows: ptend_u(1) = 2.0633949733127771e-05,
+ptend_u(16) = 1.7093444110831203e-07, ptend_u(32) = 8.6780995093086661e-67
+(the model-top value with the near-vanishing top winds and the large
+step-1 top dpidz_sq). Surface and interior rows were additionally
+hand-verified against the spr/sub/diag stencil arithmetic.
+
+### ESD/loader findings recorded for future CAM components
+
+- **The integral rule's `where` matches only a bare layer field**: the
+  CLI's shape inference does not reduce compound expressions
+  (`integral((u−u0)/(g·dt), …)` fails the `f: {shape: [lev]}` check and
+  the node survives to the unlowered_operator gate), so the integrand is
+  bound to a named observed (`tauimpx_f`, `tauimpy_f`) first — the
+  fixture precedent.
+- **The rule's `kdudz_bot`/`kdudz_top` free names cannot be renamed at
+  the import edge** (`rename` only touches edge exports; the names are
+  free names inside the template body) and, being shared across every
+  firing, one units-typed declaration can satisfy only one field (the
+  momentum flux K du/dz is kg/s⁴, the heat flux kg·m/s⁵). The ysu.esm
+  idiom is the fix: declare the two names **without units** (a
+  units-free variable is dimension-agnostic to the checker) and share one
+  rule instance across all unit classes — valid here because every
+  prescribed surface flux in the window is zero and enters through the
+  explicit sources.
+
+### Coverage gaps
+
+- **s-equation top boundary**: CAM's dse solve uses
+  BoundaryFixedLayer(0)/BoundaryData(dse_top) at the top, whose flux
+  `2·K(1)·(dse_top − s(1))/del(1)` differs from the rule's zero-flux
+  kdudz_top whenever K(1) > 0; the window has kvh(1) = 0 and dse_top = 0,
+  so the two coincide here and the gap is documented, not bridged.
+- **Countergradient terms** (cgh/cgs and the qmincg clipping,
+  dropmixnuc, ubc_mmr fixed upper boundary): all zero or inert in the
+  window (cgh = cgs ≡ 0, cnst_fixed_ubc false for the pinned
+  constituents, dropmixnuc flux zero); not carried.
+- **tauresx/y at steps ≥ 2** use the previous step's updated dump value
+  as the entering residual (the pbuf memory), per the verified law.
+- **nonzero-K stencil** is pinned by the compiled reference, not by
+  dumps (all kv ≡ 0 in the window).
+
+### Bugs found in the CAM code
+
+None confirmed. The step-1 taures pbuf initial (nonzero at the first
+vdiff call despite the pbuf being zero-initialized at nstep == 0) is
+noted as provenance-unexplained data, not a confirmed bug.
+
+`./esm units` on `cam_vertical_diffusion.esm` reports 25 consistent
+equations, 0 mismatched, and one not checked: the grid geometry equation
+`zc = column_cell_center(ze)`, whose lowered `faq` node has no
+determinable dimension — the same checker artifact the WvSaturation
+`table_lookup` note describes; no
+`units_dimensionless_literal_mismatch` anywhere.

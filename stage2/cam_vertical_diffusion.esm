@@ -1,0 +1,2008 @@
+{
+"esm": "1.3.0",
+"metadata": {
+ "name": "cam_vertical_diffusion",
+ "description": "CAM6 vertical diffusion (dump site vdiff) as a PDE on the EarthSciDiscretizations column grid (stage 2 of the EqESM project): the implicit Euler-backward finite-volume solve of vertical_diffusion_solver.F90 / diffusion_solver.F90 (components/cam/src/atmos_phys/schemes/vertical_diffusion/ of the instrumented cam6_4_212 fork) written as du/dt = d/dz(K du/dz) + tau_damp u + src_u, with the layer field u (zonal wind; v, s, q mirrored) on lev (1 = surface), the interface coefficient K = kv dpidz_sq on lev_nodes, and the surface source src_u = g taures ramda / dz[1] the CAM solver injects at pver (diffusion_solver.F90:491-499). The diffusion term is lowered by EarthSciDiscretizations' varcoeff_face_laplacian_lev_flux_bc (interface-valued coefficient, no face averaging, layer-centre gradient spacing, prescribed fluxes at both domain faces) -- exactly the CAM finite-volume stencil of linear_1d_operators.F90 (spr/sub/diag, deriv_diag): with the CAM solve's default BoundaryFixedFlux conditions at both ends the prescribed face fluxes are the free names kdudz_bot/kdudz_top, and in this dump window they are zero (taux = tauy = shflux = ksrftms = 0 and kvh(1) = 0, dse_top = 0), so the two names are declared units-free after the ysu.esm idiom and shared by all four equations (a units-typed declaration could satisfy only one field). The coordinate is the CAM interface pressure with the sign flipped: ze = -pint reversed, so ze increases upward and esd lev i <-> CAM lev 33-i; dz[i] = pdel(33-i) and the interface flux rule's zc/dz come from the grid templates applied to ze. The wind damping tau_damp is the solver's tau_damp_rate (nonzero only at CAM lev 32 in the window) and the residual-stress memory is tauresx = tauresx_enter - tauimpx with tauimpx = integral((u-u0)/(g dt), lev, z_sfc, z_top) (diffusion_solver.F90:536-589, taux = tautmsx = taubljx = 0 in the window), the integral lowered by integral_lev_whole over the measure dz; tauimpy mirrors v. The kinetic-energy dissipation dtk = 0.5(u0^2+v0^2) - 0.5(u^2+v^2) enters the s equation as dtk/dt (F90:598-646 do_beljaars branch). Tracer diffusion is a generic q equation with the explicit surface source src_q = g cflx dryfac / dz[1] (the q solve's explicit flux-to-state conversion q1(pver) += dt g cflx / pdel, F90:974-975; the pdel/pdeldry conversion for dry constituents appears as the dryfac parameter, F90:1056-1061). Tests pin the dump rows of cam_vdiff_prof.csv / cam_vdiff_q.csv (steps 1, 2, 48; the site runs with do_iss = do_beljaars = itaures = .true., am_correction = .false., timeres = 7200 s so ramda = dt/timeres = 0.25, and all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only); the nonzero-K operator row is a compiled-Fortran reference (scratch/cam_vdiff_driver/, linear_1d_operators.F90 verbatim with the CAM gfortran build's -DUSE_CONTIGUOUS=, default fixed-flux boundaries) applying A to the step-1 u0 at K = dpidz_sq (kv = 1 m2/s), reversed to esd order. The s-equation top boundary is a documented gap: CAM's dse solve uses BoundaryFixedLayer(0)/BoundaryData(dse_top) at the top (flux 2 K(1) (dse_top - s(1))/del(1), nonzero only when K(1) > 0) while the rule's shared kdudz_top is zero-flux; the window has kvh(1) = 0 and dse_top = 0 so the two coincide here. All parameters and states are in esd order (reversed from the dump rows).",
+ "license": "MIT",
+ "tags": [
+  "stage2",
+  "cam",
+  "vertical_diffusion",
+  "pde",
+  "dump-pinned",
+  "esd:column_nonuniform_1d",
+  "esd:varcoeff_face_laplacian_lev_flux_bc"
+  ]
+ },
+"metaparameters": {
+ "NLEV": {
+  "type": "integer",
+  "default": 32,
+  "description": "Number of model layers (CAM pver = 32). Bound into the column grid and rules at the import edges; the model equations spell the top interface as the literal 33 (= NLEV+1 at this binding), the fixture precedent for the ground names of the integral rule."
+  }
+ },
+"models": {
+ "CamVerticalDiffusion": {
+  "expression_template_imports": [
+   {
+    "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/grid.esm",
+    "only": [
+     "column_cell_center",
+     "column_cell_thickness"
+     ],
+    "bindings": {
+     "NLEV": "NLEV"
+     }
+    },
+   {
+    "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc.esm",
+    "bindings": {
+     "NLEV": "NLEV"
+     }
+    },
+   {
+    "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_whole.esm",
+    "bindings": {
+     "NLEV": "NLEV"
+     }
+    }
+   ],
+  "variables": {
+   "u": {
+    "type": "unknown",
+    "units": "m/s",
+    "shape": [
+     "lev"
+     ],
+    "description": "zonal wind after the vdiff implicit solve (state%u), esd order (lev 1 = surface = CAM lev 32); dump column u1 of cam_vdiff_prof.csv rows, reversed"
+    },
+   "v": {
+    "type": "unknown",
+    "units": "m/s",
+    "shape": [
+     "lev"
+     ],
+    "description": "meridional wind after the solve (state%v); dump column v1 reversed"
+    },
+   "s": {
+    "type": "unknown",
+    "units": "J/kg",
+    "shape": [
+     "lev"
+     ],
+    "description": "dry static energy after the solve (state%s); dump column s1 reversed"
+    },
+   "q": {
+    "type": "unknown",
+    "units": "kg/kg",
+    "shape": [
+     "lev"
+     ],
+    "description": "tracer mixing ratio after the solve (state%q); one tracer per test instantiation; dump column q1 of cam_vdiff_q.csv rows reversed"
+    },
+   "ze": {
+    "type": "parameter",
+    "units": "Pa",
+    "shape": [
+     "lev_nodes"
+     ],
+    "default": [
+      -92848.96251956573, -91455.24102284685, -89840.70160218416, -87994.35722354907, -85932.03544898969, -83671.13748645567,
+      -81230.48827047336, -78630.18032864774, -74141.05342121309, -68106.55401087951, -60975.2962748278, -53223.66275062209,
+      -45482.53370868157, -38906.68735723806, -33318.839428376654, -28569.892529385947, -24533.534314275326, -21102.669844630946,
+      -18186.422609487316, -15458.726012713647, -13140.144979858878, -11169.321404306324, -9494.104347324384, -8070.141900625354,
+      -6680.049811850153, -5624.0499560208045, -4711.449936258011, -3927.3001624446247, -2973.467587052297, -1855.53172375681,
+      -1015.7947507913752, -503.16918920859297, -225.5239523947239
+     ],
+    "description": "interface coordinates = -pint reversed (Pa, increasing upward; esd interface n <-> CAM interface 34-n); default = step-1 dump (ifc_hi column of cam_vdiff_prof.csv)"
+    },
+   "zc": {
+    "type": "unknown",
+    "units": "Pa",
+    "shape": [
+     "lev"
+     ],
+    "description": "layer centres, grid-derived column_cell_center(ze) = -mid(33-i)"
+    },
+   "dz": {
+    "type": "unknown",
+    "units": "Pa",
+    "shape": [
+     "lev"
+     ],
+    "description": "layer thicknesses, grid-derived column_cell_thickness(ze) = pdel(33-i)"
+    },
+   "z_sfc": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "surface coordinate ze[1]: ground lower-bound name of the grid's integral rule (esm-spec 9.6.1)"
+    },
+   "z_top": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "top coordinate ze[33] = -pint(1): ground upper-bound name of the grid's integral rule; the literal 33 is NLEV+1 at the NLEV=32 binding"
+    },
+   "kvm": {
+    "type": "parameter",
+    "units": "m^2/s",
+    "shape": [
+     "lev_nodes"
+     ],
+    "default": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0
+     ],
+    "description": "momentum eddy diffusivity on interfaces (kvh/kvm/kvq, all zero in the dump window)"
+    },
+   "kvh": {
+    "type": "parameter",
+    "units": "m^2/s",
+    "shape": [
+     "lev_nodes"
+     ],
+    "default": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0
+     ],
+    "description": "heat eddy diffusivity on interfaces (zero in the window)"
+    },
+   "kvq": {
+    "type": "parameter",
+    "units": "m^2/s",
+    "shape": [
+     "lev_nodes"
+     ],
+    "default": [
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0
+     ],
+    "description": "tracer eddy diffusivity on interfaces (zero in the window)"
+    },
+   "dpidz_sq": {
+    "type": "parameter",
+    "units": "kg^2/(m^4*s^4)",
+    "shape": [
+     "lev_nodes"
+     ],
+    "default": [
+      110.41760768707236, 107.28745785031799, 104.13855413415965, 100.90559719024924, 97.39580873262373, 93.59357425687253,
+      89.5179241603476, 85.42956372396445, 78.05102141983093, 68.21272417397428, 56.76529478263576, 45.29586785449068,
+      35.128271573798365, 27.573046994736767, 21.817810549433215, 17.336766583820914, 13.81296648547239, 10.95811449358474,
+      8.540292915166466, 6.3105758356134185, 4.592483421476296, 3.2179501696022648, 2.2657328412483975, 1.650387753496299,
+      1.1270109196163576, 0.7862683097802157, 0.5402358536147887, 0.36712348714249965, 0.20509861646498687, 0.07724499263247359,
+      0.022099894253797766, 0.004947241250016872, 0.0009336295172983327
+     ],
+    "description": "(dp/dz)^2 at interfaces (dpidz_sq column), esd order; default = step-1 dump"
+    },
+   "K_mom": {
+    "type": "unknown",
+    "units": "kg^2/(m^2*s^5)",
+    "shape": [
+     "lev_nodes"
+     ],
+    "description": "momentum interface diffusivity K = kvm*dpidz_sq (the rule's coefficient on the left of D(u))"
+    },
+   "K_th": {
+    "type": "unknown",
+    "units": "kg^2/(m^2*s^5)",
+    "shape": [
+     "lev_nodes"
+     ],
+    "description": "heat interface diffusivity kvh*dpidz_sq"
+    },
+   "K_q": {
+    "type": "unknown",
+    "units": "kg^2/(m^2*s^5)",
+    "shape": [
+     "lev_nodes"
+     ],
+    "description": "tracer interface diffusivity kvq*dpidz_sq"
+    },
+   "tau_damp": {
+    "type": "parameter",
+    "units": "1/s",
+    "shape": [
+     "lev"
+     ],
+    "default": [
+      -7.035953756246012e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0
+     ],
+    "description": "wind damping rate tau_damp_rate (nonzero only at CAM lev 32 = esd lev 1 in the window); esd order; default = step-1 dump"
+    },
+   "u0": {
+    "type": "parameter",
+    "units": "m/s",
+    "shape": [
+     "lev"
+     ],
+    "default": [
+      1.418813430289268, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+      4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+      4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+      4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+      1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+      1.9244104698866517e-59, 3.676249032166472e-67
+     ],
+    "description": "entering zonal wind before the solve (usum_in, state%u entering), esd order; default = step-1 dump"
+    },
+   "v0": {
+    "type": "parameter",
+    "units": "m/s",
+    "shape": [
+     "lev"
+     ],
+    "default": [
+      5.404623820236974, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+      5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+      -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+      -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+      -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+      -9.846847727006192e-60, -1.88106767608655e-67
+     ],
+    "description": "entering meridional wind, esd order; default = step-1 dump"
+    },
+   "s0": {
+    "type": "parameter",
+    "units": "J/kg",
+    "shape": [
+     "lev"
+     ],
+    "default": [
+      312628.99521793926, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+      315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+      331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+      344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+      411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+      569305.7289155166, 635395.0168547509
+     ],
+    "description": "entering dry static energy, esd order; default = step-1 dump"
+    },
+   "tauresx_enter": {
+    "type": "parameter",
+    "units": "Pa",
+    "default": 0.00014478837360691117,
+    "description": "residual stress entering the step (the value the solver injects at pver, diffusion_solver.F90:491); step 1 is the observed pbuf initial (0 at nstep==0, provenance unexplained); steps >= 2 the previous step's updated tauresx"
+    },
+   "tauresy_enter": {
+    "type": "parameter",
+    "units": "Pa",
+    "default": 0.0005519501195026867,
+    "description": "meridional residual stress entering the step"
+    },
+   "ramda": {
+    "type": "parameter",
+    "units": "1",
+    "default": 0.25,
+    "description": "dt/timeres: the fraction of the residual stress injected this step (am_correction = .false., timeres = 7200 s, dt = 1800 s)"
+    },
+   "g": {
+    "type": "parameter",
+    "units": "m/s^2",
+    "default": 9.80616,
+    "description": "gravity (gravit)"
+    },
+   "dt": {
+    "type": "parameter",
+    "units": "s",
+    "default": 1800.0,
+    "description": "physics timestep (ztodt)"
+    },
+   "shflux": {
+    "type": "parameter",
+    "units": "kg/s^3",
+    "default": 0.0,
+    "description": "surface sensible heat flux shflx (W/m^2); zero in the window, so src_s = 0"
+    },
+   "cflx": {
+    "type": "parameter",
+    "units": "kg/(m^2*s)",
+    "default": 0.0,
+    "description": "surface constituent flux (kg/m2/s), explicit q surface source"
+    },
+   "dryfac": {
+    "type": "parameter",
+    "units": "1",
+    "default": 1.0,
+    "description": "pdel(32)/pdeldry(32) tendency conversion for dry constituents (1 for moist), diffusion_solver.F90:1056-1061"
+    },
+   "tauimpx_f": {
+    "type": "unknown",
+    "units": "1",
+    "shape": [
+     "lev"
+     ],
+    "description": "zonal net-stress integrand (u-u0)/(g*dt) (bound to a named observed: the integral rule's where clause matches only a bare layer field)"
+    },
+   "tauimpy_f": {
+    "type": "unknown",
+    "units": "1",
+    "shape": [
+     "lev"
+     ],
+    "description": "meridional net-stress integrand (v-v0)/(g*dt)"
+    },
+   "tauimpx": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "net zonal stress added this step, integral of tauimpx_f over the column (usum_out - usum_in)/dt, diffusion_solver.F90:557-568"
+    },
+   "tauimpy": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "net meridional stress added this step"
+    },
+   "tauresx": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "updated residual stress tauresx = tauresx_enter + taux - tauimpx + tautmsx + taubljx (F90:580-584; taux = tautmsx = taubljx = 0 in the window); dump column tauresx"
+    },
+   "tauresy": {
+    "type": "unknown",
+    "units": "Pa",
+    "description": "updated meridional residual stress; dump column tauresy"
+    },
+   "kdudz_bot": {
+    "type": "parameter",
+    "default": 0.0,
+    "description": "the ESD flux rule's prescribed surface value of K du/dz; zero in the window (taux = tauy = shflux = 0; the q surface flux enters as the explicit source src_q). Declared without units on purpose (ysu.esm idiom): the rule subtracts this one name inside every field's flux row, so it must be unit-polymorphic"
+    },
+   "kdudz_top": {
+    "type": "parameter",
+    "default": 0.0,
+    "description": "the ESD flux rule's prescribed top value of K du/dz; zero (the CAM solve's default fixed-flux top; the dse solve's BoundaryFixedLayer(0)/dse_top flux is 2 K(1) (dse_top - s(1))/del(1), which vanishes at the window's kvh(1) = 0, dse_top = 0). Units omitted for the same reason as kdudz_bot"
+    },
+   "src_u": {
+    "type": "unknown",
+    "units": "m/s^2",
+    "shape": [
+     "lev"
+     ],
+    "description": "surface momentum source g*tauresx_enter*ramda/dz[1] at lev 1, 0 elsewhere (the pver injection f2s*taures*ramda/pdel, F90:491-499)"
+    },
+   "src_v": {
+    "type": "unknown",
+    "units": "m/s^2",
+    "shape": [
+     "lev"
+     ],
+    "description": "surface meridional momentum source g*tauresy_enter*ramda/dz[1] at lev 1"
+    },
+   "src_s": {
+    "type": "unknown",
+    "units": "J/(kg*s)",
+    "shape": [
+     "lev"
+     ],
+    "description": "surface heating source g*shflux/dz[1] at lev 1 (zero in the window)"
+    },
+   "src_q": {
+    "type": "unknown",
+    "units": "kg/(kg*s)",
+    "shape": [
+     "lev"
+     ],
+    "description": "surface tracer source g*cflx*dryfac/dz[1] at lev 1, 0 elsewhere (F90:974-975 with the dry-constituent pdel/pdeldry conversion)"
+    },
+   "dtk": {
+    "type": "unknown",
+    "units": "J/kg",
+    "shape": [
+     "lev"
+     ],
+    "description": "kinetic-energy dissipation 0.5(u0^2+v0^2) - 0.5(u^2+v^2) (keg_in - keg_out, do_beljaars branch, F90:598-646); dump column dtk"
+    },
+   "ptend_u": {
+    "type": "unknown",
+    "units": "m/s^2",
+    "shape": [
+     "lev"
+     ],
+    "description": "zonal momentum tendency d/dz(K du/dz) + tau_damp*u + src_u; dump column ptend_u (esd order)"
+    },
+   "ptend_v": {
+    "type": "unknown",
+    "units": "m/s^2",
+    "shape": [
+     "lev"
+     ],
+    "description": "meridional momentum tendency; dump column ptend_v"
+    },
+   "ptend_s": {
+    "type": "unknown",
+    "units": "J/(kg*s)",
+    "shape": [
+     "lev"
+     ],
+    "description": "heating tendency d/dz(K ds/dz) + dtk/dt + src_s; dump column ptend_s"
+    },
+   "ptend_q": {
+    "type": "unknown",
+    "units": "kg/(kg*s)",
+    "shape": [
+     "lev"
+     ],
+    "description": "tracer tendency d/dz(K dq/dz) + src_q; dump column ptend_q (already dryfac-converted)"
+    }
+   },
+  "equations": [
+   {
+    "lhs": "zc",
+    "rhs": {
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "column_cell_center",
+     "bindings": {
+      "ze": "ze"
+      }
+     }
+    },
+   {
+    "lhs": "dz",
+    "rhs": {
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "column_cell_thickness",
+     "bindings": {
+      "ze": "ze"
+      }
+     }
+    },
+   {
+    "lhs": "z_sfc",
+    "rhs": {
+     "op": "index",
+     "args": [
+      "ze",
+      1
+      ]
+     }
+    },
+   {
+    "lhs": "z_top",
+    "rhs": {
+     "op": "index",
+     "args": [
+      "ze",
+      33
+      ]
+     }
+    },
+   {
+    "lhs": "K_mom",
+    "rhs": {
+     "op": "*",
+     "args": [
+      "kvm",
+      "dpidz_sq"
+      ]
+     }
+    },
+   {
+    "lhs": "K_th",
+    "rhs": {
+     "op": "*",
+     "args": [
+      "kvh",
+      "dpidz_sq"
+      ]
+     }
+    },
+   {
+    "lhs": "K_q",
+    "rhs": {
+     "op": "*",
+     "args": [
+      "kvq",
+      "dpidz_sq"
+      ]
+     }
+    },
+   {
+    "lhs": "tauimpx_f",
+    "rhs": {
+     "op": "/",
+     "args": [
+      {
+       "op": "-",
+       "args": [
+        "u",
+        "u0"
+        ]
+       },
+      {
+       "op": "*",
+       "args": [
+        "g",
+        "dt"
+        ]
+       }
+      ]
+     }
+    },
+   {
+    "lhs": "tauimpy_f",
+    "rhs": {
+     "op": "/",
+     "args": [
+      {
+       "op": "-",
+       "args": [
+        "v",
+        "v0"
+        ]
+       },
+      {
+       "op": "*",
+       "args": [
+        "g",
+        "dt"
+        ]
+       }
+      ]
+     }
+    },
+   {
+    "lhs": "tauimpx",
+    "rhs": {
+     "op": "integral",
+     "args": [
+      "tauimpx_f"
+      ],
+     "var": "lev",
+     "lower": "z_sfc",
+     "upper": "z_top"
+     }
+    },
+   {
+    "lhs": "tauimpy",
+    "rhs": {
+     "op": "integral",
+     "args": [
+      "tauimpy_f"
+      ],
+     "var": "lev",
+     "lower": "z_sfc",
+     "upper": "z_top"
+     }
+    },
+   {
+    "lhs": "tauresx",
+    "rhs": {
+     "op": "-",
+     "args": [
+      "tauresx_enter",
+      "tauimpx"
+      ]
+     }
+    },
+   {
+    "lhs": "tauresy",
+    "rhs": {
+     "op": "-",
+     "args": [
+      "tauresy_enter",
+      "tauimpy"
+      ]
+     }
+    },
+   {
+    "lhs": "src_u",
+    "rhs": {
+     "op": "faq",
+     "output_idx": [
+      "i"
+      ],
+     "args": [],
+     "ranges": {
+      "i": {
+       "from": "lev"
+       }
+      },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "i",
+         1
+         ]
+        },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "g",
+           "tauresx_enter",
+           "ramda"
+           ]
+          },
+         {
+          "op": "index",
+          "args": [
+           "dz",
+           1
+           ]
+          }
+         ]
+        },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/s^2"
+        }
+       ]
+      }
+     }
+    },
+   {
+    "lhs": "src_v",
+    "rhs": {
+     "op": "faq",
+     "output_idx": [
+      "i"
+      ],
+     "args": [],
+     "ranges": {
+      "i": {
+       "from": "lev"
+       }
+      },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "i",
+         1
+         ]
+        },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "g",
+           "tauresy_enter",
+           "ramda"
+           ]
+          },
+         {
+          "op": "index",
+          "args": [
+           "dz",
+           1
+           ]
+          }
+         ]
+        },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/s^2"
+        }
+       ]
+      }
+     }
+    },
+   {
+    "lhs": "src_s",
+    "rhs": {
+     "op": "faq",
+     "output_idx": [
+      "i"
+      ],
+     "args": [],
+     "ranges": {
+      "i": {
+       "from": "lev"
+       }
+      },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "i",
+         1
+         ]
+        },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "g",
+           "shflux"
+           ]
+          },
+         {
+          "op": "index",
+          "args": [
+           "dz",
+           1
+           ]
+          }
+         ]
+        },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "J/(kg*s)"
+        }
+       ]
+      }
+     }
+    },
+   {
+    "lhs": "src_q",
+    "rhs": {
+     "op": "faq",
+     "output_idx": [
+      "i"
+      ],
+     "args": [],
+     "ranges": {
+      "i": {
+       "from": "lev"
+       }
+      },
+     "expr": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "i",
+         1
+         ]
+        },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "g",
+           "cflx",
+           "dryfac"
+           ]
+          },
+         {
+          "op": "index",
+          "args": [
+           "dz",
+           1
+           ]
+          }
+         ]
+        },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(kg*s)"
+        }
+       ]
+      }
+     }
+    },
+   {
+    "lhs": "dtk",
+    "rhs": {
+     "op": "-",
+     "args": [
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": 0.5,
+         "units": "1"
+         },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "^",
+           "args": [
+            "u0",
+            2
+            ]
+           },
+          {
+           "op": "^",
+           "args": [
+            "v0",
+            2
+            ]
+           }
+          ]
+         }
+        ]
+       },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": 0.5,
+         "units": "1"
+         },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "^",
+           "args": [
+            "u",
+            2
+            ]
+           },
+          {
+           "op": "^",
+           "args": [
+            "v",
+            2
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+   {
+    "lhs": "ptend_u",
+    "rhs": {
+     "op": "+",
+     "args": [
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "D",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            "K_mom",
+            {
+             "op": "D",
+             "args": [
+              "u"
+              ],
+             "wrt": "lev"
+             }
+            ]
+           }
+          ],
+         "wrt": "lev"
+         },
+        {
+         "op": "*",
+         "args": [
+          "tau_damp",
+          "u"
+          ]
+         }
+        ]
+       },
+      "src_u"
+      ]
+     }
+    },
+   {
+    "lhs": {
+     "op": "D",
+     "args": [
+      "u"
+      ],
+     "wrt": "t"
+     },
+    "rhs": "ptend_u"
+    },
+   {
+    "lhs": "ptend_v",
+    "rhs": {
+     "op": "+",
+     "args": [
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "D",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            "K_mom",
+            {
+             "op": "D",
+             "args": [
+              "v"
+              ],
+             "wrt": "lev"
+             }
+            ]
+           }
+          ],
+         "wrt": "lev"
+         },
+        {
+         "op": "*",
+         "args": [
+          "tau_damp",
+          "v"
+          ]
+         }
+        ]
+       },
+      "src_v"
+      ]
+     }
+    },
+   {
+    "lhs": {
+     "op": "D",
+     "args": [
+      "v"
+      ],
+     "wrt": "t"
+     },
+    "rhs": "ptend_v"
+    },
+   {
+    "lhs": "ptend_s",
+    "rhs": {
+     "op": "+",
+     "args": [
+      {
+       "op": "D",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "K_th",
+          {
+           "op": "D",
+           "args": [
+            "s"
+            ],
+           "wrt": "lev"
+           }
+          ]
+         }
+        ],
+       "wrt": "lev"
+       },
+      {
+       "op": "/",
+       "args": [
+        "dtk",
+        "dt"
+        ]
+       }
+      ]
+     }
+    },
+   {
+    "lhs": {
+     "op": "D",
+     "args": [
+      "s"
+      ],
+     "wrt": "t"
+     },
+    "rhs": "ptend_s"
+    },
+   {
+    "lhs": "ptend_q",
+    "rhs": {
+     "op": "+",
+     "args": [
+      {
+       "op": "D",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "K_q",
+          {
+           "op": "D",
+           "args": [
+            "q"
+            ],
+           "wrt": "lev"
+           }
+          ]
+         }
+        ],
+       "wrt": "lev"
+       },
+      "src_q"
+      ]
+     }
+    },
+   {
+    "lhs": {
+     "op": "D",
+     "args": [
+      "q"
+      ],
+     "wrt": "t"
+     },
+    "rhs": "ptend_q"
+    }
+   ],
+  "tests": [
+   {
+    "id": "step1_dump_momentum_heat",
+    "description": "cam_vdiff_prof.csv row (step 1, site vdiff, lev 32 = esd lev 1): the window runs all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only: ptend_u(1) = tau_damp(1)*u1(1) + g*tauresx_enter*ramda/pdel32 = -7.42648949282455202e-07 m/s^2, ptend_v(1) = -2.82821259661947271e-06, ptend_s(1) = dtk(1)/dt = 1.63314101842439011e-05 J/kg/s with dtk = 0.0293965383403023139 J/kg, tauresx = 2.50338946423451288e-04 Pa (tauresx_enter - tauimpx, tauimpx = -1.05550e-04 Pa from the column integral of (u1-u0)/(g dt)), tauresy = 9.53915893383560113e-04. Q (moist, cflx = 0) pins ptend_q = 0. The lev-16 zero assertion pins that the K = 0 operator row vanishes exactly away from the surface layer.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.4174766621805597, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+       4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+       4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+       4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+       1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+       1.9244104698866517e-59, 3.676249032166472e-67
+      ],
+     "v": [
+       5.399533037563059, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+       5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+       -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+       -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+       -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+       -9.846847727006192e-60, -1.88106767608655e-67
+      ],
+     "s": [
+       312629.0246144776, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+       315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+       331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+       344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+       411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+       569305.7289155166, 635395.0168547509
+      ],
+     "q": [
+       0.011442792697419013, 0.01085029911811306, 0.010374084988934997, 0.009948934242944374, 0.009603869586279292, 0.009232897584173836,
+       0.00878617144513622, 0.008248060932415934, 0.007319246133031167, 0.004574020011635244, 0.0022260521650778486, 0.0012718804237147104,
+       0.0006279030643706183, 0.0003195848538757373, 0.0001473570098799535, 6.754530966127701e-05, 3.6889094187542286e-05, 2.2071201218582045e-05,
+       1.540517609760933e-05, 1.1820315661595804e-05, 8.931630033704715e-06, 1.214749022741307e-07, 2.2779949403058067e-08, 1.0004633064994e-08,
+       1.0005696590863638e-08, 1.0007285863617663e-08, 1.0009094672391625e-08, 1.0011783770819379e-08, 1.0018011369077967e-08, 1.003447192795403e-08,
+       1.0067782035990724e-08, 1.0135890069398695e-08
+      ]
+     },
+    "parameter_overrides": {},
+    "assertions": [
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -7.426489492824552e-07,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_v",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -2.8282125966194727e-06,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_s",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 1.63314101842439e-05,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-14
+       }
+      },
+     {
+      "variable": "dtk",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 0.029396538340302314,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tauresx",
+      "time": 0.0,
+      "expected": 0.0002503389464234513,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "tauresy",
+      "time": 0.0,
+      "expected": 0.0009539158933835601,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 16
+       },
+      "expected": 0.0,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-24
+       }
+      },
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 0.0,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-24
+       }
+      }
+     ]
+    },
+   {
+    "id": "step1_dump_q_DMS",
+    "description": "cam_vdiff_q.csv row (step 1, site vdiff, lev 32, cnst DMS): ptend_q(1) = g*cflx*dryfac/dz[1] = 7.73205287716558068e-19 kg/kg/s with cflx = 1.0865614331583058e-16 kg/m2/s and dryfac = pdel/pdeldry = 1.0113874330578143 (DMS is a dry constituent); the state q is the dumped DMS q1 (only the surface layer differs from q0).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.4174766621805597, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+       4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+       4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+       4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+       1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+       1.9244104698866517e-59, 3.676249032166472e-67
+      ],
+     "v": [
+       5.399533037563059, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+       5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+       -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+       -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+       -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+       -9.846847727006192e-60, -1.88106767608655e-67
+      ],
+     "s": [
+       312629.0246144776, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+       315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+       331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+       344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+       411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+       569305.7289155166, 635395.0168547509
+      ],
+     "q": [
+       2.152100257299642e-15, 3.4682173729984907e-18, 3.864594857241554e-21, 1.1869410750299426e-24, 1.328423177159874e-28, 7.757281584401939e-33,
+       1.0617953935057346e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36
+      ]
+     },
+    "parameter_overrides": {
+     "cflx": 1.0865614331583058e-16,
+     "dryfac": 1.0113874330578143
+     },
+    "assertions": [
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 7.732052877165581e-19,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    },
+   {
+    "id": "step1_dump_q_bc_a4",
+    "description": "cam_vdiff_q.csv row (step 1, site vdiff, lev 32, cnst bc_a4): ptend_q(1) = 7.15302530118246567e-15 kg/kg/s with cflx = 1.0051924820151468e-12 kg/m2/s and dryfac = 1.0113874330578143 (dry constituent).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.4174766621805597, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+       4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+       4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+       4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+       1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+       1.9244104698866517e-59, 3.676249032166472e-67
+      ],
+     "v": [
+       5.399533037563059, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+       5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+       -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+       -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+       -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+       -9.846847727006192e-60, -1.88106767608655e-67
+      ],
+     "s": [
+       312629.0246144776, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+       315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+       331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+       344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+       411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+       569305.7289155166, 635395.0168547509
+      ],
+     "q": [
+       2.310231334448239e-11, 1.9616617009584873e-13, 6.614952890493445e-16, 4.763370784198778e-19, 8.629309248407893e-23, 5.023331906350187e-27,
+       9.540756956700147e-32, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36
+      ]
+     },
+    "parameter_overrides": {
+     "cflx": 1.0051924820151468e-12,
+     "dryfac": 1.0113874330578143
+     },
+    "assertions": [
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 7.153025301182466e-15,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    },
+   {
+    "id": "step1_dump_q_SOAE",
+    "description": "cam_vdiff_q.csv row (step 1, site vdiff, lev 32, cnst SOAE): ptend_q(1) = 1.19289246585730799e-13 kg/kg/s with cflx = 1.676334820644431e-11 kg/m2/s and dryfac = 1.0113874330578143 (dry constituent).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.4174766621805597, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+       4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+       4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+       4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+       1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+       1.9244104698866517e-59, 3.676249032166472e-67
+      ],
+     "v": [
+       5.399533037563059, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+       5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+       -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+       -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+       -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+       -9.846847727006192e-60, -1.88106767608655e-67
+      ],
+     "s": [
+       312629.0246144776, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+       315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+       331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+       344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+       411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+       569305.7289155166, 635395.0168547509
+      ],
+     "q": [
+       4.2162207124908957e-10, 8.766889482364685e-13, 9.17504060745373e-16, 2.6656945829767935e-19, 2.8337437594444156e-23, 1.5842299822512262e-27,
+       5.735837124826949e-32, 1.6686149592246602e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36
+      ]
+     },
+    "parameter_overrides": {
+     "cflx": 1.676334820644431e-11,
+     "dryfac": 1.0113874330578143
+     },
+    "assertions": [
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 1.192892465857308e-13,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    },
+   {
+    "id": "step2_dump_momentum_heat",
+    "description": "cam_vdiff_prof.csv row (step 2, site vdiff, lev 32): ptend_u(1) = -5.11460851379603286e-07 m/s^2 (tau_damp(1) = -7.036160593445596e-07 1/s at the step-2 state), ptend_v(1) = -2.22600648380360457e-06, ptend_s(1) = 1.30474733628539572e-05 J/kg/s (dtk = 2.348545206467989e-02 J/kg), tauresx = 3.230292786853776e-04 Pa and tauresy = 1.2702825331507481e-03 from the step-2 entering residuals (the step-1 updated values) and the step-2 tauimpx/tauimpy; geometry (ze, dpidz_sq) and entering states overridden to the step-2 dump columns.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.3527506886689635, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
+       4.107972914882358, 4.723200805987008, 4.937399225858337, 5.233183358750622, 3.4056577233543766, 3.6017393422889885,
+       4.1652064285053, 4.512782398762823, 4.3490193163938144, 2.5430452934622076, 0.7737765275810616, 1.2915668741069743,
+       3.978183555440711, 6.275508416188591, 6.327428446561204, 5.833153291972804e-05, 2.8504608383587946e-10, 8.052142682620673e-16,
+       1.7570558270525863e-21, 3.0499541713270265e-27, 4.364603659435955e-33, 3.222313466972219e-39, 1.0105093624942527e-45, 2.037960445009735e-52,
+       1.90480849810034e-59, 3.635333243112819e-67
+      ],
+     "v": [
+       5.548456131120748, 6.555734453885614, 7.3061501838792315, 7.513427948314733, 6.96174936251281, 6.233876106142138,
+       5.27840783562679, 3.2644638370938504, -0.9907830382020071, -5.462006174208737, -7.998104207305345, -8.284985476387744,
+       -7.554817495315904, -7.328210029006294, -7.357747820919425, -7.2230689653066795, -7.891710130272256, -8.27807299956892,
+       -7.227093742612805, -5.325698856997575, -3.292127082756045, -3.034948817477797e-05, -1.4830733040079566e-10, -4.1894671384757123e-16,
+       -9.141822104564741e-22, -1.58686668533234e-27, -2.270867996666207e-33, -1.6765435028430932e-39, -5.257597738490055e-46, -1.0603341351115445e-52,
+       -9.910562294236171e-60, -1.8914339941591827e-67
+      ],
+     "s": [
+       311973.1085995602, 313346.65454712283, 313804.4233790762, 314069.2622458954, 314355.1226591668, 314662.09639806167,
+       315084.8222213593, 315790.59067750745, 316979.7074263444, 319670.8719337043, 324213.55629014113, 328125.9192456654,
+       331251.15821762016, 333015.9857515428, 334365.45776045666, 335396.27375203004, 336478.09762205806, 338983.7320583975,
+       344896.23380180314, 353464.2796956384, 362911.22995056625, 379639.26607474365, 388409.902355083, 398722.8126633364,
+       411051.2038820552, 424118.98399690114, 437789.1074491902, 454885.6769829041, 482011.0590697831, 520713.1373055708,
+       569439.5771497831, 635612.9372076998
+      ],
+     "q": [
+       0.011442792697419013, 0.01085029911811306, 0.010374084988934997, 0.009948934242944374, 0.009603869586279292, 0.009232897584173836,
+       0.00878617144513622, 0.008248060932415934, 0.007319246133031167, 0.004574020011635244, 0.0022260521650778486, 0.0012718804237147104,
+       0.0006279030643706183, 0.0003195848538757373, 0.0001473570098799535, 6.754530966127701e-05, 3.6889094187542286e-05, 2.2071201218582045e-05,
+       1.540517609760933e-05, 1.1820315661595804e-05, 8.931630033704715e-06, 1.214749022741307e-07, 2.2779949403058067e-08, 1.0004633064994e-08,
+       1.0005696590863638e-08, 1.0007285863617663e-08, 1.0009094672391625e-08, 1.0011783770819379e-08, 1.0018011369077967e-08, 1.003447192795403e-08,
+       1.0067782035990724e-08, 1.0135890069398695e-08
+      ]
+     },
+    "parameter_overrides": {
+     "ze": [
+       -92829.33881667865, -91435.65829023717, -89821.546480403, -87975.69361791224, -85913.92321650208, -83653.6363260139,
+       -81213.65636034793, -78614.0691277064, -74126.19432565765, -68093.12185954816, -60963.55296234277, -53213.95433319531,
+       -45474.94520574721, -38900.92163127889, -33314.63249245497, -28567.011670875432, -24531.77531949795, -21101.86192955074,
+       -18186.422414095956, -15458.725920356093, -13140.144899890112, -11169.321403693924, -9494.10434740737, -8070.1419007049,
+       -6680.049811926476, -5624.049956094119, -4711.449936328001, -3927.300162511049, -2973.467587113101, -1855.531723807545,
+       -1015.794750827633, -503.1691892274697, -225.5239523947239
+      ],
+     "dpidz_sq": [
+       110.84901976410659, 107.56685080534591, 104.24190277855423, 100.95974538075299, 97.4248896026786, 93.6051148555748,
+       89.51582145504393, 85.412708706164, 78.02401187185446, 68.17839845508078, 56.726833948596095, 45.26299718265724,
+       35.10396202162614, 27.556109243395987, 21.804824821255018, 17.329719939325642, 13.812371562586103, 10.958650687702491,
+       8.540599091699473, 6.31113380043734, 4.5929104258817555, 3.2179298293742487, 2.265610598380361, 1.650237719088252,
+       1.1268608887899247, 0.7861230527942904, 0.5401045976137561, 0.36700492485695485, 0.20500912162543392, 0.07720004375226769,
+       0.02208246271267998, 0.004941756298763186, 0.0009324210890209467
+      ],
+     "tau_damp": [
+       -7.036160593445596e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0
+      ],
+     "u0": [
+       1.3536713182014468, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
+       4.107972914882358, 4.723200805987008, 4.937399225858337, 5.233183358750622, 3.4056577233543766, 3.6017393422889885,
+       4.1652064285053, 4.512782398762823, 4.3490193163938144, 2.5430452934622076, 0.7737765275810616, 1.2915668741069743,
+       3.978183555440711, 6.275508416188591, 6.327428446561204, 5.833153291972804e-05, 2.8504608383587946e-10, 8.052142682620673e-16,
+       1.7570558270525863e-21, 3.0499541713270265e-27, 4.364603659435955e-33, 3.222313466972219e-39, 1.0105093624942527e-45, 2.037960445009735e-52,
+       1.90480849810034e-59, 3.635333243112819e-67
+      ],
+     "v0": [
+       5.552462942791594, 6.555734453885614, 7.3061501838792315, 7.513427948314733, 6.96174936251281, 6.233876106142138,
+       5.27840783562679, 3.2644638370938504, -0.9907830382020071, -5.462006174208737, -7.998104207305345, -8.284985476387744,
+       -7.554817495315904, -7.328210029006294, -7.357747820919425, -7.2230689653066795, -7.891710130272256, -8.27807299956892,
+       -7.227093742612805, -5.325698856997575, -3.292127082756045, -3.034948817477797e-05, -1.4830733040079566e-10, -4.1894671384757123e-16,
+       -9.141822104564741e-22, -1.58686668533234e-27, -2.270867996666207e-33, -1.6765435028430932e-39, -5.257597738490055e-46, -1.0603341351115445e-52,
+       -9.910562294236171e-60, -1.8914339941591827e-67
+      ],
+     "s0": [
+       311973.08511410817, 313346.65454712283, 313804.4233790762, 314069.2622458954, 314355.1226591668, 314662.09639806167,
+       315084.8222213593, 315790.59067750745, 316979.7074263444, 319670.8719337043, 324213.55629014113, 328125.9192456654,
+       331251.15821762016, 333015.9857515428, 334365.45776045666, 335396.27375203004, 336478.09762205806, 338983.7320583975,
+       344896.23380180314, 353464.2796956384, 362911.22995056625, 379639.26607474365, 388409.902355083, 398722.8126633364,
+       411051.2038820552, 424118.98399690114, 437789.1074491902, 454885.6769829041, 482011.0590697831, 520713.1373055708,
+       569439.5771497831, 635612.9372076998
+      ],
+     "tauresx_enter": 0.0002503389464234513,
+     "tauresy_enter": 0.0009539158933835601
+     },
+    "assertions": [
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -5.114608513796033e-07,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_v",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -2.2260064838036046e-06,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_s",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 1.3047473362853957e-05,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-14
+       }
+      },
+     {
+      "variable": "dtk",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 0.02348545206467989,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tauresx",
+      "time": 0.0,
+      "expected": 0.0003230292786853776,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "tauresy",
+      "time": 0.0,
+      "expected": 0.0012702825331507481,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      }
+     ]
+    },
+   {
+    "id": "step2_dump_q_DMS",
+    "description": "cam_vdiff_q.csv row (step 2, site vdiff, lev 32, cnst DMS): ptend_q(1) = 7.73987497888484e-19 kg/kg/s with cflx = 1.087419584723552e-16 kg/m2/s and dryfac = pdel/pdeldry = 1.0115819043995633; step-2 geometry and entering states.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.3527506886689635, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
+       4.107972914882358, 4.723200805987008, 4.937399225858337, 5.233183358750622, 3.4056577233543766, 3.6017393422889885,
+       4.1652064285053, 4.512782398762823, 4.3490193163938144, 2.5430452934622076, 0.7737765275810616, 1.2915668741069743,
+       3.978183555440711, 6.275508416188591, 6.327428446561204, 5.833153291972804e-05, 2.8504608383587946e-10, 8.052142682620673e-16,
+       1.7570558270525863e-21, 3.0499541713270265e-27, 4.364603659435955e-33, 3.222313466972219e-39, 1.0105093624942527e-45, 2.037960445009735e-52,
+       1.90480849810034e-59, 3.635333243112819e-67
+      ],
+     "v": [
+       5.548456131120748, 6.555734453885614, 7.3061501838792315, 7.513427948314733, 6.96174936251281, 6.233876106142138,
+       5.27840783562679, 3.2644638370938504, -0.9907830382020071, -5.462006174208737, -7.998104207305345, -8.284985476387744,
+       -7.554817495315904, -7.328210029006294, -7.357747820919425, -7.2230689653066795, -7.891710130272256, -8.27807299956892,
+       -7.227093742612805, -5.325698856997575, -3.292127082756045, -3.034948817477797e-05, -1.4830733040079566e-10, -4.1894671384757123e-16,
+       -9.141822104564741e-22, -1.58686668533234e-27, -2.270867996666207e-33, -1.6765435028430932e-39, -5.257597738490055e-46, -1.0603341351115445e-52,
+       -9.910562294236171e-60, -1.8914339941591827e-67
+      ],
+     "s": [
+       311973.1085995602, 313346.65454712283, 313804.4233790762, 314069.2622458954, 314355.1226591668, 314662.09639806167,
+       315084.8222213593, 315790.59067750745, 316979.7074263444, 319670.8719337043, 324213.55629014113, 328125.9192456654,
+       331251.15821762016, 333015.9857515428, 334365.45776045666, 335396.27375203004, 336478.09762205806, 338983.7320583975,
+       344896.23380180314, 353464.2796956384, 362911.22995056625, 379639.26607474365, 388409.902355083, 398722.8126633364,
+       411051.2038820552, 424118.98399690114, 437789.1074491902, 454885.6769829041, 482011.0590697831, 520713.1373055708,
+       569439.5771497831, 635612.9372076998
+      ],
+     "q": [
+       2.5840438646972338e-15, 8.246836842021298e-18, 2.0139230499100764e-20, 2.5781247251163252e-23, 2.1333441109207363e-26, 9.868348502482867e-30,
+       2.320182267640461e-33, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36
+      ]
+     },
+    "parameter_overrides": {
+     "ze": [
+       -92829.33881667865, -91435.65829023717, -89821.546480403, -87975.69361791224, -85913.92321650208, -83653.6363260139,
+       -81213.65636034793, -78614.0691277064, -74126.19432565765, -68093.12185954816, -60963.55296234277, -53213.95433319531,
+       -45474.94520574721, -38900.92163127889, -33314.63249245497, -28567.011670875432, -24531.77531949795, -21101.86192955074,
+       -18186.422414095956, -15458.725920356093, -13140.144899890112, -11169.321403693924, -9494.10434740737, -8070.1419007049,
+       -6680.049811926476, -5624.049956094119, -4711.449936328001, -3927.300162511049, -2973.467587113101, -1855.531723807545,
+       -1015.794750827633, -503.1691892274697, -225.5239523947239
+      ],
+     "dpidz_sq": [
+       110.84901976410659, 107.56685080534591, 104.24190277855423, 100.95974538075299, 97.4248896026786, 93.6051148555748,
+       89.51582145504393, 85.412708706164, 78.02401187185446, 68.17839845508078, 56.726833948596095, 45.26299718265724,
+       35.10396202162614, 27.556109243395987, 21.804824821255018, 17.329719939325642, 13.812371562586103, 10.958650687702491,
+       8.540599091699473, 6.31113380043734, 4.5929104258817555, 3.2179298293742487, 2.265610598380361, 1.650237719088252,
+       1.1268608887899247, 0.7861230527942904, 0.5401045976137561, 0.36700492485695485, 0.20500912162543392, 0.07720004375226769,
+       0.02208246271267998, 0.004941756298763186, 0.0009324210890209467
+      ],
+     "tau_damp": [
+       -7.036160593445596e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0
+      ],
+     "u0": [
+       1.3536713182014468, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
+       4.107972914882358, 4.723200805987008, 4.937399225858337, 5.233183358750622, 3.4056577233543766, 3.6017393422889885,
+       4.1652064285053, 4.512782398762823, 4.3490193163938144, 2.5430452934622076, 0.7737765275810616, 1.2915668741069743,
+       3.978183555440711, 6.275508416188591, 6.327428446561204, 5.833153291972804e-05, 2.8504608383587946e-10, 8.052142682620673e-16,
+       1.7570558270525863e-21, 3.0499541713270265e-27, 4.364603659435955e-33, 3.222313466972219e-39, 1.0105093624942527e-45, 2.037960445009735e-52,
+       1.90480849810034e-59, 3.635333243112819e-67
+      ],
+     "v0": [
+       5.552462942791594, 6.555734453885614, 7.3061501838792315, 7.513427948314733, 6.96174936251281, 6.233876106142138,
+       5.27840783562679, 3.2644638370938504, -0.9907830382020071, -5.462006174208737, -7.998104207305345, -8.284985476387744,
+       -7.554817495315904, -7.328210029006294, -7.357747820919425, -7.2230689653066795, -7.891710130272256, -8.27807299956892,
+       -7.227093742612805, -5.325698856997575, -3.292127082756045, -3.034948817477797e-05, -1.4830733040079566e-10, -4.1894671384757123e-16,
+       -9.141822104564741e-22, -1.58686668533234e-27, -2.270867996666207e-33, -1.6765435028430932e-39, -5.257597738490055e-46, -1.0603341351115445e-52,
+       -9.910562294236171e-60, -1.8914339941591827e-67
+      ],
+     "s0": [
+       311973.08511410817, 313346.65454712283, 313804.4233790762, 314069.2622458954, 314355.1226591668, 314662.09639806167,
+       315084.8222213593, 315790.59067750745, 316979.7074263444, 319670.8719337043, 324213.55629014113, 328125.9192456654,
+       331251.15821762016, 333015.9857515428, 334365.45776045666, 335396.27375203004, 336478.09762205806, 338983.7320583975,
+       344896.23380180314, 353464.2796956384, 362911.22995056625, 379639.26607474365, 388409.902355083, 398722.8126633364,
+       411051.2038820552, 424118.98399690114, 437789.1074491902, 454885.6769829041, 482011.0590697831, 520713.1373055708,
+       569439.5771497831, 635612.9372076998
+      ],
+     "tauresx_enter": 0.0002503389464234513,
+     "tauresy_enter": 0.0009539158933835601,
+     "cflx": 1.087419584723552e-16,
+     "dryfac": 1.0115819043995633
+     },
+    "assertions": [
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 7.73987497888484e-19,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    },
+   {
+    "id": "step48_dump_momentum_heat",
+    "description": "cam_vdiff_prof.csv row (step 48, site vdiff, lev 32): the last dumped step, winds decaying after the spin-up: ptend_u(1) = 4.44697655249928475e-07 m/s^2 (tau_damp(1) = -6.996908185810738e-07 1/s), ptend_v(1) = 4.27688711937237731e-08, ptend_s(1) = -4.35116396854735068e-07 J/kg/s (dtk = -7.832095190778432e-04 J/kg), tauresx = 3.164756381011105e-04 Pa, tauresy = 2.7813859979201223e-03 from the step-48 entering residuals (the step-47 updated values).",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       0.31451678145457057, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
+       6.837845320612321, 8.020722415515143, 7.9120974965200315, 8.104523536792804, 7.814454111490643, 6.251011569732953,
+       6.581226119770792, 5.251652417996859, 3.6067974452866127, 2.635321304984195, 2.5148787451429215, 3.219013901852746,
+       4.530556630594639, 5.774985215972102, 5.770849745517459, 5.250674347176639e-05, 2.5318036840964425e-10, 7.078382797473619e-16,
+       1.528061675071967e-21, 2.6212890038104175e-27, 3.70238058529627e-33, 2.6940397531986615e-39, 8.32219115157844e-46, 1.6521635874812272e-52,
+       1.5147589411357743e-59, 2.7989182572886768e-67
+      ],
+     "v": [
+       6.90762095548628, 9.838176690895843, 11.141396693631572, 11.793707337862525, 11.646515406457205, 10.866385670441009,
+       9.700476174916078, 7.417002598490004, 3.875172480941073, 0.625623355553442, -2.976413165695126, -3.4926583905853525,
+       -2.7276723723454688, -2.363120395161759, -2.2810693780563, -1.4999517790149208, 0.03461296258321437, -0.03127516612971086,
+       -1.2254718002490355, -1.9362655625408767, -1.7696393246826927, -1.6101260385411858e-05, -7.76380736248755e-11, -2.170594695408774e-16,
+       -4.685819519922835e-22, -8.0382140718659745e-28, -1.1353394131306754e-33, -8.261304863767348e-40, -2.552009765647343e-46, -5.066379157229262e-53,
+       -4.645026159667008e-60, -8.582915809932753e-68
+      ],
+     "s": [
+       308258.6855830086, 310914.8508680568, 312597.05781209783, 313684.0014700589, 314719.19596075214, 315432.36565402156,
+       315974.82833955815, 316768.85498161445, 318203.71249937854, 320968.9675030523, 324592.0680974725, 327935.25584871846,
+       330978.1423711212, 332772.60608690063, 333844.2079730258, 334680.9572018118, 337006.9223738216, 342008.1572552576,
+       344558.5615762205, 352950.26421007136, 362414.1467173247, 379870.01148180553, 388818.52498243796, 399319.689643708,
+       411867.1426478959, 425193.46676781954, 439119.7272633453, 456636.3446789743, 484319.14519455656, 523867.28103599226,
+       574150.9157760834, 643473.0071987537
+      ],
+     "q": [
+       0.011442792697419013, 0.01085029911811306, 0.010374084988934997, 0.009948934242944374, 0.009603869586279292, 0.009232897584173836,
+       0.00878617144513622, 0.008248060932415934, 0.007319246133031167, 0.004574020011635244, 0.0022260521650778486, 0.0012718804237147104,
+       0.0006279030643706183, 0.0003195848538757373, 0.0001473570098799535, 6.754530966127701e-05, 3.6889094187542286e-05, 2.2071201218582045e-05,
+       1.540517609760933e-05, 1.1820315661595804e-05, 8.931630033704715e-06, 1.214749022741307e-07, 2.2779949403058067e-08, 1.0004633064994e-08,
+       1.0005696590863638e-08, 1.0007285863617663e-08, 1.0009094672391625e-08, 1.0011783770819379e-08, 1.0018011369077967e-08, 1.003447192795403e-08,
+       1.0067782035990724e-08, 1.0135890069398695e-08
+      ]
+     },
+    "parameter_overrides": {
+     "ze": [
+       -92794.70931858035, -91393.21029364156, -89773.35903287452, -87924.32927822444, -85860.07133739268, -83599.6376099594,
+       -81162.02949316883, -78566.19759076071, -74085.86764763831, -68060.89779501746, -60930.71221570099, -53180.378028490595,
+       -45444.77768659657, -38876.57627498878, -33296.394025874, -28554.323840471272, -24524.00991972413, -21098.30291960528,
+       -18186.428908569047, -15458.728763808145, -13140.144860988654, -11169.321396199322, -9494.104351245256, -8070.141904387926,
+       -6680.0498154611705, -5624.04995949035, -4711.449939571152, -3927.3001655899293, -2973.4675899328267, -1855.531726162374,
+       -1015.7947525129217, -503.169190105461, -225.5239523947239
+      ],
+     "dpidz_sq": [
+       113.53516580048438, 109.68148179762086, 105.3932817404696, 101.37574786367168, 97.309444165265, 93.13128588519291,
+       88.90712194183664, 84.77582294981543, 77.3625811265885, 67.53778403362242, 56.36345301996264, 45.21422819757231,
+       35.15081099441522, 27.600084826363094, 21.863711274001957, 17.413072823069324, 13.81808826974881, 10.784083313092724,
+       8.442437552930052, 6.343638050260264, 4.618998577552092, 3.224089113886945, 2.2604364260923484, 1.6439122330679166,
+       1.120704386609304, 0.7804040129589008, 0.5351900985444011, 0.3628272173148276, 0.2020682461125112, 0.07581215396563121,
+       0.021551961249356436, 0.00476582626446563, 0.0008925524182430744
+      ],
+     "tau_damp": [
+       -6.996908185810738e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0
+      ],
+     "u0": [
+       0.3137163256751207, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
+       6.837845320612321, 8.020722415515143, 7.9120974965200315, 8.104523536792804, 7.814454111490643, 6.251011569732953,
+       6.581226119770792, 5.251652417996859, 3.6067974452866127, 2.635321304984195, 2.5148787451429215, 3.219013901852746,
+       4.530556630594639, 5.774985215972102, 5.770849745517459, 5.250674347176639e-05, 2.5318036840964425e-10, 7.078382797473619e-16,
+       1.528061675071967e-21, 2.6212890038104175e-27, 3.70238058529627e-33, 2.6940397531986615e-39, 8.32219115157844e-46, 1.6521635874812272e-52,
+       1.5147589411357743e-59, 2.7989182572886768e-67
+      ],
+     "v0": [
+       6.907543971518131, 9.838176690895843, 11.141396693631572, 11.793707337862525, 11.646515406457205, 10.866385670441009,
+       9.700476174916078, 7.417002598490004, 3.875172480941073, 0.625623355553442, -2.976413165695126, -3.4926583905853525,
+       -2.7276723723454688, -2.363120395161759, -2.2810693780563, -1.4999517790149208, 0.03461296258321437, -0.03127516612971086,
+       -1.2254718002490355, -1.9362655625408767, -1.7696393246826927, -1.6101260385411858e-05, -7.76380736248755e-11, -2.170594695408774e-16,
+       -4.685819519922835e-22, -8.0382140718659745e-28, -1.1353394131306754e-33, -8.261304863767348e-40, -2.552009765647343e-46, -5.066379157229262e-53,
+       -4.645026159667008e-60, -8.582915809932753e-68
+      ],
+     "s0": [
+       308258.68636621814, 310914.8508680568, 312597.05781209783, 313684.0014700589, 314719.19596075214, 315432.36565402156,
+       315974.82833955815, 316768.85498161445, 318203.71249937854, 320968.9675030523, 324592.0680974725, 327935.25584871846,
+       330978.1423711212, 332772.60608690063, 333844.2079730258, 334680.9572018118, 337006.9223738216, 342008.1572552576,
+       344558.5615762205, 352950.26421007136, 362414.1467173247, 379870.01148180553, 388818.52498243796, 399319.689643708,
+       411867.1426478959, 425193.46676781954, 439119.7272633453, 456636.3446789743, 484319.14519455656, 523867.28103599226,
+       574150.9157760834, 643473.0071987537
+      ],
+     "tauresx_enter": 0.00038003194660834425,
+     "tauresy_enter": 0.002787498536495529
+     },
+    "assertions": [
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 4.446976552499285e-07,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_v",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 4.276887119372377e-08,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "ptend_s",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -4.3511639685473507e-07,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-14
+       }
+      },
+     {
+      "variable": "dtk",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -0.0007832095190778432,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tauresx",
+      "time": 0.0,
+      "expected": 0.0003164756381011105,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      },
+     {
+      "variable": "tauresy",
+      "time": 0.0,
+      "expected": 0.0027813859979201223,
+      "tolerance": {
+       "rel": 1e-09
+       }
+      }
+     ]
+    },
+   {
+    "id": "step48_dump_q_DMS",
+    "description": "cam_vdiff_q.csv row (step 48, site vdiff, lev 32, cnst DMS): ptend_q(1) = 8.042700869325534e-19 kg/kg/s with cflx = 1.1288183467197434e-16 kg/m2/s and dryfac = pdel/pdeldry = 1.0182904760308067; step-48 geometry and entering states.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       0.31451678145457057, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
+       6.837845320612321, 8.020722415515143, 7.9120974965200315, 8.104523536792804, 7.814454111490643, 6.251011569732953,
+       6.581226119770792, 5.251652417996859, 3.6067974452866127, 2.635321304984195, 2.5148787451429215, 3.219013901852746,
+       4.530556630594639, 5.774985215972102, 5.770849745517459, 5.250674347176639e-05, 2.5318036840964425e-10, 7.078382797473619e-16,
+       1.528061675071967e-21, 2.6212890038104175e-27, 3.70238058529627e-33, 2.6940397531986615e-39, 8.32219115157844e-46, 1.6521635874812272e-52,
+       1.5147589411357743e-59, 2.7989182572886768e-67
+      ],
+     "v": [
+       6.90762095548628, 9.838176690895843, 11.141396693631572, 11.793707337862525, 11.646515406457205, 10.866385670441009,
+       9.700476174916078, 7.417002598490004, 3.875172480941073, 0.625623355553442, -2.976413165695126, -3.4926583905853525,
+       -2.7276723723454688, -2.363120395161759, -2.2810693780563, -1.4999517790149208, 0.03461296258321437, -0.03127516612971086,
+       -1.2254718002490355, -1.9362655625408767, -1.7696393246826927, -1.6101260385411858e-05, -7.76380736248755e-11, -2.170594695408774e-16,
+       -4.685819519922835e-22, -8.0382140718659745e-28, -1.1353394131306754e-33, -8.261304863767348e-40, -2.552009765647343e-46, -5.066379157229262e-53,
+       -4.645026159667008e-60, -8.582915809932753e-68
+      ],
+     "s": [
+       308258.6855830086, 310914.8508680568, 312597.05781209783, 313684.0014700589, 314719.19596075214, 315432.36565402156,
+       315974.82833955815, 316768.85498161445, 318203.71249937854, 320968.9675030523, 324592.0680974725, 327935.25584871846,
+       330978.1423711212, 332772.60608690063, 333844.2079730258, 334680.9572018118, 337006.9223738216, 342008.1572552576,
+       344558.5615762205, 352950.26421007136, 362414.1467173247, 379870.01148180553, 388818.52498243796, 399319.689643708,
+       411867.1426478959, 425193.46676781954, 439119.7272633453, 456636.3446789743, 484319.14519455656, 523867.28103599226,
+       574150.9157760834, 643473.0071987537
+      ],
+     "q": [
+       2.94307798651245e-15, 4.2423471315627494e-17, 5.723775863127544e-19, 5.4950580514438546e-21, 3.891846402751517e-23, 1.9407016476611309e-25,
+       6.095368811034883e-28, 9.195900822387836e-31, 4.6358575919936917e-35, 3.0079949407747365e-31, 8.22272143602233e-29, 3.0023856335908285e-26,
+       4.1249727508646986e-24, 3.2343557207146584e-22, 2.1550191221182543e-20, 2.5658327989214186e-18, 2.4489047406144686e-16, 2.2276793115817664e-16,
+       5.081423121625485e-19, 5.958801249572157e-22, 8.841465896253572e-26, 4.660020005772539e-30, 1.519722598006862e-34, 1e-36,
+       1e-36, 1e-36, 1e-36, 1e-36, 1e-36, 1e-36,
+       1e-36, 1e-36
+      ]
+     },
+    "parameter_overrides": {
+     "ze": [
+       -92794.70931858035, -91393.21029364156, -89773.35903287452, -87924.32927822444, -85860.07133739268, -83599.6376099594,
+       -81162.02949316883, -78566.19759076071, -74085.86764763831, -68060.89779501746, -60930.71221570099, -53180.378028490595,
+       -45444.77768659657, -38876.57627498878, -33296.394025874, -28554.323840471272, -24524.00991972413, -21098.30291960528,
+       -18186.428908569047, -15458.728763808145, -13140.144860988654, -11169.321396199322, -9494.104351245256, -8070.141904387926,
+       -6680.0498154611705, -5624.04995949035, -4711.449939571152, -3927.3001655899293, -2973.4675899328267, -1855.531726162374,
+       -1015.7947525129217, -503.169190105461, -225.5239523947239
+      ],
+     "dpidz_sq": [
+       113.53516580048438, 109.68148179762086, 105.3932817404696, 101.37574786367168, 97.309444165265, 93.13128588519291,
+       88.90712194183664, 84.77582294981543, 77.3625811265885, 67.53778403362242, 56.36345301996264, 45.21422819757231,
+       35.15081099441522, 27.600084826363094, 21.863711274001957, 17.413072823069324, 13.81808826974881, 10.784083313092724,
+       8.442437552930052, 6.343638050260264, 4.618998577552092, 3.224089113886945, 2.2604364260923484, 1.6439122330679166,
+       1.120704386609304, 0.7804040129589008, 0.5351900985444011, 0.3628272173148276, 0.2020682461125112, 0.07581215396563121,
+       0.021551961249356436, 0.00476582626446563, 0.0008925524182430744
+      ],
+     "tau_damp": [
+       -6.996908185810738e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0
+      ],
+     "u0": [
+       0.3137163256751207, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
+       6.837845320612321, 8.020722415515143, 7.9120974965200315, 8.104523536792804, 7.814454111490643, 6.251011569732953,
+       6.581226119770792, 5.251652417996859, 3.6067974452866127, 2.635321304984195, 2.5148787451429215, 3.219013901852746,
+       4.530556630594639, 5.774985215972102, 5.770849745517459, 5.250674347176639e-05, 2.5318036840964425e-10, 7.078382797473619e-16,
+       1.528061675071967e-21, 2.6212890038104175e-27, 3.70238058529627e-33, 2.6940397531986615e-39, 8.32219115157844e-46, 1.6521635874812272e-52,
+       1.5147589411357743e-59, 2.7989182572886768e-67
+      ],
+     "v0": [
+       6.907543971518131, 9.838176690895843, 11.141396693631572, 11.793707337862525, 11.646515406457205, 10.866385670441009,
+       9.700476174916078, 7.417002598490004, 3.875172480941073, 0.625623355553442, -2.976413165695126, -3.4926583905853525,
+       -2.7276723723454688, -2.363120395161759, -2.2810693780563, -1.4999517790149208, 0.03461296258321437, -0.03127516612971086,
+       -1.2254718002490355, -1.9362655625408767, -1.7696393246826927, -1.6101260385411858e-05, -7.76380736248755e-11, -2.170594695408774e-16,
+       -4.685819519922835e-22, -8.0382140718659745e-28, -1.1353394131306754e-33, -8.261304863767348e-40, -2.552009765647343e-46, -5.066379157229262e-53,
+       -4.645026159667008e-60, -8.582915809932753e-68
+      ],
+     "s0": [
+       308258.68636621814, 310914.8508680568, 312597.05781209783, 313684.0014700589, 314719.19596075214, 315432.36565402156,
+       315974.82833955815, 316768.85498161445, 318203.71249937854, 320968.9675030523, 324592.0680974725, 327935.25584871846,
+       330978.1423711212, 332772.60608690063, 333844.2079730258, 334680.9572018118, 337006.9223738216, 342008.1572552576,
+       344558.5615762205, 352950.26421007136, 362414.1467173247, 379870.01148180553, 388818.52498243796, 399319.689643708,
+       411867.1426478959, 425193.46676781954, 439119.7272633453, 456636.3446789743, 484319.14519455656, 523867.28103599226,
+       574150.9157760834, 643473.0071987537
+      ],
+     "tauresx_enter": 0.00038003194660834425,
+     "tauresy_enter": 0.002787498536495529,
+     "cflx": 1.1288183467197434e-16,
+     "dryfac": 1.0182904760308067
+     },
+    "assertions": [
+     {
+      "variable": "ptend_q",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 8.042700869325534e-19,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    },
+   {
+    "id": "nonzeroK_operator",
+    "description": "Compiled-Fortran pin (linear_1d_operators.F90 and coords_1d.F90 verbatim from the cam6_4_212 fork, gfortran 11.5 with the CAM gfortran build's -DUSE_CONTIGUOUS= empty, scratch/cam_vdiff_driver/): diffusion_operator on the step-1 geometry (Coords1D from the dumped pint, CAM order) with interface diffusivity K = dpidz_sq (kv = 1 m2/s) and the default BoundaryFixedFlux conditions at both ends (zero prescribed flux, matching kdudz_bot = kdudz_top = 0), applied to the dumped step-1 u0; the esm row is the reversed (esd-order) operator value, so ptend_u(1) = (A u0)[32] = 2.0633949733127771e-05 m/s^2, ptend_u(16) = (A u0)[17] = 1.7093444110831203e-07, ptend_u(32) = (A u0)[1] = 8.6780995093086661e-67 at the model top (the near-vanishing winds of lev 1-11 with the large step-1 dpidz_sq at the top interfaces). tau_damp and the taures source are zeroed (tauresx_enter = tauresy_enter = 0 and u = u0 so tauimpx = 0), leaving the operator alone; hand-verified against the spr/sub/diag stencil at lev 1 and 17.",
+    "time_span": {
+     "start": 0.0,
+     "end": 0.0
+     },
+    "initial_conditions": {
+     "u": [
+       1.418813430289268, 1.821989658621705, 2.3450054899294184, 2.8488663218424306, 3.2117619336921175, 3.5591567560448185,
+       4.034058594187169, 4.674512907937394, 4.946001742972865, 5.2962672024737465, 3.3988040130833124, 3.5339665817020194,
+       4.021306923395206, 4.3729102638376665, 4.2390870207605005, 2.386571507304945, 0.596798703981576, 1.1986831699513256,
+       4.000750061915931, 6.3443642690380315, 6.38887267816177, 5.884546319839207e-05, 2.8742026224385195e-10, 8.11760687085515e-16,
+       1.7712963947651545e-21, 3.0750274997756505e-27, 4.401531211660759e-33, 3.250702812670074e-39, 1.0198359578029224e-45, 2.0577267759704973e-52,
+       1.9244104698866517e-59, 3.676249032166472e-67
+      ],
+     "v": [
+       5.404623820236974, 6.310454547094066, 6.994126996518428, 7.181782497316116, 6.676532451260701, 6.04197180635534,
+       5.19301131453386, 3.281358030346952, -0.9295124147800242, -5.462468207889116, -8.136688440816727, -8.436225902117142,
+       -7.661705280265053, -7.453402920282828, -7.498466654291726, -7.360980134043813, -8.006150126686007, -8.337333141343398,
+       -7.233194444484647, -5.304268300685342, -3.269084377391446, -3.011019088038629e-05, -1.4706775357583737e-10, -4.1536306806665363e-16,
+       -9.063396520560035e-22, -1.5734345023562052e-27, -2.252181563930316e-33, -1.6633239589798645e-39, -5.218309926148392e-46, -1.0529002685103777e-52,
+       -9.846847727006192e-60, -1.88106767608655e-67
+      ],
+     "s": [
+       312628.99521793926, 313612.3640159418, 313974.70825960184, 314197.57112273894, 314453.70159045624, 314737.67921529844,
+       315139.3088646416, 315814.349563606, 316988.9249309061, 319648.0537169, 324170.9181130199, 328084.1997595133,
+       331210.14153627044, 332986.65185315924, 334320.8829223958, 335403.22004100477, 336507.7781546821, 339000.7250139721,
+       344910.27085095627, 353494.05677008646, 362927.04624387604, 379648.5467979983, 388415.0877778055, 398723.4029272898,
+       411046.0060318936, 424106.36931870837, 437768.29636206443, 454850.8638813471, 481955.9242054399, 520627.7375487072,
+       569305.7289155166, 635395.0168547509
+      ],
+     "q": [
+       0.011442792697419013, 0.01085029911811306, 0.010374084988934997, 0.009948934242944374, 0.009603869586279292, 0.009232897584173836,
+       0.00878617144513622, 0.008248060932415934, 0.007319246133031167, 0.004574020011635244, 0.0022260521650778486, 0.0012718804237147104,
+       0.0006279030643706183, 0.0003195848538757373, 0.0001473570098799535, 6.754530966127701e-05, 3.6889094187542286e-05, 2.2071201218582045e-05,
+       1.540517609760933e-05, 1.1820315661595804e-05, 8.931630033704715e-06, 1.214749022741307e-07, 2.2779949403058067e-08, 1.0004633064994e-08,
+       1.0005696590863638e-08, 1.0007285863617663e-08, 1.0009094672391625e-08, 1.0011783770819379e-08, 1.0018011369077967e-08, 1.003447192795403e-08,
+       1.0067782035990724e-08, 1.0135890069398695e-08
+      ]
+     },
+    "parameter_overrides": {
+     "kvm": [
+       1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       1.0, 1.0, 1.0
+      ],
+     "tau_damp": [
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+       0.0, 0.0
+      ],
+     "tauresx_enter": 0.0,
+     "tauresy_enter": 0.0,
+     "cflx": 0.0
+     },
+    "assertions": [
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": 2.063394973312777e-05,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 16
+       },
+      "expected": 1.7093444110831203e-07,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "ptend_u",
+      "time": 0.0,
+      "coords": {
+       "lev": 32
+       },
+      "expected": 8.678099509308666e-67,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
