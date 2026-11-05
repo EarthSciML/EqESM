@@ -2,13 +2,16 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_surface_forcing",
-  "description": "Stage-2 implementation of the MOM6 surface forcing import-to-fluxes/forces mapping (stage 1 boundary I of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the per-column mapping from the imported coupler fields (x_in, 25 fields gathered by the driver) to the MOM6 forcing fluxes (convert_IOB_to_fluxes, mom_surface_forcing_nuopc.F90:258-734) and mechanical forces (convert_IOB_to_forces, :739-1050), plus the net mass source (set_net_mass_forcing, MOM_forcing_type.F90:2748-2800), all with the unit conversions of the reference run (C_JRA_t62_mom6_inst: every conversion factor 1.0, so the laws below are pure arithmetic). All fluxes/forces are pass-throughs of the imports except: sw = sw_vis_dir + sw_vis_dif + sw_nir_dir + sw_nir_dif (:597); latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf with Lv = 2.501e6 and Lf = 3.337e5 J kg-1 (:572-596); the latent heat diagnostics latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf; vprec = vprec_restore - net_fw_global_adjust (SRESTORE_AS_SFLUX=True so the restoring freshwater flux is 0, and ADJUST_NET_FRESH_WATER_TO_ZERO=True subtracts the area-mean net fresh-water flux; :455-486, :694-714); salt_flux_o = salt_flux + salt_restore_flux (:430-447, :686-689); the mechanical forces with wind_stagger = AGRID (taux/tauy are the h-point stress averages onto the u/v points east/north of the cell, :943-951, while tau_mag = GUST_CONST + sqrt(u_flux^2 + v_flux^2), ustar = sqrt(tau_mag/RHO_0) and omega_w2x = atan2(v_flux, u_flux) are built from the h-point stresses directly, :956-962); and net_mass_src, the nine-term sum of the water fluxes. GUST_CONST = 4.0e-4 Pa, RHO_0 = 1035.0 kg m-3, Lf and Lv as above. The restoring salt flux and the net-FW adjustment are ocean-state-driven fields, not IOB imports, so they enter as inputs (the dump records them as salt_flux_o - salt_flux_in and -vprec). The tests pin the stage-1 instrumentation dump mom6_sfc_forcing.csv (12 traced cells x 12 coupling steps; the rows below cover ocean and land east/north neighbors of the AGRID averages and the runoff/melt/evaporation branches). The dump writes es26.17; the run is r8, so the transcriptions are pinned to round-off (rel 1e-12). The u10_sqr import is never used: the reference run does not allocate fluxes%u10_sqr (:644-645), so u10_sqr_o is identically 0 (u10_sqr_allocated = 0).",
+  "description": "Stage-2 implementation of the MOM6 surface forcing import-to-fluxes/forces mapping (stage 1 boundary I of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the per-column mapping from the imported coupler fields (x_in, 25 fields gathered by the driver) to the MOM6 forcing fluxes (convert_IOB_to_fluxes, mom_surface_forcing_nuopc.F90:258-734) and mechanical forces (convert_IOB_to_forces, :739-1050), plus the net mass source (set_net_mass_forcing, MOM_forcing_type.F90:2748-2800), all with the unit conversions of the reference run (C_JRA_t62_mom6_inst: every conversion factor 1.0, so the laws below are pure arithmetic). All fluxes/forces are pass-throughs of the imports except: sw = sw_vis_dir + sw_vis_dif + sw_nir_dir + sw_nir_dif (:597); latent = (latent_evap_diag + latent_fprec_diag + latent_frunoff_diag) - frunoff_glc*Lf, assembled from the latent heat diagnostics latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf (:572-596, with Lv = 2.501e6 and Lf = 3.337e5 J kg-1); vprec = vprec_restore - net_fw_global_adjust (SRESTORE_AS_SFLUX=True so the restoring freshwater flux is 0, and ADJUST_NET_FRESH_WATER_TO_ZERO=True subtracts the area-mean net fresh-water flux; :455-486, :694-714); salt_flux_o = salt_flux + salt_restore_flux (:430-447, :686-689); the mechanical forces with wind_stagger = AGRID (taux/tauy are the h-point stress averages onto the u/v points east/north of the cell via the shared masked_pair_average template, :943-951, while tau_mag = GUST_CONST + sqrt(u_flux^2 + v_flux^2), ustar = sqrt(tau_mag/RHO_0) and omega_w2x = atan2(v_flux, u_flux) are built from the h-point stresses directly, :956-962); and net_mass_src, the nine-term sum of the water fluxes. GUST_CONST = 4.0e-4 Pa, RHO_0 = 1035.0 kg m-3, Lf and Lv as above. The restoring salt flux and the net-FW adjustment are ocean-state-driven fields, not IOB imports, so they enter as inputs (the dump records them as salt_flux_o - salt_flux_in and -vprec). The tests pin the stage-1 instrumentation dump mom6_sfc_forcing.csv (12 traced cells x 12 coupling steps; the rows below cover ocean and land east/north neighbors of the AGRID averages and the runoff/melt/evaporation branches). The dump writes es26.17; the run is r8, so the transcriptions are pinned to round-off (rel 1e-12). The u10_sqr import is never used: the reference run does not allocate fluxes%u10_sqr (:644-645), so u10_sqr_o is identically 0 (u10_sqr_allocated = 0).",
   "authors": [
    "EqESM stage 2 (wt/mom6-eos)"
   ]
  },
  "models": {
   "SurfaceForcing": {
+   "expression_template_imports": [
+    { "ref": "./mom6_templates.esm" }
+   ],
    "variables": {
     "p": {
      "type": "parameter",
@@ -435,21 +438,6 @@
      "units": "Pa",
      "description": "Meridional wind stress at the v point north of the cell (forces%tauy, the AGRID average of (i, j) and (i, j+1), mom_surface_forcing_nuopc.F90:948-951), [Pa]"
     },
-    "tau_mag_o": {
-     "type": "unknown",
-     "units": "Pa",
-     "description": "Wind stress magnitude (forces%tau_mag = GUST_CONST + |(u_flux, v_flux)|, built from the h-point stresses, NOT from taux/tauy; mom_surface_forcing_nuopc.F90:956-957), [Pa]"
-    },
-    "ustar_o": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "Friction velocity (forces%ustar = sqrt(tau_mag/RHO_0), mom_surface_forcing_nuopc.F90:960-961), [m s-1]"
-    },
-    "p_surf_full_o": {
-     "type": "unknown",
-     "units": "Pa",
-     "description": "Full surface pressure (forces%p_surf_full, mom_surface_forcing_nuopc.F90:674-680), [Pa]"
-    },
     "omega_w2x": {
      "type": "unknown",
      "units": "rad",
@@ -552,34 +540,16 @@
       "op": "-",
       "args": [
        {
-        "op": "-",
+        "op": "+",
         "args": [
          {
-          "op": "-",
+          "op": "+",
           "args": [
-           {
-            "op": "*",
-            "args": [
-             "q_flux",
-             "Lv"
-            ]
-           },
-           {
-            "op": "*",
-            "args": [
-             "fprec",
-             "Lf"
-            ]
-           }
+           "latent_evap_diag",
+           "latent_fprec_diag"
           ]
          },
-         {
-          "op": "*",
-          "args": [
-           "frunoff",
-           "Lf"
-          ]
-         }
+         "latent_frunoff_diag"
         ]
        },
        {
@@ -693,57 +663,27 @@
     {
      "lhs": "taux",
      "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         "u_flux",
-         {
-          "op": "*",
-          "args": [
-           "mask_east",
-           "u_flux_east"
-          ]
-         }
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         1.0,
-         "mask_east"
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "masked_pair_average",
+      "bindings": {
+       "a": "u_flux",
+       "a_neighbor": "u_flux_east",
+       "mask": "mask_east"
+      }
      }
     },
     {
      "lhs": "tauy",
      "rhs": {
-      "op": "/",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         "v_flux",
-         {
-          "op": "*",
-          "args": [
-           "mask_north",
-           "v_flux_north"
-          ]
-         }
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         1.0,
-         "mask_north"
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "masked_pair_average",
+      "bindings": {
+       "a": "v_flux",
+       "a_neighbor": "v_flux_north",
+       "mask": "mask_north"
+      }
      }
     },
     {
@@ -793,18 +733,6 @@
        }
       ]
      }
-    },
-    {
-     "lhs": "tau_mag_o",
-     "rhs": "tau_mag"
-    },
-    {
-     "lhs": "ustar_o",
-     "rhs": "ustar"
-    },
-    {
-     "lhs": "p_surf_full_o",
-     "rhs": "p"
     },
     {
      "lhs": "omega_w2x",
@@ -1065,21 +993,6 @@
        "expected": 0.0027653556842152883
       },
       {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.010076636214621834
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.00312023723466675
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99753.85917574639
-      },
-      {
        "variable": "omega_w2x",
        "time": 0.0,
        "expected": 2.919930916068436
@@ -1319,21 +1232,6 @@
        "variable": "tauy",
        "time": 0.0,
        "expected": 0.0031404664273666253
-      },
-      {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.01623958509656516
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.003961113528183046
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99768.41042848327
       },
       {
        "variable": "omega_w2x",
@@ -1577,21 +1475,6 @@
        "expected": -0.0011003512588782388
       },
       {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.012532249543376735
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.0034797203429439982
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99747.88776992254
-      },
-      {
        "variable": "omega_w2x",
        "time": 0.0,
        "expected": -3.0120049143885357
@@ -1831,21 +1714,6 @@
        "variable": "tauy",
        "time": 0.0,
        "expected": -0.003448667698242268
-      },
-      {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.018801181125855205
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.004262087797327811
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99777.35498675313
       },
       {
        "variable": "omega_w2x",
@@ -2089,21 +1957,6 @@
        "expected": -0.0028846928460972052
       },
       {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.0044020220071012165
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.0020623194125833377
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99838.14520494227
-      },
-      {
        "variable": "omega_w2x",
        "time": 0.0,
        "expected": -2.172871511705786
@@ -2343,21 +2196,6 @@
        "variable": "tauy",
        "time": 0.0,
        "expected": -0.0027649886839760046
-      },
-      {
-       "variable": "tau_mag_o",
-       "time": 0.0,
-       "expected": 0.003314031677459621
-      },
-      {
-       "variable": "ustar_o",
-       "time": 0.0,
-       "expected": 0.001789402965625948
-      },
-      {
-       "variable": "p_surf_full_o",
-       "time": 0.0,
-       "expected": 99839.22343332047
       },
       {
        "variable": "omega_w2x",

@@ -1,0 +1,327 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_surfalbedo",
+  "description": "CTSM/CLM ground surface albedo and the bare-ground shortwave partition (stage 2 of the EqESM project), transcribed from ctsm5.4.063 (cesm3.0-alphabranch). GroundAlbedo is SurfaceAlbedo's ground albedo chain: the SoilAlbedo soil law - the wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) and albsod = min(albsat + inc, albdry) with albsat/albdry the wet/dry soil albedo tables by color class and waveband (SurfaceAlbedoMod.F90:1244, 1249-1250; the mxsoil_color = 20 tables of F90:210-218, the active branch for the reference run's surfdata mxsoil_color = 20), albsoi = albsod (F90:1250) - and the snow/soil ground albedo blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo, albgri = albsoi*(1-frac_sno_albedo) + albsni*frac_sno_albedo (F90:816-817), with albsnd/albsni the SNICAR snow albedos (SnowSnicarMod; their computation is a separate component - here they are inputs). SurfaceRadiationBare is the bare-patch branch of SurfaceRadiation (SurfaceRadiationMod.F90:688-711, 897-899): with fabd = fabi = 0, ftdd = ftii = 1, ftid = 0 and albd = albgrd, albi = albgri (SurfaceAlbedoMod.F90:1118-1128) the absorbed/reflected partition sabv = 0, sabg = sum_ib [forc_solad_ib*(1-albgrd_ib) + forc_solai_ib*(1-albgri_ib)], sabg_soil = sum_ib [forc_solad_ib*(1-albsod_ib) + forc_solai_ib*(1-albsoi_ib)], sabg_snow = sum_ib [forc_solad_ib*(1-albsnd_ib) + forc_solai_ib*(1-albsni_ib)] (F90:707-708), fsa = sabv + sabg, fsr = sum_ib [albd_ib*forc_solad_ib + albi_ib*forc_solai_ib] and parveg = 0. Both models are the pointwise laws evaluated on the stage-2 skeleton (one column, one patch; the Fortran runs them per column/patch, SurfaceAlbedoMod.F90:201-218, 816-817, 1244-1250, SurfaceRadiationMod.F90:688-711), written scalar like the other table-using stage-2 law (cam_wv_saturation.esm): the surface-data color class is a scalar table query. The vegetation (two-stream) branch of SurfaceAlbedo/SurfaceRadiation is NOT traced by the stage-1 dumps (the traced patches are all bare: sabv = parveg = 0 on every clm_surfrad.csv row) and is therefore not implemented here; see README-clm-albedo.md for the dump extension the two-stream law would need. The pointwise laws are imported by reference from ./clm_templates.esm (soil_albedo_wetness, soil_albedo, snow_soil_albedo, absorbed_shortwave, reflected_shortwave); the albsat/albdry color-class tables are transcribed from SurfaceAlbedoMod.F90:210-218 as function_tables (soil color class is the discrete table index, so interpolation is nearest). Tests pin the stage-1 CLM dumps (stage1/dumps/clm/, W3 regeneration, fork clm 3d7038304): clm_surfalbedo.csv (kind=nourban rows; the W3 extension adds the SNICAR albsnd/albsni, h2osoi_vol_1 and isoicol columns, so the soil-law inputs and the all-snow endpoint of the mixing law are pinned directly from the dump; the kind=urban rows are the previous step's UrbanAlbedo sref output - UrbanAlbedoMod.F90:442-463 overrides albgrd for urban columns, so the soil/snow mixing law does not apply there and those rows pin no law of this component; see README-clm-albedo.md) and clm_surfrad.csv (bare-patch rows; the albedo inputs come from the previous step's clm_surfalbedo.csv row, since SurfaceRadiation runs before the doalb call of its step, SurfaceRadiationMod.F90:658 vs clm_driver.F90:1325-1364).",
+  "license": "MIT"
+ },
+ "function_tables": {
+  "albsat_20_vis": {
+   "description": "Saturated (wet) soil albedo, visible band, by soil color class 1..20 [1]: the mxsoil_color = 20 branch of SurfaceAlbedoMod.F90:211-212 (albsat(1:20,1)). The table index is the discrete color class (isoicol), so interpolation is nearest.",
+   "axes": [{"name": "soilcol", "units": "1", "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}],
+   "interpolation": "nearest",
+   "out_of_bounds": "clamp",
+   "data": [0.25, 0.23, 0.21, 0.2, 0.19, 0.18, 0.17, 0.16, 0.15, 0.14, 0.13, 0.12, 0.11, 0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04]
+  },
+  "albsat_20_nir": {
+   "description": "Saturated (wet) soil albedo, near-infrared band, by soil color class 1..20 [1]: the mxsoil_color = 20 branch of SurfaceAlbedoMod.F90:213-214 (albsat(1:20,2)).",
+   "axes": [{"name": "soilcol", "units": "1", "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}],
+   "interpolation": "nearest",
+   "out_of_bounds": "clamp",
+   "data": [0.5, 0.46, 0.42, 0.4, 0.38, 0.36, 0.34, 0.32, 0.3, 0.28, 0.26, 0.24, 0.22, 0.2, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08]
+  },
+  "albdry_20_vis": {
+   "description": "Dry soil albedo, visible band, by soil color class 1..20 [1]: the mxsoil_color = 20 branch of SurfaceAlbedoMod.F90:215-216 (albdry(1:20,1)).",
+   "axes": [{"name": "soilcol", "units": "1", "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}],
+   "interpolation": "nearest",
+   "out_of_bounds": "clamp",
+   "data": [0.36, 0.34, 0.32, 0.31, 0.3, 0.29, 0.28, 0.27, 0.26, 0.25, 0.24, 0.23, 0.22, 0.2, 0.18, 0.16, 0.14, 0.12, 0.1, 0.08]
+  },
+  "albdry_20_nir": {
+   "description": "Dry soil albedo, near-infrared band, by soil color class 1..20 [1]: the mxsoil_color = 20 branch of SurfaceAlbedoMod.F90:217-218 (albdry(1:20,2)).",
+   "axes": [{"name": "soilcol", "units": "1", "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}],
+   "interpolation": "nearest",
+   "out_of_bounds": "clamp",
+   "data": [0.61, 0.57, 0.53, 0.51, 0.49, 0.48, 0.45, 0.43, 0.41, 0.39, 0.37, 0.35, 0.33, 0.31, 0.29, 0.27, 0.25, 0.23, 0.21, 0.16]
+  }
+ },
+ "models": {
+  "GroundAlbedo": {
+   "expression_template_imports": [
+    {"ref": "./clm_templates.esm"}
+   ],
+   "variables": {
+    "albsat_vis": {"type": "unknown", "units": "1", "description": "saturated soil albedo, visible band, of the column's color class (albsat(isoicol,1), SurfaceAlbedoMod.F90:211-212), [-]"},
+    "albsat_nir": {"type": "unknown", "units": "1", "description": "saturated soil albedo, near-infrared band, of the column's color class (albsat(isoicol,2), SurfaceAlbedoMod.F90:213-214), [-]"},
+    "albdry_vis": {"type": "unknown", "units": "1", "description": "dry soil albedo, visible band, of the column's color class (albdry(isoicol,1), SurfaceAlbedoMod.F90:215-216), [-]"},
+    "albdry_nir": {"type": "unknown", "units": "1", "description": "dry soil albedo, near-infrared band, of the column's color class (albdry(isoicol,2), SurfaceAlbedoMod.F90:217-218), [-]"},
+    "inc": {"type": "unknown", "units": "1", "description": "soil albedo wetness correction (SoilAlbedo, SurfaceAlbedoMod.F90:1244), [-]"},
+    "albsod_vis": {"type": "unknown", "units": "1", "description": "direct-beam soil albedo, visible band (SoilAlbedo, SurfaceAlbedoMod.F90:1249), [-]"},
+    "albsod_nir": {"type": "unknown", "units": "1", "description": "direct-beam soil albedo, near-infrared band (SoilAlbedo, SurfaceAlbedoMod.F90:1249), [-]"},
+    "albsoi_vis": {"type": "unknown", "units": "1", "description": "diffuse soil albedo, visible band, equal to the direct-beam value (SurfaceAlbedoMod.F90:1250), [-]"},
+    "albsoi_nir": {"type": "unknown", "units": "1", "description": "diffuse soil albedo, near-infrared band, equal to the direct-beam value (SurfaceAlbedoMod.F90:1250), [-]"},
+    "albgrd_vis": {"type": "unknown", "units": "1", "description": "direct-beam ground albedo, visible band (snow + soil blend, SurfaceAlbedoMod.F90:816), [-]"},
+    "albgrd_nir": {"type": "unknown", "units": "1", "description": "direct-beam ground albedo, near-infrared band (SurfaceAlbedoMod.F90:816), [-]"},
+    "albgri_vis": {"type": "unknown", "units": "1", "description": "diffuse ground albedo, visible band (SurfaceAlbedoMod.F90:817), [-]"},
+    "albgri_nir": {"type": "unknown", "units": "1", "description": "diffuse ground albedo, near-infrared band (SurfaceAlbedoMod.F90:817), [-]"},
+    "frac_sno_albedo": {"type": "parameter", "units": "1", "default": 0.0, "description": "fraction of ground covered by snow for albedo calculations (waterdiagnosticbulk_inst%frac_sno_albedo_col), [-]"},
+    "h2osoi_vol_1": {"type": "parameter", "units": "1", "default": 0.0, "description": "top-layer volumetric soil water h2osoi_vol(c,1) [m3/m3], the SoilAlbedo wetness input (waterstatebulk_inst%h2osoi_vol_col, updated in HydrologyNoDrainageMod.F90:575-583 as h2osoi_liq/(dz*denh2o) + h2osoi_ice/(dz*denice)), [m3/m3]"},
+    "soilcol": {"type": "parameter", "units": "1", "default": 1, "description": "soil color class isoicol(c) (SurfaceAlbedoMod.F90:167-187, read from the surface dataset SOIL_COLOR; 1..mxsoil_color), [-]"},
+    "albsnd_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam snow albedo, visible band (SNICAR output albsnd(c,1); its computation is a separate component), [-]"},
+    "albsnd_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam snow albedo, near-infrared band (SNICAR output albsnd(c,2)), [-]"},
+    "albsni_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse snow albedo, visible band (SNICAR output albsni(c,1)), [-]"},
+    "albsni_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse snow albedo, near-infrared band (SNICAR output albsni(c,2)), [-]"}
+   },
+   "equations": [
+    {"lhs": "albsat_vis", "rhs": {"op": "table_lookup", "table": "albsat_20_vis", "axes": {"soilcol": "soilcol"}, "args": []}},
+    {"lhs": "albsat_nir", "rhs": {"op": "table_lookup", "table": "albsat_20_nir", "axes": {"soilcol": "soilcol"}, "args": []}},
+    {"lhs": "albdry_vis", "rhs": {"op": "table_lookup", "table": "albdry_20_vis", "axes": {"soilcol": "soilcol"}, "args": []}},
+    {"lhs": "albdry_nir", "rhs": {"op": "table_lookup", "table": "albdry_20_nir", "axes": {"soilcol": "soilcol"}, "args": []}},
+    {"lhs": "inc", "rhs": {"op": "apply_expression_template", "args": [], "name": "soil_albedo_wetness", "bindings": {"h2osoi_vol": "h2osoi_vol_1"}}},
+    {"lhs": "albsod_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "soil_albedo", "bindings": {"albsat": "albsat_vis", "inc": "inc", "albdry": "albdry_vis"}}},
+    {"lhs": "albsod_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "soil_albedo", "bindings": {"albsat": "albsat_nir", "inc": "inc", "albdry": "albdry_nir"}}},
+    {"lhs": "albsoi_vis", "rhs": "albsod_vis"},
+    {"lhs": "albsoi_nir", "rhs": "albsod_nir"},
+    {"lhs": "albgrd_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsod_vis", "alb_snow": "albsnd_vis", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgrd_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsod_nir", "alb_snow": "albsnd_nir", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgri_vis", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsoi_vis", "alb_snow": "albsni_vis", "frac_sno": "frac_sno_albedo"}}},
+    {"lhs": "albgri_nir", "rhs": {"op": "apply_expression_template", "args": [], "name": "snow_soil_albedo", "bindings": {"alb_soil": "albsoi_nir", "alb_snow": "albsni_nir", "frac_sno": "frac_sno_albedo"}}}
+   ],
+   "tests": [
+    {
+     "id": "clm_groundalbedo_soil_step2_c1",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 2, column 1, kind=nourban): the W3 dump extension carries the law's inputs directly - h2osoi_vol_1 = 1.50499999999999995E-01 m3/m3 and isoicol = 10 on every nourban row (the same 0.1505 m3/m3 reconstructed from clm_soiltemp.csv exit j = 1 and the surfdata SOIL_COLOR = 10, mxsoil_color = 20; the reconstruction is still cited as the cross-check). Then inc = max(0.11 - 0.40*0.1505, 0) = 0.0498 (SurfaceAlbedoMod.F90:1244), albsod_vis = min(0.14 + 0.0498, 0.25) = 0.1898 and albsod_nir = min(0.28 + 0.0498, 0.39) = 0.3298 (F90:1249, class-10 albsat/albdry of F90:211-218), matching the dumped albsod_vis/albsod_nir = 1.89800000000000024E-01/3.29800000000000038E-01 to the last bit, and albsoi = albsod (F90:1250, dumped equal on every row).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albsat_vis", "time": 0.0, "expected": 0.14},
+      {"variable": "albsat_nir", "time": 0.0, "expected": 0.28},
+      {"variable": "albdry_vis", "time": 0.0, "expected": 0.25},
+      {"variable": "albdry_nir", "time": 0.0, "expected": 0.39},
+      {"variable": "inc", "time": 0.0, "expected": 0.0498},
+      {"variable": "albsod_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsod_nir", "time": 0.0, "expected": 0.32980000000000004},
+      {"variable": "albsoi_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsoi_nir", "time": 0.0, "expected": 0.32980000000000004}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_soil_step7_c8",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 7, column 8, kind=nourban): the dumped h2osoi_vol_1 = 0.1505 m3/m3 and isoicol = 10 (constant on all 176 nourban rows: the soil state and color class do not change across the traced columns and steps) reproduce the dumped albsod_vis/albsod_nir, with albsoi = albsod. Pins the same law at a different step/column of the dump.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albsod_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsod_nir", "time": 0.0, "expected": 0.32980000000000004},
+      {"variable": "albsoi_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsoi_nir", "time": 0.0, "expected": 0.32980000000000004}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_soil_step12_c16",
+     "description": "Instantaneous pin of the SoilAlbedo law against clm_surfalbedo.csv (step 12, column 16, kind=nourban): the last traced step, same law and inputs as clm_groundalbedo_soil_step2_c1 (dumped h2osoi_vol_1 = 0.1505 m3/m3 and isoicol = 10).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albsod_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsod_nir", "time": 0.0, "expected": 0.32980000000000004},
+      {"variable": "albsoi_vis", "time": 0.0, "expected": 0.18980000000000002},
+      {"variable": "albsoi_nir", "time": 0.0, "expected": 0.32980000000000004}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_mix_allsnow_step2_c1",
+     "description": "Instantaneous pin of the snow/soil ground-albedo blend at its all-snow endpoint against clm_surfalbedo.csv (step 2, column 1, kind=nourban): the W3 dump extension adds the SNICAR snow albedos as columns, and on every nourban row the dumped albsnd_vis = albgrd_vis = 9.84056006521105808E-01, albsnd_nir = albgrd_nir = 7.07167867393178495E-01, albsni_vis = albgri_vis = 9.80136507492165632E-01 and albsni_nir = albgri_nir = 7.78258834298133695E-01 are bit-identical (all rows carry frac_sno_albedo = 1, so the F90:816-817 blend albgrd = albsod*(1-frac_sno_albedo) + albsnd*frac_sno_albedo reduces to albgrd = albsnd and albgri = albgri = albsni with the real SNICAR values; the dump's equality confirms there are no further contributions to albgrd/albgri on the traced bare columns). The blend interior (0 < frac_sno_albedo < 1) is not exercised by the dump; see README-clm-albedo.md.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505,
+      "frac_sno_albedo": 1.0,
+      "albsnd_vis": 9.84056006521105808e-01,
+      "albsnd_nir": 7.07167867393178495e-01,
+      "albsni_vis": 9.80136507492165632e-01,
+      "albsni_nir": 7.78258834298133695e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albgrd_vis", "time": 0.0, "expected": 9.84056006521105808e-01},
+      {"variable": "albgrd_nir", "time": 0.0, "expected": 7.07167867393178495e-01},
+      {"variable": "albgri_vis", "time": 0.0, "expected": 9.80136507492165632e-01},
+      {"variable": "albgri_nir", "time": 0.0, "expected": 7.78258834298133695e-01}
+     ]
+    },
+    {
+     "id": "clm_groundalbedo_mix_allsnow_step7_c8",
+     "description": "Instantaneous pin of the all-snow endpoint of the ground-albedo blend against clm_surfalbedo.csv (step 7, column 8, kind=nourban): the dumped albsnd/albsni columns of this row (albsnd_vis = albgrd_vis = 9.84760966905754653E-01, albsnd_nir = albgrd_nir = 7.14341884504990032E-01, albsni_vis = albgri_vis = 9.81119976149716355E-01, albsni_nir = albgri_nir = 7.85889504897399283E-01; the SNICAR snow albedo ages between steps, so these differ from the step-2 row) reproduce albgrd = albsnd and albgri = albsni at frac_sno_albedo = 1.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "soilcol": 10,
+      "h2osoi_vol_1": 0.1505,
+      "frac_sno_albedo": 1.0,
+      "albsnd_vis": 9.84760966905754653e-01,
+      "albsnd_nir": 7.14341884504990032e-01,
+      "albsni_vis": 9.81119976149716355e-01,
+      "albsni_nir": 7.85889504897399283e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "albgrd_vis", "time": 0.0, "expected": 9.84760966905754653e-01},
+      {"variable": "albgrd_nir", "time": 0.0, "expected": 7.14341884504990032e-01},
+      {"variable": "albgri_vis", "time": 0.0, "expected": 9.81119976149716355e-01},
+      {"variable": "albgri_nir", "time": 0.0, "expected": 7.85889504897399283e-01}
+     ]
+    }
+   ]
+  },
+  "SurfaceRadiationBare": {
+   "expression_template_imports": [
+    {"ref": "./clm_templates.esm"}
+   ],
+   "variables": {
+    "sabv": {"type": "unknown", "units": "W/m^2", "description": "solar radiation absorbed by vegetation: 0 on bare patches (fabd = fabi = 0, SurfaceAlbedoMod.F90:1118-1123, SurfaceRadiationMod.F90:688-690), [W/m2]"},
+    "sabg": {"type": "unknown", "units": "W/m^2", "description": "solar radiation absorbed by ground (SurfaceRadiationMod.F90:701-702, 705, 709-710), [W/m2]"},
+    "sabg_soil": {"type": "unknown", "units": "W/m^2", "description": "solar radiation absorbed by soil (the same partition with the soil albedo, SurfaceRadiationMod.F90:705-706), [W/m2]"},
+    "sabg_snow": {"type": "unknown", "units": "W/m^2", "description": "solar radiation absorbed by snow (the same partition with the SNICAR snow albedo, SurfaceRadiationMod.F90:707-708), [W/m2]"},
+    "fsa": {"type": "unknown", "units": "W/m^2", "description": "total absorbed solar radiation fsa = sabv + sabg (SurfaceRadiationMod.F90:691, 711), [W/m2]"},
+    "fsr": {"type": "unknown", "units": "W/m^2", "description": "reflected solar radiation fsr = albd*forc_solad + albi*forc_solai summed over bands, with albd = albgrd and albi = albgri on bare patches (SurfaceAlbedoMod.F90:1127-1128, SurfaceRadiationMod.F90:897-899), [W/m2]"},
+    "parveg": {"type": "unknown", "units": "W/m^2", "description": "absorbed PAR by vegetation: 0 on bare patches (SurfaceRadiationMod.F90:692-694), [W/m2]"},
+    "forc_solad_vis": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "incident direct-beam visible solar radiation (forc_solad_col(c,1)), [W/m2]"},
+    "forc_solad_nir": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "incident direct-beam near-infrared solar radiation (forc_solad_col(c,2)), [W/m2]"},
+    "forc_solai_vis": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "incident diffuse visible solar radiation (forc_solai(g,1)), [W/m2]"},
+    "forc_solai_nir": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "incident diffuse near-infrared solar radiation (forc_solai(g,2)), [W/m2]"},
+    "albgrd_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam ground albedo, visible band (the GroundAlbedo output albgrd(c,1)), [-]"},
+    "albgrd_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam ground albedo, near-infrared band (albgrd(c,2)), [-]"},
+    "albgri_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse ground albedo, visible band (albgri(c,1)), [-]"},
+    "albgri_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse ground albedo, near-infrared band (albgri(c,2)), [-]"},
+    "albsod_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam soil albedo, visible band (albsod(c,1)), [-]"},
+    "albsod_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam soil albedo, near-infrared band (albsod(c,2)), [-]"},
+    "albsoi_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse soil albedo, visible band (albsoi(c,1)), [-]"},
+    "albsoi_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse soil albedo, near-infrared band (albsoi(c,2)), [-]"},
+    "albsnd_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam snow albedo, visible band (albsnd_hst(c,1) = albsnd(c,1) when snow is present, SurfaceAlbedoMod.F90:877-879), [-]"},
+    "albsnd_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "direct-beam snow albedo, near-infrared band (albsnd_hst(c,2)), [-]"},
+    "albsni_vis": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse snow albedo, visible band (albsni_hst(c,1)), [-]"},
+    "albsni_nir": {"type": "parameter", "units": "1", "default": 0.0, "description": "diffuse snow albedo, near-infrared band (albsni_hst(c,2)), [-]"}
+   },
+   "equations": [
+    {"lhs": "sabv", "rhs": {"op": "const", "args": [], "value": 0.0, "units": "W/m^2"}},
+    {"lhs": "sabg", "rhs": {"op": "+", "args": [
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albgrd_vis", "albi": "albgri_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albgrd_nir", "albi": "albgri_nir"}}]}},
+    {"lhs": "sabg_soil", "rhs": {"op": "+", "args": [
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albsod_vis", "albi": "albsoi_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albsod_nir", "albi": "albsoi_nir"}}]}},
+    {"lhs": "sabg_snow", "rhs": {"op": "+", "args": [
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albsnd_vis", "albi": "albsni_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "absorbed_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albsnd_nir", "albi": "albsni_nir"}}]}},
+    {"lhs": "fsa", "rhs": {"op": "+", "args": ["sabv", "sabg"]}},
+    {"lhs": "fsr", "rhs": {"op": "+", "args": [
+     {"op": "apply_expression_template", "args": [], "name": "reflected_shortwave", "bindings": {"solad": "forc_solad_vis", "solai": "forc_solai_vis", "albd": "albgrd_vis", "albi": "albgri_vis"}},
+     {"op": "apply_expression_template", "args": [], "name": "reflected_shortwave", "bindings": {"solad": "forc_solad_nir", "solai": "forc_solai_nir", "albd": "albgrd_nir", "albi": "albgri_nir"}}]}},
+    {"lhs": "parveg", "rhs": {"op": "const", "args": [], "value": 0.0, "units": "W/m^2"}}
+   ],
+   "tests": [
+    {
+     "id": "clm_surfrad_bare_step3_p1",
+     "description": "Instantaneous pin of the bare-patch SurfaceRadiation partition against clm_surfrad.csv (step 3, patch 1): a bare patch (ptype = 0, sabv = parveg = 0 on every traced row) with the incident radiation of the step-3 row and the ground/soil albedos of clm_surfalbedo.csv step 2 (SurfaceRadiation runs before the doalb call of its step - clm_driver.F90:658 vs :1325-1364 - so step s uses the albedo computed at step s-1's doalb). Then sabg = forc_solad_vis*(1-albgrd_vis) + forc_solai_vis*(1-albgri_vis) + forc_solad_nir*(1-albgrd_nir) + forc_solai_nir*(1-albgri_nir) = 64.1493509908771570 W/m2, sabg_soil = 318.225002092635634 W/m2, fsa = sabv + sabg = sabg, fsr = albgrd_vis*forc_solad_vis + albgri_vis*forc_solai_vis + albgrd_nir*forc_solad_nir + albgri_nir*forc_solai_nir = 365.768237676828392 W/m2 (all matching the dumped values to round-off), sabg_snow = sabg because frac_sno_albedo = 1 makes albsnd_hst = albsnd = albgrd (SurfaceAlbedoMod.F90:816 with frac_sno_albedo = 1; the W3 albsnd/albsni columns of the clm_surfalbedo.csv step-2 row equal albgrd/albgri bit-exactly, and the dumped sabg_snow equals sabg on all 192 rows), and sabv = parveg = 0 (dumped exactly).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_solad_vis": 1.41440923402172501e+02,
+      "forc_solad_nir": 1.79610527065502623e+02,
+      "forc_solai_vis": 7.35178729316802873e+01,
+      "forc_solai_nir": 3.53482692683501369e+01,
+      "albgrd_vis": 9.84056006521105808e-01,
+      "albgrd_nir": 7.07167867393178495e-01,
+      "albgri_vis": 9.80136507492165632e-01,
+      "albgri_nir": 7.78258834298133695e-01,
+      "albsod_vis": 1.89800000000000024e-01,
+      "albsod_nir": 3.29800000000000038e-01,
+      "albsoi_vis": 1.89800000000000024e-01,
+      "albsoi_nir": 3.29800000000000038e-01,
+      "albsnd_vis": 9.84056006521105808e-01,
+      "albsnd_nir": 7.07167867393178495e-01,
+      "albsni_vis": 9.80136507492165632e-01,
+      "albsni_nir": 7.78258834298133695e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "sabv", "time": 0.0, "expected": 0.0},
+      {"variable": "sabg", "time": 0.0, "expected": 6.41493549908771570e+01},
+      {"variable": "sabg_soil", "time": 0.0, "expected": 3.18225002092635634e+02},
+      {"variable": "sabg_snow", "time": 0.0, "expected": 6.41493549908771570e+01},
+      {"variable": "fsa", "time": 0.0, "expected": 6.41493549908771570e+01},
+      {"variable": "fsr", "time": 0.0, "expected": 3.65768237676828392e+02},
+      {"variable": "parveg", "time": 0.0, "expected": 0.0}
+     ]
+    },
+    {
+     "id": "clm_surfrad_bare_step7_p8",
+     "description": "Instantaneous pin of the bare-patch SurfaceRadiation partition against clm_surfrad.csv (step 7, patch 8) with the ground/soil albedos of clm_surfalbedo.csv step 6: sabg = 65.1421552900382892 W/m2, sabg_soil = 332.277798993192789 W/m2, fsr = 383.760572341943316 W/m2 (all to round-off), sabg_snow = sabg, sabv = parveg = 0.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_solad_vis": 1.49864076800716191e+02,
+      "forc_solad_nir": 1.88869513340756271e+02,
+      "forc_solai_vis": 7.45872870152746259e+01,
+      "forc_solai_nir": 3.55818504752345390e+01,
+      "albgrd_vis": 9.84816166186115893e-01,
+      "albgrd_nir": 7.14935795573663713e-01,
+      "albgri_vis": 9.81119555820641143e-01,
+      "albgri_nir": 7.85889005725716738e-01,
+      "albsod_vis": 1.89800000000000024e-01,
+      "albsod_nir": 3.29800000000000038e-01,
+      "albsoi_vis": 1.89800000000000024e-01,
+      "albsoi_nir": 3.29800000000000038e-01,
+      "albsnd_vis": 9.84816166186115893e-01,
+      "albsnd_nir": 7.14935795573663713e-01,
+      "albsni_vis": 9.81119555820641143e-01,
+      "albsni_nir": 7.85889005725716738e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "sabv", "time": 0.0, "expected": 0.0},
+      {"variable": "sabg", "time": 0.0, "expected": 6.51421552900382892e+01},
+      {"variable": "sabg_soil", "time": 0.0, "expected": 3.32277798993192789e+02},
+      {"variable": "sabg_snow", "time": 0.0, "expected": 6.51421552900382892e+01},
+      {"variable": "fsa", "time": 0.0, "expected": 6.51421552900382892e+01},
+      {"variable": "fsr", "time": 0.0, "expected": 3.83760572341943316e+02},
+      {"variable": "parveg", "time": 0.0, "expected": 0.0}
+     ]
+    },
+    {
+     "id": "clm_surfrad_bare_step12_p16",
+     "description": "Instantaneous pin of the bare-patch SurfaceRadiation partition against clm_surfrad.csv (step 12, patch 16) with the ground/soil albedos of clm_surfalbedo.csv step 11: sabg = 94.3857689404263596 W/m2, sabg_soil = 443.571552342500695 W/m2, fsr = 504.873285831933458 W/m2 (all to round-off), sabg_snow = sabg, sabv = parveg = 0.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_solad_vis": 2.17371141743014334e+02,
+      "forc_solad_nir": 2.58611979081164918e+02,
+      "forc_solai_vis": 8.22583856431655818e+01,
+      "forc_solai_nir": 4.10175483050150049e+01,
+      "albgrd_vis": 9.80108094604079105e-01,
+      "albgrd_nir": 6.94683748925544964e-01,
+      "albgri_vis": 9.76726493933013584e-01,
+      "albgri_nir": 7.75974865406225622e-01,
+      "albsod_vis": 1.89800000000000024e-01,
+      "albsod_nir": 3.29800000000000038e-01,
+      "albsoi_vis": 1.89800000000000024e-01,
+      "albsoi_nir": 3.29800000000000038e-01,
+      "albsnd_vis": 9.80108094604079105e-01,
+      "albsnd_nir": 6.94683748925544964e-01,
+      "albsni_vis": 9.76726493933013584e-01,
+      "albsni_nir": 7.75974865406225622e-01
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "sabv", "time": 0.0, "expected": 0.0},
+      {"variable": "sabg", "time": 0.0, "expected": 9.43857689404263596e+01},
+      {"variable": "sabg_soil", "time": 0.0, "expected": 4.43571552342500695e+02},
+      {"variable": "sabg_snow", "time": 0.0, "expected": 9.43857689404263596e+01},
+      {"variable": "fsa", "time": 0.0, "expected": 9.43857689404263596e+01},
+      {"variable": "fsr", "time": 0.0, "expected": 5.04873285831933458e+02},
+      {"variable": "parveg", "time": 0.0, "expected": 0.0}
+     ]
+    }
+   ]
+  }
+ }
+}
