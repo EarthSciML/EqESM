@@ -550,8 +550,39 @@ def cmd_cleanup(a):
                            cwd=repo, text=True, capture_output=True)
         print(r.stdout.strip() or r.stderr.strip())
     if not a.keep_run_dir:
+        archive = archive_run_logs(d, m, a.name)
+        if archive:
+            print(f"archived logs to {archive}")
         shutil.rmtree(d)
         print(f"removed {d}")
+
+
+ARCHIVED_FILES = ("opencode.jsonl", "result.md", "prompt.md", "meta.json",
+                  "slurm.out", "opencode.err", "status", "exit_code")
+
+
+def archive_run_logs(d, m, name):
+    """Copy a run's transcript and report into .work/agent-logs/<name>-<jobid>/
+    (gitignored) before its run dir is deleted, so later log reviews can
+    cover every job. opencode.jsonl is gzipped; the llama-server log is not
+    kept (large, and only useful while debugging a live server)."""
+    import gzip
+    dest = repo_root() / ".work" / "agent-logs" / f"{name}-{m.get('jobid', 'nojob')}"
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        for fn in ARCHIVED_FILES:
+            src = Path(d) / fn
+            if not src.exists():
+                continue
+            if fn == "opencode.jsonl":
+                with open(src, "rb") as fi, gzip.open(dest / (fn + ".gz"), "wb") as fo:
+                    shutil.copyfileobj(fi, fo)
+            else:
+                shutil.copy2(src, dest / fn)
+    except OSError as e:
+        print(f"warning: could not archive logs for {name}: {e}", file=sys.stderr)
+        return None
+    return dest
 
 
 # ------------------------------------------------- opencode event parsing

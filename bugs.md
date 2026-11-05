@@ -366,7 +366,7 @@ Format template:
   interception fields to be written at the flx stage).
 - **Status:** open (instrumentation coverage note; recorded).
 
-## 31. CLM Sturm1997 snow thermal conductivity is evaluated with single-precision literals (missing `_r8` suffix)
+## 33. CLM Sturm1997 snow thermal conductivity is evaluated with single-precision literals (missing `_r8` suffix)
 
 - **Location:** `components/clm/src/biogeophys/SoilTemperatureMod.F90:774-778` (Sturm1997 branch of `SoilThermProp`, non-glacier land units; the identical glc branch at :754-758 and the same copy in `LakeFluxesMod.F90:497` / `LakeTemperatureMod.F90:1195` carry the same defect).
 - **Description:** the five Sturm et al. (1997) fit literals `0.023`, `0.234`, `0.138`, `1.01`, `3.233` have no kind suffix. Under default `real(4)` (gfortran, CESM default) they are stored as single precision and promoted to `real(8)` at evaluation, so the executed coefficients are the float32-rounded values — 0.1379999965429306, 1.0099999904632568, 3.2330000400543213, 0.023000000044703484, 0.23399999737739563 — not the paper's coefficients. Verified in the compiled object (`SoilTemperatureMod.o` `.rodata.cst8`: the constants are the float32 values; the branch threshold 156 is an exact integer double): a double-precision evaluation of the written formula disagrees with the executed snow interface conductivities at rel ~2.6e-8 (layer thk rel ~1.2e-7 at the traced densities ~340-460 kg/m3), while the float32-constant formula reproduces the dump to rel 1.6e-16 on all 144 traced snow interfaces (16 columns x 9). The neighbouring Jordan1991 branch uses suffixed literals (`7.75e-5_r8`, `1.105e-6_r8`) — the Sturm literals simply lost their suffix when the Jordan formula was replaced (commit ab94ab484, "Replace thermal conductivity of snow of Jordan with Sturm").
@@ -374,10 +374,66 @@ Format template:
 - **Reproduced/corrected in .esm:** reproduced exactly — `stage2/clm_templates.esm` `snow_thermal_cond_sturm1997` carries the float32-rounded coefficients with this provenance, and the `clm_soiltemp.esm` snow interface-tk pins pass at rel 1e-12 to the dump's full double precision.
 - **Status:** open (upstream candidate; the fix is appending `_r8` to the five literals).
 
-## 32. CLM snow hydrology leaves the top snow layer's (z, dz) inconsistent with its zi interfaces
+## 34. CLM snow hydrology leaves the top snow layer's (z, dz) inconsistent with its zi interfaces
 
-- **Location:** `components/clm/src/biogeophys/SnowHydrologyMod.F90` (`DivideSnowLayers` / `AddNewSnow`; called from `SnowWater` before `SoilTemperature`, clm_driver.F90:921/:971 order rules out in-step snowfall as the cause) — state arrays `col%z`, `col%dz`, `col%zi` (SoilStateType).
+- **Location:** SUSPECTED attribution — `components/clm/src/biogeophys/SnowHydrologyMod.F90` (`DivideSnowLayers` / `AddNewSnow`; called from `SnowWater` before `SoilTemperature`; clm_driver.F90:921/:971 order rules out in-step snowfall as the cause). Not traced to the specific call that leaves the state inconsistent; the observed defect is in the state arrays `col%z`, `col%dz`, `col%zi` (SoilStateType) at the SoilTemperature entry.
 - **Description:** after snow-layer division/addition the layer centers and thicknesses (z, dz) of the top snow layer are updated but the interface depths (zi) are not re-derived from them, so `z(c,snl) - 0.5*dz(c,snl) != zi(c,snl)`. In the W3 traced January columns the top-layer mismatch is ~3.02e-5 m (column 1: `zi(-9) = -22.13156338` vs `z(-8) - dz(-8)/2 = -22.13159361`; the layer thickness from dz is 0.01557835 m vs the interface spacing zi(-8) - zi(-9) = 0.01551790 m, i.e. a 6.05e-5 m discrepancy) and up to ~1.6e-4 m (columns 11-15); all other layers satisfy the identity to machine precision.
 - **Impact on results:** small but real: the top snow row's `fact` (ComputeHeatDiffFluxAndFactor, SoilTemperatureMod.F90:1896) uses `z(c,j) - zi(c,j-1)` directly, so the capr-weighted surface factor carries the inconsistency; it does not cancel elsewhere because the matrix/rhs rows use zi only through the top-row factor. The W3 dump now writes `zi_top`/`zi_bot` directly, so the harmonic-mean interface pins feed the true interface depths and reproduce the dump to round-off (rel 1e-12) despite the inconsistency.
 - **Reproduced/corrected in .esm:** the harmonic-mean pins in `stage2/clm_soiltemp.esm` use the dumped `zi_bot` (true interface below each layer), which absorbs the inconsistency exactly; the top-snow factor is transcribed verbatim for the PDE step (`clm_soiltemp.esm` HeatConduction). The inconsistency itself is not corrected (out of scope; it reproduces the F90 state).
 - **Status:** open (upstream candidate; recorded).
+
+## 31. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
+
+- **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
+  `dump_surfalbedo` (urban branch, fork clm `3d7038304`): the write
+  statement passed the module's `nan` (the renamed derived-type parameter
+  `shr_infnan_nan` of `shr_infnan_mod`, a `type(shr_infnan_nan_type)` whose
+  single component is LOGICAL) directly in an `es26.17` data list.
+- **Description:** `shr_infnan_nan` is a derived-type parameter, not a
+  real: it can only be converted to a real through the module's
+  `assignment(=)` interface (the module header says "cannot be passed to
+  functions that expect real arguments"). gfortran's formatted transfer
+  therefore failed at runtime with "Expected REAL for item 14 in formatted
+  transfer, got LOGICAL" (item 14 = the first albsnd/albsni slot) the first
+  time the urban branch ran with the extended dump (LID
+  12027802.261103-131613, step 2), aborting the whole run: the run's CSVs
+  were truncated mid-step-2. (The earlier runs never hit it because they
+  predated the extension's albsnd/albsni columns.)
+- **Impact on results:** the aborted run wrote truncated dumps (the
+  complete pre-extension dumps were preserved). Fix verified by a rerun
+  (LID 12027802.261103-133002): with the NaN materialized to a real local
+  (`nanval = nan` via the assignment interface) all 11 dumps complete and
+  the urban albsnd/albsni slots read `NaN` as designed.
+- **Reproduced/corrected in .esm:** n/a (instrumentation defect, dump-only;
+  no model state affected).
+- **Status:** patched locally (uncommitted in the fork working tree; to be
+  committed with the surfalbedo dump work).
+
+## 32. GLC cap: hflx export sign convention contradicts the code comments and field dictionary
+
+- **Location:** `components/cism/source_cism/libglad/glad_output_fluxes.F90:134-139`
+  (`accumulate_output_fluxes`, `hflx_sum = hflx_sum - ucondflx`) vs
+  `components/cism/source_cism/libglad/glad_main.F90:625` (the `glad_gcm`
+  `hflx` intent comment "output heat flux (W/m^2, positive down)") and the
+  CMEPS field dictionary `components/cmeps/mediator/esmFldsExchange_cesm_mod.F90:816`
+  ("Flgg_hflx: downward heat flux from glacier interior").
+- **Description:** `ucondflx` is the upper-surface conductive flux, positive
+  down (`libglissade/glissade_therm.F90:669`); the accumulation code flips the
+  sign with the comment "Flip the sign so that hflx is positive up"
+  (F90:134-136), so the exported `hflx` is **positive up**. The `glad_gcm`
+  interface comment (glad_main.F90:625) and the CMEPS field dictionary both
+  label `Flgg_hflx` as **positive down**. The two labels cannot both describe
+  the exported value. (The value is currently unconsumed: the mediator errors
+  out if `Flgg_hflx` is actually routed to the land model,
+  `med_phases_post_glc_mod.F90:343-344`, so no downstream component pins the
+  convention.)
+- **Impact on results:** none in the reference run — every traced export row
+  of `cism_cap.csv` has hflx = 0 (ucondflx = 0 in the 2-year cold-base
+  window), so the sign is unobservable in the dumps. Would matter for a run
+  with surface temperature evolution.
+- **Reproduced/corrected in .esm:** `stage2/cism_cap.esm` (GlcCapExport)
+  transcribes the code as written (`hflx = -ucondflx`, i.e. positive up per
+  the F90:135-136 comment) and documents the label contradiction; the sign is
+  unpinned by the dump.
+- **Status:** open (comment/label inconsistency; needs an upstream decision
+  on the intended convention).

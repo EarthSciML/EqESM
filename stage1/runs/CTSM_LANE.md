@@ -123,6 +123,23 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
   `527ab5d` commits (surfalbedo albsnd/albsni + soil color + h2osoi_vol_1)
   are the parents of the soiltemp W3 commits and their clm_dump_mod.F90
   diff contains both lanes' dump changes.
+  - W2c (2026-11-03): surfalbedo dump extension (fork clm `3d7038304` /
+    superproject `527ab5d`): `clm_surfalbedo.csv` gained the SNICAR snow
+    albedos albsnd/albsni (direct/diffuse, vis/nir), the top-layer
+    volumetric soil water h2osoi_vol_1 and the soil color class isoicol
+    per column (urban columns write NaN in the albsnd/albsni slots — they
+    do not run SNICAR). Instrumented rerun inside allocation 12027802
+    (in-node `--no-batch`), LID 261103-133002. The first attempt (LID
+    261103-131613) aborted in `dump_surfalbedo`'s urban branch: the module
+    passed the shr_infnan derived-type NaN parameter (`nan => shr_infnan_nan`)
+    directly in a formatted es26.17 write list, which gfortran rejects at
+    runtime ("Expected REAL ..., got LOGICAL"); fixed by materializing a
+    real local through the module's `assignment(=)` interface (bugs.md #31
+    entry). Verified: albsnd == albgrd and albsni == albgri bit-identical
+    on all nourban rows (frac_sno_albedo = 1 endpoint of the ground-albedo
+    blend), h2osoi_vol_1 = 0.1505, isoicol = 10, and the shared columns
+    bit-identical to the W3 CSVs (the extension is dump-only; the model
+    trajectory is unchanged).
 - **W4 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
   existing files, plus fixing the 2 invalid files).
 
