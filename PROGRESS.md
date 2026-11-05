@@ -1213,3 +1213,10 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
 - **Next:** check suite 12095377; review the six follow-ups as they finish.
   Merge order: cam-surface3 before cam-vdiff2 (README-cam tables), and
   clm-bareground2 before clm-soiltemp3 (clm_templates.esm).
+- **Tooling note (correction):** the opencode "ripgrep execution failed"
+  errors were not intermittent. `rg` 14.1.1 was installed to
+  `~/.local/bin` on 2026-11-03 11:19. Every session whose first grep call
+  came before that time failed on all grep calls for its whole life
+  (clm-surfalbedo, clm-soiltemp2); opencode appears to cache the failed
+  lookup. Every grep call made after the install succeeded. No action
+  needed.
