@@ -86,6 +86,8 @@ draft the next prompts.
    merged or abandoned.
 
 
+If you review a batch of multiple jobs, review their transcripts to see if there are any problems multiple agents are repeatedly running into, for example blocked tool calls or software that is assumed to be installed but isn't, and offer suggestions to the user if you can think of anything that would allow the agents to operate more smoothly.
+
 
 ## Tracking
 
