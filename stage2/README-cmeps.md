@@ -132,14 +132,23 @@ stresses N/m²; fluxes W/m²; water flux kg/m²/s.
    allocation was exposed as an out-of-bounds read (bugs.md #28). The
    gustiness law `ugust(min(rainc, 6.94444e-4))` of F90:197-202 is not
    transcribed (no dump coverage); `ugust = 0` is a plain equation.
-3. **Coverage limits.** All 288 dump rows are unstable Antarctic-coast cells
-   with low-to-moderate wind, so the stable branch (stable0 = 1, the
-   `rhn = 0.018` ratio, the −5·hol stable psi of F90:258-259), the cdn 33 m/s
-   wind cap, the gustiness path and the cold-air-outbreak branch carry no dump
-   pins — the stable-branch and cdn laws are transcribed in the templates
-   (they are exercised by construction only in the psi_momentum/psi_scalar and
-   neutral_heat_coefficient branches). The minwind = 0.5 m/s floor and the
-   |hol| ≤ 10 clamp ARE pinned (rows with vmag = 0.5 and hol = −10).
+3. **Coverage limits.** The fixed-window dump (288 rows) is entirely unstable
+   Antarctic-coast cells with low-to-moderate wind, so the stable branch
+   (stable0 = 1, the `rhn = 0.018` ratio, the −5·hol stable psi of F90:258-259)
+   and the cdn 33 m/s wind cap carried no dump pins. The wide dump
+   (`cmeps_aoflux_wide.csv`, dynamic selection: the per-step top-8 strongest
+   wind cells and top-8 delt > 0 cells of ALL masked PET-0 cells) then
+   PROVABLY exhausts the run's domain: its 192 rows are the strongest-wind rows
+   the run offers (vmag max 4.81 m/s, still far below the cap; iter 2/3/4) and
+   the stable selection is empty every step — no cell of PET 0 has delt > 0 in
+   this January window. So the stable-branch and cdn laws remain transcribed
+   but unpinned (they are exercised by construction only in the
+   psi_momentum/psi_scalar and neutral_heat_coefficient branches); closing the
+   gap needs a different window (a PET slice or season with warm-air-over-
+   cold-water cells and/or storm-force winds), and the gustiness and
+   cold-air-outbreak paths are namelist-off in this case (not run, documented).
+   The minwind = 0.5 m/s floor and the |hol| ≤ 10 clamp ARE pinned (rows with
+   vmag = 0.5 and hol = −10).
 4. **esat vs qsat ordering.** The dump's `esat` column is the capped
    min(es_raw, pslv) while `qsat` is computed from the uncapped es_raw — the
    model carries both (`esat_raw` internal, `esat` capped output); the two
@@ -148,14 +157,14 @@ stresses N/m²; fluxes W/m²; water flux kg/m²/s.
 
 ## Testing
 
-The stage-2 `tests` block pins the stage-1 instrumentation dump
-(`stage1/dumps/cmeps/cmeps_aoflux.csv`) with instantaneous laws
-(`time_span {0,0}`, MOSART pattern): 6 tests × 52 assertions = 312 assertions,
+The stage-2 `tests` block pins the stage-1 instrumentation dumps
+(`stage1/dumps/cmeps/cmeps_aoflux.csv` fixed window and
+`cmeps_aoflux_wide.csv` dynamic window) with instantaneous laws
+(`time_span {0,0}`, MOSART pattern): 9 tests × 52 assertions = 468 assertions,
 all `rel 1e-12`, byte-identical to the pre-refactor unrolled model (the
 composition keeps the same external variable names). The full stage-2 suite —
-`./esm test` on `cmeps_aoflux.esm` plus the CICE and MOSART files — reports
-561 assertions (312 aoflux + 249 CICE/MOSART); this component needs no
-`ESD_ROOT`.
+`./esm test stage2/` — reports 1327P/0F/0E (468 aoflux + 859 CICE/MOSART/other
+files); this component needs no `ESD_ROOT`.
 
 | test | dump row (step, gid) | what is pinned |
 |---|---|---|
@@ -165,28 +174,34 @@ composition keeps the same external variable names). The full stage-2 suite —
 | `iter5_hol_clamp` | (8, 42662) | all 5 iterations run (no convergence) with hol pinned at the |hol| ≤ 10 clamp (−10.0 exactly), vmag 0.52 m/s near the minwind floor |
 | `iter5_minwind_clamp` | (22, 42662) | all 5 iterations run with vmag pinned at the minwind = 0.5 m/s floor while hol = −9.76 stays just off the clamp |
 | `iter2_late_step` | (24, 41583) | the same cell as the first test 23 coupling steps later (convergence at iteration 2 again, vmag 2.22 m/s, hol −2.58) |
+| `wide_maxwind_cell` | (4, 42667) | the wide dump's strongest-wind row: the wind-ranked selection's domain maximum vmag 4.81 m/s (the strongest wind this run's PET-0 slice offers; the cdn 33 m/s cap is not reached), converged at iteration 2, hol −1.16 |
+| `wide_iter3_coldest_cell` | (13, 42126) | wide-dump convergence at iteration 3 at one of the domain's coldest cells (delt −4.54 K at this row, −5.86 K over the run), vmag 1.75 m/s, hol −4.21 |
+| `wide_iter4_holclamp_adj` | (19, 41583) | wide-dump convergence at iteration 4 with hol −9.901, a tenth off the |hol| ≤ 10 clamp, at the weakest-wind step of the wind-ranked selection (vmag 0.64 m/s; same cell as `iter2_typical_unstable`) |
 
 Every test overrides the 12 raw inputs at full dump precision and asserts the
 11 derived inputs, the 4 neutral first estimates, the 16-field exit state, the
 7 fluxes, the 10 diagnostics, and the convergence representation
 (`conv_1..4` from the replay, `iter` from both). The replay
-(`stage1/analysis/validate_cmeps_dump.py`) reproduces all 288 dump rows to
-≤ 4.4e-15 relative on every computed column, so `rel 1e-12` pins the dump to
-round-off. Row identity (step, gid, local n, lat, lon) and the exercised laws
-are cited in each test description.
+(`stage1/analysis/validate_cmeps_dump.py`) reproduces all 288 fixed-window rows
+to ≤ 4.4e-15 and all 192 wide-window rows to ≤ 3.4e-15 relative on every
+computed column, so `rel 1e-12` pins the dump to round-off. Row identity
+(step, gid, local n, lat, lon — the true cell latitude, ~69 S for both
+windows) and the exercised laws are cited in each test description.
 
 ### Coverage summary
 
 | branch | traced rows | pinned |
 |---|---|---|
-| unstable psi (Paulson psimhu/psixhu, stable = 0) | 288 | ✓ |
-| |hol| ≤ 10 clamp | 21 rows at hol = −10 | ✓ |
-| minwind = 0.5 m/s floor | 17 rows at vmag = 0.5 | ✓ |
-| iteration convergence 2 / 3 / 4 / 5 | 145 / 85 / 37 / 21 | ✓ |
+| unstable psi (Paulson psimhu/psixhu, stable = 0) | 288 (fixed) + 192 (wide) | ✓ |
+| |hol| ≤ 10 clamp | 21 rows at hol = −10 (fixed); wide hol ≥ −9.90 | ✓ |
+| minwind = 0.5 m/s floor | 17 rows at vmag = 0.5 (fixed) | ✓ |
+| iteration convergence 2 / 3 / 4 / 5 | 145 / 85 / 37 / 21 (fixed); 126 / 57 / 9 / 0 (wide) | ✓ |
 | nonzero ocean currents (us/vs) | all rows (|u| ≤ 0.13 m/s) | ✓ |
-| stable psi (−5·hol branch), rhn = 0.018 | 0 | ✗ gap |
-| cdn 33 m/s cap | 0 | ✗ gap |
-| gustiness (rainc → ugust), cold-air outbreak | 0 | ✗ gap |
+| wind-ranked selection (dynamic, per-step top-8 of all masked PET-0 cells) | 192 rows, 9 cells | ✓ |
+| strongest-wind rows of the domain | wide vmag 0.63–4.81 m/s (max 4.81) | ✓ |
+| stable psi (−5·hol branch), rhn = 0.018 | 0 — delt > 0 nowhere on PET 0 (selection exhaustive, proven) | ✗ gap |
+| cdn 33 m/s cap | 0 — domain wind max 4.81 m/s (selection exhaustive, proven) | ✗ gap |
+| gustiness (rainc → ugust), cold-air outbreak | 0 (namelist-off in this case, not run) | ✗ gap |
 
 ### Transcription fixes found while writing the tests
 

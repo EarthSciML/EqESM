@@ -3004,8 +3004,873 @@
        "expected": 2.6223671059442197
       }
      ]
+    },
+
+    {
+     "id": "wide_maxwind_cell",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 4, gid 42667, PET-0 local ogrid index n = 7117, lat  -6.90324828501366454E+001, lon  -2.82666666666666742E+002): the strongest-wind row of the wide dump (step 4, gid 42667, n 7117, ~69.0 S): the wind-ranked selection's domain maximum vmag 4.81 m/s, the strongest wind this run's PET-0 slice offers (the cdn 33 m/s cap of F90:153-154 is not reached anywhere in the run), converged at iteration 2 with hol -1.16. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 10.0,
+      "ubot": -4.84313936925882,
+      "vbot": -0.20035078953980595,
+      "thbot": 268.9364041393618,
+      "qbot": 0.0023738008991529983,
+      "rainc": 0.0,
+      "rbot": 1.2914738837215007,
+      "tbot": 268.9364041393618,
+      "pslv": 99831.892819101,
+      "us": -0.03442336054062248,
+      "vs": 0.0029097750458843483,
+      "ts": 274.7371154262015
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 4.8130099220361435
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 4.8130099220361435
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 684.4343380552905
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004275228800511764
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004189724224501529
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -5.800711286839714
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.0018159233253485308
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1008.0142363014446
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.03272139308764523
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -1.162480023670138
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 4.427152626544765
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 2.10407999528173
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 1.194147659195485
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 1.9965348753660666
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.035983084902379434
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 5.330001966849747
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.03249263531328211
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.039078218958748745
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.041822810534201726
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.17318694466062118
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.22668146578360757
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -7.594701718068916e-05
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 2.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.03873610321555057
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.03870154490958884
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.00163588322837105
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -51.107361075828805
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -42.483979649710356
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -323.0370944126899
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -1.6986797141027733e-05
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -0.2324960047340276
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 2.1725413864284477
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 1.4739543366157744
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 0.9227715706577744
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.05233302402837743
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.05600854406724826
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 269.21997290251767
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.0024755081207435254
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 28.408920966622173
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 5.330001966849747
+      }
+     ]
+    },
+    {
+     "id": "wide_iter3_coldest_cell",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 13, gid 42126, PET-0 local ogrid index n = 7026, lat  -6.92697499477610563E+001, lon  -2.83333333333333258E+002): wide dump row (step 13, gid 42126, n 7026, ~69.3 S): convergence at iteration 3 with delt -4.54 K, vmag 1.75 m/s, hol -4.21, at one of the domain's coldest cells (its delt reaches -5.86 K over the 24 steps). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 9.999999999999998,
+      "ubot": -1.2043176826249995,
+      "vbot": -1.2938589768517899,
+      "thbot": 269.84927374971903,
+      "qbot": 0.002429231439258395,
+      "rainc": 0.0,
+      "rbot": 1.2873330206001175,
+      "tbot": 269.84927374971903,
+      "pslv": 99858.70000065018,
+      "us": 0.00016183031376212128,
+      "vs": -0.031039915622662624,
+      "ts": 274.39102565483586
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 1.7451311923442347
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 1.7451311923442347
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 667.629807651811
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004168873202774833
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004085495738719336
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -4.541751905116826
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.0016562642994609415
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": -2.2204460492503136e-16
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1007.9302948481348
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.04269062698858705
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -4.211488549909194
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 8.269450816018383
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 2.8756652823335305
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 1.9554547090840326
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 3.0671539082298223
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.04886989955271463
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 2.162071109512883
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.03944597305173633
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.04364305136784405
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.04709461691543906
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.08528438607617186
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.19821591169501718
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -7.800113269383108e-05
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 3.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.009363322117158068
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.0064625110780431585
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0067755259305703275
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -21.93458640578663
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -21.417808828315955
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -321.41243211887706
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -8.56369805210554e-06
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -0.842297709981839
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 3.804834209227706
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 1.9505984233633806
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 1.7529507149285481
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.032212360031712337
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.034759914994244204
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 269.9755742972614
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.0024868030455156586
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 4.674551482590268
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 2.162071109512883
+      }
+     ]
+    },
+    {
+     "id": "wide_iter4_holclamp_adj",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 19, gid 41583, PET-0 local ogrid index n = 6933, lat  -6.95044490632870833E+001, lon  -2.85333333333333371E+002): wide dump row (step 19, gid 41583, n 6933, ~69.5 S): convergence at iteration 4 with hol -9.901, a tenth off the |hol| <= 10 clamp (F90:254), at the wind-ranked selection's weakest-wind step (vmag 0.64 m/s; the same cell as iter2_typical_unstable at step 1 of the fixed dump). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 10.0,
+      "ubot": -0.48004821510498685,
+      "vbot": -0.4387967800968047,
+      "thbot": 270.95215383885187,
+      "qbot": 0.001848003704906176,
+      "rainc": 0.0,
+      "rbot": 1.2816240627112865,
+      "tbot": 270.95215383885187,
+      "pslv": 99789.63753681745,
+      "us": -2.451200525106499e-05,
+      "vs": -0.015256348211631913,
+      "ts": 274.60333148203955
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 0.640163458016046
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 0.640163458016046
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 677.8945039514921
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004236071051223503
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004151349630199033
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -3.6511776431876797
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.002303345925292857
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1007.9833309381771
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.06639714814096637
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -9.901475217582552
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 12.626306010917082
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 3.553351377350273
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 2.542353285734573
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 3.837710018815846
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.08343129260996399
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 0.9798214088524587
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.05452029499269593
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.047649078545390924
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.05179345438710655
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.05340966478394313
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.17397525030342506
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -0.00011929824211938333
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 4.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.003655950922958945
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.002741398432563549
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0024188244634579174
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -12.003871154306012
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -20.42340930036445
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -322.40833888822533
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -8.166097281233287e-06
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -1.9802950435165105
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 5.717055246913761
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 2.3910364378055307
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 2.423005341259468
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.023197148010216637
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.02521476729573256
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 271.0168507470525
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.001906082036414009
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 0.960049993245617
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 0.9798214088524587
+      }
+     ]
     }
-   ]
+    ]
   },
   "step1": { "ref": "./cmeps_aoflux_step.esm" },
   "step2": { "ref": "./cmeps_aoflux_step.esm" },
