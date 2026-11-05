@@ -2,7 +2,7 @@
 "esm": "1.3.0",
 "metadata": {
  "name": "cam_vertical_diffusion",
- "description": "CAM6 vertical diffusion (dump site vdiff) as a PDE on the EarthSciDiscretizations column grid (stage 2 of the EqESM project): the implicit Euler-backward finite-volume solve of vertical_diffusion_solver.F90 / diffusion_solver.F90 (components/cam/src/atmos_phys/schemes/vertical_diffusion/ of the instrumented cam6_4_212 fork) written as du/dt = d/dz(K du/dz) + tau_damp u + src_u, with the layer field u (zonal wind; v, s, q mirrored) on lev (1 = surface), the interface coefficient K = kv dpidz_sq on lev_nodes, and the surface source src_u = g taures ramda / dz[1] the CAM solver injects at pver (diffusion_solver.F90:491-499). The diffusion term is lowered by EarthSciDiscretizations' varcoeff_face_laplacian_lev_flux_bc (interface-valued coefficient, no face averaging, layer-centre gradient spacing, prescribed fluxes at both domain faces) -- exactly the CAM finite-volume stencil of linear_1d_operators.F90 (spr/sub/diag, deriv_diag): with the CAM solve's default BoundaryFixedFlux conditions at both ends the prescribed face fluxes are the free names kdudz_bot/kdudz_top, and in this dump window they are zero (taux = tauy = shflux = ksrftms = 0 and kvh(1) = 0, dse_top = 0), so the two names are declared units-free after the ysu.esm idiom and shared by all four equations (a units-typed declaration could satisfy only one field). The coordinate is the CAM interface pressure with the sign flipped: ze = -pint reversed, so ze increases upward and esd lev i <-> CAM lev 33-i; dz[i] = pdel(33-i) and the interface flux rule's zc/dz come from the grid templates applied to ze. The wind damping tau_damp is the solver's tau_damp_rate (nonzero only at CAM lev 32 in the window) and the residual-stress memory is tauresx = tauresx_enter - tauimpx with tauimpx = integral((u-u0)/(g dt), lev, z_sfc, z_top) (diffusion_solver.F90:536-589, taux = tautmsx = taubljx = 0 in the window), the integral lowered by integral_lev_whole over the measure dz; tauimpy mirrors v. The kinetic-energy dissipation dtk = 0.5(u0^2+v0^2) - 0.5(u^2+v^2) enters the s equation as dtk/dt (F90:598-646 do_beljaars branch). Tracer diffusion is a generic q equation with the explicit surface source src_q = g cflx dryfac / dz[1] (the q solve's explicit flux-to-state conversion q1(pver) += dt g cflx / pdel, F90:974-975; the pdel/pdeldry conversion for dry constituents appears as the dryfac parameter, F90:1056-1061). Tests pin the dump rows of cam_vdiff_prof.csv / cam_vdiff_q.csv (steps 1, 2, 48; the site runs with do_iss = do_beljaars = itaures = .true., am_correction = .false., timeres = 7200 s so ramda = dt/timeres = 0.25, and all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only); the nonzero-K operator row is a compiled-Fortran reference (scratch/cam_vdiff_driver/, linear_1d_operators.F90 verbatim with the CAM gfortran build's -DUSE_CONTIGUOUS=, default fixed-flux boundaries) applying A to the step-1 u0 at K = dpidz_sq (kv = 1 m2/s), reversed to esd order. The s-equation top boundary is a documented gap: CAM's dse solve uses BoundaryFixedLayer(0)/BoundaryData(dse_top) at the top (flux 2 K(1) (dse_top - s(1))/del(1), nonzero only when K(1) > 0) while the rule's shared kdudz_top is zero-flux; the window has kvh(1) = 0 and dse_top = 0 so the two coincide here. All parameters and states are in esd order (reversed from the dump rows).",
+ "description": "CAM6 vertical diffusion (dump site vdiff) as a PDE on the EarthSciDiscretizations column grid (stage 2 of the EqESM project): the implicit Euler-backward finite-volume solve of vertical_diffusion_solver.F90 / diffusion_solver.F90 (components/cam/src/atmos_phys/schemes/vertical_diffusion/ of the instrumented cam6_4_212 fork) written as du/dt = d/dz(K du/dz) + tau_damp u + src_u, with the layer field u (zonal wind; v, s, q mirrored) on lev (1 = surface) and the interface coefficient K = interface_diffusivity(kv, dpidz_sq) on lev_nodes. The surface-layer sources src_u/v/s/q and the wind damping are the cam_templates laws surface_layer_source (the pver injection g F / dz[1], diffusion_solver.F90:440, 491-499 for the residual stress, 779 for shflx, 974-975 and 1056-1061 for cflx with the dryfac conversion) and wind_damping_rate (tau_damp = -g ksrf / dz[1] at pver, 0 elsewhere, F90:274-285) with the drag coefficient ksrf = surface_stress_coefficient(taux, tauy, u0, v0, ksrftms) = ksrftms + max(tau/ws, ksrfmin) (F90:232-239; wsmin/ksrfmin are the module parameters F90:42-44). The sources are explicit sources rather than the flux rule's boundary condition because the CLI cannot express them as the BC: the rule's prescribed-flux free names kdudz_bot/kdudz_top cannot be renamed at the import edge (rename reaches only exports; the names are free inside the rule body) and are shared across every firing, so one units-typed declaration carries one value and one unit class, while the four fields' fluxes differ in both (verified: import-rename of kdudz_bot fails with template_import_rename_unknown_name). The diffusion term is lowered by EarthSciDiscretizations' varcoeff_face_laplacian_lev_flux_bc (interface-valued coefficient, no face averaging, layer-centre gradient spacing, prescribed fluxes at both domain faces) -- exactly the CAM finite-volume stencil of linear_1d_operators.F90 (spr/sub/diag, deriv_diag): with the CAM solve's default BoundaryFixedFlux conditions at both ends the prescribed face fluxes are the free names kdudz_bot/kdudz_top, and in this dump window they are zero (taux = tauy = shflux = 0 with CLUBB_SGS, vertical_diffusion.F90:1017-1035, and kvh(1) = 0, dse_top = 0), so the two names are declared units-free after the ysu.esm idiom and shared by all four equations (a units-typed declaration could satisfy only one field). The coordinate is the CAM interface pressure with the sign flipped: ze = -pint reversed, so ze increases upward and esd lev i <-> CAM lev 33-i; dz[i] = pdel(33-i), z_top = ze[NLEV+1], and the interface flux rule's zc/dz come from the grid templates applied to ze. The residual-stress memory is tauresx = tauresx_enter - tauimpx with tauimpx = integral((u-u0)/(g dt), lev, z_sfc, z_top) (diffusion_solver.F90:536-589, taux = tautmsx = taubljx = 0 in the window), the integral lowered by integral_lev_whole over the measure dz; tauimpy mirrors v. ramda = dt/timeres (F90:491-496, am_correction = .false., timeres = 7200 s). The kinetic-energy dissipation dtk = 0.5(u0^2+v0^2) - 0.5(u^2+v^2) enters the s equation as dtk/dt (F90:598-646 do_beljaars branch). Tracer diffusion is a generic q equation with the explicit surface source (the q solve's explicit flux-to-state conversion q1(pver) += dt g cflx / pdel, F90:974-975; the pdel/pdeldry conversion for dry constituents appears as the dryfac parameter, F90:1056-1061). Tests pin the dump rows of cam_vdiff_prof.csv / cam_vdiff_q.csv (steps 1, 2, 48; the site runs with do_iss = do_beljaars = itaures = .true., am_correction = .false., and all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only); the nonzero-K operator row is a compiled-Fortran reference (stage1/analysis/cam_vdiff_driver/, linear_1d_operators.F90 verbatim with the CAM gfortran build's -DUSE_CONTIGUOUS=, default fixed-flux boundaries) applying A to the step-1 u0 at K = dpidz_sq (kv = 1 m2/s), reversed to esd order. The s-equation top boundary is a documented gap: CAM's dse solve uses BoundaryFixedLayer(0)/BoundaryData(dse_top) at the top (flux 2 K(1) (dse_top - s(1))/del(1), nonzero only when K(1) > 0) while the rule's shared kdudz_top is zero-flux; the window has kvh(1) = 0 and dse_top = 0 so the two coincide here. All parameters and states are in esd order (reversed from the dump rows).",
  "license": "MIT",
  "tags": [
   "stage2",
@@ -18,7 +18,7 @@
  "NLEV": {
   "type": "integer",
   "default": 32,
-  "description": "Number of model layers (CAM pver = 32). Bound into the column grid and rules at the import edges; the model equations spell the top interface as the literal 33 (= NLEV+1 at this binding), the fixture precedent for the ground names of the integral rule."
+  "description": "Number of model layers (CAM pver = 32). Bound into the column grid and rules at the import edges; the model equations spell the top interface as NLEV+1 (the ground upper-bound name z_top of the integral rule, esm-spec 9.6.1)."
   }
  },
 "models": {
@@ -45,6 +45,15 @@
     "bindings": {
      "NLEV": "NLEV"
      }
+    },
+   {
+    "ref": "./cam_templates.esm",
+    "only": [
+     "interface_diffusivity",
+     "surface_layer_source",
+     "surface_stress_coefficient",
+     "wind_damping_rate"
+     ]
     }
    ],
   "variables": {
@@ -211,20 +220,47 @@
     "description": "tracer interface diffusivity kvq*dpidz_sq"
     },
    "tau_damp": {
-    "type": "parameter",
+    "type": "unknown",
     "units": "1/s",
     "shape": [
      "lev"
      ],
-    "default": [
-      -7.035953756246012e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0
-     ],
-    "description": "wind damping rate tau_damp_rate (nonzero only at CAM lev 32 = esd lev 1 in the window); esd order; default = step-1 dump"
+    "description": "wind damping rate tau_damp_rate of vertical_diffusion_wind_damping_rate_run (diffusion_solver.F90:274-285), the wind_damping_rate law: tau_damp[1] = -g*ksrf/dz[1] at the surface layer (CAM pver, the only nonzero layer in the implicit-surface-stress branch) and 0 elsewhere; nonzero only at esd lev 1 in the window"
+    },
+   "taux": {
+    "type": "parameter",
+    "units": "kg/(m*s^2)",
+    "default": 0.0,
+    "description": "surface zonal stress taux [N/m2] into the solver (zero with CLUBB_SGS, vertical_diffusion.F90:1017-1035); the per-step dump column taux"
+    },
+   "tauy": {
+    "type": "parameter",
+    "units": "kg/(m*s^2)",
+    "default": 0.0,
+    "description": "surface meridional stress tauy (per-step dump column tauy)"
+    },
+   "ksrftms": {
+    "type": "parameter",
+    "units": "kg/(m^2*s)",
+    "default": 0.0,
+    "description": "turbulent-mountain-stress surface drag coefficient ksrftms, added to ksrf by turbulent_mountain_stress_add_drag_coefficient_run (diffusion_stubs.F90:161-184); zero in the window"
+    },
+   "ksrfmin": {
+    "type": "parameter",
+    "units": "kg/(m^2*s)",
+    "default": 1e-04,
+    "description": "minimum surface drag coefficient ksrfmin = 1.e-4 kg/(m2 s) (diffusion_solver.F90:44): the floor that keeps the implicit-surface-stress damping rate at pver nonzero even when the turbulent stress vanishes"
+    },
+   "wsmin": {
+    "type": "parameter",
+    "units": "m/s",
+    "default": 1.0,
+    "description": "minimum lowest-level wind speed wsmin = 1 m/s for estimating the frictional velocity (diffusion_solver.F90:42)"
+    },
+   "ksrf": {
+    "type": "unknown",
+    "units": "kg/(m^2*s)",
+    "description": "total surface drag coefficient ksrf = ksrftms + max(tau/ws, ksrfmin) of implicit_surface_stress_add_drag_coefficient_run (diffusion_solver.F90:232-239), the surface_stress_coefficient law; = ksrfmin in the window (taux = tauy = ksrftms = 0)"
     },
    "u0": {
     "type": "parameter",
@@ -287,10 +323,9 @@
     "description": "meridional residual stress entering the step"
     },
    "ramda": {
-    "type": "parameter",
+    "type": "unknown",
     "units": "1",
-    "default": 0.25,
-    "description": "dt/timeres: the fraction of the residual stress injected this step (am_correction = .false., timeres = 7200 s, dt = 1800 s)"
+    "description": "dt/timeres: the fraction of the residual stress injected this step, the am_correction = .false. branch of diffusion_solver.F90:491-496 (timeres = 7200 s, dt = 1800 s in the run; = 0.25)"
     },
    "g": {
     "type": "parameter",
@@ -303,6 +338,12 @@
     "units": "s",
     "default": 1800.0,
     "description": "physics timestep (ztodt)"
+    },
+   "timeres": {
+    "type": "parameter",
+    "units": "s",
+    "default": 7200.0,
+    "description": "relaxation timescale of the residual stress, the timeres namelist of the implicit-surface-stress branch (diffusion_solver.F90:495); 7200 s in the run, so ramda = dt/timeres = 0.25"
     },
    "shflux": {
     "type": "parameter",
@@ -367,6 +408,11 @@
     "type": "parameter",
     "default": 0.0,
     "description": "the ESD flux rule's prescribed top value of K du/dz; zero (the CAM solve's default fixed-flux top; the dse solve's BoundaryFixedLayer(0)/dse_top flux is 2 K(1) (dse_top - s(1))/del(1), which vanishes at the window's kvh(1) = 0, dse_top = 0). Units omitted for the same reason as kdudz_bot"
+    },
+   "zero": {
+    "type": "parameter",
+    "default": 0.0,
+    "description": "units-free zero bound into the surface_layer_source and wind_damping_rate template applications (the checker requires ifelse branches to share dimensions and the four sources carry different units; a units-free declaration is dimension-agnostic, the ysu.esm idiom of the kdudz_bot/kdudz_top names)"
     },
    "src_u": {
     "type": "unknown",
@@ -480,38 +526,91 @@
      "op": "index",
      "args": [
       "ze",
-      33
+      {
+       "op": "+",
+       "args": [
+        "NLEV",
+        1
+        ]
+       }
       ]
      }
     },
    {
     "lhs": "K_mom",
     "rhs": {
-     "op": "*",
-     "args": [
-      "kvm",
-      "dpidz_sq"
-      ]
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "interface_diffusivity",
+     "bindings": {
+      "kv": "kvm",
+      "dpidz_sq": "dpidz_sq"
+      }
      }
     },
    {
     "lhs": "K_th",
     "rhs": {
-     "op": "*",
-     "args": [
-      "kvh",
-      "dpidz_sq"
-      ]
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "interface_diffusivity",
+     "bindings": {
+      "kv": "kvh",
+      "dpidz_sq": "dpidz_sq"
+      }
      }
     },
    {
     "lhs": "K_q",
     "rhs": {
-     "op": "*",
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "interface_diffusivity",
+     "bindings": {
+      "kv": "kvq",
+      "dpidz_sq": "dpidz_sq"
+      }
+     }
+    },
+   {
+    "lhs": "ramda",
+    "rhs": {
+     "op": "/",
      "args": [
-      "kvq",
-      "dpidz_sq"
+      "dt",
+      "timeres"
       ]
+     }
+    },
+   {
+    "lhs": "ksrf",
+    "rhs": {
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "surface_stress_coefficient",
+     "bindings": {
+      "taux": "taux",
+      "tauy": "tauy",
+      "u0": "u0",
+      "v0": "v0",
+      "ksrftms": "ksrftms",
+      "wsmin": "wsmin",
+      "ksrfmin": "ksrfmin"
+      }
+     }
+    },
+   {
+    "lhs": "tau_damp",
+    "rhs": {
+     "op": "apply_expression_template",
+     "args": [],
+     "name": "wind_damping_rate",
+     "bindings": {
+      "ksrf": "ksrf",
+      "g": "g",
+      "dz": "dz",
+      "zero": "zero"
+      }
      }
     },
    {
@@ -605,211 +704,74 @@
    {
     "lhs": "src_u",
     "rhs": {
-     "op": "faq",
-     "output_idx": [
-      "i"
-      ],
+     "op": "apply_expression_template",
      "args": [],
-     "ranges": {
-      "i": {
-       "from": "lev"
-       }
-      },
-     "expr": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "i",
-         1
-         ]
-        },
-       {
-        "op": "/",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "g",
-           "tauresx_enter",
-           "ramda"
-           ]
-          },
-         {
-          "op": "index",
-          "args": [
-           "dz",
-           1
-           ]
-          }
-         ]
-        },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "m/s^2"
-        }
-       ]
+     "name": "surface_layer_source",
+     "bindings": {
+      "flux": {
+       "op": "*",
+       "args": [
+        "tauresx_enter",
+        "ramda"
+        ]
+       },
+      "g": "g",
+      "dz": "dz",
+      "zero": "zero"
       }
      }
     },
    {
     "lhs": "src_v",
     "rhs": {
-     "op": "faq",
-     "output_idx": [
-      "i"
-      ],
+     "op": "apply_expression_template",
      "args": [],
-     "ranges": {
-      "i": {
-       "from": "lev"
-       }
-      },
-     "expr": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "i",
-         1
-         ]
-        },
-       {
-        "op": "/",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "g",
-           "tauresy_enter",
-           "ramda"
-           ]
-          },
-         {
-          "op": "index",
-          "args": [
-           "dz",
-           1
-           ]
-          }
-         ]
-        },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "m/s^2"
-        }
-       ]
+     "name": "surface_layer_source",
+     "bindings": {
+      "flux": {
+       "op": "*",
+       "args": [
+        "tauresy_enter",
+        "ramda"
+        ]
+       },
+      "g": "g",
+      "dz": "dz",
+      "zero": "zero"
       }
      }
     },
    {
     "lhs": "src_s",
     "rhs": {
-     "op": "faq",
-     "output_idx": [
-      "i"
-      ],
+     "op": "apply_expression_template",
      "args": [],
-     "ranges": {
-      "i": {
-       "from": "lev"
-       }
-      },
-     "expr": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "i",
-         1
-         ]
-        },
-       {
-        "op": "/",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "g",
-           "shflux"
-           ]
-          },
-         {
-          "op": "index",
-          "args": [
-           "dz",
-           1
-           ]
-          }
-         ]
-        },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "J/(kg*s)"
-        }
-       ]
+     "name": "surface_layer_source",
+     "bindings": {
+      "flux": "shflux",
+      "g": "g",
+      "dz": "dz",
+      "zero": "zero"
       }
      }
     },
    {
     "lhs": "src_q",
     "rhs": {
-     "op": "faq",
-     "output_idx": [
-      "i"
-      ],
+     "op": "apply_expression_template",
      "args": [],
-     "ranges": {
-      "i": {
-       "from": "lev"
-       }
-      },
-     "expr": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "i",
-         1
-         ]
-        },
-       {
-        "op": "/",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "g",
-           "cflx",
-           "dryfac"
-           ]
-          },
-         {
-          "op": "index",
-          "args": [
-           "dz",
-           1
-           ]
-          }
-         ]
-        },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "kg/(kg*s)"
-        }
-       ]
+     "name": "surface_layer_source",
+     "bindings": {
+      "flux": {
+       "op": "*",
+       "args": [
+        "cflx",
+        "dryfac"
+        ]
+       },
+      "g": "g",
+      "dz": "dz",
+      "zero": "zero"
       }
      }
     },
@@ -1116,7 +1078,7 @@
        },
       "expected": -7.426489492824552e-07,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1127,7 +1089,7 @@
        },
       "expected": -2.8282125966194727e-06,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1158,7 +1120,7 @@
       "time": 0.0,
       "expected": 0.0002503389464234513,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1166,7 +1128,7 @@
       "time": 0.0,
       "expected": 0.0009539158933835601,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1191,6 +1153,37 @@
       "tolerance": {
        "rel": 1e-12,
        "abs": 1e-24
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -7.035953756246012e-07,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 2
+       },
+      "expected": 0.0,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-24
+       }
+      },
+     {
+      "variable": "ramda",
+      "time": 0.0,
+      "expected": 0.25,
+      "tolerance": {
+       "rel": 1e-12
        }
       }
      ]
@@ -1430,14 +1423,6 @@
        1.1268608887899247, 0.7861230527942904, 0.5401045976137561, 0.36700492485695485, 0.20500912162543392, 0.07720004375226769,
        0.02208246271267998, 0.004941756298763186, 0.0009324210890209467
       ],
-     "tau_damp": [
-       -7.036160593445596e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0
-      ],
      "u0": [
        1.3536713182014468, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
        4.107972914882358, 4.723200805987008, 4.937399225858337, 5.233183358750622, 3.4056577233543766, 3.6017393422889885,
@@ -1474,7 +1459,7 @@
        },
       "expected": -5.114608513796033e-07,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1485,7 +1470,7 @@
        },
       "expected": -2.2260064838036046e-06,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1516,7 +1501,7 @@
       "time": 0.0,
       "expected": 0.0003230292786853776,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1524,7 +1509,30 @@
       "time": 0.0,
       "expected": 0.0012702825331507481,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -7.036160593445596e-07,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 2
+       },
+      "expected": 0.0,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-24
        }
       }
      ]
@@ -1586,14 +1594,6 @@
        8.540599091699473, 6.31113380043734, 4.5929104258817555, 3.2179298293742487, 2.265610598380361, 1.650237719088252,
        1.1268608887899247, 0.7861230527942904, 0.5401045976137561, 0.36700492485695485, 0.20500912162543392, 0.07720004375226769,
        0.02208246271267998, 0.004941756298763186, 0.0009324210890209467
-      ],
-     "tau_damp": [
-       -7.036160593445596e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0
       ],
      "u0": [
        1.3536713182014468, 1.7824180436607069, 2.341232879416481, 2.8831120761986635, 3.278580816763879, 3.64253956368536,
@@ -1696,14 +1696,6 @@
        1.120704386609304, 0.7804040129589008, 0.5351900985444011, 0.3628272173148276, 0.2020682461125112, 0.07581215396563121,
        0.021551961249356436, 0.00476582626446563, 0.0008925524182430744
       ],
-     "tau_damp": [
-       -6.996908185810738e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0
-      ],
      "u0": [
        0.3137163256751207, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
        6.837845320612321, 8.020722415515143, 7.9120974965200315, 8.104523536792804, 7.814454111490643, 6.251011569732953,
@@ -1740,7 +1732,7 @@
        },
       "expected": 4.446976552499285e-07,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1751,7 +1743,7 @@
        },
       "expected": 4.276887119372377e-08,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1782,7 +1774,7 @@
       "time": 0.0,
       "expected": 0.0003164756381011105,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
        }
       },
      {
@@ -1790,7 +1782,30 @@
       "time": 0.0,
       "expected": 0.0027813859979201223,
       "tolerance": {
-       "rel": 1e-09
+       "rel": 1e-10
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 1
+       },
+      "expected": -6.996908185810738e-07,
+      "tolerance": {
+       "rel": 1e-12
+       }
+      },
+     {
+      "variable": "tau_damp",
+      "time": 0.0,
+      "coords": {
+       "lev": 2
+       },
+      "expected": 0.0,
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 1e-24
        }
       }
      ]
@@ -1852,14 +1867,6 @@
        8.442437552930052, 6.343638050260264, 4.618998577552092, 3.224089113886945, 2.2604364260923484, 1.6439122330679166,
        1.120704386609304, 0.7804040129589008, 0.5351900985444011, 0.3628272173148276, 0.2020682461125112, 0.07581215396563121,
        0.021551961249356436, 0.00476582626446563, 0.0008925524182430744
-      ],
-     "tau_damp": [
-       -6.996908185810738e-07, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0
       ],
      "u0": [
        0.3137163256751207, 0.5103747843374203, 1.2195009804731203, 2.2443207699925836, 3.6247696703078005, 5.2848702548817315,
@@ -1954,14 +1961,7 @@
        1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
        1.0, 1.0, 1.0
       ],
-     "tau_damp": [
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-       0.0, 0.0
-      ],
+      "ksrfmin": 0.0,
      "tauresx_enter": 0.0,
      "tauresy_enter": 0.0,
      "cflx": 0.0

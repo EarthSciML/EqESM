@@ -938,6 +938,199 @@
     "value": 20.0,
     "units": "K"
    }
+  },
+  "interface_diffusivity": {
+   "description": "The vertical-diffusion solver's interface diffusion coefficient K = kv*dpidz_sq (the coef_q_diff of fin_vol_solve and fin_vol_lu_decomp, diffusion_solver.F90:524-528 and 952): the eddy diffusivity kv (m2/s) evaluated on the interfaces times (dp/dz)^2, converting the p-coordinate solve to the z-coordinate finite-volume flux form of linear_1d_operators.F90. One law shared by the momentum (kv = kvm), heat (kvh) and tracer (kvq) equations of cam_vertical_diffusion.esm.",
+   "params": [
+    "kv",
+    "dpidz_sq"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "kv",
+     "dpidz_sq"
+    ]
+   }
+  },
+  "surface_layer_source": {
+   "description": "The CAM vertical-diffusion surface-layer injection: a flux F entering through the surface interface becomes the layer source g*F/dz[1] in the lowest layer (esd lev 1 = CAM pver) and 0 in every other layer. The solver's flux-to-state conversion factor is f2s = dt*gravit*rdel(pver) applied to the state update (diffusion_solver.F90:440), so the tendency source is f2s*F/dt = g*F/pdel: momentum F = taures*ramda (the residual-stress injection, F90:491-499), heat F = shflx (F90:779), tracer F = cflx (F90:975) with the dry-constituent pdel/pdeldry tendency conversion folded into F (F90:1056-1061). The source form rather than the flux-rule boundary condition is required by the CLI: the varcoeff_face_laplacian_lev_flux_bc rule's prescribed-flux free names kdudz_bot/kdudz_top cannot be renamed at the import edge (rename reaches only exports; the names are free inside the rule body, esm-spec 9.7.7) and are shared across every firing of the rule, so one units-typed declaration can carry only one value and one unit class, while the four fields' fluxes differ in both (and all are nonzero in general; the window's CLUBB_SGS zeroing, vertical_diffusion.F90:1017-1035, makes them zero here). zero is a units-free parameter bound from a units-free model parameter (the ysu.esm idiom): the checker requires ifelse branches to share dimensions and the four consumers carry different units, so the false branch cannot be a units-typed literal in the template body.",
+   "params": [
+    "flux",
+    "g",
+    "dz",
+    "zero"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "i"
+    ],
+    "args": [],
+    "ranges": {
+     "i": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "==",
+       "args": [
+        "i",
+        1
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "g",
+          "flux"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "dz",
+          1
+         ]
+        }
+       ]
+      },
+      "zero"
+     ]
+    }
+   }
+  },
+  "surface_stress_coefficient": {
+   "description": "Total surface drag coefficient of the implicit-surface-stress branch, implicit_surface_stress_add_drag_coefficient_run (diffusion_solver.F90:232-239): ksrf = ksrftms + max(tau/ws, ksrfmin) with tau = sqrt(taux^2 + tauy^2) the turbulent surface stress and ws = max(sqrt(u0(pver)^2 + v0(pver)^2), wsmin) the lowest-level wind speed (esd order: u0[1], v0[1]); wsmin = 1 m/s and ksrfmin = 1e-4 kg/(m2 s) are the module parameters of diffusion_solver.F90:42-44 and the turbulent-mountain-stress drag ksrftms is added by turbulent_mountain_stress_add_drag_coefficient_run (diffusion_stubs.F90:161-184; ksrftms = 0 in the window). The ksrfmin floor makes the coefficient nonzero even when the stress vanishes (taux = tauy = 0 with CLUBB_SGS, vertical_diffusion.F90:1017-1035), so the resulting damping rate at pver never vanishes in the implicit branch.",
+   "params": [
+    "taux",
+    "tauy",
+    "u0",
+    "v0",
+    "ksrftms",
+    "wsmin",
+    "ksrfmin"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     "ksrftms",
+     {
+      "op": "max",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "sqrt",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "^",
+              "args": [
+               "taux",
+               2
+              ]
+             },
+             {
+              "op": "^",
+              "args": [
+               "tauy",
+               2
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "max",
+          "args": [
+           {
+            "op": "sqrt",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "^",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "u0",
+                   1
+                  ]
+                 },
+                 2
+                ]
+               },
+               {
+                "op": "^",
+                "args": [
+                 {
+                  "op": "index",
+                  "args": [
+                   "v0",
+                   1
+                  ]
+                 },
+                 2
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "wsmin"
+          ]
+         }
+        ]
+       },
+       "ksrfmin"
+      ]
+     }
+    ]
+   }
+  },
+  "wind_damping_rate": {
+   "description": "Wind damping rate of vertical_diffusion_wind_damping_rate_run (diffusion_solver.F90:274-285): tau_damp = -gravit*ksrf*rdel in the lowest layer (pver) and 0 in every other layer, i.e. the surface-layer source of the flux -ksrf. On the esd column (lev 1 = CAM pver) the law is tau_damp[1] = -g*ksrf/dz[1], 0 elsewhere, lowered as surface_layer_source applied to the flux -ksrf. The Beljaars SGO profile term added by beljaars_add_wind_damping_rate_run (beljaars_drag_interstitials.F90:19-44) is zero in the window (dragblj = 0 on every dumped row) and not carried. ksrf comes from surface_stress_coefficient.",
+   "params": [
+    "ksrf",
+    "g",
+    "dz",
+    "zero"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "surface_layer_source",
+    "bindings": {
+     "flux": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": -1.0,
+        "units": "1"
+       },
+       "ksrf"
+      ]
+     },
+     "g": "g",
+     "dz": "dz",
+     "zero": "zero"
+    }
+   }
   }
  }
 }
