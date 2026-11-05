@@ -392,3 +392,32 @@ Format template:
   no model state affected).
 - **Status:** patched locally (uncommitted in the fork working tree; to be
   committed with the surfalbedo dump work).
+
+## 32. GLC cap: hflx export sign convention contradicts the code comments and field dictionary
+
+- **Location:** `components/cism/source_cism/libglad/glad_output_fluxes.F90:134-139`
+  (`accumulate_output_fluxes`, `hflx_sum = hflx_sum - ucondflx`) vs
+  `components/cism/source_cism/libglad/glad_main.F90:625` (the `glad_gcm`
+  `hflx` intent comment "output heat flux (W/m^2, positive down)") and the
+  CMEPS field dictionary `components/cmeps/mediator/esmFldsExchange_cesm_mod.F90:816`
+  ("Flgg_hflx: downward heat flux from glacier interior").
+- **Description:** `ucondflx` is the upper-surface conductive flux, positive
+  down (`libglissade/glissade_therm.F90:669`); the accumulation code flips the
+  sign with the comment "Flip the sign so that hflx is positive up"
+  (F90:134-136), so the exported `hflx` is **positive up**. The `glad_gcm`
+  interface comment (glad_main.F90:625) and the CMEPS field dictionary both
+  label `Flgg_hflx` as **positive down**. The two labels cannot both describe
+  the exported value. (The value is currently unconsumed: the mediator errors
+  out if `Flgg_hflx` is actually routed to the land model,
+  `med_phases_post_glc_mod.F90:343-344`, so no downstream component pins the
+  convention.)
+- **Impact on results:** none in the reference run — every traced export row
+  of `cism_cap.csv` has hflx = 0 (ucondflx = 0 in the 2-year cold-base
+  window), so the sign is unobservable in the dumps. Would matter for a run
+  with surface temperature evolution.
+- **Reproduced/corrected in .esm:** `stage2/cism_cap.esm` (GlcCapExport)
+  transcribes the code as written (`hflx = -ucondflx`, i.e. positive up per
+  the F90:135-136 comment) and documents the label contradiction; the sign is
+  unpinned by the dump.
+- **Status:** open (comment/label inconsistency; needs an upstream decision
+  on the intended convention).
