@@ -122,6 +122,31 @@
     {"op": "and", "args": [{"op": "<=", "args": ["h2osoi_liq_top", 0.0]}, {"op": ">", "args": ["h2osoi_ice_top", 0.0]}]},
     "hsub", "hvap"
    ]}
+  },
+  "soil_albedo_wetness": {
+   "description": "Soil albedo wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) [1]: the SoilAlbedo soil water factor of SurfaceAlbedoMod.F90:1244, h2osoi_vol the top-layer volumetric soil water [m3/m3].",
+   "params": ["h2osoi_vol"],
+   "body": {"op": "max", "args": [{"op": "-", "args": [0.11, {"op": "*", "args": [0.4, "h2osoi_vol"]}]}, 0.0]}
+  },
+  "soil_albedo": {
+   "description": "Direct-beam soil albedo albsod = min(albsat + inc, albdry) [1]: SurfaceAlbedoMod.F90:1249 (SoilAlbedo), albsat/albdry the saturated/dry soil albedo of the column's color class and waveband (SurfaceAlbedoMod.F90:205-218) and inc the wetness correction (soil_albedo_wetness). The diffuse soil albedo is the same value, albsoi = albsod (SurfaceAlbedoMod.F90:1250), written as an identity at the call sites.",
+   "params": ["albsat", "inc", "albdry"],
+   "body": {"op": "min", "args": [{"op": "+", "args": ["albsat", "inc"]}, "albdry"]}
+  },
+  "snow_soil_albedo": {
+   "description": "Snow/soil ground albedo blend alb_g = alb_soil*(1 - frac_sno) + alb_snow*frac_sno [1]: SurfaceAlbedoMod.F90:816 (direct beam: albgrd from albsod, albsnd) and F90:817 (diffuse: albgri from albsoi, albsni), frac_sno the frac_sno_albedo snow cover fraction and alb_snow the SNICAR snow albedo of the same beam and waveband.",
+   "params": ["alb_soil", "alb_snow", "frac_sno"],
+   "body": {"op": "+", "args": [{"op": "*", "args": ["alb_soil", {"op": "-", "args": [1.0, "frac_sno"]}]}, {"op": "*", "args": ["alb_snow", "frac_sno"]}]}
+  },
+  "absorbed_shortwave": {
+   "description": "Shortwave absorbed by a surface in one waveband, solad*(1 - albd) + solai*(1 - albi) [W/m2]: the bare-surface absorption term of SurfaceRadiationMod.F90:701-710 (sabg with the ground albedos, sabg_soil with the soil albedos, sabg_snow with the snow albedos), solad/solai the incident direct/diffuse radiation and albd/albi the direct/diffuse albedo.",
+   "params": ["solad", "solai", "albd", "albi"],
+   "body": {"op": "+", "args": [{"op": "*", "args": ["solad", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albd"]}]}, {"op": "*", "args": ["solai", {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "albi"]}]}]}
+  },
+  "reflected_shortwave": {
+   "description": "Shortwave reflected by a surface in one waveband, albd*solad + albi*solai [W/m2]: SurfaceRadiationMod.F90:897-899 (fsr), solad/solai the incident direct/diffuse radiation and albd/albi the direct/diffuse albedo.",
+   "params": ["solad", "solai", "albd", "albi"],
+   "body": {"op": "+", "args": [{"op": "*", "args": ["albd", "solad"]}, {"op": "*", "args": ["albi", "solai"]}]}
   }
  }
 }

@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_aoflux_step",
-  "description": "One-step update of the CMEPS atmosphere-ocean stability iteration (stage 2 of the EqESM project): a single pass of the do-while of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90:242-290 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly and mounted five times by reference in cmeps_aoflux.esm (top-level models.step1..step5, esm-spec section 4.7) so the 16-equation update law is authored once and the unrolled iteration is composed. Inputs are the update-invariant pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot (the wind magnitude, the temperature and humidity differences, the height logarithm ln(zbot/10) and the Monin-Obukhov inputs of F90:252-254) and the water coefficient ren = 0.0346 (constant across the iteration, F90:277), the previous update's state (ustar_prev/tstar_prev/qstar_prev feeding the stability parameter and the convergence test |(ustar - ustar_prev)/ustar| <= flux_convergence = 0.01 of F90:286-287, and rdn_prev, the pre-update neutral drag used by the clamped wind shift rdw of F90:272; the heat coefficient rhn is recomputed from this update's stability each pass, F90:278, so no rhn_prev is needed), the previous convergence flag conv_prev, and the 15 previous frozen-state fields. Outputs are the 16 update states (hol, stable, xsq, xqq, psimh, psixh, rdw, u10n, rdn, rhn, rd, rh, re, ustar, tstar, qstar), this update's own convergence flag conv, and 15 frozen-state fields that pin the first-converged state (frozen_state_select: once conv_prev = 1 the frozen fields stop updating, so the 5th mount's frozen outputs are exactly the state the Fortran leaves in the iteration variables when the do-while exits, and the all-5-iterations case leaves the fresh 5th-update values). The frozen threading is required because the iteration states do not repeat after convergence (ustar_2 differs from ustar_4 at the 1.8e-4 level on the pinned rows) while the dump pins the first-converged state. The expression templates of ./cmeps_templates.esm are imported by reference."
+  "description": "One-step update of the CMEPS atmosphere-ocean stability iteration (stage 2 of the EqESM project): a single pass of the do-while of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90:242-290 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly and mounted six times by reference in cmeps_aoflux.esm (top-level models.step1..step5, esm-spec section 4.7; the 6th mount exit recomputes the exit-state fields from step5's frozen state, see the parent's metadata) so the 16-equation update law is authored once and the unrolled iteration is composed. Inputs are the update-invariant pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot (the wind magnitude, the temperature and humidity differences, the height logarithm ln(zbot/10) and the Monin-Obukhov inputs of F90:252-254) and the water coefficient ren = 0.0346 (constant across the iteration, F90:277), the previous update's state (ustar_prev/tstar_prev/qstar_prev feeding the stability parameter and the convergence test |(ustar - ustar_prev)/ustar| <= flux_convergence = 0.01 of F90:286-287, and rdn_prev, the pre-update neutral drag used by the clamped wind shift rdw of F90:272; the heat coefficient rhn is recomputed from this update's stability each pass, F90:278, so no rhn_prev is needed), the previous convergence flag conv_prev, and the 4 previous frozen-state fields (ustar/tstar/qstar/rdn). The CESM constants karman = 0.4, g = 9.80616 m/s^2 and zvir = 28.966/18.016 - 1 (shr_const_mod.F90:32, 21, 31) are parameters with defaults, bound into the stability_parameter template call and not coupled (the parent carries the same constants, the ren precedent). Outputs are the 17 update states (hol_raw, the unclamped Monin-Obukhov parameter of F90:252-253; hol = stability_parameter_clamp(hol_raw), the sign-preserving |hol| <= 10 clamp of F90:254; stable, xsq, xqq, psimh, psixh, rdw, u10n, rdn, rhn, rd, rh, re, ustar, tstar, qstar), this update's own convergence flag conv, and 4 frozen-state fields (frozen_ustar_prev/frozen_tstar_prev/frozen_qstar_prev/frozen_rdn_prev) that pin the INPUT state of the first-converged update (frozen_state_select on the update inputs ustar_prev/tstar_prev/qstar_prev/rdn_prev: once conv_prev = 1 the frozen fields stop updating, so the 5th mount's frozen outputs are the state the first-converged update was computed from — the pre-converged update's outputs, which the parent's exit mount feeds back through the update law to reproduce the Fortran exit state exactly — and the all-5-iterations case leaves the fresh 4th-update values, which reproduce the 5th update). The frozen threading is required because the iteration states do not repeat after convergence (ustar_2 differs from ustar_4 at the 1.8e-4 level on the pinned rows) while the dump pins the first-converged state; all 15 exit-state fields are functions of the pinned 4-input state plus the fixed fields and are recomputed by the parent's exit mount rather than threaded. The expression templates of ./cmeps_templates.esm are imported by reference."
  },
  "models": {
   "AoFluxStep": {
@@ -58,6 +58,24 @@
      "default": 0.0346,
      "description": "neutral 10-m sqrt water exchange coefficient = 0.0346, constant across the iteration (F90:277), not coupled (the parent carries the same constant), [-]"
     },
+    "karman": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.4,
+     "description": "von Karman constant = 0.4 (shr_const_mod.F90:32), the exchange-coefficient shift denominator of F90:272/282-284; declared as a parameter with default, not coupled (the parent carries the same constant), [-]"
+    },
+    "g": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration = 9.80616 m/s^2 (shr_const_mod.F90:21), used by the Monin-Obukhov stability parameter of F90:252-253; declared as a parameter with default, not coupled (the parent carries the same constant), [m/s2]"
+    },
+    "zvir": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.6077930728241565,
+     "description": "molecular-weight ratio zvir = 28.966/18.016 - 1 (shr_const_mod.F90:31), the 1/zvir + qbot denominator of the stability parameter of F90:252-253; declared as a parameter with default, not coupled (the parent carries the same constant), [-]"
+    },
     "ustar_prev": {
      "type": "parameter",
      "units": "m/s",
@@ -88,100 +106,39 @@
      "default": 0.0,
      "description": "previous update's convergence flag (0 for the 1st mount, conv_{k-1} for the k-th): when 1, the frozen-state fields stop updating and carry the first-converged state, [-]"
     },
-    "frozen_hol_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state Monin-Obukhov stability parameter, [-]"
-    },
-    "frozen_stable_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state stability factor, [-]"
-    },
-    "frozen_xsq_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state sqrt(|1 - 16*hol|) floored at 1, [-]"
-    },
-    "frozen_xqq_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state sqrt(xsq), [-]"
-    },
-    "frozen_psimh_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state momentum stability function at zbot, [-]"
-    },
-    "frozen_psixh_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state scalar stability function at zbot, [-]"
-    },
-    "frozen_rd_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state sqrt momentum exchange coefficient at zbot, [-]"
-    },
-    "frozen_u10n_prev": {
+    "frozen_ustar_prev_in": {
      "type": "parameter",
      "units": "m/s",
      "default": 0.0,
-     "description": "previous frozen-state 10-m neutral wind, [m/s]"
+     "description": "previous update's frozen_ustar_prev value, threaded from the previous mount's frozen_ustar_prev (default 0.0 for the 1st mount, where conv_prev = 0 selects the fresh value anyway), [-]"
     },
-    "frozen_rdn_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state neutral 10-m sqrt drag coefficient, [-]"
-    },
-    "frozen_rhn_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state neutral 10-m sqrt heat coefficient, [-]"
-    },
-    "frozen_rh_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state sqrt heat exchange coefficient at zbot, [-]"
-    },
-    "frozen_re_prev": {
-     "type": "parameter",
-     "units": "1",
-     "default": 0.0,
-     "description": "previous frozen-state sqrt water exchange coefficient at zbot, [-]"
-    },
-    "frozen_ustar_prev": {
-     "type": "parameter",
-     "units": "m/s",
-     "default": 0.0,
-     "description": "previous frozen-state friction velocity, [m/s]"
-    },
-    "frozen_tstar_prev": {
+    "frozen_tstar_prev_in": {
      "type": "parameter",
      "units": "K",
      "default": 0.0,
-     "description": "previous frozen-state friction temperature, [K]"
+     "description": "previous update's frozen_tstar_prev value, threaded from the previous mount's frozen_tstar_prev (default 0.0 for the 1st mount, where conv_prev = 0 selects the fresh value anyway), [-]"
     },
-    "frozen_qstar_prev": {
+    "frozen_qstar_prev_in": {
      "type": "parameter",
      "units": "kg/kg",
      "default": 0.0,
-     "description": "previous frozen-state friction humidity, [kg/kg]"
+     "description": "previous update's frozen_qstar_prev value, threaded from the previous mount's frozen_qstar_prev (default 0.0 for the 1st mount, where conv_prev = 0 selects the fresh value anyway), [-]"
+    },
+    "frozen_rdn_prev_in": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "previous update's frozen_rdn_prev value, threaded from the previous mount's frozen_rdn_prev (default 0.0 for the 1st mount, where conv_prev = 0 selects the fresh value anyway), [-]"
+    },
+    "hol_raw": {
+     "type": "unknown",
+     "units": "1",
+     "description": "Monin-Obukhov stability parameter z/L at zbot of this update, UNCLAMPED (F90:252-253), computed from the previous update's state; the |hol| <= 10 sign-preserving clamp of F90:254 is applied by the hol equation below, [-]"
     },
     "hol": {
      "type": "unknown",
      "units": "1",
-     "description": "Monin-Obukhov stability parameter z/L at zbot of this update (F90:252-254), computed from the previous update's state, [-]"
+     "description": "Monin-Obukhov stability parameter z/L at zbot of this update: hol = stability_parameter_clamp(hol_raw), the sign-preserving |hol| <= 10 clamp of F90:254 applied to the raw value of F90:252-253, [-]"
     },
     "stable": {
      "type": "unknown",
@@ -263,85 +220,30 @@
      "units": "1",
      "description": "convergence flag of this update: |(ustar - ustar_prev)/ustar| <= flux_convergence = 0.01 (the Fortran exit test of F90:286-287), 1 converged / 0 not, [-]"
     },
-    "frozen_hol": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state Monin-Obukhov stability parameter: hol of the first-converged update, carried unchanged by the subsequent updates (frozen_state_select on conv_prev), [-]"
-    },
-    "frozen_stable": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state stability factor of the first-converged update, [-]"
-    },
-    "frozen_xsq": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state sqrt(|1 - 16*hol|) floored at 1 of the first-converged update, [-]"
-    },
-    "frozen_xqq": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state sqrt(xsq) of the first-converged update, [-]"
-    },
-    "frozen_psimh": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state momentum stability function at zbot of the first-converged update, [-]"
-    },
-    "frozen_psixh": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state scalar stability function at zbot of the first-converged update, [-]"
-    },
-    "frozen_rd": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state sqrt momentum exchange coefficient at zbot of the first-converged update, [-]"
-    },
-    "frozen_u10n": {
+    "frozen_ustar_prev": {
      "type": "unknown",
      "units": "m/s",
-     "description": "frozen-state 10-m neutral wind of the first-converged update, [m/s]"
+     "description": "frozen-state friction velocity: the ustar_prev INPUT of the first-converged update (the state before the converged update, ustar_{k-1}), pinned by frozen_state_select once conv_prev = 1 and carried unchanged through the remaining updates; the parent's exit mount recomputes the exit-state fields from this and the other three frozen states, [m/s]"
     },
-    "frozen_rdn": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state neutral 10-m sqrt drag coefficient of the first-converged update, [-]"
-    },
-    "frozen_rhn": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state neutral 10-m sqrt heat coefficient of the first-converged update, [-]"
-    },
-    "frozen_rh": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state sqrt heat exchange coefficient at zbot of the first-converged update, [-]"
-    },
-    "frozen_re": {
-     "type": "unknown",
-     "units": "1",
-     "description": "frozen-state sqrt water exchange coefficient at zbot of the first-converged update, [-]"
-    },
-    "frozen_ustar": {
-     "type": "unknown",
-     "units": "m/s",
-     "description": "frozen-state friction velocity of the first-converged update, [m/s]"
-    },
-    "frozen_tstar": {
+    "frozen_tstar_prev": {
      "type": "unknown",
      "units": "K",
-     "description": "frozen-state friction temperature of the first-converged update, [K]"
+     "description": "frozen-state friction temperature: the tstar_prev INPUT of the first-converged update (the state before the converged update, tstar_{k-1}), pinned by frozen_state_select once conv_prev = 1 and carried unchanged through the remaining updates, [K]"
     },
-    "frozen_qstar": {
+    "frozen_qstar_prev": {
      "type": "unknown",
      "units": "kg/kg",
-     "description": "frozen-state friction humidity of the first-converged update, [kg/kg]"
+     "description": "frozen-state friction humidity: the qstar_prev INPUT of the first-converged update (the state before the converged update, qstar_{k-1}), pinned by frozen_state_select once conv_prev = 1 and carried unchanged through the remaining updates, [kg/kg]"
+    },
+    "frozen_rdn_prev": {
+     "type": "unknown",
+     "units": "1",
+     "description": "frozen-state neutral 10-m sqrt drag coefficient: the rdn_prev INPUT of the first-converged update (the state before the converged update, rdn_{k-1}), pinned by frozen_state_select once conv_prev = 1 and carried unchanged through the remaining updates; the parent's exit mount feeds it to the clamped wind shift rdw of F90:272 and u10n = vmag*rdw/rdn of F90:273, [-]"
     }
    },
    "equations": [
     {
-     "lhs": "hol",
+     "lhs": "hol_raw",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
@@ -352,7 +254,21 @@
        "qstar": "qstar_prev",
        "thbot": "thbot",
        "qbot": "qbot",
-       "zbot": "zbot"
+       "zbot": "zbot",
+       "karman": "karman",
+       "g": "g",
+       "zvir": "zvir"
+      }
+     }
+    },
+    {
+     "lhs": "hol",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "stability_parameter_clamp",
+      "bindings": {
+       "hol_raw": "hol_raw"
       }
      }
     },
@@ -477,7 +393,8 @@
       "bindings": {
        "c": "rdn_prev",
        "alz": "alz",
-       "psi": "psimh"
+       "psi": "psimh",
+       "karman": "karman"
       }
      }
     },
@@ -530,7 +447,8 @@
       "bindings": {
        "c": "rdn",
        "alz": "alz",
-       "psi": "psimh"
+       "psi": "psimh",
+       "karman": "karman"
       }
      }
     },
@@ -543,7 +461,8 @@
       "bindings": {
        "c": "rhn",
        "alz": "alz",
-       "psi": "psixh"
+       "psi": "psixh",
+       "karman": "karman"
       }
      }
     },
@@ -556,7 +475,8 @@
       "bindings": {
        "c": "ren",
        "alz": "alz",
-       "psi": "psixh"
+       "psi": "psixh",
+       "karman": "karman"
       }
      }
     },
@@ -628,196 +548,53 @@
      }
     },
     {
-     "lhs": "frozen_hol",
+     "lhs": "frozen_ustar_prev",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
       "name": "frozen_state_select",
       "bindings": {
-       "value": "hol",
-       "frozen": "frozen_hol_prev",
+       "value": "ustar_prev",
+       "frozen": "frozen_ustar_prev_in",
        "conv": "conv_prev"
       }
      }
     },
     {
-     "lhs": "frozen_stable",
+     "lhs": "frozen_tstar_prev",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
       "name": "frozen_state_select",
       "bindings": {
-       "value": "stable",
-       "frozen": "frozen_stable_prev",
+       "value": "tstar_prev",
+       "frozen": "frozen_tstar_prev_in",
        "conv": "conv_prev"
       }
      }
     },
     {
-     "lhs": "frozen_xsq",
+     "lhs": "frozen_qstar_prev",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
       "name": "frozen_state_select",
       "bindings": {
-       "value": "xsq",
-       "frozen": "frozen_xsq_prev",
+       "value": "qstar_prev",
+       "frozen": "frozen_qstar_prev_in",
        "conv": "conv_prev"
       }
      }
     },
     {
-     "lhs": "frozen_xqq",
+     "lhs": "frozen_rdn_prev",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
       "name": "frozen_state_select",
       "bindings": {
-       "value": "xqq",
-       "frozen": "frozen_xqq_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_psimh",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "psimh",
-       "frozen": "frozen_psimh_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_psixh",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "psixh",
-       "frozen": "frozen_psixh_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_rd",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "rd",
-       "frozen": "frozen_rd_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_u10n",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "u10n",
-       "frozen": "frozen_u10n_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_rdn",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "rdn",
-       "frozen": "frozen_rdn_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_rhn",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "rhn",
-       "frozen": "frozen_rhn_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_rh",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "rh",
-       "frozen": "frozen_rh_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_re",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "re",
-       "frozen": "frozen_re_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_ustar",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "ustar",
-       "frozen": "frozen_ustar_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_tstar",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "tstar",
-       "frozen": "frozen_tstar_prev",
-       "conv": "conv_prev"
-      }
-     }
-    },
-    {
-     "lhs": "frozen_qstar",
-     "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "frozen_state_select",
-      "bindings": {
-       "value": "qstar",
-       "frozen": "frozen_qstar_prev",
+       "value": "rdn_prev",
+       "frozen": "frozen_rdn_prev_in",
        "conv": "conv_prev"
       }
      }

@@ -365,3 +365,59 @@ Format template:
   needs the hyd-stage filter to include the vegetated patches (or the
   interception fields to be written at the flx stage).
 - **Status:** open (instrumentation coverage note; recorded).
+
+## 31. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
+
+- **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
+  `dump_surfalbedo` (urban branch, fork clm `3d7038304`): the write
+  statement passed the module's `nan` (the renamed derived-type parameter
+  `shr_infnan_nan` of `shr_infnan_mod`, a `type(shr_infnan_nan_type)` whose
+  single component is LOGICAL) directly in an `es26.17` data list.
+- **Description:** `shr_infnan_nan` is a derived-type parameter, not a
+  real: it can only be converted to a real through the module's
+  `assignment(=)` interface (the module header says "cannot be passed to
+  functions that expect real arguments"). gfortran's formatted transfer
+  therefore failed at runtime with "Expected REAL for item 14 in formatted
+  transfer, got LOGICAL" (item 14 = the first albsnd/albsni slot) the first
+  time the urban branch ran with the extended dump (LID
+  12027802.261103-131613, step 2), aborting the whole run: the run's CSVs
+  were truncated mid-step-2. (The earlier runs never hit it because they
+  predated the extension's albsnd/albsni columns.)
+- **Impact on results:** the aborted run wrote truncated dumps (the
+  complete pre-extension dumps were preserved). Fix verified by a rerun
+  (LID 12027802.261103-133002): with the NaN materialized to a real local
+  (`nanval = nan` via the assignment interface) all 11 dumps complete and
+  the urban albsnd/albsni slots read `NaN` as designed.
+- **Reproduced/corrected in .esm:** n/a (instrumentation defect, dump-only;
+  no model state affected).
+- **Status:** patched locally (uncommitted in the fork working tree; to be
+  committed with the surfalbedo dump work).
+
+## 32. GLC cap: hflx export sign convention contradicts the code comments and field dictionary
+
+- **Location:** `components/cism/source_cism/libglad/glad_output_fluxes.F90:134-139`
+  (`accumulate_output_fluxes`, `hflx_sum = hflx_sum - ucondflx`) vs
+  `components/cism/source_cism/libglad/glad_main.F90:625` (the `glad_gcm`
+  `hflx` intent comment "output heat flux (W/m^2, positive down)") and the
+  CMEPS field dictionary `components/cmeps/mediator/esmFldsExchange_cesm_mod.F90:816`
+  ("Flgg_hflx: downward heat flux from glacier interior").
+- **Description:** `ucondflx` is the upper-surface conductive flux, positive
+  down (`libglissade/glissade_therm.F90:669`); the accumulation code flips the
+  sign with the comment "Flip the sign so that hflx is positive up"
+  (F90:134-136), so the exported `hflx` is **positive up**. The `glad_gcm`
+  interface comment (glad_main.F90:625) and the CMEPS field dictionary both
+  label `Flgg_hflx` as **positive down**. The two labels cannot both describe
+  the exported value. (The value is currently unconsumed: the mediator errors
+  out if `Flgg_hflx` is actually routed to the land model,
+  `med_phases_post_glc_mod.F90:343-344`, so no downstream component pins the
+  convention.)
+- **Impact on results:** none in the reference run — every traced export row
+  of `cism_cap.csv` has hflx = 0 (ucondflx = 0 in the 2-year cold-base
+  window), so the sign is unobservable in the dumps. Would matter for a run
+  with surface temperature evolution.
+- **Reproduced/corrected in .esm:** `stage2/cism_cap.esm` (GlcCapExport)
+  transcribes the code as written (`hflx = -ucondflx`, i.e. positive up per
+  the F90:135-136 comment) and documents the label contradiction; the sign is
+  unpinned by the dump.
+- **Status:** open (comment/label inconsistency; needs an upstream decision
+  on the intended convention).

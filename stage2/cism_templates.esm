@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cism_templates",
-  "description": "Expression-template library for the CISM-specific pointwise laws of the stage-2 CISM components (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch). Carries the pieces of the CISM basal traction and flow-factor physics that have no PISM/EqIce counterpart and are therefore not in the EqIce template libraries: (a) the bed-elevation friction-angle ramp of the PSEUDO_PLASTIC_OLD basal law (glissade_basal_traction.F90:256-277): phi = phimin below bedmin, phi = phimax above bedmax, and a linear ramp phi = phimin + (bed - bedmin)/(bedmax - bedmin) * (phimax - phimin) in between (the glide_types defaults are pseudo_plastic_phimin = 5 deg, pseudo_plastic_phimax = 40 deg, pseudo_plastic_bedmin = -300 m, pseudo_plastic_bedmax = 700 m, glide_types.F90:2380-2383), and (b) the pressure-corrected temperature construction of the Paterson-Budd flow law (glissade_therm.F90:2596-2598): tempcor = clamp(temp - pmptemp, -50, 0) degC, where temp is the ice temperature and pmptemp the pressure melting point temperature in the same column (pmptemp = -rhoi*grav*pmlt*thck*stagsigma, glissade_therm.F90:2170), and (c) the pointwise laws of the temperature step (M4, lane row 5): the pressure melting point temperature (cism_pmp_temp, glissade_therm.F90:2163-2174), the layer internal melt rate of the TEMP_PROGNOSTIC melt cap (cism_internal_melt_rate, F90:2127-2155, with the temperature reset written as min(temp, pmptemp) at the call site), and the grounded basal melt trio of glissade_basal_melting_ground (F90:1930-2012): the flux-balance melt rate with the eps11 rounding guard (cism_basal_melt_rate), the freeze-on predicate (cism_basal_freeze_on, F90:2007) and the post-melt basal temperature cap with the freeze-on reset (cism_basal_melt_cap, F90:1979, 2010-2011). The rest of the CISM basal and rheology physics is the same law as PISM's and is imported by reference from the EqIce libraries (../../eqice/stage2/basal_templates.esm: the Bueler & van Pelt / Tulaczyk effective pressure and the pseudo-plastic drag; ../../eqice/stage2/ice_rheology_templates.esm: the Paterson-Budd softness) with the CISM constants bound at the call sites. All templates here are match-less and invoked by name via apply_expression_template."
+  "description": "Expression-template library for the CISM-specific pointwise laws of the stage-2 CISM components (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch). Carries the pieces of the CISM basal traction, flow-factor, cap-coupling and temperature-step physics that have no PISM/EqIce counterpart and are therefore not in the EqIce template libraries: (a) the bed-elevation friction-angle ramp of the PSEUDO_PLASTIC_OLD basal law (glissade_basal_traction.F90:256-277): phi = phimin below bedmin, phi = phimax above bedmax, and a linear ramp phi = phimin + (bed - bedmin)/(bedmax - bedmin) * (phimax - phimin) in between (the glide_types defaults are pseudo_plastic_phimin = 5 deg, pseudo_plastic_phimax = 40 deg, pseudo_plastic_bedmin = -300 m, pseudo_plastic_bedmax = 700 m, glide_types.F90:2380-2383), (b) the pressure-corrected temperature construction of the Paterson-Budd flow law (glissade_therm.F90:2596-2598): tempcor = clamp(temp - pmptemp, -50, 0) degC, where temp is the ice temperature and pmptemp the pressure melting point temperature in the same column (pmptemp = -rhoi*grav*pmlt*thck*stagsigma, glissade_therm.F90:2170), (c) the GLC cap import temperature transformation (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_raw - tkfrz < -250, 0, tsfc_raw - tkfrz) with the -250 degC sentinel clamp, and (d) the pointwise laws of the temperature step (M4, lane row 5): the pressure melting point temperature (cism_pmp_temp, glissade_therm.F90:2163-2174), the layer internal melt rate of the TEMP_PROGNOSTIC melt cap (cism_internal_melt_rate, F90:2127-2155, with the temperature reset written as min(temp, pmptemp) at the call site), and the grounded basal melt trio of glissade_basal_melting_ground (F90:1930-2012): the flux-balance melt rate with the eps11 rounding guard (cism_basal_melt_rate), the freeze-on predicate (cism_basal_freeze_on, F90:2007) and the post-melt basal temperature cap with the freeze-on reset (cism_basal_melt_cap, F90:1979, 2010-2011). The rest of the CISM basal and rheology physics is the same law as PISM's and is imported by reference from the EqIce libraries (../../eqice/stage2/basal_templates.esm: the Bueler & van Pelt / Tulaczyk effective pressure and the pseudo-plastic drag; ../../eqice/stage2/ice_rheology_templates.esm: the Paterson-Budd softness) with the CISM constants bound at the call sites. All templates here are match-less and invoked by name via apply_expression_template."
  },
  "expression_templates": {
   "cism_phi_ramp": {
@@ -109,6 +109,49 @@
          "pmptemp"
         ]
        }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_tsfc_import": {
+   "description": "Cap import temperature transformation of the GLC NUOPC cap (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_raw - tkfrz < -250, 0, tsfc_raw - tkfrz), with tsfc_raw the mediator field Sl_tsrf [K] and tkfrz = SHR_CONST_TKFRZ = 273.15 K (glc_constants.F90:22-23, shr_const_mod.F90:37). The -250 threshold is applied to the CONVERTED value in degC (F90:333); the degC/K offset cancels in the comparison, so the condition is algebraically identical in K. The clamp is the 'Jer hack' sentinel (F90:328-332): land points where CLM sees ocean send a raw value of 0 K, which the -tkfrz conversion would drop to -273.15 degC; the clamp resets those to 0 degC. The subtraction is written twice because the template body has no let-binding (the Fortran converts and clamps in place on the same array). The mediator-to-model halo conversion (vector_to_spatial / parallel_convert_nonhaloed_to_haloed) is a grid operation and lives in the stage-3 assembly. CISM-specific: no PISM/EqIce counterpart (CISM_LANE.md row 15).",
+   "params": [
+    "tsfc_raw",
+    "tkfrz"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "tsfc_raw",
+         "tkfrz"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": -250.0,
+        "units": "degC"
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "degC"
+     },
+     {
+      "op": "-",
+      "args": [
+       "tsfc_raw",
+       "tkfrz"
       ]
      }
     ]

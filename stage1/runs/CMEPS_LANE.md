@@ -33,50 +33,81 @@ submodule on the same branch):
 
 | Commit (cmeps submodule) | Change |
 |---|---|
+| `d81b5cc1` | dynamic traced-cell selection (the "wide" dump): new MED attributes `dump_file`, `dump_stable_cells`, `dump_wind_cells`; when their sum is > 0 the selection switches from fixed first-N cells to a per-coupling-step rank of ALL masked PET-0 cells — the top `dump_wind_cells` by relative wind sqrt((ubot−us)²+(vbot−vs)²) and the top `dump_stable_cells` by delt = thbot − ts with delt > 0 — union, deduped, sorted by local index; ranking reads only the raw aoflux inputs (solution-neutral, verified below); fixed first-N mode kept for backward compatibility (`namelist_definition_drv.xml` entries + `med_phases_aofluxes_mod.F90` call site) |
 | `10741c34` | dump header: `iter` column position fixed to right after `gid` (data write order); subnormal flush to 0.0 |
 | `4750efc5` | `es26.17e3` float format (gfortran `es26.17` omits the exponent letter, bugs.md #29); `rainc` fallback init `aoflux_in%rainc(1) = 0.0` (bugs.md #28) |
 | `bd88a843` | dump passes a sanitized `rainc` (= 0 when `add_gusts = .false.`) instead of the out-of-bounds `rainc(n)` read of the mediator's 1-element dummy array (bugs.md #28) |
 
-Pointer commits in `EqESM-cesm-cmeps`: `5d367e0`, `0403cf3`, `735eb8b`.
+Pointer commits in `EqESM-cesm-cmeps`: `bb957c8` (wide run), `5d367e0`, `0403cf3`, `735eb8b`.
 
 ## The dump
 
-`stage1/dumps/cmeps/cmeps_aoflux.csv` — gated by the mediator attribute
-`dump_cmeps` (default `.false.`), PET 0 only, 12 masked ocean cells × 24 coupling
-steps = 288 rows, 67 columns: the 12 raw inputs, the 11 derived inputs, the 4
-neutral first estimates, the 16-field exit state of the stability iteration
-(`iter` included), the 7 fluxes and the 10 diagnostics, plus point metadata
-(`n`, `gid`, `lat`, `lon`). `# description` / `# columns` headers; floats written
-`es26.17e3` with subnormals flushed (both header and format are gfortran-workaround
-decisions documented in the header). `hol`/`xsq`/`xqq` are the zbot-level
-pre-2m-rescale values (`hol0`/`xsq0`/`xqq0` of the instrumentation), `hol2`/`xsq2`/
-`xqq2` the 2-m diagnostics.
+Two dump files in `stage1/dumps/cmeps/`, both gated by the mediator attribute
+`dump_cmeps` (default `.false.`), PET 0 only, 67 columns each: the 12 raw inputs,
+the 11 derived inputs, the 4 neutral first estimates, the 16-field exit state of
+the stability iteration (`iter` included), the 7 fluxes and the 10 diagnostics,
+plus point metadata (`n`, `gid`, `lat`, `lon`). `# description` / `# columns`
+headers; floats written `es26.17e3` with subnormals flushed (both header and
+format are gfortran-workaround decisions documented in the header).
+`hol`/`xsq`/`xqq` are the zbot-level pre-2m-rescale values (`hol0`/`xsq0`/`xqq0`
+of the instrumentation), `hol2`/`xsq2`/`xqq2` the 2-m diagnostics. Note: the
+column name `lat` is used for both the cell latitude (first occurrence) and the
+latent-heat flux (second); the replay/validators resolve the collision by name
+(the latitude is metadata, the latent-heat flux is asserted via evap = lat/LATVAP).
+
+- `cmeps_aoflux.csv` — fixed selection (first `dump_first_cells` masked cells):
+  12 masked ocean cells × 24 coupling steps = 288 rows, local ogrid indices
+  n 6933..7117, gid 41583..42667, all ~69 S on the Antarctic coast (PET 0's slice
+  of the tx0.66v1 ocean grid), lon 74.0–77.3 E (ESMF [−360, 0] convention).
+- `cmeps_aoflux_wide.csv` — dynamic selection (`dump_stable_cells=8`,
+  `dump_wind_cells=8`, `dump_first_cells=0`): per coupling step the strongest-
+  wind 8 of ALL masked PET-0 cells plus the most-stable 8 (delt > 0), union,
+  deduped, sorted by n. 192 rows = 8 rows/step × 24 steps, all wind-selected
+  (the stable selection found no cell with delt > 0 on PET 0 in this window).
+  9 distinct cells, a subset of the fixed window's 12 (the 3 weakest-wind cells
+  n 7023/7113/7114 drop out of every step's top-8).
 
 ## Validation
 
-- **Neutrality.** The instrumented run's restarts are md5-identical to the
+- **Neutrality.** Both instrumented runs' restarts are md5-identical to the
   reference run's: `cpl.r 0f47e2f0f4f207240148d8ef333d5044`, `datm.r
   e14609a64cbba942d56a9eaa961c4bda`, `dice.r 8e1656e609b0c189b68284b940b2a19b`,
   `drof.r 002ca0b2a42c135246a5134e2517e00e`, `mom6.r
-  2f19de039ced94bcd30930385cc29b76`; `ocean.stats.nc` byte-identical.
+  2f19de039ced94bcd30930385cc29b76`; `ocean.stats.nc` byte-identical. The
+  dynamic per-step ranking of the wide run reads the aoflux inputs read-only,
+  so it is provably solution-neutral too (the run job 12055973, resubmitted
+  after the SLURM_MEM_* env conflict of 12047777; the fork code is d81b5cc1).
 - **Full replay.** `stage1/analysis/validate_cmeps_dump.py` replays
   `flux_atmOcn_large` from the dumped inputs and reproduces all 46 computed
-  columns on all 288 rows to ≤ 4.4e-15 relative (machine precision) and the
-  dumped `iter` on every row. The replay mirrors the stage-2 esm structure:
-  all 5 updates unrolled, `conv_k = |(ustar_k − ustar_{k−1})/ustar_k| ≤ 0.01`
-  (k = 1..4), `iter` = first converged k else 5, exit state selected by `iter`.
-- **Structure.** 2 header lines, 288 rows, 67 columns, zero wrong-arity rows,
-  zero NaN, zero spval-like values (`rainc = 0` on every row after the #28 fix).
-- **Coverage (and its limits).** All 288 rows are unstable Antarctic-coast cells
+  columns on all rows to machine precision and the dumped `iter` on every row:
+  ≤ 4.4e-15 relative on the 288 fixed-window rows, ≤ 3.4e-15 on the 192
+  wide-window rows (worst columns fac_t/fac_q). The replay mirrors the stage-2
+  esm structure: all 5 updates unrolled, `conv_k = |(ustar_k −
+  ustar_{k−1})/ustar_k| ≤ 0.01` (k = 1..4), `iter` = first converged k else 5,
+  exit state selected by `iter`.
+- **Structure.** Both dumps: 2 header lines, 67 columns, zero wrong-arity rows,
+  zero NaN, zero spval-like values (`rainc = 0` on every row after the #28 fix);
+  the wide dump passes the per-step row-count check (8 rows/step, cell set
+  varying between steps as expected of the dynamic selection).
+- **Coverage — fixed window.** All 288 rows are unstable Antarctic-coast cells
   with low-to-moderate wind: `hol ∈ [−10.0, −1.16]` (21 rows pinned at the
   |hol| ≤ 10 clamp), `vmag ∈ [0.5, 4.8]` m/s (17 rows pinned at the minwind
   floor), ocean currents small but nonzero (`us`/`vs` ∈ ±0.13 m/s, so the
   stress direction cosines bite), iteration counts 2 (145 rows), 3 (85), 4 (37),
-  5 (21). NOT exercised: the stable branch (stable0 = 1, the `rhn = 0.018`
-  ratio, the −5·hol stable psi), the cdn 33 m/s wind cap, gustiness, the
-  cold-air-outbreak branch. The stable-branch laws are transcribed in the
-  templates but carry no dump pins — a future run over a stable window (e.g. a
-  daytime tropical ocean slice) would close the gap.
+  5 (21).
+- **Coverage — wide window (and its limits).** The dynamic selection ranks ALL
+  masked PET-0 cells every step, so its coverage is exhaustive over the domain:
+  the strongest-wind rows the run offers — `vmag ∈ [0.63, 4.81]` m/s (domain
+  max 4.81, still far below the cdn 33 m/s cap) — at iteration counts 2 (126
+  rows), 3 (57), 4 (9); `hol ∈ [−9.90, −1.16]` (no clamp rows). NOT exercised
+  even by the exhaustive ranking: the stable branch (delt > 0 nowhere on PET
+  0's 12 masked cells in this January window, so the stable selection is empty
+  every step) and the cdn 33 m/s wind cap (no cell of PET 0 exceeds 4.8 m/s).
+  The stable-branch and cdn-cap laws are transcribed in the templates but carry
+  no dump pins; closing those gaps needs a different window (a PET slice or
+  season with warm-air-over-cold-water cells and/or storm-force winds), not
+  more cells of this domain. Gustiness and the cold-air-outbreak branch are
+  namelist-off in this case and were not turned on (documented, not run).
 
 ## Stage-2 handoff
 
@@ -89,10 +120,16 @@ pre-2m-rescale values (`hol0`/`xsq0`/`xqq0` of the instrumentation), `hol2`/`xsq
   `conv_1..4` + `iter`, the 16 exit-state selections, fluxes, diagnostics.
 - `stage2/README-cmeps.md` — the human-readable map (transcription notes,
   divergences, testing table).
-- 6 tests × 52 assertions = 312 assertions, all green under `./esm test stage2/`
-  (561 total with the MOSART/CICE suites) at `rel 1e-12`, `time_span {0,0}`,
-  pinning dump rows at iterations 2/3/4/5/5/2 including the minwind-floor row
-  (vmag = 0.5) and the hol-clamp row (hol = −10).
+- 9 tests × 52 assertions = 468 assertions (6 from the fixed dump, 3 from the
+  wide dump), all green under `./esm test stage2/` (1327P/0F/0E whole suite) at
+  `rel 1e-12`, `time_span {0,0}`, pinning dump rows at iterations 2/3/4/5/5/2
+  (fixed window, including the minwind-floor row vmag = 0.5 and the hol-clamp
+  row hol = −10) and 2/3/4 (wide window: `wide_maxwind_cell` (4, 42667) the
+  domain-max vmag 4.81 m/s at iter 2, `wide_iter3_coldest_cell` (13, 42126) at
+  iter 3, `wide_iter4_holclamp_adj` (19, 41583) at hol −9.901, a tenth off the
+  clamp). The wide tests pin the wind-ranked selection's rows and iteration
+  variants; the stable branch and the cdn cap remain gaps (see above) and are
+  documented, not pinned.
 
 ## Bugs found in the CESM code
 
@@ -105,7 +142,13 @@ pre-2m-rescale values (`hol0`/`xsq0`/`xqq0` of the instrumentation), `hol2`/`xsq
 
 ## Status
 
-Stage 1 complete (dump validated, solution-neutral, documented); stage 2 complete
-(model + templates + tests green, 312 new assertions). Next: import `cmeps_aoflux`
-by reference into the top-level `eqesm.esm` coupling (stage 3) and extend the
-dump window to a stable/strong-wind slice for the untested branches.
+Stage 1 complete: fixed dump (288 rows) plus wide dump (192 rows, dynamic
+per-step stable/wind selection), both validated to machine precision and
+solution-neutral (restarts md5-identical; wide run 12055973). The wide window
+provably exhausts PET 0's domain — the strongest-wind rows available (max
+4.81 m/s) are pinned; the stable branch and the cdn 33 m/s cap are not reachable
+in this window and stay documented gaps (closing them needs a different
+window/domain, and gustiness/cold-air-outbreak would need namelist changes).
+Stage 2 complete (model + templates + tests green, 468 cmeps assertions, whole
+suite 1327P/0F/0E). Next: import `cmeps_aoflux` by reference into the top-level
+`eqesm.esm` coupling (stage 3).
