@@ -1,0 +1,1492 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_atm_forcing",
+  "description": "CTSM/CLM atmospheric-forcing import and downscaling (stage 2 of the EqESM project; ctsm5.4.063, cesm3.0-alphabranch): the land side of the datm -> CLM boundary, i.e. the atm2lnd input fields of the stage1/boundaries.md 1.5 boundary table. Two models. ImportFields is import_fields of cpl/nuopc/lnd_import_export.F90:542-577 plus derive_quantities of cpl/utils/lnd_import_export_utils.F90:61-91: the mediator Sa_*/Faxa_* fields into the gridcell-level forc_* state (forc_hgt/forc_topo/forc_u/forc_v/forc_q/forc_th/forc_pbot/forc_t, the observation heights forc_hgt_u/t/q, the vapor pressure forc_vp = q*pbot/(0.622 + 0.378*q), the density forc_rho = (pbot - 0.378*forc_vp)/(rair*forc_t), forc_po2, the wind speed forc_wind = sqrt(u^2 + v^2), the total solar forc_solar, the convective/large-scale rain and snow, the total forc_rain/forc_snow and the relative humidity forc_rh = 100*q/qsat); the vp/density laws are shared with the DATM datamode by reference (cdeps_templates.esm vapor_pressure/density, datm_datamode_clmncep_mod.F90:428-429 are the same formulas) and the saturation humidity is the CLM QSat law (clm_templates.esm qsat_qs, QSatMod.F90:90-103). Downscale is downscale_forcings of main/atm2lndMod.F90:98-284: the gridcell-to-column copies over all active columns (F90:180-195), the elevation topo downscaling over the DownscaleFilterc columns (the glacier landunit columns; F90:202-267: tbot_c = tbot_g - lapse_rate*(hsurf_c - hsurf_g), Hbot = rair*0.5*(tbot_g + tbot_c)/grav, pbot_c = pbot_g*exp(-(hsurf_c - hsurf_g)/Hbot), thbot_c = thbot_g + (tbot_c - tbot_g)*exp((zbot/Hbot)*(rair/cpair)), qbot_c = qbot_g*qs_c/qs_g with the QSat humidities, rhos_c = rhos_g*rhos_c_estimate/rhos_g_estimate via the clm_templates.esm:rhos law), the precipitation rain/snow repartition over all columns (F90:359-390 with the ramp frac_rain = clamp((forc_t_c - all_snow_t)*frac_rain_slope, 0, 1), F90:419-426, and the glc/nonglc ramp endpoints of ctsm60_params.c260518.nc: glc -2..0 C, nonglc 0..2 C) and the longwave downscaling branch (F90:506-568; inactive at glcmec_downscale_longwave = .false., the traced configuration; the per-column lapse + clamp of F90:532-541 is transcribed and the energy-conserving gridcell normalization of F90:544-568 is a documented scheme gap - it needs the gridcell column weights, and is not exercised by any dump). The namelist/parameter values are the I2000Clm60Sp run's (lnd_in: repartition_rain_snow = .true., glcmec_downscale_longwave = .false., lapse_rate = 0.006; the lapse_rate_longwave = 0.032, longwave_downscaling_limit = 0.5 and ramp endpoints are the ctsm60 params/namelist defaults). The tests pin the stage-1 CLM dumps (stage1/dumps/clm/clm_bareground.csv, clm_canopyflux.csv stage hyd, clm_surfrad.csv) against the datm export dump (stage1/dumps/cdeps/datm_gswp3_exports.csv) on the overlapping (cell, step) rows: columns c = 1..5 at steps s = 1..12 (the South Pole row; the five traced cells are value-identical, so cell 1 pins all of them) are driven by the datm exports one coupling interval earlier (step s - 1) - the land receives the atmosphere of the previous interval because the data atmosphere runs after the land in the CESM run sequence (verified: every forc_* dump value equals its Sa_*/Faxa_* export bit-exact). The traced columns are non-glacier soil columns (needs_downscaling = 0), so the tests exercise the copy + partition_precip path; the topo-downscaling, longwave and glc-ramp branches are transcribed but have no dump coverage. Reference: stage1/cesm/components/clm/src/cpl/nuopc/lnd_import_export.F90, cpl/utils/lnd_import_export_utils.F90, main/atm2lndMod.F90, main/atm2lndType.F90.",
+  "license": "MIT"
+ },
+ "models": {
+  "ImportFields": {
+   "expression_template_imports": [
+    {"ref": "./clm_templates.esm"},
+    {"ref": "./cdeps_templates.esm"}
+   ],
+   "variables": {
+    "Sa_z": {"type": "parameter", "units": "m", "default": 30.0, "description": "atmospheric reference height export (Sa_z; 30 m when the stream does not provide it), [m]"},
+    "Sa_topo": {"type": "parameter", "units": "m", "default": 0.0, "description": "atmospheric surface elevation export (Sa_topo), [m]"},
+    "Sa_u": {"type": "parameter", "units": "m/s", "default": 0.0, "description": "zonal wind export (Sa_u = wind/sqrt(2) in the datm datamode), [m/s]"},
+    "Sa_v": {"type": "parameter", "units": "m/s", "default": 0.0, "description": "meridional wind export (Sa_v = Sa_u in the datm datamode), [m/s]"},
+    "Sa_shum": {"type": "parameter", "units": "kg/kg", "default": 0.0, "description": "specific humidity export (Sa_shum), [kg/kg]"},
+    "Sa_ptem": {"type": "parameter", "units": "K", "default": 273.15, "description": "potential temperature export (Sa_ptem), [K]"},
+    "Sa_pbot": {"type": "parameter", "units": "Pa", "default": 101325.0, "description": "bottom-level pressure export (Sa_pbot), [Pa]"},
+    "Sa_tbot": {"type": "parameter", "units": "K", "default": 273.15, "description": "bottom-level temperature export (Sa_tbot), [K]"},
+    "Faxa_rainc": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "convective rain flux export, treated as mm/s on import: lnd_import_export.F90:535-539 delivers the coupler kg/m2/s rate and converts it with the unity factor (1 m3/1000 kg)*(1000 mm/m), so the import state is mm/s"},
+    "Faxa_rainl": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "large-scale rain flux export, treated as mm/s on import (unity kg/m2/s -> mm/s conversion, lnd_import_export.F90:535-539)"},
+    "Faxa_snowc": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "convective snow flux export, treated as mm/s on import (unity kg/m2/s -> mm/s conversion, lnd_import_export.F90:535-539)"},
+    "Faxa_snowl": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "large-scale snow flux export, treated as mm/s on import (unity kg/m2/s -> mm/s conversion, lnd_import_export.F90:535-539)"},
+    "Faxa_lwdn": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "downward longwave flux export (Faxa_lwdn), [W/m2]"},
+    "Faxa_swvdr": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "visible direct shortwave flux export (Faxa_swvdr), [W/m2]"},
+    "Faxa_swndr": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "near-infrared direct shortwave flux export (Faxa_swndr), [W/m2]"},
+    "Faxa_swvdf": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "visible diffuse shortwave flux export (Faxa_swvdf), [W/m2]"},
+    "Faxa_swndf": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "near-infrared diffuse shortwave flux export (Faxa_swndf), [W/m2]"},
+    "o2_molar_const": {"type": "parameter", "units": "1", "default": 1.1047089691362286, "description": "o2 molar constant o2_molar_const = SHR_CONST_MWO2/SHR_CONST_MWDAIR = 31.999/28.966 (clm_varcon.F90), [-]"},
+    "forc_hgt": {"type": "unknown", "units": "m", "description": "atmospheric reference height forc_hgt = Sa_z (lnd_import_export.F90:542), [m]"},
+    "forc_topo": {"type": "unknown", "units": "m", "description": "atmospheric surface elevation forc_topo = Sa_topo (lnd_import_export.F90:544), [m]"},
+    "forc_u": {"type": "unknown", "units": "m/s", "description": "zonal wind forc_u = Sa_u (lnd_import_export.F90:546), [m/s]"},
+    "forc_v": {"type": "unknown", "units": "m/s", "description": "meridional wind forc_v = Sa_v (lnd_import_export.F90:548), [m/s]"},
+    "forc_q": {"type": "unknown", "units": "kg/kg", "description": "specific humidity forc_q = Sa_shum (lnd_import_export.F90:550), [kg/kg]"},
+    "forc_th": {"type": "unknown", "units": "K", "description": "potential temperature forc_th = Sa_ptem (lnd_import_export.F90:552), [K]"},
+    "forc_pbot": {"type": "unknown", "units": "Pa", "description": "bottom-level pressure forc_pbot = Sa_pbot (lnd_import_export.F90:554), [Pa]"},
+    "forc_t": {"type": "unknown", "units": "K", "description": "bottom-level temperature forc_t = Sa_tbot (lnd_import_export.F90:556), [K]"},
+    "forc_hgt_u": {"type": "unknown", "units": "m", "description": "observational height of wind forc_hgt_u = forc_hgt (lnd_import_export_utils.F90:66), [m]"},
+    "forc_hgt_t": {"type": "unknown", "units": "m", "description": "observational height of temperature forc_hgt_t = forc_hgt (lnd_import_export_utils.F90:67), [m]"},
+    "forc_hgt_q": {"type": "unknown", "units": "m", "description": "observational height of humidity forc_hgt_q = forc_hgt (lnd_import_export_utils.F90:68), [m]"},
+    "forc_vp": {"type": "unknown", "units": "Pa", "description": "vapor pressure forc_vp = forc_q*forc_pbot/(0.622 + 0.378*forc_q) (lnd_import_export_utils.F90:70; the vapor_pressure template), [Pa]"},
+    "forc_rho": {"type": "unknown", "units": "kg/m^3", "description": "atmospheric density forc_rho = (forc_pbot - 0.378*forc_vp)/(rair*forc_t) (lnd_import_export_utils.F90:72-73; the density template), [kg/m3]"},
+    "forc_po2": {"type": "unknown", "units": "Pa", "description": "partial pressure of o2 forc_po2 = o2_molar_const*forc_pbot (lnd_import_export_utils.F90:75), [Pa]"},
+    "forc_wind": {"type": "unknown", "units": "m/s", "description": "wind speed forc_wind = sqrt(forc_u^2 + forc_v^2) (lnd_import_export_utils.F90:77), [m/s]"},
+    "forc_solar": {"type": "unknown", "units": "W/m^2", "description": "total incident solar forc_solar = forc_solad_vis + forc_solai_vis + forc_solad_nir + forc_solai_nir (lnd_import_export_utils.F90:79-83), [W/m2]"},
+    "forc_rainc": {"type": "unknown", "units": "mm/s", "description": "convective rain forc_rainc = Faxa_rainc (lnd_import_export.F90:560), [mm/s]"},
+    "forc_rainl": {"type": "unknown", "units": "mm/s", "description": "large-scale rain forc_rainl = Faxa_rainl (lnd_import_export.F90:562), [mm/s]"},
+    "forc_snowc": {"type": "unknown", "units": "mm/s", "description": "convective snow forc_snowc = Faxa_snowc (lnd_import_export.F90:564), [mm/s]"},
+    "forc_snowl": {"type": "unknown", "units": "mm/s", "description": "large-scale snow forc_snowl = Faxa_snowl (lnd_import_export.F90:566), [mm/s]"},
+    "forc_rain": {"type": "unknown", "units": "mm/s", "description": "total rain forc_rain = forc_rainc + forc_rainl (lnd_import_export_utils.F90:85), [mm/s]"},
+    "forc_snow": {"type": "unknown", "units": "mm/s", "description": "total snow forc_snow = forc_snowc + forc_snowl (lnd_import_export_utils.F90:86), [mm/s]"},
+    "forc_rh": {"type": "unknown", "units": "%", "description": "relative humidity forc_rh = 100*forc_q/qsat(forc_t, forc_pbot) (lnd_import_export_utils.F90:88-90; the qsat_qs template), [%]"},
+    "forc_lwrad": {"type": "unknown", "units": "W/m^2", "description": "downward longwave forc_lwrad = Faxa_lwdn (lnd_import_export.F90:568), [W/m2]"},
+    "forc_solad_vis": {"type": "unknown", "units": "W/m^2", "description": "visible direct solar forc_solad_vis = Faxa_swvdr (lnd_import_export.F90:570), [W/m2]"},
+    "forc_solad_nir": {"type": "unknown", "units": "W/m^2", "description": "near-infrared direct solar forc_solad_nir = Faxa_swndr (lnd_import_export.F90:572), [W/m2]"},
+    "forc_solai_vis": {"type": "unknown", "units": "W/m^2", "description": "visible diffuse solar forc_solai_vis = Faxa_swvdf (lnd_import_export.F90:574; stays gridcell-level - the downscale loop copies only solad, F90:193), [W/m2]"},
+    "forc_solai_nir": {"type": "unknown", "units": "W/m^2", "description": "near-infrared diffuse solar forc_solai_nir = Faxa_swndf (lnd_import_export.F90:576), [W/m2]"}
+   },
+   "equations": [
+    {"lhs": "forc_hgt", "rhs": "Sa_z"},
+    {"lhs": "forc_topo", "rhs": "Sa_topo"},
+    {"lhs": "forc_u", "rhs": "Sa_u"},
+    {"lhs": "forc_v", "rhs": "Sa_v"},
+    {"lhs": "forc_q", "rhs": "Sa_shum"},
+    {"lhs": "forc_th", "rhs": "Sa_ptem"},
+    {"lhs": "forc_pbot", "rhs": "Sa_pbot"},
+    {"lhs": "forc_t", "rhs": "Sa_tbot"},
+    {"lhs": "forc_hgt_u", "rhs": "forc_hgt"},
+    {"lhs": "forc_hgt_t", "rhs": "forc_hgt"},
+    {"lhs": "forc_hgt_q", "rhs": "forc_hgt"},
+    {"lhs": "forc_vp", "rhs": {"op": "apply_expression_template", "args": [], "name": "vapor_pressure", "bindings": {"q": "Sa_shum", "pbot": "Sa_pbot"}}},
+    {"lhs": "forc_rho", "rhs": {"op": "apply_expression_template", "args": [], "name": "density", "bindings": {"pbot": "Sa_pbot", "vp": "forc_vp", "tbot": "Sa_tbot"}}},
+    {"lhs": "forc_po2", "rhs": {"op": "*", "args": ["o2_molar_const", "Sa_pbot"]}},
+    {"lhs": "forc_wind", "rhs": {"op": "sqrt", "args": [{"op": "+", "args": [{"op": "^", "args": ["forc_u", 2]}, {"op": "^", "args": ["forc_v", 2]}]}]}},
+    {"lhs": "forc_solar", "rhs": {"op": "+", "args": ["forc_solad_vis", "forc_solai_vis", "forc_solad_nir", "forc_solai_nir"]}},
+    {"lhs": "forc_rainc", "rhs": "Faxa_rainc"},
+    {"lhs": "forc_rainl", "rhs": "Faxa_rainl"},
+    {"lhs": "forc_snowc", "rhs": "Faxa_snowc"},
+    {"lhs": "forc_snowl", "rhs": "Faxa_snowl"},
+    {"lhs": "forc_rain", "rhs": {"op": "+", "args": ["forc_rainc", "forc_rainl"]}},
+    {"lhs": "forc_snow", "rhs": {"op": "+", "args": ["forc_snowc", "forc_snowl"]}},
+    {"lhs": "forc_rh", "rhs": {"op": "*", "args": [100.0, {"op": "/", "args": ["forc_q", {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t", "p": "forc_pbot", "TKFRZ": 273.15}}]}]}},
+    {"lhs": "forc_lwrad", "rhs": "Faxa_lwdn"},
+    {"lhs": "forc_solad_vis", "rhs": "Faxa_swvdr"},
+    {"lhs": "forc_solad_nir", "rhs": "Faxa_swndr"},
+    {"lhs": "forc_solai_vis", "rhs": "Faxa_swvdf"},
+    {"lhs": "forc_solai_nir", "rhs": "Faxa_swndf"}
+   ]
+  },
+  "Downscale": {
+   "expression_template_imports": [
+    {"ref": "./clm_templates.esm"}
+   ],
+   "variables": {
+    "forc_t_grc": {"type": "parameter", "units": "K", "default": 273.15, "description": "gridcell atmospheric temperature (the not-downscaled gridcell field of atm2lndType), [K]"},
+    "forc_th_grc": {"type": "parameter", "units": "K", "default": 273.15, "description": "gridcell atmospheric potential temperature, [K]"},
+    "forc_q_grc": {"type": "parameter", "units": "kg/kg", "default": 0.0, "description": "gridcell specific humidity, [kg/kg]"},
+    "forc_pbot_grc": {"type": "parameter", "units": "Pa", "default": 101325.0, "description": "gridcell bottom-level pressure, [Pa]"},
+    "forc_rho_grc": {"type": "parameter", "units": "kg/m^3", "default": 1.2, "description": "gridcell atmospheric density, [kg/m3]"},
+    "forc_solar_grc": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "gridcell total incident solar, [W/m2]"},
+    "forc_solad_vis_grc": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "gridcell visible direct solar, [W/m2]"},
+    "forc_solad_nir_grc": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "gridcell near-infrared direct solar, [W/m2]"},
+    "forc_rain_grc": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "gridcell total rain (forc_rain_not_downscaled_grc), [mm/s]"},
+    "forc_snow_grc": {"type": "parameter", "units": "mm/s", "default": 0.0, "description": "gridcell total snow (forc_snow_not_downscaled_grc), [mm/s]"},
+    "forc_lwrad_grc": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "gridcell downward longwave (forc_lwrad_not_downscaled_grc), [W/m2]"},
+    "forc_topo_grc": {"type": "parameter", "units": "m", "default": 0.0, "description": "gridcell surface elevation (forc_topo_grc; the elevation the atmospheric forcing is valid at), [m]"},
+    "forc_hgt_grc": {"type": "parameter", "units": "m", "default": 30.0, "description": "gridcell atmospheric reference height zbot (forc_hgt_grc), [m]"},
+    "topo_col": {"type": "parameter", "units": "m", "default": 0.0, "description": "column surface elevation (topo_inst%topo_col), [m]"},
+    "needs_downscaling": {"type": "parameter", "units": "1", "default": 0.0, "description": "1 when the column is in the topo DownscaleFilterc (the glacier landunit columns; TopoMod.F90 DownscaleFilterc), [-]"},
+    "landunit_glc": {"type": "parameter", "units": "1", "default": 0.0, "description": "1 when the column's landunit is a glacier (istice) landunit, selecting the glc rain-snow ramp (atm2lndMod.F90:365-370), [-]"},
+    "lapse_rate": {"type": "parameter", "units": "K/m", "default": 0.006, "description": "surface temperature lapse rate (lnd_in lapse_rate = 0.006), [K/m]"},
+    "repartition_rain_snow": {"type": "parameter", "units": "1", "default": 1.0, "description": "1 when precipitation is re-partitioned into rain/snow by temperature over all columns (lnd_in repartition_rain_snow = .true.; atm2lndMod.F90:359), [-]"},
+    "glcmec_downscale_longwave": {"type": "parameter", "units": "1", "default": 0.0, "description": "1 when longwave is downscaled for the filter columns (lnd_in glcmec_downscale_longwave = .false.; atm2lndMod.F90:511), [-]"},
+    "precip_repartition_glc_all_snow_t": {"type": "parameter", "units": "K", "default": 271.15, "description": "temperature below which all precipitation is snow on glacier landunits (-2 C + tfrz; ctsm60_params.c260518.nc precip_repartition_glc_all_snow_t = -2.0), [K]"},
+    "precip_repartition_glc_frac_rain_slope": {"type": "parameter", "units": "1/K", "default": 0.5, "description": "rain fraction ramp slope on glacier landunits, 1/(all_rain_t - all_snow_t) = 1/(0 - (-2)) (atm2lndType.F90:278), [1/K]"},
+    "precip_repartition_nonglc_all_snow_t": {"type": "parameter", "units": "K", "default": 273.15, "description": "temperature below which all precipitation is snow on non-glacier landunits (0 C + tfrz; ctsm60_params.c260518.nc precip_repartition_nonglc_all_snow_t = 0.0), [K]"},
+    "precip_repartition_nonglc_frac_rain_slope": {"type": "parameter", "units": "1/K", "default": 0.5, "description": "rain fraction ramp slope on non-glacier landunits, 1/(2 - 0) (atm2lndType.F90:278), [1/K]"},
+    "lapse_rate_longwave": {"type": "parameter", "units": "W/m^2/m", "default": 0.032, "description": "longwave lapse rate (namelist_defaults_ctsm.xml lapse_rate_longwave = 0.032; Van Tricht et al. 2016), [W/m2/m]"},
+    "longwave_downscaling_limit": {"type": "parameter", "units": "1", "default": 0.5, "description": "relative limit on the longwave downscaling departure from the gridcell value (longwave_downscaling_limit = 0.5), [-]"},
+    "tbot_c": {"type": "unknown", "units": "K", "description": "column surface temperature tbot_c = tbot_g - lapse_rate*(hsurf_c - hsurf_g) (atm2lndMod.F90:218), [K]"},
+    "Hbot": {"type": "unknown", "units": "m", "description": "pressure scale height at the average temperature Hbot = rair*0.5*(tbot_g + tbot_c)/grav (atm2lndMod.F90:219), [m]"},
+    "pbot_c": {"type": "unknown", "units": "Pa", "description": "column surface pressure pbot_c = pbot_g*exp(-(hsurf_c - hsurf_g)/Hbot) (atm2lndMod.F90:220), [Pa]"},
+    "thbot_c": {"type": "unknown", "units": "K", "description": "column potential temperature thbot_c = thbot_g + (tbot_c - tbot_g)*exp((zbot/Hbot)*(rair/cpair)) (atm2lndMod.F90:242), [K]"},
+    "qs_g": {"type": "unknown", "units": "kg/kg", "description": "gridcell saturation specific humidity QSat(tbot_g, pbot_g) (atm2lndMod.F90:244), [kg/kg]"},
+    "qs_c": {"type": "unknown", "units": "kg/kg", "description": "column saturation specific humidity QSat(tbot_c, pbot_c) (atm2lndMod.F90:245), [kg/kg]"},
+    "qbot_c": {"type": "unknown", "units": "kg/kg", "description": "column specific humidity qbot_c = qbot_g*qs_c/qs_g (atm2lndMod.F90:247), [kg/kg]"},
+    "rhos_c_estimate": {"type": "unknown", "units": "kg/m^3", "description": "density law at the column state rhos(qbot_c, pbot_c, tbot_c) (atm2lndMod.F90:257), [kg/m3]"},
+    "rhos_g_estimate": {"type": "unknown", "units": "kg/m^3", "description": "density law at the gridcell state rhos(qbot_g, pbot_g, tbot_g) (atm2lndMod.F90:258), [kg/m3]"},
+    "rhos_c": {"type": "unknown", "units": "kg/m^3", "description": "column density rhos_c = rhos_g*rhos_c_estimate/rhos_g_estimate (atm2lndMod.F90:259; identical to rhos_g when the column elevation equals the gridcell's), [kg/m3]"},
+    "forc_t": {"type": "unknown", "units": "K", "description": "column (downscaled) atmospheric temperature, [K]"},
+    "forc_th": {"type": "unknown", "units": "K", "description": "column (downscaled) potential temperature, [K]"},
+    "forc_q": {"type": "unknown", "units": "kg/kg", "description": "column (downscaled) specific humidity, [kg/kg]"},
+    "forc_pbot": {"type": "unknown", "units": "Pa", "description": "column (downscaled) bottom-level pressure, [Pa]"},
+    "forc_rho": {"type": "unknown", "units": "kg/m^3", "description": "column (downscaled) atmospheric density, [kg/m3]"},
+    "forc_solar": {"type": "unknown", "units": "W/m^2", "description": "column total incident solar (copy of the gridcell value; atm2lndMod.F90:192), [W/m2]"},
+    "forc_solad_vis": {"type": "unknown", "units": "W/m^2", "description": "column visible direct solar (copy of the gridcell value; atm2lndMod.F90:193), [W/m2]"},
+    "forc_solad_nir": {"type": "unknown", "units": "W/m^2", "description": "column near-infrared direct solar (copy of the gridcell value; atm2lndMod.F90:193), [W/m2]"},
+    "total_precip": {"type": "unknown", "units": "mm/s", "description": "total precipitation rain + snow before the repartition (atm2lndMod.F90:424), [mm/s]"},
+    "all_snow_t": {"type": "unknown", "units": "K", "description": "all-snow temperature of the column's landunit ramp (atm2lndMod.F90:365-370), [K]"},
+    "frac_rain_slope": {"type": "unknown", "units": "1/K", "description": "rain-fraction ramp slope of the column's landunit (atm2lndMod.F90:365-370), [1/K]"},
+    "frac_rain": {"type": "unknown", "units": "1", "description": "fraction of precipitation that should become rain, clamped to [0, 1] (atm2lndMod.F90:419-422), [-]"},
+    "forc_rain": {"type": "unknown", "units": "mm/s", "description": "column rain rate after the partition_precip repartition (atm2lndMod.F90:185, 425), [mm/s]"},
+    "forc_snow": {"type": "unknown", "units": "mm/s", "description": "column snow rate after the partition_precip repartition (atm2lndMod.F90:186, 426), [mm/s]"},
+    "rain_to_snow_conversion": {"type": "unknown", "units": "mm/s", "description": "rain converted to snow by the repartition, rain_orig - rain when the snow increased (atm2lndMod.F90:381-383), [mm/s]"},
+    "snow_to_rain_conversion": {"type": "unknown", "units": "mm/s", "description": "snow converted to rain by the repartition, snow_orig - snow when the rain increased (atm2lndMod.F90:378-380), [mm/s]"},
+    "eflx_sh_precip_conversion": {"type": "unknown", "units": "W/m^2", "description": "sensible heat flux from the rain-snow conversion, (rain_to_snow - snow_to_rain)*mm_to_m*denh2o*hfus (atm2lndMod.F90:431-454), [W/m2]"},
+    "lwrad_down": {"type": "unknown", "units": "W/m^2", "description": "column longwave after the per-column lapse + clamp of the downscale_longwave branch (atm2lndMod.F90:532-541), [W/m2]"},
+    "forc_lwrad": {"type": "unknown", "units": "W/m^2", "description": "column downward longwave (copy unless glcmec_downscale_longwave; atm2lndMod.F90:506), [W/m2]"}
+   },
+   "equations": [
+    {"lhs": "tbot_c", "rhs": {"op": "-", "args": ["forc_t_grc", {"op": "*", "args": ["lapse_rate", {"op": "-", "args": ["topo_col", "forc_topo_grc"]}]}]}},
+    {"lhs": "Hbot", "rhs": {"op": "/", "args": [{"op": "*", "args": [287.0423113650487, 0.5, {"op": "+", "args": ["forc_t_grc", "tbot_c"]}]}, 9.80616]}},
+    {"lhs": "pbot_c", "rhs": {"op": "*", "args": ["forc_pbot_grc", {"op": "exp", "args": [{"op": "-", "args": [{"op": "/", "args": [{"op": "-", "args": ["topo_col", "forc_topo_grc"]}, "Hbot"]}]}]}]}},
+    {"lhs": "thbot_c", "rhs": {"op": "+", "args": ["forc_th_grc", {"op": "*", "args": [{"op": "-", "args": ["tbot_c", "forc_t_grc"]}, {"op": "exp", "args": [{"op": "*", "args": [{"op": "/", "args": ["forc_hgt_grc", "Hbot"]}, {"op": "/", "args": [287.0423113650487, 1004.64]}]}]}]}]}},
+    {"lhs": "qs_g", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t_grc", "p": "forc_pbot_grc", "TKFRZ": 273.15}}},
+    {"lhs": "qs_c", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "tbot_c", "p": "pbot_c", "TKFRZ": 273.15}}},
+    {"lhs": "qbot_c", "rhs": {"op": "*", "args": ["forc_q_grc", {"op": "/", "args": ["qs_c", "qs_g"]}]}},
+    {"lhs": "rhos_c_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "qbot_c", "pbot": "pbot_c", "tbot": "tbot_c"}}},
+    {"lhs": "rhos_g_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "forc_q_grc", "pbot": "forc_pbot_grc", "tbot": "forc_t_grc"}}},
+    {"lhs": "rhos_c", "rhs": {"op": "*", "args": ["forc_rho_grc", {"op": "/", "args": ["rhos_c_estimate", "rhos_g_estimate"]}]}},
+    {"lhs": "forc_t", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "tbot_c", "forc_t_grc"]}},
+    {"lhs": "forc_th", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "thbot_c", "forc_th_grc"]}},
+    {"lhs": "forc_q", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "qbot_c", "forc_q_grc"]}},
+    {"lhs": "forc_pbot", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "pbot_c", "forc_pbot_grc"]}},
+    {"lhs": "forc_rho", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "rhos_c", "forc_rho_grc"]}},
+    {"lhs": "forc_solar", "rhs": "forc_solar_grc"},
+    {"lhs": "forc_solad_vis", "rhs": "forc_solad_vis_grc"},
+    {"lhs": "forc_solad_nir", "rhs": "forc_solad_nir_grc"},
+    {"lhs": "total_precip", "rhs": {"op": "+", "args": ["forc_rain_grc", "forc_snow_grc"]}},
+    {"lhs": "all_snow_t", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["landunit_glc", 0.5]}, "precip_repartition_glc_all_snow_t", "precip_repartition_nonglc_all_snow_t"]}},
+    {"lhs": "frac_rain_slope", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["landunit_glc", 0.5]}, "precip_repartition_glc_frac_rain_slope", "precip_repartition_nonglc_frac_rain_slope"]}},
+    {"lhs": "frac_rain", "rhs": {"op": "min", "args": [1.0, {"op": "max", "args": [0.0, {"op": "*", "args": [{"op": "-", "args": ["forc_t", "all_snow_t"]}, "frac_rain_slope"]}]}]}},
+    {"lhs": "forc_rain", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": "*", "args": ["total_precip", "frac_rain"]}, "forc_rain_grc"]}},
+    {"lhs": "forc_snow", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": "-", "args": ["total_precip", "forc_rain"]}, "forc_snow_grc"]}},
+    {"lhs": "rain_to_snow_conversion", "rhs": {"op": "ifelse", "args": [{"op": "and", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": ">", "args": ["forc_snow", "forc_snow_grc"]}]}, {"op": "-", "args": ["forc_rain_grc", "forc_rain"]}, 0.0]}},
+    {"lhs": "snow_to_rain_conversion", "rhs": {"op": "ifelse", "args": [{"op": "and", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": ">", "args": ["forc_rain", "forc_rain_grc"]}]}, {"op": "-", "args": ["forc_snow_grc", "forc_snow"]}, 0.0]}},
+    {"lhs": "eflx_sh_precip_conversion", "rhs": {"op": "*", "args": [{"op": "-", "args": ["rain_to_snow_conversion", "snow_to_rain_conversion"]}, 0.001, 1000.0, 3.337e5]}},
+    {"lhs": "lwrad_down", "rhs": {"op": "min", "args": [
+     {"op": "max", "args": [
+      {"op": "-", "args": ["forc_lwrad_grc", {"op": "*", "args": ["lapse_rate_longwave", {"op": "-", "args": ["topo_col", "forc_topo_grc"]}]}]},
+      {"op": "*", "args": ["forc_lwrad_grc", {"op": "-", "args": [1.0, "longwave_downscaling_limit"]}]}]},
+     {"op": "*", "args": ["forc_lwrad_grc", {"op": "+", "args": [1.0, "longwave_downscaling_limit"]}]}]}},
+    {"lhs": "forc_lwrad", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["glcmec_downscale_longwave", 0.5]}, "lwrad_down", "forc_lwrad_grc"]}}
+   ],
+   "tests": [
+     {
+      "id": "step1_p1",
+      "description": "Import-law trace row (step 1, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 0, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 1, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 3.452153973484479,
+       "ImportFields.Sa_v": 3.452153973484479,
+       "ImportFields.Sa_shum": 0.0006480331532619146,
+       "ImportFields.Sa_ptem": 249.30924313863048,
+       "ImportFields.Sa_pbot": 68134.13610026057,
+       "ImportFields.Sa_tbot": 249.30924313863048,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.222160691826291e-07,
+       "ImportFields.Faxa_snowl": 4.699944622643661e-06,
+       "ImportFields.Faxa_lwdn": 147.6519253730771,
+       "ImportFields.Faxa_swvdr": 141.46489999577733,
+       "ImportFields.Faxa_swndr": 179.6370757987365,
+       "ImportFields.Faxa_swvdf": 73.52098366466403,
+       "ImportFields.Faxa_swndf": 35.348807861704884,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.30924313863048
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006480331532619146
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68134.13610026057
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9517205665016577
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 3.452153973484479
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 3.452153973484479
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 4.88208296870192
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.22216069182629e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.46489999577733
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.6370757987365
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.52098366466403
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.348807861704884
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.9717673208827
+       }
+      ]
+     },
+     {
+      "id": "step2_p1",
+      "description": "Import-law trace row (step 2, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 1, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 2, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 2.7204154149312934,
+       "ImportFields.Sa_v": 2.7204154149312934,
+       "ImportFields.Sa_shum": 0.0006513651298453515,
+       "ImportFields.Sa_ptem": 249.36076958974138,
+       "ImportFields.Sa_pbot": 68132.31866319476,
+       "ImportFields.Sa_tbot": 249.36076958974138,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 147.99193893715167,
+       "ImportFields.Faxa_swvdr": 141.4529247420581,
+       "ImportFields.Faxa_swndr": 179.62381601300245,
+       "ImportFields.Faxa_swvdf": 73.51943004197076,
+       "ImportFields.Faxa_swndf": 35.3485387710264,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.36076958974138
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006513651298453515
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68132.31866319476
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9514966012761956
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 2.7204154149312934
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 2.7204154149312934
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 3.847248375084666
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.4529247420581
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.62381601300245
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.51943004197076
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.3485387710264
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.94470956805765
+       }
+      ]
+     },
+     {
+      "id": "step3_p1",
+      "description": "Import-law trace row (step 3, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 2, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 3, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.9886768563781079,
+       "ImportFields.Sa_v": 1.9886768563781079,
+       "ImportFields.Sa_shum": 0.000654712835078913,
+       "ImportFields.Sa_ptem": 249.41229604085228,
+       "ImportFields.Sa_pbot": 68130.50122612894,
+       "ImportFields.Sa_tbot": 249.41229604085228,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 148.33195250122625,
+       "ImportFields.Faxa_swvdr": 141.4409234021725,
+       "ImportFields.Faxa_swndr": 179.61052706550262,
+       "ImportFields.Faxa_swvdf": 73.51787293168029,
+       "ImportFields.Faxa_swndf": 35.34826926835014,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.41229604085228
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.000654712835078913
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68130.50122612894
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9512727196106728
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.9886768563781079
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.9886768563781079
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 2.812413781467412
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.4409234021725
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.61052706550262
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.51787293168029
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.34826926835014
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.91759266770555
+       }
+      ]
+     },
+     {
+      "id": "step4_p1",
+      "description": "Import-law trace row (step 4, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 3, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 4, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006580763363032471,
+       "ImportFields.Sa_ptem": 249.46382249196316,
+       "ImportFields.Sa_pbot": 68128.68378906311,
+       "ImportFields.Sa_tbot": 249.46382249196316,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 148.67196606530084,
+       "ImportFields.Faxa_swvdr": 141.4288959784,
+       "ImportFields.Faxa_swndr": 179.5972089569428,
+       "ImportFields.Faxa_swvdf": 73.51631233337793,
+       "ImportFields.Faxa_swndf": 35.3479993548351,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.46382249196316
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006580763363032471
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68128.68378906311
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.951048921415245
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.4288959784
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.5972089569428
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.51631233337793
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.3479993548351
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.89041662355584
+       }
+      ]
+     },
+     {
+      "id": "step5_p1",
+      "description": "Import-law trace row (step 5, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 4, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 5, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006584296068543657,
+       "ImportFields.Sa_ptem": 249.4691693517891,
+       "ImportFields.Sa_pbot": 68128.15022424827,
+       "ImportFields.Sa_tbot": 249.4691693517891,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 148.17598408946304,
+       "ImportFields.Faxa_swvdr": 141.4168424730258,
+       "ImportFields.Faxa_swndr": 179.5838616880311,
+       "ImportFields.Faxa_swvdf": 73.5147482466476,
+       "ImportFields.Faxa_swndf": 35.34772903164232,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.4691693517891
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006584296068543657
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68128.15022424827
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9510208853513893
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.4168424730258
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.5838616880311
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.5147482466476
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.34772903164232
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.8631814393468
+       }
+      ]
+     },
+     {
+      "id": "step6_p1",
+      "description": "Import-law trace row (step 6, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 5, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 6, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006587830519016376,
+       "ImportFields.Sa_ptem": 249.47451621161508,
+       "ImportFields.Sa_pbot": 68127.61665943344,
+       "ImportFields.Sa_tbot": 249.47451621161508,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 147.68000211362525,
+       "ImportFields.Faxa_swvdr": 141.40476288834097,
+       "ImportFields.Faxa_swndr": 179.5704852594782,
+       "ImportFields.Faxa_swvdf": 73.51318067107225,
+       "ImportFields.Faxa_swndf": 35.34745829993504,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.47451621161508
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006587830519016376
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68127.61665943344
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9509928503917765
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 141.40476288834097
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 179.5704852594782
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.51318067107225
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.34745829993504
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 429.83588711882646
+       }
+      ]
+     },
+     {
+      "id": "step7_p1",
+      "description": "Import-law trace row (step 7, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 6, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 7, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.000659136671523473,
+       "ImportFields.Sa_ptem": 249.479863071441,
+       "ImportFields.Sa_pbot": 68127.0830946186,
+       "ImportFields.Sa_tbot": 249.479863071441,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 7.058281049252279e-07,
+       "ImportFields.Faxa_snowl": 6.352452944327051e-06,
+       "ImportFields.Faxa_lwdn": 147.18402013778746,
+       "ImportFields.Faxa_swvdr": 145.0643818326321,
+       "ImportFields.Faxa_swndr": 183.61015759671932,
+       "ImportFields.Faxa_swvdf": 73.98346209641066,
+       "ImportFields.Faxa_swndf": 35.43768633232347,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.479863071441
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.000659136671523473
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68127.0830946186
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9509648165362925
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 7.058281049252279e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.0643818326321
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.61015759671932
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.98346209641066
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.43768633232347
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 438.09568785808557
+       }
+      ]
+     },
+     {
+      "id": "step8_p1",
+      "description": "Import-law trace row (step 8, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 7, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 8, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006594904657983285,
+       "ImportFields.Sa_ptem": 249.48520993126698,
+       "ImportFields.Sa_pbot": 68126.54952980377,
+       "ImportFields.Sa_tbot": 249.48520993126698,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.524998584307837e-07,
+       "ImportFields.Faxa_snowl": 4.972498725877053e-06,
+       "ImportFields.Faxa_lwdn": 146.6880381619497,
+       "ImportFields.Faxa_swvdr": 145.0519887279434,
+       "ImportFields.Faxa_swndr": 183.59652081021645,
+       "ImportFields.Faxa_swvdf": 73.98188463866681,
+       "ImportFields.Faxa_swndf": 35.43735255639377,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.48520993126698
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006594904657983285
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68126.54952980377
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9509367837848233
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.524998584307837e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.0519887279434
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.59652081021645
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.98188463866681
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.43735255639377
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 438.0677467332204
+       }
+      ]
+     },
+     {
+      "id": "step9_p1",
+      "description": "Import-law trace row (step 9, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 8, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 9, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006598444348046829,
+       "ImportFields.Sa_ptem": 249.49055679109296,
+       "ImportFields.Sa_pbot": 68126.01596498894,
+       "ImportFields.Sa_tbot": 249.49055679109296,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.524998584307837e-07,
+       "ImportFields.Faxa_snowl": 4.972498725877053e-06,
+       "ImportFields.Faxa_lwdn": 146.1920561861119,
+       "ImportFields.Faxa_swvdr": 145.03956898131554,
+       "ImportFields.Faxa_swndr": 183.58285441346987,
+       "ImportFields.Faxa_swvdf": 73.98030369035993,
+       "ImportFields.Faxa_swndf": 35.437018258205605,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.49055679109296
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006598444348046829
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68126.01596498894
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9509087521372553
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.524998584307837e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.03956898131554
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.58285441346987
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.98030369035993
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.437018258205605
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 438.039745343351
+       }
+      ]
+     },
+     {
+      "id": "step10_p1",
+      "description": "Import-law trace row (step 10, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 9, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 10, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2569382978249226,
+       "ImportFields.Sa_v": 1.2569382978249226,
+       "ImportFields.Sa_shum": 0.0006601985786210476,
+       "ImportFields.Sa_ptem": 249.49590365091888,
+       "ImportFields.Sa_pbot": 68125.48240017409,
+       "ImportFields.Sa_tbot": 249.49590365091888,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.524998584307837e-07,
+       "ImportFields.Faxa_snowl": 4.972498725877053e-06,
+       "ImportFields.Faxa_lwdn": 145.6960742102741,
+       "ImportFields.Faxa_swvdr": 145.02712259506063,
+       "ImportFields.Faxa_swndr": 183.56915840711642,
+       "ImportFields.Faxa_swvdf": 73.9787192511067,
+       "ImportFields.Faxa_swndf": 35.4366834390509,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.49590365091888
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006601985786210476
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68125.48240017409
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9508807215934749
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2569382978249226
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7775791878501581
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.524998584307837e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.02712259506063
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.56915840711642
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.9787192511067
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.4366834390509
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 438.01168369233466
+       }
+      ]
+     },
+     {
+      "id": "step11_p1",
+      "description": "Import-law trace row (step 11, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 10, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 11, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2612705292218627,
+       "ImportFields.Sa_v": 1.2612705292218627,
+       "ImportFields.Sa_shum": 0.0006558385515325504,
+       "ImportFields.Sa_ptem": 249.42885932569146,
+       "ImportFields.Sa_pbot": 68125.11562319186,
+       "ImportFields.Sa_tbot": 249.42885932569146,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.524998584307837e-07,
+       "ImportFields.Faxa_snowl": 4.972498725877053e-06,
+       "ImportFields.Faxa_lwdn": 145.74330644607647,
+       "ImportFields.Faxa_swvdr": 145.01464957149668,
+       "ImportFields.Faxa_swndr": 183.55543279179562,
+       "ImportFields.Faxa_swvdf": 73.97713132052264,
+       "ImportFields.Faxa_swndf": 35.436348100223675,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.42885932569146
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006558385515325504
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68125.11562319186
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9511337085300605
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2612705292218627
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2612705292218627
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7837058882470493
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.524998584307837e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.01464957149668
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.55543279179562
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.97713132052264
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.436348100223675
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 437.98356178403856
+       }
+      ]
+     },
+     {
+      "id": "step12_p1",
+      "description": "Import-law trace row (step 12, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 11, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 12, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "parameter_overrides": {
+       "ImportFields.Sa_z": 30.0,
+       "ImportFields.Sa_topo": 2824.921026576389,
+       "ImportFields.Sa_u": 1.2656027606188025,
+       "ImportFields.Sa_v": 1.2656027606188025,
+       "ImportFields.Sa_shum": 0.0006515049554584835,
+       "ImportFields.Sa_ptem": 249.361815000464,
+       "ImportFields.Sa_pbot": 68124.74884620964,
+       "ImportFields.Sa_tbot": 249.361815000464,
+       "ImportFields.Faxa_rainc": 0.0,
+       "ImportFields.Faxa_rainl": 0.0,
+       "ImportFields.Faxa_snowc": 5.524998584307837e-07,
+       "ImportFields.Faxa_snowl": 4.972498725877053e-06,
+       "ImportFields.Faxa_lwdn": 145.79053868187884,
+       "ImportFields.Faxa_swvdr": 145.00214991294726,
+       "ImportFields.Faxa_swndr": 183.5416775681492,
+       "ImportFields.Faxa_swvdf": 73.97553989822235,
+       "ImportFields.Faxa_swndf": 35.43601224302044,
+       "Downscale.needs_downscaling": 0,
+       "Downscale.landunit_glc": 0,
+       "Downscale.repartition_rain_snow": 1,
+       "Downscale.glcmec_downscale_longwave": 0,
+       "Downscale.topo_col": 2824.921026576389
+      },
+      "tolerance": {
+       "rel": 1e-12
+      },
+      "assertions": [
+       {
+        "variable": "Downscale.forc_t",
+        "time": 0.0,
+        "expected": 249.361815000464
+       },
+       {
+        "variable": "Downscale.forc_q",
+        "time": 0.0,
+        "expected": 0.0006515049554584835
+       },
+       {
+        "variable": "Downscale.forc_pbot",
+        "time": 0.0,
+        "expected": 68124.74884620964
+       },
+       {
+        "variable": "Downscale.forc_rho",
+        "time": 0.0,
+        "expected": 0.9513868162151617
+       },
+       {
+        "variable": "ImportFields.forc_u",
+        "time": 0.0,
+        "expected": 1.2656027606188025
+       },
+       {
+        "variable": "ImportFields.forc_v",
+        "time": 0.0,
+        "expected": 1.2656027606188025
+       },
+       {
+        "variable": "ImportFields.forc_wind",
+        "time": 0.0,
+        "expected": 1.7898325886439401
+       },
+       {
+        "variable": "Downscale.forc_rain",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Downscale.forc_snow",
+        "time": 0.0,
+        "expected": 5.524998584307837e-06
+       },
+       {
+        "variable": "Downscale.forc_solad_vis",
+        "time": 0.0,
+        "expected": 145.00214991294726
+       },
+       {
+        "variable": "Downscale.forc_solad_nir",
+        "time": 0.0,
+        "expected": 183.5416775681492
+       },
+       {
+        "variable": "ImportFields.forc_solai_vis",
+        "time": 0.0,
+        "expected": 73.97553989822235
+       },
+       {
+        "variable": "ImportFields.forc_solai_nir",
+        "time": 0.0,
+        "expected": 35.43601224302044
+       },
+       {
+        "variable": "Downscale.forc_solar",
+        "time": 0.0,
+        "expected": 437.95537962233925
+       }
+      ]
+     }
+
+   ]
+  }
+ },
+ "coupling": [
+  {"type": "variable_map", "from": "ImportFields.forc_hgt", "to": "Downscale.forc_hgt_grc", "transform": "param_to_var", "description": "gridcell reference height zbot into the downscaling (atm2lndMod.F90:217)"},
+  {"type": "variable_map", "from": "ImportFields.forc_topo", "to": "Downscale.forc_topo_grc", "transform": "param_to_var", "description": "gridcell surface elevation hsurf_g into the downscaling (atm2lndMod.F90:210)"},
+  {"type": "variable_map", "from": "ImportFields.forc_t", "to": "Downscale.forc_t_grc", "transform": "param_to_var", "description": "gridcell temperature tbot_g into the downscaling (atm2lndMod.F90:212)"},
+  {"type": "variable_map", "from": "ImportFields.forc_th", "to": "Downscale.forc_th_grc", "transform": "param_to_var", "description": "gridcell potential temperature thbot_g into the downscaling (atm2lndMod.F90:213)"},
+  {"type": "variable_map", "from": "ImportFields.forc_q", "to": "Downscale.forc_q_grc", "transform": "param_to_var", "description": "gridcell specific humidity qbot_g into the downscaling (atm2lndMod.F90:214)"},
+  {"type": "variable_map", "from": "ImportFields.forc_pbot", "to": "Downscale.forc_pbot_grc", "transform": "param_to_var", "description": "gridcell pressure pbot_g into the downscaling (atm2lndMod.F90:215)"},
+  {"type": "variable_map", "from": "ImportFields.forc_rho", "to": "Downscale.forc_rho_grc", "transform": "param_to_var", "description": "gridcell density rhos_g into the downscaling (atm2lndMod.F90:216)"},
+  {"type": "variable_map", "from": "ImportFields.forc_solar", "to": "Downscale.forc_solar_grc", "transform": "param_to_var", "description": "gridcell total solar into the column copy (atm2lndMod.F90:192)"},
+  {"type": "variable_map", "from": "ImportFields.forc_solad_vis", "to": "Downscale.forc_solad_vis_grc", "transform": "param_to_var", "description": "gridcell visible direct solar into the column copy (atm2lndMod.F90:193)"},
+  {"type": "variable_map", "from": "ImportFields.forc_solad_nir", "to": "Downscale.forc_solad_nir_grc", "transform": "param_to_var", "description": "gridcell near-infrared direct solar into the column copy (atm2lndMod.F90:193)"},
+  {"type": "variable_map", "from": "ImportFields.forc_rain", "to": "Downscale.forc_rain_grc", "transform": "param_to_var", "description": "gridcell rain into the column copy + partition_precip (atm2lndMod.F90:185)"},
+  {"type": "variable_map", "from": "ImportFields.forc_snow", "to": "Downscale.forc_snow_grc", "transform": "param_to_var", "description": "gridcell snow into the column copy + partition_precip (atm2lndMod.F90:186)"},
+  {"type": "variable_map", "from": "ImportFields.forc_lwrad", "to": "Downscale.forc_lwrad_grc", "transform": "param_to_var", "description": "gridcell longwave into the column copy / downscale_longwave branch (atm2lndMod.F90:506)"}
+ ]
+}

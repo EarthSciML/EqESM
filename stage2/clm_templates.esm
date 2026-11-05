@@ -147,6 +147,18 @@
    "description": "Shortwave reflected by a surface in one waveband, albd*solad + albi*solai [W/m2]: SurfaceRadiationMod.F90:897-899 (fsr), solad/solai the incident direct/diffuse radiation and albd/albi the direct/diffuse albedo.",
    "params": ["solad", "solai", "albd", "albi"],
    "body": {"op": "+", "args": [{"op": "*", "args": ["albd", "solad"]}, {"op": "*", "args": ["albi", "solai"]}]}
+  },
+  "rhos": {
+   "description": "Atmospheric density rhos(q,p,t) [kg/m3]: the rhos function of atm2lndMod.F90:287-310 (the density used by the atm2lnd topo downscaling, written as a ratio of this law so that rhos_c equals rhos_g when the column elevation equals the atmosphere's), with egcm = q*p/(wv + (1 - wv)*q) (F90:306-307) and rhos = (p - (1 - wv)*egcm)/(rair*t) (F90:308), wv = wv_to_dair_weight_ratio = SHR_CONST_MWWV/SHR_CONST_MWDAIR = 18.016/28.966 (clm_varcon.F90:71) and rair = SHR_CONST_RDAIR = 287.0423113650487 J/(kg K). The import-side density law (derive_quantities, lnd_import_export_utils.F90:70-73) is the same functional form with the 0.622/0.378 literals; it is shared with the DATM datamode via cdeps_templates.esm:density.",
+   "params": ["q", "pbot", "tbot"],
+   "body": {"op": "/", "args": [
+    {"op": "-", "args": ["pbot", {"op": "*", "args": [
+     {"op": "-", "args": [1.0, 0.6219705862045155]},
+     {"op": "/", "args": [
+      {"op": "*", "args": ["q", "pbot"]},
+      {"op": "+", "args": [0.6219705862045155, {"op": "*", "args": [
+       {"op": "-", "args": [1.0, 0.6219705862045155]}, "q"]}]}]}]}]},
+    {"op": "*", "args": ["tbot", 287.0423113650487]}]}
   }
  }
 }
