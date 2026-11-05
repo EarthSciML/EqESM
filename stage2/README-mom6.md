@@ -24,11 +24,10 @@ Sources:
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `mom6_templates.esm` | Expression-template library: `wright_alpha0`, `wright_p0`, `wright_lambda` (the three shared polynomials), `wright_density`, `wright_drho_dT`, `wright_drho_dS`, `masked_pair_average` (the AGRID h-point stress average) | `MOM_EOS_Wright_full.F90`: density_elem_Wright_full 75-91, calculate_density_derivs_elem_Wright_full 179-204, constants 23-37; `mom_surface_forcing_nuopc.F90`: 943-951 |
+| `mom6_templates.esm` | Expression-template library: `wright_alpha0`, `wright_p0`, `wright_lambda` (the three shared polynomials), `wright_density`, `wright_drho_dT`, `wright_drho_dS`, the 15 constant fragments `wright_coeff_a0..c5` (the single shared source of the fit coefficients), the `wright_rho` composition (the whole in-situ law in one application, used by KPPBLD), `masked_pair_average` (the AGRID h-point stress average) | `MOM_EOS_Wright_full.F90`: density_elem_Wright_full 75-91, calculate_density_derivs_elem_Wright_full 179-204, constants 23-37; `mom_surface_forcing_nuopc.F90`: 943-951 |
 | `mom6_eos.esm` | Model `WrightEOS` — rho(T, S, p), drho/dT, drho/dS via the templates (imported by reference), `I_denom2`; 15 dump-pinned tests | `MOM_EOS_Wright_full.F90` as above; the EOS calls themselves are `calculate_density`/`calculate_density_derivs_scalar` in `MOM_CVMix_KPP.F90:1437` |
-<<<<<<< HEAD
-| `mom6_kpp_templates.esm` | Expression-template library for the KPP laws: `kpp_turbulent_scale` (the MXL w_s/w_m stability functions), `kpp_unresolved_shear` (Vt² with the Danabasoglu Cv), `kpp_bulk_richardson`, `kpp_shape_cubic` (G(σ), evaluate_cubic order), `kpp_quad_interp_c/b/a` and `kpp_quad_root` (the OBL-depth quadratic) | `cvmix_kpp.F90`: turbulent_scales 2416-2604, unresolved_shear 2611-2903, bulk_Richardson 2031-2132, shape_function_coeffs 3079-3112; `cvmix_math.F90`: linear_through_cubic_poly_interp 103-138, cubic_root_find 260-294, evaluate_cubic 300-340 |
-| `mom6_kpp.esm` | Models `KPPBLD` (KPP_compute_BLD down to the pre-smoothing OBLdepth/kOBL: surface-layer averages, the Wright EOS via the shared `mom6_templates`, deltaBuoy/N2/N, w_s/Vt²/BulkRi, OBL_depth_low with the Monin-Obukhov limit and the MOM6 bounds) and `KPPCoefs` (cvmix_coeffs_kpp_low: the no-match shape G(σ), the 2..floor(kOBL) overwrite, the KPP_IS_ADDITIVE=False replacement, the CVMix non-local term, all driven by the *smoothed* OBLdepth/kOBL from the dump); 8 dump-pinned tests (5 BLD rows × 236 + 3 coefficient rows × 532 = 2776 assertions) | `MOM_CVMix_KPP.F90`: KPP_compute_BLD 1195-1575, KPP_calculate 740-1067, KPP_smooth_BLD 1715-1834; `cvmix_kpp.F90`: OBL_depth_low 1585-1814, kOBL 1821-1867, coeffs_kpp_low 701-1298 |
+| `mom6_kpp_templates.esm` | Expression-template library for the KPP laws: `kpp_turbulent_scale` (the MXL w_s/w_m stability functions), `kpp_unresolved_shear` (Vt² with the Danabasoglu Cv), `kpp_bulk_richardson`, `kpp_shape_cubic` (G(σ), evaluate_cubic order), `kpp_quad_interp_c/b/a` and `kpp_quad_root` (the OBL-depth quadratic), `kpp_override_nonzero` (the KPP_IS_ADDITIVE=False replacement) | `cvmix_kpp.F90`: turbulent_scales 2416-2604, unresolved_shear 2611-2903, bulk_Richardson 2031-2132, shape_function_coeffs 3079-3112; `cvmix_math.F90`: linear_through_cubic_poly_interp 103-138, cubic_root_find 260-294, evaluate_cubic 300-340 |
+| `mom6_kpp.esm` | Models `KPPBLD` (KPP_compute_BLD down to the pre-smoothing OBLdepth/kOBL: surface-layer averages, the Wright EOS as three `wright_rho` applications at the layer-top pressure, deltaBuoy/N2/N, w_s/Vt²/BulkRi, OBL_depth_low with the Monin-Obukhov limit and the MOM6 bounds) and `KPPCoefs` (cvmix_coeffs_kpp_low: the no-match shape G(σ), the 2..floor(kOBL) overwrite, the KPP_IS_ADDITIVE=False replacement via `kpp_override_nonzero` with `Kd_salt = Kd_heat`, the CVMix non-local term, all driven by the *smoothed* OBLdepth/kOBL from the dump); 8 dump-pinned tests (5 BLD rows × 34..39 + 3 coefficient rows × 21..28 = 262 assertions) | `MOM_CVMix_KPP.F90`: KPP_compute_BLD 1195-1575, KPP_calculate 740-1067, KPP_smooth_BLD 1715-1834; `cvmix_kpp.F90`: OBL_depth_low 1585-1814, kOBL 1821-1867, coeffs_kpp_low 701-1298 |
 | `mom6_surface_forcing.esm` | Model `SurfaceForcing` — the 25-field IOB import → fluxes/forces mapping, 39 outputs, 6 dump-pinned tests | `mom_surface_forcing_nuopc.F90`: convert_IOB_to_fluxes 258-734, convert_IOB_to_forces 739-1050; `MOM_forcing_type.F90`: set_net_mass_forcing/get_net_mass_forcing 2748-2800 |
 
 ## Units
@@ -126,18 +125,27 @@ COMPUTE_MONIN_OBUKHOV=True, COMPUTE_EKMAN=False, all unit rescale factors
 - **`KPPBLD`** reproduces `KPP_compute_BLD` (`MOM_CVMix_KPP.F90:1195-1575`)
   down to the *pre-smoothing* OBLdepth and kOBL: the surface-layer means
   (F90:1342-1405), the per-layer hydrostatic EOS pressure
-  (`term(i) = PRESS_STEP·h(i−1)`, PRESS_STEP = g·ρ₀ = 10143.0 Pa/m, with the
-  Wright 1997 EOS imported from `./mom6_templates.esm`), deltaBuoy/N2/N
-  (F90:1444-1457), the MXL turbulent scale w_s, the unresolved shear Vt²
-  (with the Danabasoglu et al. 2006 Cv = 2.1 − 200·N) and the bulk
-  Richardson numbers (F90:1509-1550), then `OBL_depth_low`
-  (`cvmix_kpp.F90:1585-1814`) and the kOBL fraction (1821-1867).
+  (`term(i) = PRESS_STEP·h(i−1)`, PRESS_STEP = g·ρ₀ = 10143.0 Pa/m), the
+  Wright 1997 EOS applied once per state (surface-layer mean, layer value,
+  layer−1 value, all at the layer-top pressure pRef) through the shared
+  `wright_rho` composition of `./mom6_templates.esm` (whose 15 fit
+  coefficients are the `wright_coeff_*` constant fragments — the same values
+  `mom6_eos.esm` declares as parameters, so neither model redeclares them),
+  deltaBuoy/N2/N (F90:1444-1457), the MXL turbulent scale w_s, the
+  unresolved shear Vt² (with the Danabasoglu et al. 2006 Cv = 2.1 − 200·N)
+  and the bulk Richardson numbers (F90:1509-1550), then `OBL_depth_low`
+  (`cvmix_kpp.F90:1585-1814`) and the kOBL fraction (1821-1867). The
+  75/76-sized sentinels (the i = 76 zero branch of N, the N_LAYER-indexed
+  OBL_limit, the kfirst/kwfirst = 76 no-crossing values and the 75.75
+  bottom kOBL) are spelled with the N_LAYER/N_IFACE metaparameters.
 - **`KPPCoefs`** reproduces `cvmix_coeffs_kpp_low` (701-1298, not
   lStokesMOST) as called by `KPP_calculate` (740-1067): with MatchGradient +
   ENHANCE_DIFFUSION=False the shape is the no-match cubic
   G(σ) = σ·(1−σ)², the overwrite loop covers exactly interfaces
   2..floor(kOBL), KPP_IS_ADDITIVE=False keeps the incoming value where the
-  KPP value is zero (F90:1023-1038), and the non-local term is the CVMix law
+  KPP value is zero (F90:1023-1038) — the same `kpp_override_nonzero` law
+  shared by the Kt_out/Ks_out/Kv_out triple, with Kd_salt = Kd_heat — and
+  the non-local term is the CVMix law
   `nonlocal_coeff·G(σ)` (NLT_SHAPE=CVMix: MOM6's override block at
   960-1001 is inactive, so NLT_heat = NLT_salt, F90:1002-1003) with
   nonlocal_coeff = Cstar·κ·(κ·ε·c_s)^(1/3) = 6.327399015078757. Inputs are
@@ -178,8 +186,9 @@ model.
   75); every computed-index gather (the quadratic arrays, `root(kfirst)`,
   z_cell/z_inter at symbolic k, ...) is on an unknown array. This shapes the
   spelling: N2 is computed on the 75 layers and N on the 76 interfaces with
-  the i = 76 zero branch (`ifelse(i == 76, 0, sqrt(max(N2(i), 0)))`), which
-  avoids an out-of-range `index(h, 76)` inside an untaken branch.
+  the i = N_IFACE zero branch (`ifelse(i == N_IFACE, 0,
+  sqrt(max(N2(i), 0)))`), which avoids an out-of-range `index(h, 76)`
+  inside an untaken branch.
 - **The Fortran's operation order is preserved wherever the pins can see
   it**: the bulk-Richardson numerator/denominator, the evaluate_cubic
   summation order of G(σ) = (σ + (−2)·σ²) + σ³, and uStar³ spelled
@@ -202,24 +211,35 @@ model.
 | `cell1184_step3600_kfirst1` | (11, 84, 3600) | 1 | 5.0 (floored) | 3.25 |
 | `cell684_step10800_kfirst1_shallow` | (6, 84, 10800) | 1 | 5.0 (floored) | 2.75 |
 
-Each BLD test pins OBLdepth, kOBL, kfirst, every layer's BulkRi/deltaU2/N2,
-the full N profile and spot z_inter/z_cell values (236 assertions, rel
-1e-12). The kfirst = 1 and 2 rows exercise the `−z_cell(1)` branch and the
-two-point (zero-slope) quadratic; the kfirst = 3 rows exercise the full
-slope-preserving quadratic. The kOBL fraction is pinned on both sides of
-the crossing: .75 (OBL below the layer-3 center, kfirst = 3 row) and .25
-(OBL above it), plus the shallow kfirst = 1 rows.
+Each BLD test pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3
+(6 or 5 layers), spot z_inter/z_cell values at the same range plus the
+three deep layers 73..75, and kfirst (34..39 assertions, rel 1e-12).
+`kfirst` is *not a dump column*: it comes from the Python reference
+reimplementation (`stage1/analysis/kpp_ref.py`) of the OBL_depth_low
+branch selection and is labeled "derived (not a dump column)" in the test
+descriptions. The kfirst = 1 and 2 rows exercise the `−z_cell(1)` branch
+and the two-point (zero-slope) quadratic; the kfirst = 3 rows exercise the
+full slope-preserving quadratic. The kOBL fraction is pinned on both sides
+of the crossing: .75 (OBL below the layer-3 center, kfirst = 3 row) and
+.25 (OBL above it), plus the shallow kfirst = 1 rows. The test tuples are
+extracted by `stage1/analysis/extract_mom6_kpp_test_rows.py` (dump
+directory as its argument; the pinned rows and the keep-ranges live in the
+script's docstring).
 
 | Test (KPPCoefs) | mom6_kpp.csv row | OBLdepth_s [m] | kOBL_s | kwup vs ktup |
 |---|---|---|---|---|
 | `cell782_step3600_kOBL325` | (7, 82, 3600) | 6.1872106097070425 | 3.25 | kwup = ktup + 1 |
-| `cell783_step3600_kOBL375` | (8, 83, 3600) | 6.309964392417778 | 3.75 | kwup = ktup |
+| `cell882_step3600_kOBL375` | (8, 82, 3600) | 6.309964392417778 | 3.75 | kwup = ktup |
 | `cell684_step10800_kOBL275` | (6, 84, 10800) | 5.001656526745087 | 2.75 | kwup = 2 |
 
-Each coefficient test pins Kd_heat/Kd_salt/Kv/NLT_heat/NLT_salt and the
-Kt_out/Ks_out/Kv_out replacement law on all 76 interfaces (532 assertions,
-rel 1e-12), covering both the .25 and .75 kOBL branches of the zero
-restoration at kwup and the kwup = 2 minimal case.
+Each coefficient test pins the 7 asserted columns
+Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces
+2..kwup+1 — the KPP-active region plus the first restoration interface —
+and at the deep interface 76 (21..28 assertions, rel 1e-12), covering both
+the .25 and .75 kOBL branches of the zero restoration at kwup and the
+kwup = 2 minimal case. (The 0-below-kwup and Kt_out = Kt_in bulk of the
+76-interface profiles is not asserted; the deep interface pins the
+fallback-to-incoming law once per row.)
 
 ### Coverage limitations (this data window)
 
@@ -232,6 +252,8 @@ restoration at kwup and the kwup = 2 minimal case.
 | Langmuir paths | l_LMD_ws = false, USE_KPP_LT_K/VT2 = False: the lStokesMOST and Langmuir-entrainment branches of coeffs_kpp_low are not transcribed |
 | MINIMUM_VT2 floor | not reached in the traces (Vt² stays above 1e-10 m² s⁻²) |
 | Ekman / Monin-Obukhov OBL limits | COMPUTE_EKMAN=False, so only the Monin-Obukhov limit enters OBL_limit; it is transcribed (the min(−root, OBL_limit) cap), and no traced OBLdepth reaches the cap |
+| interface-indexed N profile | not asserted (only the layer-indexed N2); N is an intermediate of the BulkRi/Vt² chain, and the i = N_IFACE zero branch is the only interface-specific behavior |
+| KPPCoefs below-kwup zeros and the Kt_out = Kt_in fallback bulk | the informative core (interfaces 2..kwup+1 + the deep interface 76) is pinned; the identically-zero and copy-of-input stretches are not |
 
 ## Surface forcing mapping
 
@@ -314,10 +336,8 @@ unit rescale factors 1.0).
 | File | Tests | Assertions | What is pinned |
 |---|---|---|---|
 | `mom6_eos.esm` | 15 | 45 | rho/drho_dT/drho_dS at 12 surface/mid/deep states of 4 cells over steps 1, 3, 5, 6, 12: the T/S/p range extremes of the dump (T −1.99..2.04 °C, S 33.25..34.66 ppt, p 9.97e4..7.85e6 Pa), min/max rho, drho_dT (most- and least-negative), drho_dS (min/max) — every template exercised on every row |
-<<<<<<< HEAD
-| `mom6_kpp.esm` | 8 | 2776 | See the KPP section: 5 OBL rows (every layer's BulkRi/deltaU2/N2, the N profile, z_inter/z_cell spots, OBLdepth/kOBL/kfirst) and 3 coefficient rows (all 11 KPP output columns on all 76 interfaces), rel 1e-12 |
+| `mom6_kpp.esm` | 8 | 262 | See the KPP section: 5 OBL rows (BulkRi/deltaU2/N2 at layers 1..kOBL+3, z_inter/z_cell spots + 3 deep layers, OBLdepth/kOBL, kfirst derived) and 3 coefficient rows (the 7 asserted KPP output columns Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces 2..kwup+1 + the deep interface 76; NLT_salt and the Kt/Ks/Kv_in inputs are not asserted), rel 1e-12 |
 | `mom6_surface_forcing.esm` | 6 | 234 | All 39 output columns on 6 rows covering: ocean/land east neighbors (taux averaged vs taux = u_flux) with ocean north neighbors (tauy averaged); the runoff/enthalpy branches (rows with lrunoff/frunoff/hrofl/hrofi nonzero); the sea-ice melt branches (seaice_melt_heat/seaice_melt nonzero); evaporation and snow on every row; vprec via net_fw_global_adjust (steps 1, 3, 5, 12); salt_flux_o via salt_restore_flux; the smallest and largest tau_mag and salt_restore_flux of the traced rows |
->>>>>>> main
 
 ### Coverage limitations (this data window)
 
