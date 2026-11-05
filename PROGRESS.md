@@ -1220,3 +1220,34 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
   (clm-surfalbedo, clm-soiltemp2); opencode appears to cache the failed
   lookup. Every grep call made after the install succeeded. No action
   needed.
+- **Batch submitted 2026-11-04 (afternoon), 10 new tasks** (16 agent jobs
+  queued in total; ctessum nodes are in rolling maintenance, so they run
+  as nodes return):
+  - stage 2: `clm-soilfluxes`, `cism-velo` (owns the CISM fork),
+    `cism-transport`, `cam-physics-update`
+  - stage 1: `cam-zm-instrument` (owns the CAM fork), `mom6-dumps-w2`
+    (owns the MOM6 fork)
+  - stage 1 + 2: `cmeps-ocnalb` (CMEPS fork), `cdeps-datm-jra` (CDEPS
+    fork; own C_JRA case), `cice-dedd` (CICE fork; also dumps the
+    qicen/qsnon/Tsfcn tracers for a later tracer-transport job)
+  - M9 subassembly with a feasibility gate: `m9-datm-clm`
+
+  New prompts add parallel-job rules:
+  - each job writes its own `stage2/README-<slice>.md`;
+  - shared `*_templates.esm` files are append-only;
+  - only the named job owns a lane's fork;
+  - existing dump CSVs must stay bit-identical.
+
+  Expect concatenation conflicts in the shared template files at merge.
+  Held back:
+  - ZM closure (needs cam-zm-instrument);
+  - CLM vegetated dump wave (collides with clm-soiltemp3 on the CLM fork);
+  - `${EQICE_ROOT}` import paths (collides with cism-thermo3);
+  - EarthSciModels/ESD PR wave (outward-facing; needs user go-ahead).
+- **ESD checkout:** another session reset the shared EarthSciDiscretizations
+  checkout to origin/main at 13:49. That dropped the local cice_bgrid
+  rules and broke the 3 CICE files on main. The rules are now upstream
+  (PR #50, `85963d7`), and the checkout was fast-forwarded. The suite on
+  main is rerunning as job 12095573 from a sibling worktree
+  `../EqESM-suite-a922c00`; a snapshot under `.work/` breaks the
+  `../../eqice` relative imports.
