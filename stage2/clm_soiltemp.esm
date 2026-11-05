@@ -459,8 +459,8 @@
        ]
       ],
       "values": [
-       0.0,
-       1.0
+       {"op": "const", "args": [], "value": 0.0, "units": "1"},
+       {"op": "const", "args": [], "value": 1.0, "units": "1"}
       ]
      }
     },
@@ -514,8 +514,8 @@
        ]
       ],
       "values": [
-       1.0,
-       0.0
+       {"op": "const", "args": [], "value": 1.0, "units": "1"},
+       {"op": "const", "args": [], "value": 0.0, "units": "1"}
       ]
      }
     },
@@ -706,7 +706,7 @@
           1
          ]
         },
-        0.0,
+        {"op": "const", "args": [], "value": 0.0, "units": "W/m/K"},
         {
          "op": "ifelse",
          "args": [
@@ -723,7 +723,7 @@
             }
            ]
           },
-          0.0,
+          {"op": "const", "args": [], "value": 0.0, "units": "W/m/K"},
           {
            "op": "apply_expression_template",
            "args": [],
@@ -852,7 +852,7 @@
         {
          "op": "*",
          "args": [
-          -1.0,
+          {"op": "const", "args": [], "value": -1.0, "units": "1"},
           {
            "op": "apply_expression_template",
            "args": [],
@@ -914,7 +914,7 @@
      "rhs": {
       "op": "*",
       "args": [
-       0.5,
+       {"op": "const", "args": [], "value": 0.5, "units": "1"},
        {
         "op": "+",
         "args": [
