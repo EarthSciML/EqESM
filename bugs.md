@@ -421,3 +421,29 @@ Format template:
   unpinned by the dump.
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
+
+## 34. CMEPS ocnalb init: else branch sets the local use_min_ocnalb instead of the module use_min_albedo
+
+- **Location:** `components/cmeps/mediator/med_phases_ocnalb_mod.F90:222-231`
+  (`med_phases_ocnalb_init`, the `ocean_albedo_limit` attribute read).
+- **Description:** when the `ocean_albedo_limit` attribute is absent, the
+  else branch executes `min_albedo = 0.0_R8; use_min_ocnalb = .false.`
+  (F90:229-230). `use_min_ocnalb` is a LOCAL of the init subroutine
+  (declared F90:109) that is never read anywhere; the albedo loop
+  (F90:507-509) gates the `max(anidr, min_albedo)` clamp on the MODULE
+  variable `use_min_albedo` (declared F90:66). The intent of the dead
+  assignment was clearly to switch the clamp off in this branch. The bug is
+  latent: the module variable defaults to `.false.` at module load, so the
+  else branch behaves as intended by accident, and the `isPresent .and.
+  isSet` branch sets `use_min_albedo = .true.` correctly (F90:227).
+- **Impact on results:** none in the traced run (`ocean_albedo_limit` not
+  set, so `use_min_albedo` stays `.false.` either way; the min_albedo clamp
+  is inactive). Would only matter if some build changed the module
+  default or reused the init routine's state.
+- **Reproduced/corrected in .esm:** `stage2/cmeps_ocnalb.esm` transcribes
+  the clamp as `ifelse(use_min_albedo, max(anidr, min_albedo), anidr)`
+  driven by the dumped `use_min_albedo` flag, i.e. it pins the intended
+  semantics, not the dead assignment; the traced rows all have
+  `use_min_albedo = 0` so the clamp branch is unpinned.
+- **Status:** open (dead assignment; benign in all CESM configurations on
+  this branch).
