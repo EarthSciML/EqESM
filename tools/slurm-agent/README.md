@@ -99,6 +99,12 @@ From Claude Code, run `dispatch.py wait <name>` with `run_in_background` to
 get a notification when a subagent finishes. Then review the branch, merge
 it, and run `cleanup`.
 
+Before `cleanup` deletes a run dir, it archives the transcript
+(`opencode.jsonl`, gzipped), `result.md`, `prompt.md`, `meta.json`,
+`slurm.out`, `opencode.err`, `status`, and `exit_code` into the gitignored
+`.work/agent-logs/<name>-<jobid>/`. The llama-server log is not kept. Read an
+archived transcript with `zcat … | jq`, or use it for cross-job log reviews.
+
 ## jobs.json
 
 `submit` appends an entry to `<repo>/jobs.json` (tracked in git). The entry

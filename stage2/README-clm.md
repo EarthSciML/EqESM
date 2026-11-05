@@ -110,12 +110,12 @@ indexing defect of the original dumps; one defect remains (both recorded in
    is pinned instead through dqgdT by the surfhum tests (which trace
    callers that do request qsdT).
 
-A third dump limitation (not a defect, a coverage boundary): `clm_surfalbedo.csv`
-has no albsnd/albsni columns and every non-urban row carries
-frac_sno_albedo = 1, so only the degenerate all-snow endpoint of the
-ground-albedo mixing law is recoverable; the surfalbedo component is
-therefore deferred to the future clm_biogeophysics.esm task (its snow albedo
-laws cannot be pinned from this dump).
+The surfalbedo dump limitation of the W2 files (no albsnd/albsni columns)
+was closed by the W3 surfalbedo extension (fork clm `3d7038304` /
+superproject `527ab5d`): `clm_surfalbedo.csv` now also carries the SNICAR
+snow albedos, the top-layer volumetric soil water and the soil color class
+per column (see `README-clm-albedo.md`, the surface-albedo stage-2
+component).
 
 ## Coverage gaps
 
@@ -267,14 +267,15 @@ albedo set, soil/ground albedo laws, topmodel baseflow/aquifer
 yield/impedance, soil_water_flux, frozen_water_potential, supercool_water,
 snow_percolation_flux, monin_obukhov_zeta, dewpoint_magnus, aerodynamic
 ram/rah, snow_albedo_two_stream_approx). None of these is exercised by the
-canopy hydrology/flux-interface component and none can be pinned from the
-current dumps, so they were removed to keep the library to what is exercised;
-they will return with their stage-2 components (soil hydrology and
-temperature, snow hydrology, surface albedo/biogeophysics), where they will
-be tested against the corresponding dumps. Two of the removed laws are
-documented in bugs.md: the Van Genuchten 1980 duplicates (#22) and the
-soil_hk/soil_suction Clapp-Hornberg provenance (kept in the template
-descriptions).
+canopy hydrology/flux-interface component, so they were removed to keep the
+library to what is exercised. Four of them have since returned with the
+surface-albedo stage-2 component (`soil_albedo_wetness`, `soil_albedo`,
+`snow_soil_albedo`, `absorbed_shortwave`, `reflected_shortwave` — see README-clm-albedo.md);
+the rest will return with their stage-2 components (soil hydrology and
+temperature, snow hydrology), where they will be tested against the
+corresponding dumps. Two of the removed laws are documented in bugs.md: the
+Van Genuchten 1980 duplicates (#22) and the soil_hk/soil_suction
+Clapp-Hornberg provenance (kept in the template descriptions).
 
 ## Dump extensions that would close the gaps
 
@@ -296,20 +297,22 @@ window clamp); a T > 273.15 QSat call (for the liquid branch); a
 frac_h2osfc > 0 state (for the h2osfc humidity branch); a snow-unloading
 state (snocan > 0 with forc_t/forc_wind); the patch-level qflx_liq_grnd for
 the vegetated columns (the dumped value is the wtcol-weighted column
-aggregate); forc_th (for thv); and the frac_sno_albedo values with
-albsnd/albsni (for the ground-albedo mixing).
+aggregate); and forc_th (for thv). The frac_sno_albedo + albsnd/albsni
+extension (ground-albedo mixing) is done: the W3 surfalbedo dump extension
+(see README-clm-albedo.md) adds the SNICAR snow albedos, h2osoi_vol_1 and
+isoicol to clm_surfalbedo.csv; what is still missing for the *interior* of
+the mixing law is a traced state with 0 < frac_sno_albedo < 1.
 
 ## Next steps (stage 2.5 / stage 3)
 
-The canopy hydrology and flux-interface skeleton is the first CLM stage-2
-component; the remaining CLM pieces (snow hydrology and soil
-temperature/moisture, surface albedo, canopy fluxes/biogeophysics, and the
-top-level clm assembly) follow the same pattern — transcribe the Fortran
+The canopy hydrology/flux-interface skeleton and the surface albedo
+component (README-clm-albedo.md) are done; the remaining CLM pieces (snow
+hydrology and soil temperature/moisture, canopy fluxes/biogeophysics, and
+the top-level clm assembly) follow the same pattern — transcribe the Fortran
 laws into templates, mount them in the component models, and pin them against
-the remaining `stage1/dumps/clm/` files (`clm_surfalbedo.csv`,
-`clm_soiltemp.csv` exit rows, `clm_canopyflux.csv` flx stage (t_veg/
-eflx_sh_veg/qflx_evap_veg for the canopy-flux energy balance),
-`clm_bareground.csv`, `clm_soilfluxes.csv`). The W2 soiltemp/soilfluxes
-files are now layer-exact, so the soiltemp component can pin its layer
-temperatures directly (entry/exit j = −8..13+). Stage 3 couples the merged
-components into the top-level `eqesm.esm` model.
+the remaining `stage1/dumps/clm/` files (`clm_soiltemp.csv` exit rows,
+`clm_canopyflux.csv` flx stage (t_veg/eflx_sh_veg/qflx_evap_veg for the
+canopy-flux energy balance), `clm_bareground.csv`, `clm_soilfluxes.csv`).
+The W2 soiltemp/soilfluxes files are now layer-exact, so the soiltemp
+component can pin its layer temperatures directly (entry/exit j = −8..13+).
+Stage 3 couples the merged components into the top-level `eqesm.esm` model.

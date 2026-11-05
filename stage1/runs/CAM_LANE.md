@@ -196,12 +196,15 @@ Notes:
 | `cam_surface_cflx.csv` | (step, phase, cnst) | cam_in%cflx per constituent |
 | `cam_qsat.csv` | (step, phase, lev) | qsat law: T, pmid → es, qs, gam (wv_saturation qsat_2D, Goff-Gratch mixed phase) |
 | `cam_tend_total.csv` | (step, phase, lev) | tend%dtdt/dudt/dvdt at end of tphysbc (bc) and tphysac (ac) |
+| `cam_vdiff_prof.csv` | (step, lev) | vdiff (site 15) solver context after tendencies_run: solve-grid mid/ifc_lo/ifc_hi (Coords1D(state%pint)), interface rhoi/tint/dpidz_sq, kvh/kvm/kvq + cgh/cgs at lo/hi interfaces, tau_damp_rate, dtk, post-solve u1/v1/s1, ptend_s/u/v, pdel/pdeldry, dragblj, tauresx/y, ksrftms, clubbtop, taux/tauy/shflux, dse_top |
+| `cam_vdiff_q.csv` | (step, lev, cnst) | vdiff tracer context: q0 (pre-solve), q1 (post-solve q_tmp), ptend_q, cflx, do_diffusion flag — one row per constituent (pcnst = 34) |
 
 Row counts for the 48-step run (verified): `cam_phys_tend` 48 × 26 × 32 =
 39936 rows (26 = 20 single sites + clubb×3 + microp×3); `cam_phys_tend_q`
 48 × Σ(site lq count) × 32; `cam_qsat`/`cam_tend_total` 48 × 2 × 32 =
 3072 each; `cam_surface_exchange` 48 × 3 = 144; `cam_surface_cflx`
-48 × pcnst = 1632 (pcnst = 34).
+48 × pcnst = 1632 (pcnst = 34); `cam_vdiff_prof` 48 × 32 = 1536;
+`cam_vdiff_q` 48 × 32 × 34 = 52224.
 
 All CSVs: `# description =` / `# columns =` headers naming columns + units +
 Fortran file:line, one row per sample, no blank lines, no trailing commas,
@@ -214,7 +217,9 @@ es26.17 reals.
   the `case` global attribute and the `time_written` char variable
   (write timestamps) — `compare_cam_hist.py` reports exactly those two
   differences. Verified twice: (pristine 11999519 vs inst 11999518) and
-  (pristine 11999519 vs inst 12001684, the final CSV format).
+  (pristine 11999519 vs inst 12001684, the final CSV format). Re-verified
+  2026-11-03 after adding the vdiff solver-context dump (run 12048430):
+  bit-identical again (same two differences only).
 - [x] **Structural:** `python3 stage1/analysis/validate_cam_dumps.py` —
   ALL STRUCTURAL CHECKS PASSED. Row counts: cam_phys_tend 39936 =
   48 × 26 × 32; cam_phys_tend_q 511488 = 48 × Σ(calls×lq×32); qsat and
@@ -222,6 +227,8 @@ es26.17 reals.
   1632 = 48 × 34 (pcnst=34); per-step site order OK (26 site-calls,
   22 unique, clubb/microp interleaved ×3); macmic_it=1..3, scale=1/3 OK;
   q-block nlq counts consistent with the ptend `nlq` column.
+  vdiff dumps (added 2026-11-03): cam_vdiff_prof 1536 = 48 × 32,
+  cam_vdiff_q 52224 = 48 × 32 × 34.
 - [x] **qsat law:** es=estblf(T) (Goff-Gratch mixed-phase table, linear
   interpolation), qs=epsilo·es/(p−omeps·es), es=min(es,p), gam=(hltalt/cpair)·dqsdt
   with pcf transition polynomial — 3072 rows checked, max|es err| =

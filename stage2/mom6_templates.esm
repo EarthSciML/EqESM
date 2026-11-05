@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_templates",
-  "description": "Expression-template library for the MOM6 equation of state (stage 2 of the EqESM project): the Wright 1997 full-range in-situ density law rho(T,S,p) and its analytic partial derivatives drho/dT, drho/dS, transcribed exactly from MOM_EOS_Wright_full.F90 (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps) and shared by the mom6_eos.esm component. The law (Wright, JPO 1997, 'A new salinity equation of state'; a fit to UNESCO EOS-80 valid for -2 < theta < 40 degC, 0 < S < 40 PSU, 0 < p < 1e8 Pa) is rho = (p + p0)/(lambda + al0*(p + p0)) with the three polynomials al0 = a0 + (a1*T + a2*S), p0 = b0 + (b4*S + T*(b1 + (T*(b2 + b3*T) + b5*S))) and lambda = c0 + (c4*S + T*(c1 + (T*(c2 + c3*T) + c5*S))) (density_elem_Wright_full, MOM_EOS_Wright_full.F90:86-89; constants a0..c5 at F90:23-37, each with the Fortran's own units comment: a0 [m3 kg-1], a1 [m3 kg-1 degC-1], a2 [m3 kg-1 PSU-1], b0..b5 [Pa, Pa degC-1, Pa degC-2, Pa degC-3, Pa PSU-1, Pa degC-1 PSU-1], c0..c5 [m2 s-2, m2 s-2 degC-1, m2 s-2 degC-2, m2 s-2 degC-3, m2 s-2 PSU-1, m2 s-2 degC-1 PSU-1]). The derivatives (calculate_density_derivs_elem_Wright_full, F90:194-202) are the Fortran's hand-coded formulas I_denom2*(lambda*dp0/dT - (p+p0)*((p+p0)*a1 + dlambda/dT)) and I_denom2*(lambda*dp0/dS - (p+p0)*((p+p0)*a2 + dlambda/dS)) with I_denom2 = 1/(lambda + al0*(p+p0))^2; they are transcribed here rather than written as symbolic D(rho, T)/D(rho, S) because in esm 1.3.0 the D operator is a rewrite-target for discretization stencils (esm-spec §4.2 / §9.6.8) and is rejected by the CLI 0.7.0 evaluator for algebraic expressions ('unlowered_operator: rewrite-target operator D reached evaluation without being lowered to a stencil by a rewrite rule'). The polynomial templates (wright_alpha0/wright_p0/wright_lambda) are the shared sub-laws of both the density and its derivatives; the consuming component binds the 15 coefficients (declared there as named parameters with units, values from MOM_EOS_Wright_full.F90:23-37) and the state T [degC], S [ppt], p [Pa] at the call sites. All templates are match-less and invoked by name via apply_expression_template; the only dependencies among them are the model-level intermediate bindings (al0, p0, lambda are computed once by the component and passed to the density and derivative templates), so the body-reference DAG is acyclic (esm-spec 9.7.3).",
+  "description": "Expression-template library for the MOM6 equation of state (stage 2 of the EqESM project): the Wright 1997 full-range in-situ density law rho(T,S,p) and its analytic partial derivatives drho/dT, drho/dS, transcribed exactly from MOM_EOS_Wright_full.F90 (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps) and shared by the mom6_eos.esm component. The surface-forcing component mom6_surface_forcing.esm additionally binds masked_pair_average, the AGRID h-point stress average (a + mask*a_neighbor)/(1 + mask) of mom_surface_forcing_nuopc.F90:943-951 (the taux/tauy stencils). The law (Wright, JPO 1997, 'A new salinity equation of state'; a fit to UNESCO EOS-80 valid for -2 < theta < 40 degC, 0 < S < 40 PSU, 0 < p < 1e8 Pa) is rho = (p + p0)/(lambda + al0*(p + p0)) with the three polynomials al0 = a0 + (a1*T + a2*S), p0 = b0 + (b4*S + T*(b1 + (T*(b2 + b3*T) + b5*S))) and lambda = c0 + (c4*S + T*(c1 + (T*(c2 + c3*T) + c5*S))) (density_elem_Wright_full, MOM_EOS_Wright_full.F90:86-89; constants a0..c5 at F90:23-37, each with the Fortran's own units comment: a0 [m3 kg-1], a1 [m3 kg-1 degC-1], a2 [m3 kg-1 PSU-1], b0..b5 [Pa, Pa degC-1, Pa degC-2, Pa degC-3, Pa PSU-1, Pa degC-1 PSU-1], c0..c5 [m2 s-2, m2 s-2 degC-1, m2 s-2 degC-2, m2 s-2 degC-3, m2 s-2 PSU-1, m2 s-2 degC-1 PSU-1]). The derivatives (calculate_density_derivs_elem_Wright_full, F90:194-202) are the Fortran's hand-coded formulas I_denom2*(lambda*dp0/dT - (p+p0)*((p+p0)*a1 + dlambda/dT)) and I_denom2*(lambda*dp0/dS - (p+p0)*((p+p0)*a2 + dlambda/dS)) with I_denom2 = 1/(lambda + al0*(p+p0))^2; they are transcribed here rather than written as symbolic D(rho, T)/D(rho, S) because in esm 1.3.0 the D operator is a rewrite-target for discretization stencils (esm-spec §4.2 / §9.6.8) and is rejected by the CLI 0.7.0 evaluator for algebraic expressions ('unlowered_operator: rewrite-target operator D reached evaluation without being lowered to a stencil by a rewrite rule'). The polynomial templates (wright_alpha0/wright_p0/wright_lambda) are the shared sub-laws of both the density and its derivatives; the consuming component binds the 15 coefficients (declared there as named parameters with units, values from MOM_EOS_Wright_full.F90:23-37) and the state T [degC], S [ppt], p [Pa] at the call sites. All templates are match-less and invoked by name via apply_expression_template; the only dependencies among them are the model-level intermediate bindings (al0, p0, lambda are computed once by the component and passed to the density and derivative templates), so the body-reference DAG is acyclic (esm-spec 9.7.3).",
   "authors": [
    "EqESM stage 2 (wt/mom6-eos)"
   ]
@@ -475,6 +475,39 @@
          }
         ]
        }
+      ]
+     }
+    ]
+   }
+  },
+  "masked_pair_average": {
+   "description": "The AGRID average of a field value with its east/north neighbor (mom_surface_forcing_nuopc.F90:943-951): (a + mask*a_neighbor)/(1 + mask), the h-point stress average onto the u/v point of the cell; mask is the ocean mask of the neighbor cell (1 ocean, 0 land), so the average divides by 2 over ocean-ocean pairs and by 1 at the coast. Bound by the SurfaceForcing component with (a, a_neighbor, mask) = (u_flux, u_flux_east, mask_east) for taux and (v_flux, v_flux_north, mask_north) for tauy.",
+   "params": [
+    "a",
+    "a_neighbor",
+    "mask"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "a",
+       {
+        "op": "*",
+        "args": [
+         "mask",
+         "a_neighbor"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       1.0,
+       "mask"
       ]
      }
     ]

@@ -286,7 +286,7 @@ descriptions. Representative transcriptions:
 The stage-2 `tests` blocks pin the stage-1 instrumentation dumps
 (`stage1/dumps/cice/`) with instantaneous laws (`time_span {0,0}`, MOSART
 pattern) plus one integrated transport trace. Run `./esm test stage2/` for
-the full suite (115 MOSART + 134 CICE = 249 assertions). The two lowered
+the full suite (135 MOSART + 151 CICE = 286 assertions). The two lowered
 components import the B-grid rules by reference from the
 EarthSciDiscretizations checkout, so the tests (and `esm validate` of those
 two files) need `export ESD_ROOT=/path/to/EarthSciDiscretizations` (the
@@ -299,7 +299,7 @@ two files) need `export ESD_ROOT=/path/to/EarthSciDiscretizations` (the
 | `cice_thermodynamics.esm` | 17 | 30 | the dEdd shortwave laws against `cice_albedo.csv`: the snow fraction on bare ice and snow (vsnon = 0 / > 0), the effective pond area apeffn through the infiltration, hypsometry, hpmin and taper branches, the ice/snow broadband albedos, and the shortwave conservation fswintn = swabs − fswsfc − fswthrun; the mushy enthalpy↔temperature inversions zTin/zTsn (eqs 1-2) against the `cice_thermo_state.csv` zTin_1..8/zTsn_1..3 columns (all `rel 1e-12`); the step-1 surface energy-block aggregates flwout/fsens against `cice_thermo_flux.csv` (the similarity-driven shcoef/lhcoef at the entry Tsfcn, fluxes at the exit Tsfcn, ε = 0.95; `rel 1e-9`, cells (3,5) and (2,4)); the step-1 latent-heat and sublimation/condensation aggregates flat/evap/dsnow (cell (2,4), `rel 1e-6`; the evapn `esub + econ` closure and the dsnow [m/step]→[m/s] rate convention, transcription fixes #9-#11); the step-2 radiation aggregates fswabs/fswthru testing the prep_radiation rescale `albedo_dump(1) × netsw(2)/netsw(1)` (icepack_shortwave.F90:3893-3922; `rel 1e-12`, cells (3,5) and (4,5)); and the per-category surface energy balance residual fsurf_bal = fsurfn − fcondtopn at the step-2 exit state (cell (2,4), cats 2-5, `abs 2e-2`; the implicit solve's own convergence, see the balance test description) |
 | `cice_dynamics.esm` | 1 | 19 | the lowered B-grid laws against the step-2 dynamics state (`time_span {0,0}`, `rel 1e-12`, full-domain overrides so m > 0 and DminTarea > 0 everywhere): the four-corner strain rates divu/tension/shear at T cell (3,5) (12 values; the `strain_rates` corner combinations, ice_dyn_shared.F90:2148-2175, area-weighted m²/s), the stress integrals strintx/strinty at the U point U(2,4) (the stepu `uarear·(str1 − str2 + str3 − str4)` sums, ice_dyn_evp.F90:1698-1765), the Hibler strength P = 546804.85434316727 (formulation pin; the run's Rothrock strength 321248.866048 is pinned in the coupling cap), and the full dyn_finish ocean-ice stress vrel/taux/tauy/Cb at U(2,4) with the dump's aiX/uocn/vocn (F90:1345-1348; the stepu partials are the cap's pin). ICs: uvel/vvel = the momentum dump's uold/vold (U(4,4) = (0,0) convention), stressp/m/12 = the stress dump's newp/newm/new12 ksub1 corners |
 | `cice_transport.esm` | 2 | 16 | `cice_transport_remap_35_integrated` — the continuity system integrated over [0, 3600] s from the dump's t_entr state with the dump's velocity/grid parameters, asserting the exit aicen/vicen/vsnon at cell (3,7) (15 assertions; per-assertion tolerances rel 1e-4/1e-4/2e-4 — the residuals ≤ 3.04e-5/3.33e-5/1.78e-4 quantify the scheme difference between the rule's centered edge reconstruction and the Fortran's incremental-remap departure-cell integrals, O(C·Δc) ≈ 10% of the transported change); `cice_transport_uniform_field` — the algebraic div_flux at t = 0 with a uniform aicen = 1 field pins the lowered operator itself: div_flux = D_vel = 1.1240071614720283e-07 1/s (rel 1e-12, integrator-independent; the earlier integrated form was bdf-solver-sensitive — the solver converges to exp(−D·t), (D·dt)²/2 ≈ 8.2e-8 off the Euler form) |
-| `cice.esm` | 0 | 0 | none — the assembly couples the 3×5 dynamics/transport with the single-cell thermodynamics/coupling through shape-mismatched `variable_map` edges (the validator accepts them with an UNKNOWN compatibility verdict); a whole-coupling-period trace from a cold start stays a stage-3 concern (see coverage limits) |
+| `cice.esm` | 1 | 17 | the coupled assembly at the step-1 export-time state (test `assembly_exports_dynamics_step1_cell3_5`, `time_span {0,0}`, `rel 1e-12`): the export chain through the coupling — the Transport→Thermodynamics/IceCap single-cell selects (faq full-map over ncat of the traced cell (2,2) = global (3,5)) and the Thermodynamics→IceCap Tsfc/albedo edges — pinned exactly against `cice_run_exports.csv` step-1 (3,5): Si_ifrac/Si_vice/Si_vsno/Si_snowh/Si_t and the albedo aggregation Si_avsdr/Si_anidr/Si_avsdf/Si_anidf (the state is `cice_thermo_state.csv` entry(2): exports(S) = entry(S+1) to round-off; Tsfc = the entry Tsfc tracer, not the solve Tsfcn — see coverage limits); the constant-scheme Control chain through the cap aggregation (Faii_taux/Faii_tauy formulation pins = strairxT/aice·areacor with strairx = tau·uatm from the step-1 (3,5) imports; the run's similarity-scheme export differs); the broadcast ocean stress and the tilt stress (Dynamics.taux/tauy at U(1,1) and U(2,2) — formulation pins vrel = aiX·rhow·Cw·\|u_ocn−u\| with the momentum-dump aiX and the broadcast step-1 uocn/vocn; strtltx/strtlty wiring pins with the run's identically-zero So_dhdx/dhdy imports) |
 
 All 47 pre-probe coupling assertions reproduce the dumped values at the
 tolerances documented per test: the imports/exports/aggregations at round-off
@@ -600,12 +600,20 @@ must reproduce the dumped value:
 - **Spatial-D lowering landed; what remains deferred.** The dynamics and
    transport rewrite targets are now lowered by the EarthSciDiscretizations
    CICE B-grid rules (`grids/cice_bgrid`, ESD commit `11fe246`) and carry
-   their own dump pins (19 + 16 assertions, see the testing table). What
-   stays deferred: the **assembly** test (the coupling wires the 3×5
-   dynamics/transport to the single-cell thermodynamics/coupling through
-   shape-mismatched `variable_map` edges — accepted by the validator with an
-   UNKNOWN verdict — and a whole-coupling-period trace from a cold start is
-   a stage-3 concern), the momentum-ODE rate itself (strairx/strairy are not
+   their own dump pins (19 + 16 assertions, see the testing table). The
+   **assembly** now couples them and runs a 17-assertion instant pin of the
+   step-1 export-time state (see the testing table): the 31 shape-mismatched
+   `variable_map` edges (3×5 dynamics/transport → single-cell
+   thermodynamics/coupling) carry faq full-map broadcast and single-cell
+   select transforms — `param_to_var` breaks the receiving var_map
+   ("array state has no cells in var_map") for any scalar→shaped edge, and
+   the native compiler additionally requires the select as a full-rank index
+   inside the faq (a bare partial `index` yields a sub-array and is refused,
+   esm-libraries-spec §2.5.10), so each select edge is
+   `faq(output_idx: [ncat], expr: index(From.var, 2, 2, ncat), ranges: {ncat})`
+   with the traced-cell constants (2,2) = global (3,5). What stays deferred:
+   a whole-coupling-period trace from a cold start (stage 3), the
+   momentum-ODE rate itself (strairx/strairy are not
    dump columns; the stepu implicit-solve machinery cca/ccb/ab2/cc1/cc2 of
    `cice_dynamics.esm` is documented rather than transcribed), the aiX
    derivation (the ocean-ice stress consumes the dump's aiX = the cap's
@@ -620,6 +628,22 @@ must reproduce the dumped value:
    remain pinned in the coupling cap (see divergence 6).
    `cice_dyn_state.csv` continues to feed the similarity tests through the
    uvelT/vvelT reconstruction.
+- **Assembly pins: what the single-cell skeleton cannot reproduce.** The
+   assembly test pins the export-state chain, the ocean/tilt stress, and the
+   constant-scheme Control chain (see the testing table). Deliberately
+   excluded: the flux exports (Faii_lwup/sen/lat/evap, Fioi_swpen/melth/
+   meltw/salt) — the run's merged fluxes are evaluated at the converged-solve
+   Tsfcn (the exit Tsfcn is ~0.7 K warmer than the entry Tsfc tracer the Si_t
+   export aggregates), and the skeleton carries a single Tsfc parameter, so
+   the two chains cannot both be exact; the flux chains stay pinned at the
+   component level (thermo merged aggregates, cap constructed-input exports);
+   Faii_swnet at step 1 (the init-time dEdd solve of CICE_InitMod.F90:192-201
+   is not dumped); Fioi_taux/tauy (the collapsed T-point average of
+   strocnxU/aiU of ice_step_mod.F90:1051-1072 does not reproduce the dumped
+   export); and the similarity exports (uvelT reconstruction, a stage-3
+   concern). The dynamics Control→Dynamics strairx/strairy and
+   shcoef/lhcoef broadcast edges enter only the momentum/energy ODE rates, so
+   they are compile-exercised but not instant-pinned.
 - **fswthru merge timing.** `merge_fluxes` weights fswthrun by the mid-thermo
    aicen (icepack_therm_vertical.F90:3169), which is not a dumped state; a
    per-category fswthru pin misses the dump by 0.1-18%, so Fioi_swpen uses the
@@ -633,9 +657,9 @@ must reproduce the dumped value:
    diagnostics row (hemispheric budgets are a stage-3 assembly concern).
 
 `esm validate` passes on every file (with `ESD_ROOT` exported for the two
-lowered files); `esm test stage2/` runs the 115 MOSART assertions plus the
-134 CICE assertions (69 coupling + 30 thermodynamics + 19 dynamics + 16
-transport) with 0 failures and 0 errors — 249P/0F/0E.
+lowered files); `esm test stage2/` runs the 135 MOSART assertions plus the
+151 CICE assertions (69 coupling + 30 thermodynamics + 19 dynamics + 16
+transport + 17 assembly) with 0 failures and 0 errors — 286P/0F/0E.
 
 ## Scheme gaps (continuous ODE vs Fortran discrete)
 
@@ -657,8 +681,13 @@ transport) with 0 failures and 0 errors — 249P/0F/0E.
 
 ## Next steps (stage 2.5 / stage 3)
 
-1. Fill the remaining `tests` blocks (the assembly) and reconcile any
-   transcription mismatches.
+1. Reconcile any transcription mismatches the assembly pins expose; the
+   assembly instant pins cover the export, ocean-stress, tilt-stress, and
+   constant-scheme Control chains at the step-1 export-time state, and the
+   deferred assembly items are: the single-cell selects' traced-cell choice
+   (2,2) = global (3,5) is a skeleton constant, the momentum-ODE rate
+   (strairx/strairy enter only the ODE, not an instant pin), and the
+   whole-coupling-period trace from a cold start (stage 3).
 2. Submit the EarthSciDiscretizations B-grid rules as a PR
    (`grids/cice_bgrid`, commit `11fe246` in the worktree; 6 conformance
    fixtures at N_I = N_J = 4, NCAT = 2, goldens byte-identical across all 5

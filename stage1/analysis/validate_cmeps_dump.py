@@ -256,8 +256,23 @@ def main(path):
     cells = sorted(set(arr['n']))
     print(f'steps: {steps}')
     print(f'cells traced: {len(cells)} (n range {min(cells)}..{max(cells)})')
-    expected = len(cells) * len(steps)
-    print(f'rows = cells x steps: {len(rows)} == {expected}: {len(rows) == expected}')
+    # fixed mode (first-N cells, identical set every step): rows = cells x steps;
+    # dynamic mode (per-step stable/wind selection): the cell set can differ
+    # between steps, so compare rows against the per-step union instead.
+    cells_per_step = {s: sorted(set(arr['n'][arr['step'] == s])) for s in steps}
+    union_total = sum(len(cs) for cs in cells_per_step.values())
+    if all(cells_per_step[s] == cells for s in steps):
+        mode = 'fixed (identical cell set every step)'
+    else:
+        mode = 'dynamic (cell set varies per step)'
+    print(f'selection: {mode}')
+    if len(cells_per_step) <= 12:
+        for s in steps:
+            print(f'  step {s:2d}: {len(cells_per_step[s])} rows')
+    print(f'rows = sum over steps of that step\'s cells: {len(rows)} == {union_total}: '
+          f'{len(rows) == union_total}')
+    print(f'rows = cells x steps: {len(rows)} == {len(cells) * len(steps)}: '
+          f'{len(rows) == len(cells) * len(steps)}')
 
     # NaN / spval checks (spval = 1e30 in the mediator)
     for c in COMPARE:
@@ -290,16 +305,28 @@ def main(path):
         print(f'  {c:8s} {worst[c]:.3e}  {flag}')
     print(f'  iter     mismatch: {worst_iter}')
 
-    # coverage checks: stability and wind
+    # coverage checks: stability, wind, clamps, iteration spread
     hol = arr['hol']
     vmag = arr['vmag']
+    delt = arr['delt']
     n_unstable = int((hol < 0).sum())
     n_stable = int((hol > 0).sum())
     n_neutral = int((hol == 0).sum())
     n_lowwind = int((vmag < 3.0).sum())
     n_highwind = int((vmag > 15.0).sum())
+    n_minwind = int((vmag <= 0.5 + 1e-12).sum())
+    n_holclamp = int((np.abs(hol) >= 10.0 - 1e-12).sum())
+    n_deltpos = int((delt > 0).sum())
+    n_windcap = int((vmag >= 33.0 - 1e-9).sum())
+    n_u10ncap = int((arr['u10n'] >= 33.0 - 1e-9).sum())
     print(f'\ncoverage: unstable {n_unstable}, stable {n_stable}, neutral {n_neutral}, '
           f'low wind (<3 m/s) {n_lowwind}, high wind (>15 m/s) {n_highwind}')
+    print(f'  delt > 0 (stable regime): {n_deltpos} rows; '
+          f'minwind floor: {n_minwind}; |hol| = 10 clamp: {n_holclamp}')
+    print(f'  vmag: min {vmag.min():.4f}, max {vmag.max():.4f} m/s; '
+          f'rows with vmag >= 33 m/s (cdn cap): {n_windcap}; '
+          f'rows with u10n >= 33 m/s (cdn cap): {n_u10ncap}')
+    print(f'  hol: min {hol.min():.4f}, max {hol.max():.4f}')
     iters = {k: int((arr['iter'] == k).sum()) for k in sorted(set(arr['iter']))}
     print(f'iteration counts: {iters}')
 

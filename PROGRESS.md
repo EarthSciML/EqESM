@@ -1101,3 +1101,167 @@ below; **no combined `./esm test stage2/` has been run on main yet**.
   output is flat, readable math and was accepted. clm-soiltemp's output
   was not. The clm-soiltemp2 prompt now says outright that a Python program
   printing the JSON counts as generation.
+
+## Lane round 2026-11-03 (afternoon: first results from the 10-task batch)
+
+- **CLM surface albedo** ✅ (`clm-surfalbedo`, merged `fe220e7`, 3.4 h) —
+  `stage2/clm_surfalbedo.esm`: `GroundAlbedo` (SoilAlbedo wetness law,
+  albsat/albdry mxsoil_color=20 `function_tables`, snow/soil blend) and
+  `SurfaceRadiationBare` (bare-patch sabg/sabg_soil/sabg_snow/fsa/fsr);
+  46 assertions. W3 dump extension (fork clm `3d7038304` + NaN-write fix,
+  superproject `527ab5d`/`fe38241`): `clm_surfalbedo.csv` now carries
+  albsnd/albsni, h2osoi_vol_1, isoicol; shared columns bit-identical.
+  **Manager fix during review:** the worker wrote the absorbed-shortwave
+  law out inline three times and had two identical blend templates. These
+  are now `snow_soil_albedo`, `absorbed_shortwave`, `reflected_shortwave`
+  in `clm_templates.esm` (`8dfe5a2`). Verified by slurm job 12045618 on
+  `secondary`: 1217P/0F/0E, validate/units clean. bugs.md **#31**
+  (instrumentation: derived-type NaN in a formatted write aborts the run).
+  Not covered: two-stream vegetated branch (no vegetated patches in the
+  dump), blend interior 0<frac_sno<1, urban rows (they are UrbanAlbedo
+  output); see `stage2/README-clm-albedo.md`.
+- **cam-surface / cism-thermo** ✗ infra failures on ccc0234: llama-server
+  degraded to ~1 t/s and opencode aborted on inactivity after 1.5 h
+  (cam-surface); the next job on that node never got a healthy server in
+  1200 s (cism-thermo). Neither made commits. Resubmitted unchanged as
+  `cam-surface2` (12045591, 8 h) and `cism-thermo2` (12045594, 16 h).
+  ccc0234 was checked later and is healthy (mom6-kpp ~25 t/s, one server).
+- **Queue:** `cism-cap` yielded its node to another user's job at 14:08
+  and, after requeue, ranked below the fresh agent jobs (age reset). The
+  not-yet-started jobs were reniced 100 → 130 so it resumes first.
+- **Pending main-checkout edit:** `stage1/runs/clm_instrument.json` holds
+  the surfalbedo W3 changelog *and* `clm-soiltemp2`'s in-progress soiltemp
+  extension (clm `1c0d375dd`). Commit it when clm-soiltemp2 is reviewed.
+- **Tooling note:** opencode's built-in `grep` tool returns "ripgrep
+  execution failed" intermittently (7× each in clm-surfalbedo and
+  clm-soiltemp2; agents fall back to bash grep).
+- **Next:** review mom6-kpp, clmu-verify, clm-soiltemp2, factoring-cleanup
+  as they finish; then cism-cap (resumes) and the queued cmeps-wide,
+  cice-assembly-tests, cam-vdiff, clm-bareground, cam-surface2,
+  cism-thermo2.
+
+## Lane round 2026-11-04 (manager review of 11 workers)
+
+Five merged, six sent back. Reviews of the large `.esm` branches were done
+by independent read-only review agents and spot-checked by the manager.
+**Merge-order slip:** `cmeps-wide` was merged before `factoring-cleanup`,
+which reworks the cmeps frozen/exit state. The merge was clean, but the
+combined suite on main (`eaa2f23`) runs as slurm job **12095377**
+(`.work/suite-eaa2f23/suite.log`). Check it before the next merge.
+
+- **CMEPS wide dump** ✅ (`cmeps-wide`, merged `90c9fbc`, 1.8 h) — fork
+  `d81b5cc1`, dynamic stable/wind-ranked selection, 192 rows, neutrality
+  bit-identical. 3 new aoflux pins (tests block only), 1327P/0F/0E on
+  branch. Proven absent in this run's window, so documented but unpinned:
+  the stable branch (0 cells with delt > 0 on PET 0) and the cdn 33 m/s
+  cap (max wind 4.81 m/s).
+- **CICE assembly** ✅ (`cice-assembly-tests`, merged `776e030`, 3.4 h) —
+  all 31 shape-mismatched coupling edges now carry faq broadcast or
+  single-cell select transforms (full-rank `index` inside the faq, as the
+  native compiler requires). First `cice.esm` test: 17 assertions (9 exact
+  dump export pins, 8 labelled formulation pins); 1188P on branch.
+- **CLMU verify** ✅ (`clmu-verify`, merged `3123275`, README only) —
+  EarthSciModels branch `clmu-verify2` @ `cd56c1d` (local, unpushed) pins
+  daytime canyon SW at 2 sun angles and canyon LW at hwr=0.8. SW uses rel
+  1e-5 (CLM errcrit), the same precedent as LW. temps/hydro/atmosphere
+  leaves are not dump-covered; `offline_mode_forcing` is not a CLM6 path.
+- **Factoring cleanup** ✅ (`factoring-cleanup`, merged `ddedc8f`, 6.6 h)
+  — cmeps couplings 119→86 (4 frozen inputs plus an `exit` mount),
+  `stable_blend`, named constants; mom6 `latent` via diag sums and
+  `masked_pair_average`; cam `ice_weight` clamp and `pcf_transition_poly`;
+  cdeps `tkfrz`/`eps`/`eps1`. Review confirmed no test value or tolerance
+  changed; 18 duplicate `_o` assertions were removed. Follow-ups:
+  `tmelt` (cam) and `tkfrz` (cdeps) are the same constant;
+  `tterm_transition` still spells `t − tmelt` 3×.
+- **CISM cap** ✅ (`cism-cap`, merged `11c06be`, 0.5 h) — `GlcCapImport`
+  and `GlcCapExport`. Interval-average fluxes are storage ODEs
+  (D(S)/dt = f, export S/T), because the CLI cannot lower a time
+  `integral`. bugs.md **#32** (hflx sign-convention labels). Small fixes
+  are folded into `cism-thermo3`.
+- **Sent back** (all resubmitted 2026-11-04, based on the previous branch;
+  step 0 merges main):
+  - `cam-surface3` (6 h): ~50 of 68 assertions were tautological via an
+    `identity` template (`body: "x"`); repeated unnamed constants
+    (rair 4×, 290.5 K 10×); missing cpslec flat branch and topo law.
+  - `cam-vdiff2` (6 h): design accepted (zero prescribed fluxes are real
+    under CLUBB_SGS; the nonzero-K operator is pinned from a
+    compiled-Fortran driver). Remaining: four repeated surface-source faq
+    blocks, `tau_damp` law taken as input, hard-coded ramda/NLEV, README
+    placement.
+  - `cism-thermo3` (12 h): stencil and exit-state operator-identity pins
+    are sound. But the boundary nodes temp[1]/temp[12] are disconnected
+    from the temp_sfc/temp_bed laws, `cism_pmp_temp` re-implements EqIce
+    templates, and `melt_internal` is a faq sum. Plus the cism-cap fixes.
+  - `clm-soiltemp3` (24 h, third pass): the dump extension (fork clm
+    `1c0d375dd`) and thermal templates are good. But again no ∂T/∂t (an
+    algebraic CN residual with per-row ifelse patches), and SoilThermProp
+    is faq with clamped gathers. Its bugs entries become #33/#34.
+  - `clm-bareground2` (8 h): physics and 75 pins fine. Problems: `wc`
+    exponent changed 0.333→1/3 to please the unit checker, blocks
+    repeated with changed suffixes, and qsat/MO laws duplicated.
+  - `mom6-kpp2` (8 h): physics fine, but of 2776 new assertions only ~30
+    per coefs row are informative (the rest are zeros below kwup or copies
+    of overridden inputs). Also the Wright EOS chain is written 3×.
+- **Lessons → prompt changes:** the shared house rules now say every
+  assertion must be able to fail (no override copies, zero regions or
+  undeclared Python-derived values), and that verification scripts belong
+  in `scratch/` or `stage1/analysis/`, not `/tmp`. Three workers inflated
+  counts with trivial assertions (cam-surface2, mom6-kpp, cism-cap) and two
+  left verification only in `/tmp` or `/scratch.local`.
+- **Queue:** ctessum nodes ccc0232/0233/0235/0236 were draining (drng@)
+  at submission, so all six agent jobs are pending.
+- **Next:** check suite 12095377; review the six follow-ups as they finish.
+  Merge order: cam-surface3 before cam-vdiff2 (README-cam tables), and
+  clm-bareground2 before clm-soiltemp3 (clm_templates.esm).
+- **Tooling note (correction):** the opencode "ripgrep execution failed"
+  errors were not intermittent. `rg` 14.1.1 was installed to
+  `~/.local/bin` on 2026-11-03 11:19. Every session whose first grep call
+  came before that time failed on all grep calls for its whole life
+  (clm-surfalbedo, clm-soiltemp2); opencode appears to cache the failed
+  lookup. Every grep call made after the install succeeded. No action
+  needed.
+- **Batch submitted 2026-11-04 (afternoon), 10 new tasks** (16 agent jobs
+  queued in total; ctessum nodes are in rolling maintenance, so they run
+  as nodes return):
+  - stage 2: `clm-soilfluxes`, `cism-velo` (owns the CISM fork),
+    `cism-transport`, `cam-physics-update`
+  - stage 1: `cam-zm-instrument` (owns the CAM fork), `mom6-dumps-w2`
+    (owns the MOM6 fork)
+  - stage 1 + 2: `cmeps-ocnalb` (CMEPS fork), `cdeps-datm-jra` (CDEPS
+    fork; own C_JRA case), `cice-dedd` (CICE fork; also dumps the
+    qicen/qsnon/Tsfcn tracers for a later tracer-transport job)
+  - M9 subassembly with a feasibility gate: `m9-datm-clm`
+
+  New prompts add parallel-job rules:
+  - each job writes its own `stage2/README-<slice>.md`;
+  - shared `*_templates.esm` files are append-only;
+  - only the named job owns a lane's fork;
+  - existing dump CSVs must stay bit-identical.
+
+  Expect concatenation conflicts in the shared template files at merge.
+  Held back:
+  - ZM closure (needs cam-zm-instrument);
+  - CLM vegetated dump wave (collides with clm-soiltemp3 on the CLM fork);
+  - `${EQICE_ROOT}` import paths (collides with cism-thermo3);
+  - EarthSciModels/ESD PR wave (outward-facing; needs user go-ahead).
+- **ESD checkout:** another session reset the shared EarthSciDiscretizations
+  checkout to origin/main at 13:49. That dropped the local cice_bgrid
+  rules and broke the 3 CICE files on main. The rules are now upstream
+  (PR #50, `85963d7`), and the checkout was fast-forwarded. The suite on
+  main is rerunning as job 12095573 from a sibling worktree
+  `../EqESM-suite-a922c00`; a snapshot under `.work/` breaks the
+  `../../eqice` relative imports.
+- **EarthSciModels PR wave (user go-ahead 2026-11-04):**
+  - **CLMU:** opened **EarthSciML/EarthSciModels#44** from
+    `ctessum-claude:clmu-verify2` @ `dea8780` (rebased cleanly onto
+    origin/main `bf6a072`; urban_radiation.esm unchanged upstream).
+  - **MOSART #33:** the channel-depth fix `705518c` is already the PR head
+    (the "not pushed" note above is stale).
+  - **CICE #37:** its ESD dependency is resolved (ESD PR #50 merged).
+  - Jobs submitted to prepare branches, which the manager pushes after
+    review:
+    - `esm-pr-refresh` re-ports CICE (coupling transforms + assembly test)
+      onto #37 and syncs #33 with origin/main.
+    - `esm-pr-cdeps` creates the new `cdeps-datm` port.
+  - Upstream `test-esm` CI on EarthSciModels main is red independently of
+    us (user confirmed), so red PR CI is not a blocker.
