@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_aoflux",
-  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: vmag and wind0 (the minwind-clamped relative wind, gustiness absent here so vmag = wind0), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), cp = cpdair*(1 + cpvir*ssq); (c) the neutral coefficients of F90:236-244 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290. The esm has no loop construct, so the iteration is represented compositionally: the 16-equation update law is authored ONCE in the one-step model AoFluxStep of ./cmeps_aoflux_step.esm (a single pass of the do-while: hol (the Monin-Obukhov stability parameter, |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn_prev, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, ustar/tstar/qstar, the per-update convergence flag conv = |(ustar - ustar_prev)/ustar| <= 0.01, and 15 frozen-state fields pinning the first-converged state) and mounted five times by reference as top-level models step1..step5 (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state feeds the next (ustar/tstar/qstar/rdn), conv and the 15 frozen fields thread the convergence state, and the fixed pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot feed every step (ren stays the constant 0.0346 of F90:277, not coupled). The parent keeps the same external names as the pre-refactor unrolled model so the pinned tests are unchanged: conv_1..4 = step1..4.conv, iter = the first converged k, else 5 (nested ifelse on conv_1..4), and the 16 exit-state fields = the 15 step5.frozen_* fields (the first-converged update's values, carried unchanged through the remaining updates by the frozen-state threading; in the no-convergence case the fresh 5th-update values) plus ren; (e) the fluxes of F90:299-311 (tau/taux/tauy/sen/lat/lwup/evap); (f) the 2-m diagnostics of F90:316-333 (hol2/xsq2/xqq2/psix2/fac_t/fac_q/tref/qref/duu10n/u10res), which consume the exit state exactly as the Fortran leaves it after the do-while."
+  "description": "CMEPS atmosphere-ocean bulk flux component (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+MOM6 case, nuopc.runconfig of the instrumented run): add_gusts = .false., coldair_outbreak_mod = .false., aofluxes_use_shr_wv_sat = .true. (the shr_wv_sat Goff & Gratch / qsat path), minwind = 0.5 m/s (seq_flux_atmocn_minwind), flux_convergence = 0.01 and flux_max_iteration = 5 (the do-while of F90:242-290). Structure, in the order of the Fortran: (a) the 12 raw inputs zbot/ubot/vbot/thbot/qbot/rainc/rbot/tbot/pslv/us/vs/ts (the flux_atmOcn_large argument list, F90:50-67); (b) the derived inputs of F90:193-229: du = ubot - us and dv = vbot - vs (the relative-wind components), vmag (the minwind-clamped relative wind), wind0 = vmag (the resolved wind of F90:204; with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt(du^2 + dv^2)) identically to vmag, so the alias is exact), esat_raw (Goff & Gratch at ts), esat = min(esat_raw, pslv), qsat from the RAW es (shr_wv_sat_qsat_liquid calls svp_to_qsat with the unminned es, shr_wv_sat_mod.F90:439-441), ssq = 0.98*qsat, delt, delq, alz = ln(zbot/10), al2 = ln(zref/ztref), cp = cpdair*(1 + cpvir*ssq), with the CESM constants cpdair = 1004.64 J/kg/K and cpvir = 1810/1004.64 - 1 declared once as named parameters of this component (shr_const_mod.F90:46, 48); (c) the neutral coefficients of F90:236-244 (stable0 = 0.5 + sign(0.5, delt) as a 0/1 selection, rdn0 = sqrt(cdn(vmag)), rhn0 = (1-stable0)*0.0327 + stable0*0.018, ren0 = 0.0346, ustar0/tstar0/qstar0); (d) the stability iteration of F90:242-290. The esm has no loop construct, so the iteration is represented compositionally: the 16-equation update law is authored ONCE in the one-step model AoFluxStep of ./cmeps_aoflux_step.esm (a single pass of the do-while: hol_raw (the unclamped Monin-Obukhov parameter of F90:252-253), hol = stability_parameter_clamp(hol_raw) (the |hol| <= 10 sign-preserving clamp of F90:254), the stability selection, xsq/xqq, the psi functions, the clamped wind-shift rdw of F90:272, u10n = vmag*rdw/rdn_prev, the updated neutral coefficients rdn = sqrt(cdn(u10n)) and rhn, the height-shifted rd/rh/re of F90:282-284, ustar/tstar/qstar, the per-update convergence flag conv = |(ustar - ustar_prev)/ustar| <= 0.01, and 4 frozen-state fields (ustar/tstar/qstar/rdn) pinning the first-converged state) and mounted six times by reference as top-level models step1..step5 and exit (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: ustar0/tstar0/qstar0/rdn0 seed step1, each step's state feeds the next (ustar/tstar/qstar/rdn), conv and the 4 frozen fields thread the convergence state, and the fixed pointwise fields vmag/delt/delq/alz/zbot/thbot/qbot feed every step (ren stays the constant 0.0346 of F90:277, not coupled; the CESM constants karman = 0.4, cpdair, cpvir, latvap = 2.501e6 J/kg and stebol = 5.67e-8 W/m^2/K^4 are declared once as named parameters of this component, shr_const_mod.F90:32, 46, 48, 52, 22). The 6th mount exit recomputes the exit-state fields from step5's frozen state: the exit-state fields of the first-converged update k are deterministic functions of the pre-converged state (the update k-1 outputs ustar/tstar/qstar/rdn) plus the fixed fields (Fortran do-while trace), so only these 4 states need to be threaded — exit is fed by step5.frozen_ustar_prev/frozen_tstar_prev/frozen_qstar_prev/frozen_rdn_prev (conv_prev stays at its 0 default, so the frozen selection inside exit is the identity) and the 7 fixed fields, and the parent aliases the 15 exit-state fields from its fresh unknowns (hol, stable, xsq, xqq, psimh, psixh, rd, u10n, rdn, rhn, rh, re, ustar, tstar, qstar), which coincide bit-identically with the Fortran exit state. The parent keeps the same external names as the pre-refactor unrolled model so the pinned tests are unchanged: conv_1..4 = step1..4.conv, iter = the first converged k, else 5 (nested ifelse on conv_1..4), and the 16 exit-state fields = the 15 exit.* fields (the first-converged update's values, recomputed by the exit mount from the pinned 4-state; in the no-convergence case the fresh 5th-update values) plus ren; (e) the fluxes of F90:299-311 (tau/taux/tauy/sen/lat/lwup/evap); (f) the 2-m diagnostics of F90:316-333 (hol2/xsq2/xqq2/psix2/fac_t/fac_q/tref/qref/duu10n/u10res), which consume the exit state exactly as the Fortran leaves it after the do-while."
  },
  "models": {
   "AoFlux": {
@@ -82,15 +82,55 @@
      "default": 275.0527096440321,
      "description": "ocean surface temperature (F90:67), [K]"
     },
+    "karman": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.4,
+     "description": "von Karman constant = 0.4 (shr_const_mod.F90:32), the exchange-coefficient denominator of fac_t/fac_q (F90:321, 324); the AoFluxStep mounts carry the same constant as an uncoupled parameter (the ren precedent), [-]"
+    },
+    "cpdair": {
+     "type": "parameter",
+     "units": "J/kg/K",
+     "default": 1004.64,
+     "description": "specific heat of dry air = 1004.64 J/kg/K (shr_const_mod.F90:46), the cp = cpdair*(1 + cpvir*ssq) of F90:226, [J/kg/K]"
+    },
+    "cpvir": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.8016403885969103,
+     "description": "molecular-weight ratio cpvir = 1810/1004.64 - 1 (shr_const_mod.F90:48), the cp correction of F90:226, [-]"
+    },
+    "latvap": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 2501000.0,
+     "description": "latent heat of vaporization = 2.501e6 J/kg (shr_const_mod.F90:52, loc_latvap of F90:305), the lat and evap scale of F90:305/308, [J/kg]"
+    },
+    "stebol": {
+     "type": "parameter",
+     "units": "W/m^2/K^4",
+     "default": 5.67e-08,
+     "description": "Stefan-Boltzmann constant = 5.67e-8 W/m^2/K^4 (shr_const_mod.F90:22), the lwup = -stebol*ts^4 of F90:306, [W/m2/K4]"
+    },
+    "du": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "zonal relative wind du = ubot - us (F90:193), [m/s]"
+    },
+    "dv": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "meridional relative wind dv = vbot - vs (F90:193), [m/s]"
+    },
     "vmag": {
      "type": "unknown",
      "units": "m/s",
-     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt((ubot-us)^2 + (vbot-vs)^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added; coupled to every AoFluxStep mount, [m/s]"
+     "description": "wind magnitude used in the iteration (F90:193-196): the relative wind sqrt(du^2 + dv^2) floored at minwind = 0.5 m/s; with add_gusts = .false. no gustiness is added; coupled to every AoFluxStep mount, [m/s]"
     },
     "wind0": {
      "type": "unknown",
      "units": "m/s",
-     "description": "resolved wind without the gustiness addition (F90:204), minwind-clamped like vmag; equals vmag in the traced configuration, [m/s]"
+     "description": "resolved wind without the gustiness addition (F90:204): with add_gusts = .false. the Fortran computes wind0 = max(minwind, sqrt(du^2 + dv^2)) identically to vmag, so the alias wind0 = vmag is exact, [m/s]"
     },
     "ugust": {
      "type": "unknown",
@@ -131,6 +171,11 @@
      "type": "unknown",
      "units": "1",
      "description": "ln(zbot/zref) with zref = 10 m (F90:225); coupled to every AoFluxStep mount, [-]"
+    },
+    "al2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "ln(zref/ztref) with zref = 10 m, ztref = 2 m (F90:321), [-]"
     },
     "cp": {
      "type": "unknown",
@@ -285,12 +330,12 @@
     "taux": {
      "type": "unknown",
      "units": "N/m^2",
-     "description": "zonal wind stress tau*(ubot - us)/vmag (F90:301), [N/m2]"
+     "description": "zonal wind stress tau*du/vmag (F90:301), [N/m2]"
     },
     "tauy": {
      "type": "unknown",
      "units": "N/m^2",
-     "description": "meridional wind stress tau*(vbot - vs)/vmag (F90:302), [N/m2]"
+     "description": "meridional wind stress tau*dv/vmag (F90:302), [N/m2]"
     },
     "sen": {
      "type": "unknown",
@@ -365,6 +410,26 @@
    },
    "equations": [
     {
+     "lhs": "du",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "ubot",
+       "us"
+      ]
+     }
+    },
+    {
+     "lhs": "dv",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "vbot",
+       "vs"
+      ]
+     }
+    },
+    {
      "lhs": "vmag",
      "rhs": {
       "op": "max",
@@ -378,10 +443,7 @@
            {
             "op": "^",
             "args": [
-             {
-              "op": "-",
-              "args": ["ubot", "us"]
-             },
+             "du",
              {
               "op": "const",
               "args": [],
@@ -393,10 +455,7 @@
            {
             "op": "^",
             "args": [
-             {
-              "op": "-",
-              "args": ["vbot", "vs"]
-             },
+             "dv",
              {
               "op": "const",
               "args": [],
@@ -420,57 +479,7 @@
     },
     {
      "lhs": "wind0",
-     "rhs": {
-      "op": "max",
-      "args": [
-       {
-        "op": "sqrt",
-        "args": [
-         {
-          "op": "+",
-          "args": [
-           {
-            "op": "^",
-            "args": [
-             {
-              "op": "-",
-              "args": ["ubot", "us"]
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "1"
-             }
-            ]
-           },
-           {
-            "op": "^",
-            "args": [
-             {
-              "op": "-",
-              "args": ["vbot", "vs"]
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "1"
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.5,
-        "units": "m/s"
-       }
-      ]
-     }
+     "rhs": "vmag"
     },
     {
      "lhs": "ugust",
@@ -565,12 +574,7 @@
      "rhs": {
       "op": "*",
       "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 1004.64,
-        "units": "J/kg/K"
-       },
+       "cpdair",
        {
         "op": "+",
         "args": [
@@ -582,15 +586,7 @@
          },
          {
           "op": "*",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 0.8016403885969103,
-            "units": "1"
-           },
-           "ssq"
-          ]
+          "args": ["cpvir", "ssq"]
          }
         ]
        }
@@ -805,43 +801,43 @@
     },
     {
      "lhs": "hol",
-     "rhs": "step5.frozen_hol"
+     "rhs": "exit.hol"
     },
     {
      "lhs": "stable",
-     "rhs": "step5.frozen_stable"
+     "rhs": "exit.stable"
     },
     {
      "lhs": "xsq",
-     "rhs": "step5.frozen_xsq"
+     "rhs": "exit.xsq"
     },
     {
      "lhs": "xqq",
-     "rhs": "step5.frozen_xqq"
+     "rhs": "exit.xqq"
     },
     {
      "lhs": "psimh",
-     "rhs": "step5.frozen_psimh"
+     "rhs": "exit.psimh"
     },
     {
      "lhs": "psixh",
-     "rhs": "step5.frozen_psixh"
+     "rhs": "exit.psixh"
     },
     {
      "lhs": "rd",
-     "rhs": "step5.frozen_rd"
+     "rhs": "exit.rd"
     },
     {
      "lhs": "u10n",
-     "rhs": "step5.frozen_u10n"
+     "rhs": "exit.u10n"
     },
     {
      "lhs": "rdn",
-     "rhs": "step5.frozen_rdn"
+     "rhs": "exit.rdn"
     },
     {
      "lhs": "rhn",
-     "rhs": "step5.frozen_rhn"
+     "rhs": "exit.rhn"
     },
     {
      "lhs": "ren",
@@ -854,23 +850,23 @@
     },
     {
      "lhs": "rh",
-     "rhs": "step5.frozen_rh"
+     "rhs": "exit.rh"
     },
     {
      "lhs": "re",
-     "rhs": "step5.frozen_re"
+     "rhs": "exit.re"
     },
     {
      "lhs": "ustar",
-     "rhs": "step5.frozen_ustar"
+     "rhs": "exit.ustar"
     },
     {
      "lhs": "tstar",
-     "rhs": "step5.frozen_tstar"
+     "rhs": "exit.tstar"
     },
     {
      "lhs": "qstar",
-     "rhs": "step5.frozen_qstar"
+     "rhs": "exit.qstar"
     },
     {
      "lhs": "tau",
@@ -902,10 +898,7 @@
        {
         "op": "/",
         "args": [
-         {
-          "op": "-",
-          "args": ["ubot", "us"]
-         },
+         "du",
          "vmag"
         ]
        }
@@ -921,10 +914,7 @@
        {
         "op": "/",
         "args": [
-         {
-          "op": "-",
-          "args": ["vbot", "vs"]
-         },
+         "dv",
          "vmag"
         ]
        }
@@ -950,12 +940,7 @@
      "rhs": {
       "op": "*",
       "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 2.501e6,
-        "units": "J/kg"
-       },
+       "latvap",
        "tau",
        {
         "op": "/",
@@ -970,10 +955,8 @@
       "op": "*",
       "args": [
        {
-        "op": "const",
-        "args": [],
-        "value": -5.67e-8,
-        "units": "W/m^2/K^4"
+        "op": "-",
+        "args": ["stebol"]
        },
        {
         "op": "^",
@@ -994,15 +977,7 @@
      "lhs": "evap",
      "rhs": {
       "op": "/",
-      "args": [
-       "lat",
-       {
-        "op": "const",
-        "args": [],
-        "value": 2.501e6,
-        "units": "J/kg"
-       }
-      ]
+      "args": ["lat", "latvap"]
      }
     },
     {
@@ -1094,6 +1069,31 @@
      }
     },
     {
+     "lhs": "al2",
+     "rhs": {
+      "op": "log",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 10.0,
+          "units": "m"
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 2.0,
+          "units": "m"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
      "lhs": "fac_t",
      "rhs": {
       "op": "*",
@@ -1102,43 +1102,19 @@
         "op": "/",
         "args": [
          "rh",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.4,
-          "units": "1"
-         }
+         "karman"
         ]
        },
        {
         "op": "+",
         "args": [
          "alz",
-         {
-          "op": "log",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 10.0,
-              "units": "m"
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "m"
-             }
-            ]
-           }
-          ]
-         },
+         "al2",
          {
           "op": "-",
-          "args": ["psixh"]
+          "args": [
+           "psixh"
+          ]
          },
          "psix2"
         ]
@@ -1190,43 +1166,19 @@
         "op": "/",
         "args": [
          "re",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.4,
-          "units": "1"
-         }
+         "karman"
         ]
        },
        {
         "op": "+",
         "args": [
          "alz",
-         {
-          "op": "log",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 10.0,
-              "units": "m"
-             },
-             {
-              "op": "const",
-              "args": [],
-              "value": 2.0,
-              "units": "m"
-             }
-            ]
-           }
-          ]
-         },
+         "al2",
          {
           "op": "-",
-          "args": ["psixh"]
+          "args": [
+           "psixh"
+          ]
          },
          "psix2"
         ]
@@ -3004,14 +2956,880 @@
        "expected": 2.6223671059442197
       }
      ]
+    },
+
+    {
+     "id": "wide_maxwind_cell",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 4, gid 42667, PET-0 local ogrid index n = 7117, lat  -6.90324828501366454E+001, lon  -2.82666666666666742E+002): the strongest-wind row of the wide dump (step 4, gid 42667, n 7117, ~69.0 S): the wind-ranked selection's domain maximum vmag 4.81 m/s, the strongest wind this run's PET-0 slice offers (the cdn 33 m/s cap of F90:153-154 is not reached anywhere in the run), converged at iteration 2 with hol -1.16. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 10.0,
+      "ubot": -4.84313936925882,
+      "vbot": -0.20035078953980595,
+      "thbot": 268.9364041393618,
+      "qbot": 0.0023738008991529983,
+      "rainc": 0.0,
+      "rbot": 1.2914738837215007,
+      "tbot": 268.9364041393618,
+      "pslv": 99831.892819101,
+      "us": -0.03442336054062248,
+      "vs": 0.0029097750458843483,
+      "ts": 274.7371154262015
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 4.8130099220361435
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 4.8130099220361435
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 684.4343380552905
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004275228800511764
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004189724224501529
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -5.800711286839714
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.0018159233253485308
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1008.0142363014446
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.03272139308764523
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -1.162480023670138
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 4.427152626544765
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 2.10407999528173
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 1.194147659195485
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 1.9965348753660666
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.035983084902379434
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 5.330001966849747
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.03249263531328211
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.039078218958748745
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.041822810534201726
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.17318694466062118
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.22668146578360757
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -7.594701718068916e-05
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 2.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.03873610321555057
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.03870154490958884
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.00163588322837105
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -51.107361075828805
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -42.483979649710356
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -323.0370944126899
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -1.6986797141027733e-05
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -0.2324960047340276
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 2.1725413864284477
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 1.4739543366157744
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 0.9227715706577744
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.05233302402837743
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.05600854406724826
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 269.21997290251767
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.0024755081207435254
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 28.408920966622173
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 5.330001966849747
+      }
+     ]
+    },
+    {
+     "id": "wide_iter3_coldest_cell",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 13, gid 42126, PET-0 local ogrid index n = 7026, lat  -6.92697499477610563E+001, lon  -2.83333333333333258E+002): wide dump row (step 13, gid 42126, n 7026, ~69.3 S): convergence at iteration 3 with delt -4.54 K, vmag 1.75 m/s, hol -4.21, at one of the domain's coldest cells (its delt reaches -5.86 K over the 24 steps). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 9.999999999999998,
+      "ubot": -1.2043176826249995,
+      "vbot": -1.2938589768517899,
+      "thbot": 269.84927374971903,
+      "qbot": 0.002429231439258395,
+      "rainc": 0.0,
+      "rbot": 1.2873330206001175,
+      "tbot": 269.84927374971903,
+      "pslv": 99858.70000065018,
+      "us": 0.00016183031376212128,
+      "vs": -0.031039915622662624,
+      "ts": 274.39102565483586
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 1.7451311923442347
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 1.7451311923442347
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 667.629807651811
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004168873202774833
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004085495738719336
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -4.541751905116826
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.0016562642994609415
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": -2.2204460492503136e-16
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1007.9302948481348
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.04269062698858705
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -4.211488549909194
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 8.269450816018383
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 2.8756652823335305
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 1.9554547090840326
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 3.0671539082298223
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.04886989955271463
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 2.162071109512883
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.03944597305173633
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.04364305136784405
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.04709461691543906
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.08528438607617186
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.19821591169501718
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -7.800113269383108e-05
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 3.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.009363322117158068
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.0064625110780431585
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0067755259305703275
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -21.93458640578663
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -21.417808828315955
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -321.41243211887706
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -8.56369805210554e-06
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -0.842297709981839
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 3.804834209227706
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 1.9505984233633806
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 1.7529507149285481
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.032212360031712337
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.034759914994244204
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 269.9755742972614
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.0024868030455156586
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 4.674551482590268
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 2.162071109512883
+      }
+     ]
+    },
+    {
+     "id": "wide_iter4_holclamp_adj",
+     "description": "Instantaneous pin of the full flux_atmOcn_large chain (flux_atmocn_Large.F90, Large & Yeager scheme as configured in the C_JRA_t62_inst run: add_gusts = .false., aofluxes_use_shr_wv_sat = .true., minwind = 0.5 m/s, flux_convergence = 0.01, flux_max_iteration = 5) from stage1/dumps/cmeps/cmeps_aoflux_wide.csv row (step 19, gid 41583, PET-0 local ogrid index n = 6933, lat  -6.95044490632870833E+001, lon  -2.85333333333333371E+002): wide dump row (step 19, gid 41583, n 6933, ~69.5 S): convergence at iteration 4 with hol -9.901, a tenth off the |hol| <= 10 clamp (F90:254), at the wind-ranked selection's weakest-wind step (vmag 0.64 m/s; the same cell as iter2_typical_unstable at step 1 of the fixed dump). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped column is asserted at full dump precision, and the convergence flags conv_k = |(u_k - u_{k-1})/u_k| <= 0.01 (k = 1..4) and the iteration count iter = first converged k, else 5, are asserted from the replay (which reproduces the dump rows to <= 4.4e-15 relative; see stage1/analysis/validate_cmeps_dump.py).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "zbot": 10.0,
+      "ubot": -0.48004821510498685,
+      "vbot": -0.4387967800968047,
+      "thbot": 270.95215383885187,
+      "qbot": 0.001848003704906176,
+      "rainc": 0.0,
+      "rbot": 1.2816240627112865,
+      "tbot": 270.95215383885187,
+      "pslv": 99789.63753681745,
+      "us": -2.451200525106499e-05,
+      "vs": -0.015256348211631913,
+      "ts": 274.60333148203955
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "vmag",
+       "time": 0.0,
+       "expected": 0.640163458016046
+      },
+      {
+       "variable": "wind0",
+       "time": 0.0,
+       "expected": 0.640163458016046
+      },
+      {
+       "variable": "ugust",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "esat",
+       "time": 0.0,
+       "expected": 677.8945039514921
+      },
+      {
+       "variable": "qsat",
+       "time": 0.0,
+       "expected": 0.004236071051223503
+      },
+      {
+       "variable": "ssq",
+       "time": 0.0,
+       "expected": 0.004151349630199033
+      },
+      {
+       "variable": "delt",
+       "time": 0.0,
+       "expected": -3.6511776431876797
+      },
+      {
+       "variable": "delq",
+       "time": 0.0,
+       "expected": -0.002303345925292857
+      },
+      {
+       "variable": "alz",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "cp",
+       "time": 0.0,
+       "expected": 1007.9833309381771
+      },
+      {
+       "variable": "stable0",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "rdn0",
+       "time": 0.0,
+       "expected": 0.06639714814096637
+      },
+      {
+       "variable": "rhn0",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren0",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "hol",
+       "time": 0.0,
+       "expected": -9.901475217582552
+      },
+      {
+       "variable": "stable",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "xsq",
+       "time": 0.0,
+       "expected": 12.626306010917082
+      },
+      {
+       "variable": "xqq",
+       "time": 0.0,
+       "expected": 3.553351377350273
+      },
+      {
+       "variable": "psimh",
+       "time": 0.0,
+       "expected": 2.542353285734573
+      },
+      {
+       "variable": "psixh",
+       "time": 0.0,
+       "expected": 3.837710018815846
+      },
+      {
+       "variable": "rd",
+       "time": 0.0,
+       "expected": 0.08343129260996399
+      },
+      {
+       "variable": "u10n",
+       "time": 0.0,
+       "expected": 0.9798214088524587
+      },
+      {
+       "variable": "rdn",
+       "time": 0.0,
+       "expected": 0.05452029499269593
+      },
+      {
+       "variable": "rhn",
+       "time": 0.0,
+       "expected": 0.0327
+      },
+      {
+       "variable": "ren",
+       "time": 0.0,
+       "expected": 0.0346
+      },
+      {
+       "variable": "rh",
+       "time": 0.0,
+       "expected": 0.047649078545390924
+      },
+      {
+       "variable": "re",
+       "time": 0.0,
+       "expected": 0.05179345438710655
+      },
+      {
+       "variable": "ustar",
+       "time": 0.0,
+       "expected": 0.05340966478394313
+      },
+      {
+       "variable": "tstar",
+       "time": 0.0,
+       "expected": -0.17397525030342506
+      },
+      {
+       "variable": "qstar",
+       "time": 0.0,
+       "expected": -0.00011929824211938333
+      },
+      {
+       "variable": "conv_1",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_2",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_3",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "conv_4",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "iter",
+       "time": 0.0,
+       "expected": 4.0
+      },
+      {
+       "variable": "tau",
+       "time": 0.0,
+       "expected": 0.003655950922958945
+      },
+      {
+       "variable": "taux",
+       "time": 0.0,
+       "expected": -0.002741398432563549
+      },
+      {
+       "variable": "tauy",
+       "time": 0.0,
+       "expected": -0.0024188244634579174
+      },
+      {
+       "variable": "sen",
+       "time": 0.0,
+       "expected": -12.003871154306012
+      },
+      {
+       "variable": "lat",
+       "time": 0.0,
+       "expected": -20.42340930036445
+      },
+      {
+       "variable": "lwup",
+       "time": 0.0,
+       "expected": -322.40833888822533
+      },
+      {
+       "variable": "evap",
+       "time": 0.0,
+       "expected": -8.166097281233287e-06
+      },
+      {
+       "variable": "hol2",
+       "time": 0.0,
+       "expected": -1.9802950435165105
+      },
+      {
+       "variable": "xsq2",
+       "time": 0.0,
+       "expected": 5.717055246913761
+      },
+      {
+       "variable": "xqq2",
+       "time": 0.0,
+       "expected": 2.3910364378055307
+      },
+      {
+       "variable": "psix2",
+       "time": 0.0,
+       "expected": 2.423005341259468
+      },
+      {
+       "variable": "fac_t",
+       "time": 0.0,
+       "expected": 0.023197148010216637
+      },
+      {
+       "variable": "fac_q",
+       "time": 0.0,
+       "expected": 0.02521476729573256
+      },
+      {
+       "variable": "tref",
+       "time": 0.0,
+       "expected": 271.0168507470525
+      },
+      {
+       "variable": "qref",
+       "time": 0.0,
+       "expected": 0.001906082036414009
+      },
+      {
+       "variable": "duu10n",
+       "time": 0.0,
+       "expected": 0.960049993245617
+      },
+      {
+       "variable": "u10res",
+       "time": 0.0,
+       "expected": 0.9798214088524587
+      }
+     ]
     }
-   ]
+    ]
   },
   "step1": { "ref": "./cmeps_aoflux_step.esm" },
   "step2": { "ref": "./cmeps_aoflux_step.esm" },
   "step3": { "ref": "./cmeps_aoflux_step.esm" },
   "step4": { "ref": "./cmeps_aoflux_step.esm" },
-  "step5": { "ref": "./cmeps_aoflux_step.esm" }
+  "step5": { "ref": "./cmeps_aoflux_step.esm" },
+  "exit": { "ref": "./cmeps_aoflux_step.esm" }
  },
  "coupling": [
   {
@@ -3280,96 +4098,6 @@
   },
   {
    "type": "variable_map",
-   "from": "step1.frozen_hol",
-   "to": "step2.frozen_hol_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_stable",
-   "to": "step2.frozen_stable_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_xsq",
-   "to": "step2.frozen_xsq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_xqq",
-   "to": "step2.frozen_xqq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_psimh",
-   "to": "step2.frozen_psimh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_psixh",
-   "to": "step2.frozen_psixh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_rd",
-   "to": "step2.frozen_rd_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_u10n",
-   "to": "step2.frozen_u10n_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_rdn",
-   "to": "step2.frozen_rdn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_rhn",
-   "to": "step2.frozen_rhn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_rh",
-   "to": "step2.frozen_rh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_re",
-   "to": "step2.frozen_re_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_ustar",
-   "to": "step2.frozen_ustar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_tstar",
-   "to": "step2.frozen_tstar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.frozen_qstar",
-   "to": "step2.frozen_qstar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
    "from": "step2.ustar",
    "to": "step3.ustar_prev",
    "transform": "param_to_var"
@@ -3396,96 +4124,6 @@
    "type": "variable_map",
    "from": "step2.conv",
    "to": "step3.conv_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_hol",
-   "to": "step3.frozen_hol_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_stable",
-   "to": "step3.frozen_stable_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_xsq",
-   "to": "step3.frozen_xsq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_xqq",
-   "to": "step3.frozen_xqq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_psimh",
-   "to": "step3.frozen_psimh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_psixh",
-   "to": "step3.frozen_psixh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_rd",
-   "to": "step3.frozen_rd_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_u10n",
-   "to": "step3.frozen_u10n_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_rdn",
-   "to": "step3.frozen_rdn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_rhn",
-   "to": "step3.frozen_rhn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_rh",
-   "to": "step3.frozen_rh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_re",
-   "to": "step3.frozen_re_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_ustar",
-   "to": "step3.frozen_ustar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_tstar",
-   "to": "step3.frozen_tstar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.frozen_qstar",
-   "to": "step3.frozen_qstar_prev",
    "transform": "param_to_var"
   },
   {
@@ -3520,96 +4158,6 @@
   },
   {
    "type": "variable_map",
-   "from": "step3.frozen_hol",
-   "to": "step4.frozen_hol_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_stable",
-   "to": "step4.frozen_stable_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_xsq",
-   "to": "step4.frozen_xsq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_xqq",
-   "to": "step4.frozen_xqq_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_psimh",
-   "to": "step4.frozen_psimh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_psixh",
-   "to": "step4.frozen_psixh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_rd",
-   "to": "step4.frozen_rd_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_u10n",
-   "to": "step4.frozen_u10n_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_rdn",
-   "to": "step4.frozen_rdn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_rhn",
-   "to": "step4.frozen_rhn_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_rh",
-   "to": "step4.frozen_rh_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_re",
-   "to": "step4.frozen_re_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_ustar",
-   "to": "step4.frozen_ustar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_tstar",
-   "to": "step4.frozen_tstar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step3.frozen_qstar",
-   "to": "step4.frozen_qstar_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
    "from": "step4.ustar",
    "to": "step5.ustar_prev",
    "transform": "param_to_var"
@@ -3640,92 +4188,164 @@
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_hol",
-   "to": "step5.frozen_hol_prev",
+   "from": "step1.frozen_ustar_prev",
+   "to": "step2.frozen_ustar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_stable",
-   "to": "step5.frozen_stable_prev",
+   "from": "step1.frozen_tstar_prev",
+   "to": "step2.frozen_tstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_xsq",
-   "to": "step5.frozen_xsq_prev",
+   "from": "step1.frozen_qstar_prev",
+   "to": "step2.frozen_qstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_xqq",
-   "to": "step5.frozen_xqq_prev",
+   "from": "step1.frozen_rdn_prev",
+   "to": "step2.frozen_rdn_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_psimh",
-   "to": "step5.frozen_psimh_prev",
+   "from": "step2.frozen_ustar_prev",
+   "to": "step3.frozen_ustar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_psixh",
-   "to": "step5.frozen_psixh_prev",
+   "from": "step2.frozen_tstar_prev",
+   "to": "step3.frozen_tstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_rd",
-   "to": "step5.frozen_rd_prev",
+   "from": "step2.frozen_qstar_prev",
+   "to": "step3.frozen_qstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_u10n",
-   "to": "step5.frozen_u10n_prev",
+   "from": "step2.frozen_rdn_prev",
+   "to": "step3.frozen_rdn_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_rdn",
-   "to": "step5.frozen_rdn_prev",
+   "from": "step3.frozen_ustar_prev",
+   "to": "step4.frozen_ustar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_rhn",
-   "to": "step5.frozen_rhn_prev",
+   "from": "step3.frozen_tstar_prev",
+   "to": "step4.frozen_tstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_rh",
-   "to": "step5.frozen_rh_prev",
+   "from": "step3.frozen_qstar_prev",
+   "to": "step4.frozen_qstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_re",
-   "to": "step5.frozen_re_prev",
+   "from": "step3.frozen_rdn_prev",
+   "to": "step4.frozen_rdn_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_ustar",
-   "to": "step5.frozen_ustar_prev",
+   "from": "step4.frozen_ustar_prev",
+   "to": "step5.frozen_ustar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_tstar",
-   "to": "step5.frozen_tstar_prev",
+   "from": "step4.frozen_tstar_prev",
+   "to": "step5.frozen_tstar_prev_in",
    "transform": "param_to_var"
   },
   {
    "type": "variable_map",
-   "from": "step4.frozen_qstar",
-   "to": "step5.frozen_qstar_prev",
+   "from": "step4.frozen_qstar_prev",
+   "to": "step5.frozen_qstar_prev_in",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step4.frozen_rdn_prev",
+   "to": "step5.frozen_rdn_prev_in",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.vmag",
+   "to": "exit.vmag",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delt",
+   "to": "exit.delt",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.delq",
+   "to": "exit.delq",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.alz",
+   "to": "exit.alz",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.zbot",
+   "to": "exit.zbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.thbot",
+   "to": "exit.thbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "AoFlux.qbot",
+   "to": "exit.qbot",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step5.frozen_ustar_prev",
+   "to": "exit.ustar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step5.frozen_tstar_prev",
+   "to": "exit.tstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step5.frozen_qstar_prev",
+   "to": "exit.qstar_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step5.frozen_rdn_prev",
+   "to": "exit.rdn_prev",
    "transform": "param_to_var"
   }
  ]

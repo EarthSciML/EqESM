@@ -2,54 +2,31 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cam_templates",
-  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the estbl table itself lives in cam_wv_saturation.esm as a function_tables entry, generated from svp_trans at T = 127.16..377.16 K); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
+  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the estbl table itself lives in cam_wv_saturation.esm as a function_tables entry, generated from svp_trans at T = 127.16..377.16 K); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, factored into the shared pcf_transition_poly(tc) template, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The repeated temperature constants are named as zero-parameter constant-fragment templates applied with empty bindings: tmelt = TKFRZ = 273.15 K, tboil = TBOIL = 373.16 K, ttrice = TTRICE = 20 K (TKTRIP = 273.16 K stays inline in goff_gratch_ice). The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
  },
  "expression_templates": {
   "ice_weight": {
-   "description": "Mixed-phase weight of calc_hltalt (wv_saturation.F90:555-562) and svp_trans (wv_sat_methods.F90:494-498): weight = -(t - tmelt)/ttrice when tmelt - ttrice <= t < tmelt (so weight = 1 exactly at t = tmelt - ttrice and 0 at t = tmelt), 1 below (pure ice), 0 at and above tmelt (pure water). The Fortran writes -(t - tmelt)/ttrice and (tmelt - t)/ttrice in the two call sites; IEEE subtraction is exactly antisymmetric so both are bit-identical. tmelt = 273.15 K (TKFRZ), ttrice = 20 K.",
+   "description": "Mixed-phase weight of calc_hltalt (wv_saturation.F90:555-562) and svp_trans (wv_sat_methods.F90:494-498): weight = min(1, max(0, (tmelt - t)/ttrice)), the clamp form of the Fortran's three-branch if (weight = 1 below tmelt - ttrice, 0 at and above tmelt, linear between). The clamp is bit-identical to the branches: (tmelt - t)/ttrice equals 1 exactly at t = tmelt - ttrice and 0 at t = tmelt, is positive below tmelt and negative above, so the outer min/max select the constant branches exactly where the Fortran does. tmelt and ttrice are the tmelt/ttrice constant-fragment templates (TKFRZ = 273.15 K, TTRICE = 20 K).",
    "params": [
     "t"
    ],
    "body": {
-    "op": "ifelse",
+    "op": "min",
     "args": [
      {
-      "op": "<",
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     },
+     {
+      "op": "max",
       "args": [
-       "t",
        {
         "op": "const",
         "args": [],
-        "value": 273.15,
-        "units": "K"
-       }
-      ]
-     },
-     {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": ">=",
-        "args": [
-         {
-          "op": "-",
-          "args": [
-           "t",
-           {
-            "op": "const",
-            "args": [],
-            "value": 273.15,
-            "units": "K"
-           }
-          ]
-         },
-         {
-          "op": "const",
-          "args": [],
-          "value": -20.0,
-          "units": "K"
-         }
-        ]
+        "value": 0.0,
+        "units": "1"
        },
        {
         "op": "/",
@@ -58,40 +35,23 @@
           "op": "-",
           "args": [
            {
-            "op": "-",
-            "args": [
-             "t",
-             {
-              "op": "const",
-              "args": [],
-              "value": 273.15,
-              "units": "K"
-             }
-            ]
-           }
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "tmelt",
+            "bindings": {}
+           },
+           "t"
           ]
          },
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 20.0,
-          "units": "K"
+          "name": "ttrice",
+          "bindings": {}
          }
         ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
        }
       ]
-     },
-     {
-      "op": "const",
-      "args": [],
-      "value": 0.0,
-      "units": "1"
      }
     ]
    }
@@ -141,10 +101,10 @@
                 "op": "/",
                 "args": [
                  {
-                  "op": "const",
+                  "op": "apply_expression_template",
                   "args": [],
-                  "value": 373.16,
-                  "units": "K"
+                  "name": "tboil",
+                  "bindings": {}
                  },
                  "t"
                 ]
@@ -175,10 +135,10 @@
                 "op": "/",
                 "args": [
                  {
-                  "op": "const",
+                  "op": "apply_expression_template",
                   "args": [],
-                  "value": 373.16,
-                  "units": "K"
+                  "name": "tboil",
+                  "bindings": {}
                  },
                  "t"
                 ]
@@ -236,10 +196,10 @@
                       "args": [
                        "t",
                        {
-                        "op": "const",
+                        "op": "apply_expression_template",
                         "args": [],
-                        "value": 373.16,
-                        "units": "K"
+                        "name": "tboil",
+                        "bindings": {}
                        }
                       ]
                      }
@@ -299,10 +259,10 @@
                         "op": "/",
                         "args": [
                          {
-                          "op": "const",
+                          "op": "apply_expression_template",
                           "args": [],
-                          "value": 373.16,
-                          "units": "K"
+                          "name": "tboil",
+                          "bindings": {}
                          },
                          "t"
                         ]
@@ -563,16 +523,16 @@
             "op": "-",
             "args": [
              {
-              "op": "const",
+              "op": "apply_expression_template",
               "args": [],
-              "value": 273.15,
-              "units": "K"
+              "name": "tmelt",
+              "bindings": {}
              },
              {
-              "op": "const",
+              "op": "apply_expression_template",
               "args": [],
-              "value": 20.0,
-              "units": "K"
+              "name": "ttrice",
+              "bindings": {}
              }
             ]
            }
@@ -683,10 +643,10 @@
       "args": [
        "t",
        {
-        "op": "const",
+        "op": "apply_expression_template",
         "args": [],
-        "value": 273.15,
-        "units": "K"
+        "name": "tmelt",
+        "bindings": {}
        }
       ]
      },
@@ -713,10 +673,10 @@
           "args": [
            "t",
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 273.15,
-            "units": "K"
+            "name": "tmelt",
+            "bindings": {}
            }
           ]
          }
@@ -771,8 +731,88 @@
     ]
    }
   },
+  "pcf_transition_poly": {
+   "description": "The pcf(5) polynomial of the water-minus-ice es correction of calc_hltalt (wv_saturation.F90:548-573): pcf(1) + tc (pcf(2) + tc (pcf(3) + tc (pcf(4) + tc pcf(5)))), Horner-evaluated in the Fortran loop order with tc = t - tmelt (wv_saturation.F90:561-565). Approximates es(water) - es(ice) in Pa over the transition band; the coefficients carry dimensions Pa, Pa/K, Pa/K^2, Pa/K^3, Pa/K^4 so the polynomial reads as Pa. Shared by tterm_transition, which divides it by ttrice.",
+   "params": [
+    "tc"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "const",
+      "args": [],
+      "value": 5.04469588506e-01,
+      "units": "Pa"
+     },
+     {
+      "op": "*",
+      "args": [
+       "tc",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": -5.47288442819e+00,
+          "units": "Pa/K"
+         },
+         {
+          "op": "*",
+          "args": [
+           "tc",
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": -3.67471858735e-01,
+              "units": "Pa/K^2"
+             },
+             {
+              "op": "*",
+              "args": [
+               "tc",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": -8.95963532403e-03,
+                  "units": "Pa/K^3"
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   "tc",
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": -7.78053686625e-05,
+                    "units": "Pa/K^4"
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
   "tterm_transition": {
-   "description": "Transition-band d(es)/dT correction of calc_hltalt (wv_saturation.F90:548-573): tterm = pcf(5)-Horner polynomial of tc = t - tmelt divided by ttrice when tmelt - ttrice <= t < tmelt, else 0. The polynomial (pcf(1) + tc (pcf(2) + tc (pcf(3) + tc (pcf(4) + tc pcf(5)))), Horner order as the Fortran loop) approximates es(water) - es(ice) in Pa over the transition band; pcf = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05] with dimensions Pa, Pa/K, Pa/K^2, Pa/K^3, Pa/K^4, so tterm reads as Pa/K.",
+   "description": "Transition-band d(es)/dT correction of calc_hltalt (wv_saturation.F90:548-573): tterm = pcf_transition_poly(t - tmelt)/ttrice when tmelt - ttrice <= t < tmelt, else 0. The pcf(5) polynomial (pcf(1) + tc (pcf(2) + tc (pcf(3) + tc (pcf(4) + tc pcf(5)))), Horner order as the Fortran loop, tc = t - tmelt) approximates es(water) - es(ice) in Pa over the transition band and is factored into the shared pcf_transition_poly template; pcf = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05] with dimensions Pa, Pa/K, Pa/K^2, Pa/K^3, Pa/K^4, so tterm reads as Pa/K. tmelt and ttrice are the tmelt/ttrice constant-fragment templates.",
    "params": [
     "t"
    ],
@@ -784,10 +824,10 @@
       "args": [
        "t",
        {
-        "op": "const",
+        "op": "apply_expression_template",
         "args": [],
-        "value": 273.15,
-        "units": "K"
+        "name": "tmelt",
+        "bindings": {}
        }
       ]
      },
@@ -802,18 +842,23 @@
           "args": [
            "t",
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 273.15,
-            "units": "K"
+            "name": "tmelt",
+            "bindings": {}
            }
           ]
          },
          {
-          "op": "const",
-          "args": [],
-          "value": -20.0,
-          "units": "K"
+          "op": "-",
+          "args": [
+           {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ttrice",
+            "bindings": {}
+           }
+          ]
          }
         ]
        },
@@ -821,128 +866,29 @@
         "op": "/",
         "args": [
          {
-          "op": "+",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 5.04469588506e-01,
-            "units": "Pa"
-           },
-           {
-            "op": "*",
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "pcf_transition_poly",
+          "bindings": {
+           "tc": {
+            "op": "-",
             "args": [
+             "t",
              {
-              "op": "-",
-              "args": [
-               "t",
-               {
-                "op": "const",
-                "args": [],
-                "value": 273.15,
-                "units": "K"
-               }
-              ]
-             },
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": -5.47288442819e+00,
-                "units": "Pa/K"
-               },
-               {
-                "op": "*",
-                "args": [
-                 {
-                  "op": "-",
-                  "args": [
-                   "t",
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": 273.15,
-                    "units": "K"
-                   }
-                  ]
-                 },
-                 {
-                  "op": "+",
-                  "args": [
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": -3.67471858735e-01,
-                    "units": "Pa/K^2"
-                   },
-                   {
-                    "op": "*",
-                    "args": [
-                     {
-                      "op": "-",
-                      "args": [
-                       "t",
-                       {
-                        "op": "const",
-                        "args": [],
-                        "value": 273.15,
-                        "units": "K"
-                       }
-                      ]
-                     },
-                     {
-                      "op": "+",
-                      "args": [
-                       {
-                        "op": "const",
-                        "args": [],
-                        "value": -8.95963532403e-03,
-                        "units": "Pa/K^3"
-                       },
-                       {
-                        "op": "*",
-                        "args": [
-                         {
-                          "op": "-",
-                          "args": [
-                           "t",
-                           {
-                            "op": "const",
-                            "args": [],
-                            "value": 273.15,
-                            "units": "K"
-                           }
-                          ]
-                         },
-                         {
-                          "op": "const",
-                          "args": [],
-                          "value": -7.78053686625e-05,
-                          "units": "Pa/K^4"
-                         }
-                        ]
-                       }
-                      ]
-                     }
-                    ]
-                   }
-                  ]
-                 }
-                ]
-               }
-              ]
+              "op": "apply_expression_template",
+              "args": [],
+              "name": "tmelt",
+              "bindings": {}
              }
             ]
            }
-          ]
+          }
          },
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 20.0,
-          "units": "K"
+          "name": "ttrice",
+          "bindings": {}
          }
         ]
        },
@@ -961,6 +907,36 @@
       "units": "Pa/K"
      }
     ]
+   }
+  },
+  "tmelt": {
+   "description": "The freezing-point temperature of the wv_saturation laws: tmelt = TKFRZ = 273.15 K (shr_const_mod.F90:41). Zero-parameter constant-fragment template applied with empty bindings; the fragment names the repeated 273.15 K literal.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 273.15,
+    "units": "K"
+   }
+  },
+  "tboil": {
+   "description": "The boiling-point temperature of the Goff-Gratch water curve: tboil = TBOIL = 373.16 K (wv_saturation.F90 local). Zero-parameter constant-fragment template applied with empty bindings.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 373.16,
+    "units": "K"
+   }
+  },
+  "ttrice": {
+   "description": "The width of the mixed-phase transition band: ttrice = TTRICE = 20 K (wv_saturation.F90 local). Zero-parameter constant-fragment template applied with empty bindings.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 20.0,
+    "units": "K"
    }
   },
   "density_dry_air": {
@@ -1031,5 +1007,5 @@
    ],
    "body": "x"
   }
+  }
  }
-}

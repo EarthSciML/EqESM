@@ -128,6 +128,16 @@ solution-neutral (bit-identical restart files vs the reference
   Sa_pslv})` — one law, one template, no copied formula.
 - JRA55 datamode (same stream layer, different datamode laws) is the
   next slice if time permits.
+- Factoring cleanup: the `s^2`/`s^3` terms of the ratio_rvrf_nir/vis
+  polynomials are written with the `^` operator
+  (`{"op": "^", "args": ["s", 2]}` / `["s", 3]`) instead of nested
+  `s·s` / `(s·s)·s` multiplications; the repeated constants are factored
+  as zero-parameter fragment templates — `tkfrz` = 273.15 K (the esat
+  phase branch, both polynomial t-axis clamps, and the rain/snow ramp),
+  `eps` = 0.622 and `eps1` = 1 − eps = 0.378 (the molecular-weight-ratio
+  pair of the qsat/vapor-pressure/density laws, `eps1` derived from
+  `eps` so the pair is defined once) — applied with `bindings: {}`. The
+  laws and expected values are unchanged.
 
 ## Units hygiene
 
