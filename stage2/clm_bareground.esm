@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_bareground",
-  "description": "CLM bare-ground turbulent-flux component (stage 2 of the EqESM project): the pointwise laws of BareGroundFluxes in stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 (cts5.4.063, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./clm_templates.esm and ./cmeps_templates.esm imported by reference. The traced configuration (the I2000Clm60Sp_clm_inst case, lnd_in of stage1/cime/cases/I2000Clm60Sp_clm_inst/run): z0param_method = 'Meier2022', use_z0m_snowmelt = .true. (so z0mg comes from the snowmelt-dependent branch of SetRoughnessLengthsAndForcHeightsNonLake, FrictionVelocityMod.F90:620-623), zetamaxstable = 2.0, soil_resis_method = 1 (the Swenson & Lawrence 2014 soil-resistance branch, inactive on the pinned rows because they are all dew rows with dqh > 0), do_soilevap_beta inactive, GSWP3 forcing heights 30 m, wind_min = 1.0 m/s and the Meier2022 constants of the ctsm60_params.c260518.nc parameter file. Structure, in the order of the Fortran: (a) the raw inputs (forc_t/forc_q/forc_u/forc_v/forc_pbot/forc_rho, thm, t_grnd, qg, the ground-layer temperatures t_soisno_top = t_soisno(c,snl+1)/t_soisno_soil = t_soisno(c,1)/t_h2osfc, the surface-humidity fields qg_snow/qg_soil/qg_h2osfc and dqgdT, thv, and the constants); (b) the derived inputs of F90:325-329 (ur = max(wind_min, |forc_u,forc_v|), dth, dqh, dthv, zldis = forc_hgt_u + z0mg) with forc_th = thv/(1 + 0.61*forc_q) recovered from the dumped virtual potential temperature (dthv = dth*(1 + 0.61*forc_q) + 0.61*forc_th*dqh of F90:328 then inverts to forc_th = thv/(1 + 0.61*forc_q)); (c) z0mg from the Meier2022 snowmelt template (the traced rows are all in the frac_sno_albedo > 0, snomelt_accum < 1e-5 branch, pinning z0mg = exp(-b1*pi/2 + b4)*1e-3 = 8.13402050576016129e-05; the bare-soil zlnd branch of the select case is included for completeness); (d) the MoninObukIni initialization of F90:331 (um_ini, rib, zeta_ini clamped to [0.01, 2.0], obu_ini = zldis/zeta_ini); (e) the stability iteration of F90:342-388. The esm has no loop construct, so the iteration is represented compositionally: the 17-equation update law is authored ONCE in the one-step model BareGroundStep of ./clm_bareground_step.esm (a single pass of the do-while: the FrictionVelocity profiles and friction velocity, the Meier2022 z0hg update, the stability-parameter clamp and the um/wc/obu update) and mounted three times by reference as top-level models step1..step3 (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: um_ini/obu_ini/z0mg/wc_ini seed step1, each step's state feeds the next (um/obu/z0h/wc), and the update-invariant pointwise fields (zldis, forc_hgt_u, forc_hgt_t, z0m = z0mg, ur, dth, dqh, forc_q, forc_th, thv, zii, beta, zetamaxstable and the constants vkc/grav/zetam/zetat/meier_param3/nu_param/beta_param) feed every step. The parent keeps the external names of the Fortran locals: ustar/temp1/temp2/temp12m/temp22m/z0h/um = the step3 outputs (the exit state of the 3-iteration loop, which matches the traced run's niters = 3). The 2-m humidity profiles are the equality branches temp2 = temp1 and temp22m = temp12m (F90:997-998, 1051-1052) because forc_hgt_q_patch == forc_hgt_t_patch and z0qg == z0hg in the traced run. (f) the flux laws of F90:396-470: ram/rah/raw, raih = forc_rho*cpair/rah, the vapor pressure forc_e = max(forc_q*forc_pbot/(forc_q + 0.622), 0.01*forc_esat) with forc_esat from the QSat polynomial, the Magnus dewpoint forc_dewpoint of F90:548-578 (liquid branch on all traced rows), the raiw selection of F90:423-438 (the dqh > 0 dew branch with the t_grnd > forc_dewpoint no-dew gate, the sl14/beta branches of the dqh <= 0 side transcribed for completeness), ram1, cgrnds/cgrndl/cgrnd (cgrnd needs the htvp latent heat of vaporization), taux/tauy, the sensible heat partition eflx_sh_grnd/soil/snow/h2osfc, the evaporation qflx_evap_soi and qflx_ev_snow/soil/h2osfc (qg_h2osfc is not dumped; qflx_ev_h2osfc is transcribed but unpinned), and the 2-m diagnostics t_ref2m/q_ref2m/rh_ref2m and kbm1 = log(z0mg/z0h) (F90:471-499). The tests pin the stage-1 instrumentation dump stage1/dumps/clm/clm_bareground.csv (192 rows; five representative rows across the run, all stable with zeta clamped at 2.0 and all in the dew branch, see README-clm-bareground.md for the branch census) plus the run-import and soil-temperature dumps that feed them; every asserted output is a dumped column, and z0mg is asserted from the template output. Not transcribed (dead or undumped in this configuration): the human-stress indices, the www soil-wetness variable, the rssun/rssha photosynthesis resistances, the u10 diagnostics of FrictionVelocityMod, and the ZengWang2007 z0hg branch (the traced run is Meier2022). Reference: stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 and FrictionVelocityMod.F90."
+  "description": "CLM bare-ground turbulent-flux component (stage 2 of the EqESM project): the pointwise laws of BareGroundFluxes in stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 (cts5.4.063, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./clm_templates.esm and ./cmeps_templates.esm imported by reference. The traced configuration (the I2000Clm60Sp_clm_inst case, lnd_in of stage1/cime/cases/I2000Clm60Sp_clm_inst/run): z0param_method = 'Meier2022', use_z0m_snowmelt = .true. (so z0mg comes from the snowmelt-dependent branch of SetRoughnessLengthsAndForcHeightsNonLake, FrictionVelocityMod.F90:620-623), zetamaxstable = 2.0, soil_resis_method = 1 (the Swenson & Lawrence 2014 soil-resistance branch, inactive on the pinned rows because they are all dew rows with dqh > 0), do_soilevap_beta inactive, GSWP3 forcing heights 30 m, wind_min = 1.0 m/s and the Meier2022 constants of the ctsm60_params.c260518.nc parameter file. Structure, in the order of the Fortran: (a) the raw inputs (forc_t/forc_q/forc_u/forc_v/forc_pbot/forc_rho, thm, t_grnd, qg, the ground-layer temperatures t_soisno_top = t_soisno(c,snl+1)/t_soisno_soil = t_soisno(c,1)/t_h2osfc, the surface-humidity fields qg_snow/qg_soil/qg_h2osfc and dqgdT, thv, and the constants); (b) the derived inputs of F90:325-329 (ur = max(wind_min, |forc_u,forc_v|), dth, dqh, dthv, zldis = forc_hgt_u + z0mg) with forc_th = thv/(1 + 0.61*forc_q) recovered from the dumped virtual potential temperature (dthv = dth*(1 + 0.61*forc_q) + 0.61*forc_th*dqh of F90:328 then inverts to forc_th = thv/(1 + 0.61*forc_q)); (c) z0mg from the Meier2022 snowmelt template (the traced rows are all in the frac_sno_albedo > 0, snomelt_accum < 1e-5 branch, pinning z0mg = exp(-b1*pi/2 + b4)*1e-3 = 8.13402050576016129e-05; the bare-soil zlnd branch of the select case is included for completeness); (d) the MoninObukIni initialization of F90:331 (um_ini, rib, zeta_ini clamped to [0.01, 2.0], obu_ini = zldis/zeta_ini); (e) the stability iteration of F90:342-388. The esm has no loop construct, so the iteration is represented compositionally: the 17-equation update law is authored ONCE in the one-step model BareGroundStep of ./clm_bareground_step.esm (a single pass of the do-while: the FrictionVelocity profiles and friction velocity, the Meier2022 z0hg update, the stability-parameter clamp and the um/wc/obu update) and mounted three times by reference as top-level models step1..step3 (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: um_ini/obu_ini/z0mg seed step1, each step's state feeds the next (um/obu/z0h), and the update-invariant pointwise fields (forc_hgt_u, forc_hgt_t, z0m = z0mg, ur, dth, dqh, forc_q, forc_th, thv, zii, beta, zetamaxstable and the constants vkc/grav/zetam/zetat/meier_param3/nu_param/beta_param) feed every step; the parent's zldis equals the step's own profile height zldis_u (z0mg is iteration-constant) and the Fortran's stale wc local is only read by the unstable um branch, so the zldis and wc couplings are dropped as dead. The parent keeps the external names of the Fortran locals: ustar/temp1/temp2/temp12m/temp22m/z0h/um = the step3 outputs (the exit state of the 3-iteration loop, which matches the traced run's niters = 3). The 2-m humidity profiles are the equality branches temp2 = temp1 and temp22m = temp12m (F90:997-998, 1051-1052) because forc_hgt_q_patch == forc_hgt_t_patch and z0qg == z0hg in the traced run. (f) the flux laws of F90:396-470: ram/rah/raw, raih = forc_rho*cpair/rah, the vapor pressure forc_e = max(forc_q*forc_pbot/(forc_q + 0.622), 0.01*forc_esat) with forc_esat from the QSat polynomial, the Magnus dewpoint forc_dewpoint of F90:548-578 (ice coefficients on all traced rows: t_grnd ~ 234-250 K < tfrz selects the ice branch), the raiw selection of F90:423-438 (the dqh > 0 dew branch with the t_grnd > forc_dewpoint no-dew gate, the sl14/beta branches of the dqh <= 0 side transcribed for completeness), ram1, cgrnds/cgrndl/cgrnd (cgrnd needs the htvp latent heat of vaporization), taux/tauy (the wind_stress_component law), the sensible heat partition eflx_sh_grnd/soil/snow/h2osfc (the sensible_heat_flux law), the evaporation qflx_evap_soi and qflx_ev_snow/soil/h2osfc (the evaporation_flux law; qg_h2osfc is not dumped, so qflx_ev_h2osfc is transcribed but unpinned), and the 2-m diagnostics t_ref2m/q_ref2m/rh_ref2m (the ref2m_profile law, with qsat_ref2m from the shared qsat_qs) and kbm1 = log(z0mg/z0h) (F90:471-499). The tests pin the stage-1 instrumentation dump stage1/dumps/clm/clm_bareground.csv (192 rows; five representative rows across the run, all stable with zeta clamped at 2.0 and all in the dew branch, see README-clm-bareground.md for the branch census) plus the run-import and soil-temperature dumps that feed them; every asserted output is a dumped column, and z0mg is asserted from the template output. Not transcribed (dead or undumped in this configuration): the human-stress indices, the www soil-wetness variable, the rssun/rssha photosynthesis resistances, the u10 diagnostics of FrictionVelocityMod, and the ZengWang2007 z0hg branch (the traced run is Meier2022). Reference: stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 and FrictionVelocityMod.F90."
  },
  "index_sets": {
   "patch": {
@@ -338,13 +338,6 @@
      "default": 0.0,
      "description": "do_soilevap_beta selects the Lee & Pielke 1992 beta evaporation (F90:427-433; inactive in the traced run), [-]"
     },
-    "wc_ini": {
-     "type": "parameter",
-     "shape": ["patch"],
-     "units": "m/s",
-     "default": 0.5,
-     "description": "seed convective velocity for the first iteration (the MoninObukIni value wc = 0.5 m/s, FrictionVelocityMod.F90:1191), [m/s]"
-    },
     "ur": {
      "type": "unknown",
      "shape": ["patch"],
@@ -633,10 +626,9 @@
     },
     {
      "lhs": "dthv",
-     "rhs": {"op": "+", "args": [
-      {"op": "*", "args": ["dth", {"op": "+", "args": [1.0, {"op": "*", "args": [0.61, "forc_q"]}]}]},
-      {"op": "*", "args": [0.61, "forc_th", "dqh"]}
-     ]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "virtual_potential_scale", "bindings": {
+      "x": "dth", "forc_q": "forc_q", "forc_th": "forc_th", "y": "dqh"
+     }}
     },
     {
      "lhs": "z0mg",
@@ -728,8 +720,8 @@
     {
      "lhs": "forc_e",
      "rhs": {"op": "max", "args": [
-      {"op": "/", "args": [{"op": "*", "args": ["forc_q", "forc_pbot"]}, {"op": "+", "args": ["forc_q", 0.622]}]},
-      {"op": "*", "args": [0.01, "forc_esat"]}
+      {"op": "/", "args": [{"op": "*", "args": ["forc_q", "forc_pbot"]}, {"op": "+", "args": ["forc_q", {"op": "const", "args": [], "value": 0.622, "units": "1"}]}]},
+      {"op": "*", "args": [{"op": "const", "args": [], "value": 0.01, "units": "1"}, "forc_esat"]}
      ]}
     },
     {
@@ -780,51 +772,75 @@
     },
     {
      "lhs": "taux",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["forc_rho", "forc_u", {"op": "/", "args": [1.0, "ram"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "wind_stress_component", "bindings": {
+      "forc_rho": "forc_rho", "forc_u": "forc_u", "ram": "ram"
+     }}
     },
     {
      "lhs": "tauy",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["forc_rho", "forc_v", {"op": "/", "args": [1.0, "ram"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "wind_stress_component", "bindings": {
+      "forc_rho": "forc_rho", "forc_u": "forc_v", "ram": "ram"
+     }}
     },
     {
      "lhs": "eflx_sh_grnd",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raih", "dth"]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_grnd"
+     }}
     },
     {
      "lhs": "eflx_sh_snow",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raih", {"op": "-", "args": ["thm", "t_soisno_top"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_soisno_top"
+     }}
     },
     {
      "lhs": "eflx_sh_soil",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raih", {"op": "-", "args": ["thm", "t_soisno_soil"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_soisno_soil"
+     }}
     },
     {
      "lhs": "eflx_sh_h2osfc",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raih", {"op": "-", "args": ["thm", "t_h2osfc"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_h2osfc"
+     }}
     },
     {
      "lhs": "qflx_evap_soi",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raiw", "dqh"]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg"
+     }}
     },
     {
      "lhs": "qflx_ev_snow",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raiw", {"op": "-", "args": ["forc_q", "qg_snow"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_snow"
+     }}
     },
     {
      "lhs": "qflx_ev_soil",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raiw", {"op": "-", "args": ["forc_q", "qg_soil"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_soil"
+     }}
     },
     {
      "lhs": "qflx_ev_h2osfc",
-     "rhs": {"op": "-", "args": [{"op": "*", "args": ["raiw", {"op": "-", "args": ["forc_q", "qg_h2osfc"]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_h2osfc"
+     }}
     },
     {
      "lhs": "t_ref2m",
-     "rhs": {"op": "+", "args": ["thm", {"op": "*", "args": ["temp1", "dth", {"op": "-", "args": [{"op": "/", "args": [1.0, "temp12m"]}, {"op": "/", "args": [1.0, "temp1"]}]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "ref2m_profile", "bindings": {
+      "base": "thm", "temp": "temp1", "delta": "dth", "temp2m": "temp12m"
+     }}
     },
     {
      "lhs": "q_ref2m",
-     "rhs": {"op": "+", "args": ["forc_q", {"op": "*", "args": ["temp2", "dqh", {"op": "-", "args": [{"op": "/", "args": [1.0, "temp22m"]}, {"op": "/", "args": [1.0, "temp2"]}]}]}]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "ref2m_profile", "bindings": {
+      "base": "forc_q", "temp": "temp2", "delta": "dqh", "temp2m": "temp22m"
+     }}
     },
     {
      "lhs": "e_ref2m",
@@ -834,14 +850,13 @@
     },
     {
      "lhs": "qsat_ref2m",
-     "rhs": {"op": "/", "args": [
-      {"op": "*", "args": [0.622, "e_ref2m"]},
-      {"op": "-", "args": ["forc_pbot", {"op": "*", "args": [0.378, "e_ref2m"]}]}
-     ]}
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {
+      "T": "t_ref2m", "p": "forc_pbot", "TKFRZ": "tfrz"
+     }}
     },
     {
      "lhs": "rh_ref2m",
-     "rhs": {"op": "min", "args": [100.0, {"op": "*", "args": [100.0, {"op": "/", "args": ["q_ref2m", "qsat_ref2m"]}]}]}
+     "rhs": {"op": "min", "args": [{"op": "const", "args": [], "value": 100.0, "units": "1"}, {"op": "*", "args": [{"op": "const", "args": [], "value": 100.0, "units": "1"}, {"op": "/", "args": ["q_ref2m", "qsat_ref2m"]}]}]}
     },
     {
      "lhs": "kbm1",
@@ -887,8 +902,7 @@
     "zii": 1000.0,
     "wind_min": 1.0,
     "forc_hgt_u": 30.0,
-    "forc_hgt_t": 30.0,
-    "wc_ini": 0.5
+    "forc_hgt_t": 30.0
    },
    "tolerance": {
     "rel": 1e-12,
@@ -1055,8 +1069,7 @@
     "zii": 1000.0,
     "wind_min": 1.0,
     "forc_hgt_u": 30.0,
-    "forc_hgt_t": 30.0,
-    "wc_ini": 0.5
+    "forc_hgt_t": 30.0
    },
    "tolerance": {
     "rel": 1e-12,
@@ -1223,8 +1236,7 @@
     "zii": 1000.0,
     "wind_min": 1.0,
     "forc_hgt_u": 30.0,
-    "forc_hgt_t": 30.0,
-    "wc_ini": 0.5
+    "forc_hgt_t": 30.0
    },
    "tolerance": {
     "rel": 1e-12,
@@ -1391,8 +1403,7 @@
     "zii": 1000.0,
     "wind_min": 1.0,
     "forc_hgt_u": 30.0,
-    "forc_hgt_t": 30.0,
-    "wc_ini": 0.5
+    "forc_hgt_t": 30.0
    },
    "tolerance": {
     "rel": 1e-12,
@@ -1559,8 +1570,7 @@
     "zii": 1000.0,
     "wind_min": 1.0,
     "forc_hgt_u": 30.0,
-    "forc_hgt_t": 30.0,
-    "wc_ini": 0.5
+    "forc_hgt_t": 30.0
    },
    "tolerance": {
     "rel": 1e-12,
@@ -1702,24 +1712,6 @@
   }
  },
  "coupling": [
-  {
-   "type": "variable_map",
-   "from": "BareGroundFluxes.zldis",
-   "to": "step1.zldis",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "BareGroundFluxes.zldis",
-   "to": "step2.zldis",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "BareGroundFluxes.zldis",
-   "to": "step3.zldis",
-   "transform": "param_to_var"
-  },
   {
    "type": "variable_map",
    "from": "BareGroundFluxes.forc_hgt_u",
@@ -2114,24 +2106,6 @@
    "type": "variable_map",
    "from": "step2.z0h",
    "to": "step3.z0h_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "BareGroundFluxes.wc_ini",
-   "to": "step1.wc_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step1.wc",
-   "to": "step2.wc_prev",
-   "transform": "param_to_var"
-  },
-  {
-   "type": "variable_map",
-   "from": "step2.wc",
-   "to": "step3.wc_prev",
    "transform": "param_to_var"
   }
  ]

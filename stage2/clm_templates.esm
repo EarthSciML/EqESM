@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_templates",
-  "description": "Expression-template library for the CTSM/CLM land-surface components (stage 2 of the EqESM project): the pointwise closure laws of ctsm5.4.063 (cesm3.0-alphabranch checkout) exercised by the stage-2 CLM components, currently CanopyHydrology and CanopyFluxInterface (stage2/clm_canopy.esm): the QSat saturation vapor pressure/specific humidity laws and their derivatives, the canopy interception/storage/excess laws, the ZengWang2007 roughness and displacement laws, the emissivity laws and the latent heat of vaporization/sublimation law. Transcribed exactly from the Fortran; every template carries its source file:line in its description and returns one scalar (the CLM laws are all pointwise, so a template per output is sufficient). The remaining shared laws (soil/snow hydraulics and thermal properties, snow hydrology and albedo, Monin-Obukhov and aerodynamic laws, etc.) will be added here as their stage-2 components are implemented. The bare-ground fluxes component (stage2/clm_bareground.esm) adds the Monin-Obukhov surface-layer laws: the Paulson (1970) stability functions (the scalar one reused from ./cmeps_templates.esm by reference through psixhu_unstable, esm-spec 9.7.3; the momentum one authored fresh because its constant is SHR_CONST_PI*0.5 while the cmeps psimhu_unstable hard-codes 1.571), the MoninObukIni initialization laws (wind speed, bulk Richardson number, clamped initial zeta), the four-branch friction-velocity profile laws (momentum and scalar, shared by the 2-m diagnostics), the Meier2022 roughness laws (z0hg and the snowmelt-dependent z0mg) and the Magnus dewpoint law. Reference: stage1/cesm/components/clm/src/biogeophys/.",
+  "description": "Expression-template library for the CTSM/CLM land-surface components (stage 2 of the EqESM project): the pointwise closure laws of ctsm5.4.063 (cesm3.0-alphabranch checkout) exercised by the stage-2 CLM components, currently CanopyHydrology and CanopyFluxInterface (stage2/clm_canopy.esm): the QSat saturation vapor pressure/specific humidity laws and their derivatives, the canopy interception/storage/excess laws, the ZengWang2007 roughness and displacement laws, the emissivity laws and the latent heat of vaporization/sublimation law. Transcribed exactly from the Fortran; every template carries its source file:line in its description and returns one scalar (the CLM laws are all pointwise, so a template per output is sufficient). The remaining shared laws (soil/snow hydraulics and thermal properties, snow hydrology and albedo, Monin-Obukhov and aerodynamic laws, etc.) will be added here as their stage-2 components are implemented. The bare-ground fluxes component (stage2/clm_bareground.esm) adds the Monin-Obukhov surface-layer laws: the Paulson (1970) stability functions (the scalar one reused from ./cmeps_templates.esm by reference through psixhu_unstable, esm-spec 9.7.3; the momentum one authored fresh because its constant is SHR_CONST_PI*0.5 while the cmeps psimhu_unstable hard-codes 1.571, with the chik = sqrt(sqrt(1-16*zeta)) intermediate factored as stability_chik), the MoninObukIni initialization laws (wind speed, bulk Richardson number, initial zeta through the shared clamp_zeta), the four-branch friction-velocity profile laws (momentum and scalar, taking the stability parameter zeta as a parameter and sharing the stable branches as stable_profile_integral), the Meier2022 roughness laws (z0hg and the snowmelt-dependent z0mg), the Magnus dewpoint law, the virtual potential temperature scale/difference law (virtual_potential_scale, shared by dthv and thvstar) and the BareGroundFluxes flux laws (sensible_heat_flux, evaporation_flux, wind_stress_component, ref2m_profile). Reference: stage1/cesm/components/clm/src/biogeophys/.",
   "license": "MIT"
  },
  "expression_template_imports": [
@@ -55,22 +55,22 @@
    ]}]}
   },
   "qsat_qs": {
-   "description": "Saturation specific humidity qs(T,p) [kg/kg]: QSatMod.F90:101-103. vp = 1/(p - 0.378*es) [1/Pa]; qs = es * 0.622 * vp. Shares qsat_esat by reference.",
+   "description": "Saturation specific humidity qs(T,p) [kg/kg]: QSatMod.F90:101-103. vp = 1/(p - 0.378*es) [1/Pa]; qs = es * 0.622 * vp, with 0.622 and 0.378 the Rd/Rv molecular-weight ratios written bare in the Fortran. Shares qsat_esat by reference.",
    "params": ["T", "p", "TKFRZ"],
    "body": {"op": "*", "args": [
     {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}},
-    0.622,
-    {"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}
+    {"op": "const", "args": [], "value": 0.622, "units": "1"},
+    {"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [{"op": "const", "args": [], "value": 0.378, "units": "1"}, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}
    ]}
   },
   "qsat_qsdT": {
-   "description": "d(qs)/dT [1/K]: QSatMod.F90:118-120. qsdT = esdT * vp1 * vp * p with vp1 = 0.622/(p - 0.378*es) and vp = 1/(p - 0.378*es), i.e. qsdT = 0.622*esdT*p/(p - 0.378*es)^2. Shares qsat_esat and qsat_esat_dT by reference.",
+   "description": "d(qs)/dT [1/K]: QSatMod.F90:118-120. qsdT = esdT * vp1 * vp * p with vp1 = 0.622/(p - 0.378*es) and vp = 1/(p - 0.378*es), i.e. qsdT = 0.622*esdT*p/(p - 0.378*es)^2, with 0.622 and 0.378 the Rd/Rv molecular-weight ratios written bare in the Fortran. Shares qsat_esat and qsat_esat_dT by reference.",
    "params": ["T", "p", "TKFRZ"],
    "body": {"op": "*", "args": [
-    0.622,
+    {"op": "const", "args": [], "value": 0.622, "units": "1"},
     {"op": "apply_expression_template", "args": [], "name": "qsat_esat_dT", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}},
     "p",
-    {"op": "^", "args": [{"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [0.378, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}, 2]}
+    {"op": "^", "args": [{"op": "/", "args": [1.0, {"op": "-", "args": ["p", {"op": "*", "args": [{"op": "const", "args": [], "value": 0.378, "units": "1"}, {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {"T": "T", "TKFRZ": "TKFRZ"}}]}]}]}, 2]}
    ]}
   },
   "soil_suction": {
@@ -126,13 +126,18 @@
     "hsub", "hvap"
    ]}
   },
+  "stability_chik": {
+   "description": "chik = sqrt(sqrt(1 - 16*zeta)), the intermediate of the Paulson (1970) momentum stability function (FrictionVelocityMod.F90:1131-1132). Factored so the 1 - 16*zeta subexpression is authored once and bound by stability_func_momentum by reference (chik2 = chik^2 of the Fortran's chik2 = sqrt(1 - 16*zeta)).",
+   "params": ["zeta"],
+   "body": {"op": "sqrt", "args": [{"op": "sqrt", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": [16.0, "zeta"]}]}]}]}
+  },
   "stability_func_momentum": {
-   "description": "Paulson (1970) unstable momentum stability function StabilityFunc1(zeta) of FrictionVelocityMod.F90:1131-1134: chik2 = sqrt(1 - 16*zeta), chik = sqrt(chik2), 2*log((1+chik)*0.5) + log((1+chik2)*0.5) - 2*atan(chik) + SHR_CONST_PI*0.5. The trailing constant is SHR_CONST_PI*0.5 = 1.5707963267948966 exactly (clm_varcon.F90:42, rpi = SHR_CONST_PI); the cmeps psimhu_unstable hard-codes 1.571 instead, so this template is authored fresh rather than reused. Only the rib < 0 (unstable) branch is transcribed here; the stable branch of the flux-gradient relations is the linear 5*zeta form written directly in the profile templates.",
+   "description": "Paulson (1970) unstable momentum stability function StabilityFunc1(zeta) of FrictionVelocityMod.F90:1131-1134: chik2 = sqrt(1 - 16*zeta), chik = sqrt(chik2), 2*log((1+chik)*0.5) + log((1+chik2)*0.5) - 2*atan(chik) + SHR_CONST_PI*0.5, with chik/chik2 bound once via the stability_chik template by reference. The trailing constant is SHR_CONST_PI*0.5 = 1.5707963267948966 exactly (clm_varcon.F90:42, rpi = SHR_CONST_PI); the cmeps psimhu_unstable hard-codes 1.571 instead, so this template is authored fresh rather than reused. Only the rib < 0 (unstable) branch is transcribed here; the stable branch of the flux-gradient relations is the linear 5*zeta form written directly in the profile templates.",
    "params": ["zeta"],
    "body": {"op": "+", "args": [
-    {"op": "*", "args": [2.0, {"op": "log", "args": [{"op": "*", "args": [{"op": "+", "args": [1.0, {"op": "sqrt", "args": [{"op": "sqrt", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": [16.0, "zeta"]}]}]}]}]}, 0.5]}]}]},
-    {"op": "log", "args": [{"op": "*", "args": [{"op": "+", "args": [1.0, {"op": "sqrt", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": [16.0, "zeta"]}]}]}]}, 0.5]}]},
-    {"op": "*", "args": [-2.0, {"op": "atan", "args": [{"op": "sqrt", "args": [{"op": "sqrt", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": [16.0, "zeta"]}]}]}]}]}]},
+    {"op": "*", "args": [2.0, {"op": "log", "args": [{"op": "*", "args": [{"op": "+", "args": [1.0, {"op": "apply_expression_template", "args": [], "name": "stability_chik", "bindings": {"zeta": "zeta"}}]}, 0.5]}]}]},
+    {"op": "log", "args": [{"op": "*", "args": [{"op": "+", "args": [1.0, {"op": "^", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_chik", "bindings": {"zeta": "zeta"}}, 2]}]}, 0.5]}]},
+    {"op": "*", "args": [-2.0, {"op": "atan", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_chik", "bindings": {"zeta": "zeta"}}]}]},
     {"op": "const", "args": [], "value": 1.5707963267948966, "units": "1"}
    ]}
   },
@@ -142,11 +147,11 @@
    "body": {"op": "apply_expression_template", "args": [], "name": "psixhu_unstable", "bindings": {"x": {"op": "^", "args": [{"op": "-", "args": [1.0, {"op": "*", "args": [16.0, "zeta"]}]}, 0.25]}}}
   },
   "monin_obukhov_initial_wind": {
-   "description": "Initial wind speed um of MoninObukIni (FrictionVelocityMod.F90:1190-1194): wc = 0.5 m/s convective velocity; if dthv >= 0 then um = max(ur, 0.1) else um = sqrt(ur^2 + wc^2). The companion initial ustar = 0.06 (F90:1189) is never read after the MoninObukIni call in BareGroundFluxesMod, so it is omitted.",
+   "description": "Initial wind speed um of MoninObukIni (FrictionVelocityMod.F90:1190-1194): wc = 0.5 m/s convective velocity; if dthv >= 0 then um = max(ur, 0.1 m/s) else um = sqrt(ur^2 + wc^2). The companion initial ustar = 0.06 (F90:1189) is never read after the MoninObukIni call in BareGroundFluxesMod, so it is omitted. Also applied to the stability-iteration update of um (BareGroundFluxesMod.F90:370,373), whose branch test is zeta_raw >= 0 instead of dthv >= 0.",
    "params": ["dthv", "ur", "wc"],
    "body": {"op": "ifelse", "args": [
     {"op": ">=", "args": ["dthv", 0.0]},
-    {"op": "max", "args": ["ur", 0.1]},
+    {"op": "max", "args": ["ur", {"op": "const", "args": [], "value": 0.1, "units": "m/s"}]},
     {"op": "sqrt", "args": [{"op": "+", "args": [{"op": "^", "args": ["ur", 2]}, {"op": "^", "args": ["wc", 2]}]}]}
    ]}
   },
@@ -158,90 +163,94 @@
     {"op": "*", "args": ["thv", {"op": "^", "args": ["um", 2]}]}
    ]}
   },
-  "monin_obukhov_initial_zeta": {
-   "description": "Initial Monin-Obukhov stability parameter zeta of MoninObukIni (FrictionVelocityMod.F90:1198-1204). Stable/neutral branch (rib >= 0): zeta = rib*log(zldis/z0m)/(1 - 5*min(rib, 0.19)) clamped to [0.01, zetamaxstable]; unstable branch: zeta = rib*log(zldis/z0m) clamped to [-100, -0.01]. The Obukhov length follows as obu = zldis/zeta at the call site.",
-   "params": ["rib", "zldis", "z0m", "zetamaxstable"],
+  "clamp_zeta": {
+   "description": "Sign-preserving clamp of the Monin-Obukhov stability parameter zeta (BareGroundFluxesMod.F90:369-374 and FrictionVelocityMod.F90:1200-1204): stable/neutral branch (zeta >= 0) zeta = min(zetamaxstable, max(zeta, 0.01)), unstable branch zeta = max(-100, min(zeta, -0.01)). Shared by the MoninObukIni initialization (monin_obukhov_initial_zeta) and every pass of the BareGroundFluxes stability iteration.",
+   "params": ["zeta", "zetamaxstable"],
    "body": {"op": "ifelse", "args": [
-    {"op": ">=", "args": ["rib", 0.0]},
-    {"op": "min", "args": ["zetamaxstable", {"op": "max", "args": [{"op": "/", "args": [{"op": "*", "args": ["rib", {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]}]}, {"op": "-", "args": [1.0, {"op": "*", "args": [5.0, {"op": "min", "args": ["rib", 0.19]}]}]}]}, 0.01]}]},
-    {"op": "max", "args": [-100.0, {"op": "min", "args": [{"op": "*", "args": ["rib", {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]}]}, -0.01]}]}
+    {"op": ">=", "args": ["zeta", 0.0]},
+    {"op": "min", "args": ["zetamaxstable", {"op": "max", "args": ["zeta", {"op": "const", "args": [], "value": 0.01, "units": "1"}]}]},
+    {"op": "max", "args": [{"op": "const", "args": [], "value": -100.0, "units": "1"}, {"op": "min", "args": ["zeta", {"op": "const", "args": [], "value": -0.01, "units": "1"}]}]}
+   ]}
+  },
+  "monin_obukhov_initial_zeta": {
+   "description": "Initial Monin-Obukhov stability parameter zeta of MoninObukIni (FrictionVelocityMod.F90:1198-1204). Stable/neutral branch (rib >= 0): zeta = rib*log(zldis/z0m)/(1 - 5*min(rib, 0.19)); unstable branch: zeta = rib*log(zldis/z0m); the branch result then passes through the sign-preserving clamp of clamp_zeta, shared with the stability-iteration clamp. The Obukhov length follows as obu = zldis/zeta at the call site.",
+   "params": ["rib", "zldis", "z0m", "zetamaxstable"],
+   "body": {"op": "apply_expression_template", "args": [], "name": "clamp_zeta", "bindings": {
+    "zeta": {"op": "ifelse", "args": [
+     {"op": ">=", "args": ["rib", 0.0]},
+     {"op": "/", "args": [{"op": "*", "args": ["rib", {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]}]}, {"op": "-", "args": [1.0, {"op": "*", "args": [5.0, {"op": "min", "args": ["rib", 0.19]}]}]}]},
+     {"op": "*", "args": ["rib", {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]}]}
+    ]},
+    "zetamaxstable": "zetamaxstable"
+   }}
+  },
+  "stable_profile_integral": {
+   "description": "The stable/neutral branches of the integrated flux-profile integral v, the denominator of the friction-velocity laws (v in ustar = vkc*um/v and temp = vkc/v), identical for the momentum (FrictionVelocityMod.F90:865-869) and scalar (F90:964-968) profiles: zeta <= 1: v = log(zldis/z0) + 5*zeta - 5*z0/obu; zeta > 1: v = log(obu/z0) + 5 - 5*z0/obu + (5*log(zeta) + zeta - 1), in the stability parameter zeta = zldis/obu. Shared by friction_velocity_momentum and friction_velocity_scalar by reference.",
+   "params": ["zldis", "z0", "obu", "zeta"],
+   "body": {"op": "ifelse", "args": [
+    {"op": "<=", "args": ["zeta", 1.0]},
+    {"op": "+", "args": [
+     {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0"]}]},
+     {"op": "*", "args": [5.0, "zeta"]},
+     {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0", "obu"]}]}]}
+    ]},
+    {"op": "+", "args": [
+     {"op": "log", "args": [{"op": "/", "args": ["obu", "z0"]}]},
+     5.0,
+     {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0", "obu"]}]}]},
+     {"op": "+", "args": [
+      {"op": "*", "args": [5.0, {"op": "log", "args": ["zeta"]}]},
+      "zeta",
+      -1.0
+     ]}
+    ]}
    ]}
   },
   "friction_velocity_momentum": {
-   "description": "Momentum profile: friction velocity ustar = vkc*um/v of FrictionVelocity (FrictionVelocityMod.F90:857-871), where v is the four-branch integral of the wind profile in zeta = zldis/obu and zetam = 1.574 is the transition point of the flux-gradient relation (F90:795). Branches: zeta < -zetam: v = log(-zetam*obu/z0m) - StabilityFunc1(-zetam) + StabilityFunc1(z0m/obu) + 1.14*((-zeta)^0.333 - zetam^0.333); zeta < 0: v = log(zldis/z0m) - StabilityFunc1(zeta) + StabilityFunc1(z0m/obu); zeta <= 1: v = log(zldis/z0m) + 5*zeta - 5*z0m/obu; else: v = log(obu/z0m) + 5 - 5*z0m/obu + (5*log(zeta) + zeta - 1). The profile zeta is recomputed as zldis/obu inside the template exactly as the Fortran does for each of its profile calls.",
-   "params": ["vkc", "um", "zldis", "z0m", "obu", "zetam"],
+   "description": "Momentum profile: friction velocity ustar = vkc*um/v of FrictionVelocity (FrictionVelocityMod.F90:857-871), where v is the four-branch integral of the wind profile in the stability parameter zeta, passed in and computed once at the call site as zldis/obu (zetam = 1.574 is the transition point of the flux-gradient relation, F90:795). Branches: zeta < -zetam: v = log(-zetam*obu/z0m) - StabilityFunc1(-zetam) + StabilityFunc1(z0m/obu) + 1.14*((-zeta)^0.333 - zetam^0.333); zeta < 0: v = log(zldis/z0m) - StabilityFunc1(zeta) + StabilityFunc1(z0m/obu); the stable branches (zeta <= 1 and zeta > 1) are the shared stable_profile_integral, applied by reference.",
+   "params": ["vkc", "um", "zldis", "z0m", "obu", "zetam", "zeta"],
    "body": {"op": "*", "args": ["vkc", "um", {"op": "/", "args": [1.0, {"op": "ifelse", "args": [
-    {"op": "<", "args": [{"op": "/", "args": ["zldis", "obu"]}, {"op": "-", "args": ["zetam"]}]},
+    {"op": "<", "args": ["zeta", {"op": "-", "args": ["zetam"]}]},
     {"op": "+", "args": [
      {"op": "log", "args": [{"op": "/", "args": [{"op": "*", "args": [{"op": "-", "args": ["zetam"]}, "obu"]}, "z0m"]}]},
      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_momentum", "bindings": {"zeta": {"op": "-", "args": ["zetam"]}}}]},
      {"op": "apply_expression_template", "args": [], "name": "stability_func_momentum", "bindings": {"zeta": {"op": "/", "args": ["z0m", "obu"]}}},
-     {"op": "*", "args": [1.14, {"op": "-", "args": [{"op": "^", "args": [{"op": "-", "args": [{"op": "/", "args": ["zldis", "obu"]}]}, 0.333]}, {"op": "^", "args": ["zetam", 0.333]}]}]}
+     {"op": "*", "args": [1.14, {"op": "-", "args": [{"op": "^", "args": [{"op": "-", "args": ["zeta"]}, 0.333]}, {"op": "^", "args": ["zetam", 0.333]}]}]}
     ]},
     {"op": "ifelse", "args": [
-     {"op": "<", "args": [{"op": "/", "args": ["zldis", "obu"]}, 0.0]},
+     {"op": "<", "args": ["zeta", 0.0]},
      {"op": "+", "args": [
       {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]},
-      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_momentum", "bindings": {"zeta": {"op": "/", "args": ["zldis", "obu"]}}}]},
+      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_momentum", "bindings": {"zeta": "zeta"}}]},
       {"op": "apply_expression_template", "args": [], "name": "stability_func_momentum", "bindings": {"zeta": {"op": "/", "args": ["z0m", "obu"]}}}
      ]},
-     {"op": "ifelse", "args": [
-      {"op": "<=", "args": [{"op": "/", "args": ["zldis", "obu"]}, 1.0]},
-      {"op": "+", "args": [
-       {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0m"]}]},
-       {"op": "*", "args": [5.0, {"op": "/", "args": ["zldis", "obu"]}]},
-       {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0m", "obu"]}]}]}
-      ]},
-      {"op": "+", "args": [
-       {"op": "log", "args": [{"op": "/", "args": ["obu", "z0m"]}]},
-       5.0,
-       {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0m", "obu"]}]}]},
-       {"op": "+", "args": [
-        {"op": "*", "args": [5.0, {"op": "log", "args": [{"op": "/", "args": ["zldis", "obu"]}]}]},
-        {"op": "/", "args": ["zldis", "obu"]},
-        -1.0
-       ]}
-      ]}
-     ]}
+     {"op": "apply_expression_template", "args": [], "name": "stable_profile_integral", "bindings": {
+      "zldis": "zldis", "z0": "z0m", "obu": "obu", "zeta": "zeta"
+     }}
     ]}
    ]}]}]}
   },
   "friction_velocity_scalar": {
-   "description": "Scalar (heat/water) profile factor temp = vkc/v of FrictionVelocity (FrictionVelocityMod.F90:956-970 for the heat profile temp1 at the measurement height; the same law with the z0q roughness and zldis = 2 + z0h/z0q serves the humidity profile temp2 (F90:974-1015, equal to temp1 when forc_hgt_q == forc_hgt_t and z0q == z0h, which holds in the traced run) and the 2-m diagnostics temp12m/temp22m (F90:1022-1038, 1051-1067)), where v is the four-branch integral of the profile in zeta = zldis/obu and zetat = 0.465 is the transition point of the temperature profile (F90:796). Branches: zeta < -zetat: v = log(-zetat*obu/z0) - StabilityFunc2(-zetat) + StabilityFunc2(z0/obu) + 0.8*(zetat^(-0.333) - (-zeta)^(-0.333)); zeta < 0: v = log(zldis/z0) - StabilityFunc2(zeta) + StabilityFunc2(z0/obu); zeta <= 1: v = log(zldis/z0) + 5*zeta - 5*z0/obu; else: v = log(obu/z0) + 5 - 5*z0/obu + (5*log(zeta) + zeta - 1). The profile zeta is recomputed as zldis/obu inside the template exactly as the Fortran does for each of its profile calls.",
-   "params": ["vkc", "zldis", "z0", "obu", "zetat"],
+   "description": "Scalar (heat/water) profile factor temp = vkc/v of FrictionVelocity (FrictionVelocityMod.F90:956-970 for the heat profile temp1 at the measurement height; the same law with the z0q roughness and zldis = 2 + z0h/z0q serves the humidity profile temp2 (F90:974-1015, equal to temp1 when forc_hgt_q == forc_hgt_t and z0q == z0h, which holds in the traced run) and the 2-m diagnostics temp12m/temp22m (F90:1022-1038, 1051-1067)), where v is the four-branch integral of the profile in the stability parameter zeta, passed in and computed once at the call site as zldis/obu (zetat = 0.465 is the transition point of the temperature profile, F90:796). Branches: zeta < -zetat: v = log(-zetat*obu/z0) - StabilityFunc2(-zetat) + StabilityFunc2(z0/obu) + 0.8*(zetat^(-0.333) - (-zeta)^(-0.333)); zeta < 0: v = log(zldis/z0) - StabilityFunc2(zeta) + StabilityFunc2(z0/obu); the stable branches (zeta <= 1 and zeta > 1) are the shared stable_profile_integral, applied by reference.",
+   "params": ["vkc", "zldis", "z0", "obu", "zetat", "zeta"],
    "body": {"op": "*", "args": ["vkc", {"op": "/", "args": [1.0, {"op": "ifelse", "args": [
-    {"op": "<", "args": [{"op": "/", "args": ["zldis", "obu"]}, {"op": "-", "args": ["zetat"]}]},
+    {"op": "<", "args": ["zeta", {"op": "-", "args": ["zetat"]}]},
     {"op": "+", "args": [
      {"op": "log", "args": [{"op": "/", "args": [{"op": "*", "args": [{"op": "-", "args": ["zetat"]}, "obu"]}, "z0"]}]},
      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_scalar", "bindings": {"zeta": {"op": "-", "args": ["zetat"]}}}]},
      {"op": "apply_expression_template", "args": [], "name": "stability_func_scalar", "bindings": {"zeta": {"op": "/", "args": ["z0", "obu"]}}},
-     {"op": "*", "args": [0.8, {"op": "-", "args": [{"op": "^", "args": ["zetat", -0.333]}, {"op": "^", "args": [{"op": "-", "args": [{"op": "/", "args": ["zldis", "obu"]}]}, -0.333]}]}]}
+     {"op": "*", "args": [0.8, {"op": "-", "args": [{"op": "^", "args": ["zetat", -0.333]}, {"op": "^", "args": [{"op": "-", "args": ["zeta"]}, -0.333]}]}]}
     ]},
     {"op": "ifelse", "args": [
-     {"op": "<", "args": [{"op": "/", "args": ["zldis", "obu"]}, 0.0]},
+     {"op": "<", "args": ["zeta", 0.0]},
      {"op": "+", "args": [
       {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0"]}]},
-      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_scalar", "bindings": {"zeta": {"op": "/", "args": ["zldis", "obu"]}}}]},
+      {"op": "-", "args": [{"op": "apply_expression_template", "args": [], "name": "stability_func_scalar", "bindings": {"zeta": "zeta"}}]},
       {"op": "apply_expression_template", "args": [], "name": "stability_func_scalar", "bindings": {"zeta": {"op": "/", "args": ["z0", "obu"]}}}
      ]},
-     {"op": "ifelse", "args": [
-      {"op": "<=", "args": [{"op": "/", "args": ["zldis", "obu"]}, 1.0]},
-      {"op": "+", "args": [
-       {"op": "log", "args": [{"op": "/", "args": ["zldis", "z0"]}]},
-       {"op": "*", "args": [5.0, {"op": "/", "args": ["zldis", "obu"]}]},
-       {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0", "obu"]}]}]}
-      ]},
-      {"op": "+", "args": [
-       {"op": "log", "args": [{"op": "/", "args": ["obu", "z0"]}]},
-       5.0,
-       {"op": "-", "args": [{"op": "*", "args": [5.0, {"op": "/", "args": ["z0", "obu"]}]}]},
-       {"op": "+", "args": [
-        {"op": "*", "args": [5.0, {"op": "log", "args": [{"op": "/", "args": ["zldis", "obu"]}]}]},
-        {"op": "/", "args": ["zldis", "obu"]},
-        -1.0
-       ]}
-      ]}
-     ]}
+     {"op": "apply_expression_template", "args": [], "name": "stable_profile_integral", "bindings": {
+      "zldis": "zldis", "z0": "z0", "obu": "obu", "zeta": "zeta"
+     }}
     ]}
    ]}]}]}
   },
@@ -278,8 +287,19 @@
     ]}
    ]}
   },
+  "virtual_potential_scale": {
+   "description": "Virtual potential temperature scale/difference x_v = x*(1 + 0.61*forc_q) + 0.61*forc_th*y [K]: BareGroundFluxesMod.F90:328 for the difference dthv = dth*(1 + 0.61*forc_q) + 0.61*forc_th*dqh and F90:367 for the scale thvstar = tstar*(1 + 0.61*forc_q) + 0.61*forc_th*qstar. The 0.61 virtual-temperature factor is the Fortran's bare constant, transcribed with its unit.",
+   "params": ["x", "forc_q", "forc_th", "y"],
+   "body": {"op": "+", "args": [
+    {"op": "*", "args": ["x", {"op": "+", "args": [
+     {"op": "const", "args": [], "value": 1.0, "units": "1"},
+     {"op": "*", "args": [{"op": "const", "args": [], "value": 0.61, "units": "1"}, "forc_q"]}
+    ]}]},
+    {"op": "*", "args": [{"op": "const", "args": [], "value": 0.61, "units": "1"}, "forc_th", "y"]}
+   ]}
+  },
   "dewpoint_magnus": {
-   "description": "Dewpoint temperature [K] from vapor pressure e and temperature t (BareGroundFluxesMod.F90:548-578, dewpoint(), Equation 7 of Lawrence 2005 with the Alduchov & Eskridge 1996 coefficients): td = ifelse(t < tfrz, B1_ice*log(e/C1_ice)/(A1_ice - log(e/C1_ice)), B1_liq*log(e/C1_liq)/(A1_liq - log(e/C1_liq))) + tfrz, with A1_ice = 22.587, B1_ice = 273.86 K, C1_ice = 611.21 Pa and A1_liq = 17.625, B1_liq = 243.04 K, C1_liq = 610.94 Pa. The ice/liquid selection is on the input temperature t (t_grnd at the call site), not on the dewpoint. The traced rows are all in the liquid branch.",
+   "description": "Dewpoint temperature [K] from vapor pressure e and temperature t (BareGroundFluxesMod.F90:548-578, dewpoint(), Equation 7 of Lawrence 2005 with the Alduchov & Eskridge 1996 coefficients): td = ifelse(t < tfrz, B1_ice*log(e/C1_ice)/(A1_ice - log(e/C1_ice)), B1_liq*log(e/C1_liq)/(A1_liq - log(e/C1_liq))) + tfrz, with A1_ice = 22.587, B1_ice = 273.86 K, C1_ice = 611.21 Pa and A1_liq = 17.625, B1_liq = 243.04 K, C1_liq = 610.94 Pa. The ice/liquid selection is on the input temperature t (t_grnd at the call site), not on the dewpoint. The traced rows all have t_grnd ~ 234-250 K < tfrz, so the ice branch is the one exercised; only the sign of t_grnd - forc_dewpoint is pinned by the raiw gate.",
    "params": ["e", "t", "tfrz"],
    "body": {"op": "+", "args": [
     {"op": "ifelse", "args": [
@@ -295,6 +315,26 @@
     ]},
     "tfrz"
    ]}
+  },
+  "sensible_heat_flux": {
+   "description": "Sensible heat flux from a surface eflx_sh = -raih*(thm - t_surf) [W/m^2] (BareGroundFluxesMod.F90:449-454, applied to the ground temperature t_grnd, the top snow layer t_soisno(c, snl+1), the top soil layer t_soisno(c, 1) and the h2osfc surface).",
+   "params": ["raih", "thm", "t_surf"],
+   "body": {"op": "-", "args": [{"op": "*", "args": ["raih", {"op": "-", "args": ["thm", "t_surf"]}]}]}
+  },
+  "evaporation_flux": {
+   "description": "Evaporation flux from a surface qflx_ev = -raiw*(forc_q - qg_surf) [kg/m^2/s] (BareGroundFluxesMod.F90:460-467, applied to the ground humidity qg and the snow/soil/h2osfc surface humidities; qflx_evap_soi = -raiw*dqh with dqh = forc_q - qg of F90:327).",
+   "params": ["raiw", "forc_q", "qg_surf"],
+   "body": {"op": "-", "args": [{"op": "*", "args": ["raiw", {"op": "-", "args": ["forc_q", "qg_surf"]}]}]}
+  },
+  "wind_stress_component": {
+   "description": "One component of the surface wind stress taux/tauy = -forc_rho*forc_u/ram [kg/m/s^2] (BareGroundFluxesMod.F90:447-448, with ram = um/ustar^2 the momentum aerodynamic resistance of F90:396).",
+   "params": ["forc_rho", "forc_u", "ram"],
+   "body": {"op": "-", "args": [{"op": "*", "args": ["forc_rho", "forc_u", {"op": "/", "args": [1.0, "ram"]}]}]}
+  },
+  "ref2m_profile": {
+   "description": "2-m height profile value x_ref2m = base + temp*delta*(1/temp2m - 1/temp): the temperature and humidity profile extrapolations of BareGroundFluxesMod.F90:470 (t_ref2m = thm + temp1*dth*(1/temp12m - 1/temp1)) and F90:473 (q_ref2m = forc_q + temp2*dqh*(1/temp22m - 1/temp2)).",
+   "params": ["base", "temp", "delta", "temp2m"],
+   "body": {"op": "+", "args": ["base", {"op": "*", "args": ["temp", "delta", {"op": "-", "args": [{"op": "/", "args": [1.0, "temp2m"]}, {"op": "/", "args": [1.0, "temp"]}]}]}]}
   },
   "soil_albedo_wetness": {
    "description": "Soil albedo wetness correction inc = max(0.11 - 0.40*h2osoi_vol, 0) [1]: the SoilAlbedo soil water factor of SurfaceAlbedoMod.F90:1244, h2osoi_vol the top-layer volumetric soil water [m3/m3].",
