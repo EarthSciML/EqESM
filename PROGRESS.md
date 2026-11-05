@@ -1251,3 +1251,17 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
   main is rerunning as job 12095573 from a sibling worktree
   `../EqESM-suite-a922c00`; a snapshot under `.work/` breaks the
   `../../eqice` relative imports.
+- **EarthSciModels PR wave (user go-ahead 2026-11-04):**
+  - **CLMU:** opened **EarthSciML/EarthSciModels#44** from
+    `ctessum-claude:clmu-verify2` @ `dea8780` (rebased cleanly onto
+    origin/main `bf6a072`; urban_radiation.esm unchanged upstream).
+  - **MOSART #33:** the channel-depth fix `705518c` is already the PR head
+    (the "not pushed" note above is stale).
+  - **CICE #37:** its ESD dependency is resolved (ESD PR #50 merged).
+  - Jobs submitted to prepare branches, which the manager pushes after
+    review:
+    - `esm-pr-refresh` re-ports CICE (coupling transforms + assembly test)
+      onto #37 and syncs #33 with origin/main.
+    - `esm-pr-cdeps` creates the new `cdeps-datm` port.
+  - Upstream `test-esm` CI on EarthSciModels main is red independently of
+    us (user confirmed), so red PR CI is not a blocker.
