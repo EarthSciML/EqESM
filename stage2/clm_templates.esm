@@ -147,6 +147,20 @@
    "description": "Shortwave reflected by a surface in one waveband, albd*solad + albi*solai [W/m2]: SurfaceRadiationMod.F90:897-899 (fsr), solad/solai the incident direct/diffuse radiation and albd/albi the direct/diffuse albedo.",
    "params": ["solad", "solai", "albd", "albi"],
    "body": {"op": "+", "args": [{"op": "*", "args": ["albd", "solad"]}, {"op": "*", "args": ["albi", "solai"]}]}
+  },
+  "ground_temperature_blend": {
+   "description": "Area-weighted blend of the snow/soil/surface-water temperatures t = frac_sno_fluxes*t_snow + (1 - frac_sno_fluxes - frac_h2osfc)*t_soil + frac_h2osfc*t_h2osfc: the previous-time-step ground temperature t_grnd0 (SoilFluxesMod.F90:176-178) and the ground T^4 longwave-weighted temperature lw_grnd (SoilFluxesMod.F90:344-346), and the preflux ground temperature of CalcInitialTemperatureAndEnergyVars (BiogeophysPreFluxCalcsMod.F90:334-339, where the same blend appears with frac_sno_fluxes = 0 when there is no snow; the blend then reduces to (1 - frac_h2osfc)*t_soil + frac_h2osfc*t_h2osfc, the SoilFluxesMod.F90:180 no-snow branch).",
+   "params": ["frac_sno_fluxes", "t_snow", "frac_h2osfc", "t_soil", "t_h2osfc"],
+   "body": {"op": "+", "args": [
+    {"op": "*", "args": ["frac_sno_fluxes", "t_snow"]},
+    {"op": "*", "args": [{"op": "-", "args": [{"op": "-", "args": [1.0, "frac_sno_fluxes"]}, "frac_h2osfc"]}, "t_soil"]},
+    {"op": "*", "args": ["frac_h2osfc", "t_h2osfc"]}
+   ]}
+  },
+  "stefan_boltzmann_emission": {
+   "description": "Black-body longwave emission law emg*sb*T4 [W/m^2]: the ground longwave emission terms of SoilFluxesMod.F90:350 (eflx_soil_grnd) and :471 (eflx_lwrad_out), with T4 the fourth power of the radiating temperature (the weighted-mean lw_grnd of SoilFluxesMod.F90:344-346) and sb the Stefan-Boltzmann constant SHR_CONST_STEBOL = 5.67e-8 (shr_const_mod.F90:23; CESM carries the rounded value rather than the CODATA 5.670374419e-8, and the stage-1 dump pins sb = 5.67e-8 exactly — see stage2/README-clm-soilfluxes.md).",
+   "params": ["emg", "sb", "T4"],
+   "body": {"op": "*", "args": ["emg", "sb", "T4"]}
   }
  }
 }
