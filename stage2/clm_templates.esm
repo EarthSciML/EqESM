@@ -132,7 +132,7 @@
    ]}
   },
   "snow_thermal_cond_sturm1997": {
-   "description": "Snow thermal conductivity thk [W/m/K] of the Sturm et al. (1997) fit as implemented in SoilTemperatureMod.F90:774-778 (bw in kg/m3): thk = 0.023 + 0.234*(bw/1000) for bw <= 156, else thk = 0.138 - 1.01*(bw/1000) + 3.233*(bw/1000)^2. The traced run uses the Sturm1997 snow_thermal_cond_method. The five literals in the Fortran lack the _r8 suffix, so under default real(4) the executed coefficients are the float32-rounded values written here (0.023000000044703484, 0.23399999737739563, 0.1379999965429306, 1.0099999904632568, 3.2330000400543213) promoted to double, not the paper's coefficients (bugs.md #31; verified in the compiled object's .rodata.cst8 and against the dump to rel 1.6e-16).",
+   "description": "Snow thermal conductivity thk [W/m/K] of the Sturm et al. (1997) fit as implemented in SoilTemperatureMod.F90:774-778 (bw in kg/m3): thk = 0.023 + 0.234*(bw/1000) for bw <= 156, else thk = 0.138 - 1.01*(bw/1000) + 3.233*(bw/1000)^2. The traced run uses the Sturm1997 snow_thermal_cond_method. The five literals in the Fortran lack the _r8 suffix, so under default real(4) the executed coefficients are the float32-rounded values written here (0.023000000044703484, 0.23399999737739563, 0.1379999965429306, 1.0099999904632568, 3.2330000400543213) promoted to double, not the paper's coefficients (bugs.md #33; verified in the compiled object's .rodata.cst8 and against the dump to rel 1.6e-16).",
    "params": ["bw"],
    "body": {"op": "ifelse", "args": [
     {"op": "<=", "args": ["bw", 156.0]},
@@ -149,14 +149,14 @@
    ]}]}
   },
   "snow_heat_capacity": {
-   "description": "Snow heat capacity cv = max(thin_sfclayer, (cpliq*h2osoi_liq + cpice*h2osoi_ice)/frac_sno_fluxes) [J/m2/K], the thin-layer floor of SoilTemperatureMod.F90:892-895 (cv is per unit ground area, h2osoi_* in kg/m2). The thin_sfclayer floor never binds in the dump (all snow layers have dz >= thin_sfclayer).",
+   "description": "Snow heat capacity cv = max(thin_sfclayer, (cpliq*h2osoi_liq + cpice*h2osoi_ice)/frac_sno_fluxes) [J/m2/K], the thin-layer floor of SoilTemperatureMod.F90:892-895 (cv is per unit ground area, h2osoi_* in kg/m2). The else branch is thin_sfclayer + 0*h2osoi_liq, value-identical to the scalar thin_sfclayer, so both branches of the ifelse under the runtime scalar condition frac_sno_fluxes > 0 share one value box, which the strict native compiler requires when the template is applied whole-array inside a const-cadence observed (esm-libraries-spec 2.5.10). The thin_sfclayer floor never binds in the dump (all snow layers have dz >= thin_sfclayer).",
    "params": ["h2osoi_liq", "h2osoi_ice", "frac_sno_fluxes", "cpliq", "cpice", "thin_sfclayer"],
    "body": {"op": "ifelse", "args": [
     {"op": ">", "args": ["frac_sno_fluxes", 0.0]},
     {"op": "max", "args": ["thin_sfclayer", {"op": "/", "args": [
      {"op": "+", "args": [{"op": "*", "args": ["cpliq", "h2osoi_liq"]}, {"op": "*", "args": ["cpice", "h2osoi_ice"]}]},
      "frac_sno_fluxes"]}]},
-    "thin_sfclayer"
+    {"op": "+", "args": ["thin_sfclayer", {"op": "*", "args": [0.0, "h2osoi_liq"]}]}
    ]}
   },
   "soil_saturation_water_content": {
@@ -201,24 +201,13 @@
    ]}
   },
   "soil_thermal_cond": {
-   "description": "Soil thermal conductivity thk [W/m/K] of the Johansen (1975) law as implemented in SoilTemperatureMod.F90:712-727: thk = dke*dksat + (1-dke)*tkdry when satw > 1e-7 (dke the Kersten number, dksat the saturated conductivity; the Fortran threshold is the .1e-6_r8 literal = 1e-7), thk = tkdry otherwise; bedrock layers (j > nbedrock) are overridden with thk_bedrock at :727. Composes soil_saturation_water_content, kersten_number, soil_liquid_fraction and soil_saturated_thermal_cond by reference.",
-   "params": ["h2osoi_liq", "h2osoi_ice", "excess_ice", "dz", "watsat", "t_soisno", "tkmg", "tkdry", "denh2o", "denice", "tfrz", "tkwat", "tkice"],
+   "description": "Soil thermal conductivity thk [W/m/K] of the Johansen (1975) law as implemented in SoilTemperatureMod.F90:712-727, in the named-intermediate form: thk = dke*dksat + (1-dke)*tkdry when satw > 1e-7 (the Fortran threshold is the .1e-6_r8 literal = 1e-7), thk = tkdry otherwise, with the saturation water content satw, the Kersten number dke and the saturated conductivity dksat as NAMED intermediate parameters, each defined once by the caller from soil_saturation_water_content, kersten_number and soil_saturated_thermal_cond (the ESM template format admits params + body only, so naming the intermediates once requires the caller to compute them as observeds: clm_soiltemp.esm declares satw/dke/fl/dksat exactly that way; the bedrock override thk_bedrock at :727 is applied by the caller's layer mask).",
+   "params": ["satw", "dke", "dksat", "tkdry"],
    "body": {"op": "ifelse", "args": [
-    {"op": ">", "args": [{"op": "apply_expression_template", "args": [], "name": "soil_saturation_water_content", "bindings": {"h2osoi_liq": "h2osoi_liq", "h2osoi_ice": "h2osoi_ice", "excess_ice": "excess_ice", "dz": "dz", "watsat": "watsat", "denh2o": "denh2o", "denice": "denice"}}, 1.0e-7]},
+    {"op": ">", "args": ["satw", 1.0e-7]},
     {"op": "+", "args": [
-     {"op": "*", "args": [
-      {"op": "apply_expression_template", "args": [], "name": "kersten_number", "bindings": {
-       "satw": {"op": "apply_expression_template", "args": [], "name": "soil_saturation_water_content", "bindings": {"h2osoi_liq": "h2osoi_liq", "h2osoi_ice": "h2osoi_ice", "excess_ice": "excess_ice", "dz": "dz", "watsat": "watsat", "denh2o": "denh2o", "denice": "denice"}},
-       "t_soisno": "t_soisno", "tfrz": "tfrz"}},
-      {"op": "apply_expression_template", "args": [], "name": "soil_saturated_thermal_cond", "bindings": {
-       "tkmg": "tkmg",
-       "fl": {"op": "apply_expression_template", "args": [], "name": "soil_liquid_fraction", "bindings": {"h2osoi_liq": "h2osoi_liq", "h2osoi_ice": "h2osoi_ice", "excess_ice": "excess_ice", "dz": "dz", "denh2o": "denh2o", "denice": "denice"}},
-       "watsat": "watsat", "tkwat": "tkwat", "tkice": "tkice"}}]},
-     {"op": "*", "args": [
-      {"op": "-", "args": [1.0, {"op": "apply_expression_template", "args": [], "name": "kersten_number", "bindings": {
-       "satw": {"op": "apply_expression_template", "args": [], "name": "soil_saturation_water_content", "bindings": {"h2osoi_liq": "h2osoi_liq", "h2osoi_ice": "h2osoi_ice", "excess_ice": "excess_ice", "dz": "dz", "watsat": "watsat", "denh2o": "denh2o", "denice": "denice"}},
-       "t_soisno": "t_soisno", "tfrz": "tfrz"}}]},
-      "tkdry"]}
+     {"op": "*", "args": ["dke", "dksat"]},
+     {"op": "*", "args": [{"op": "-", "args": [1.0, "dke"]}, "tkdry"]}
     ]},
     "tkdry"
    ]}
