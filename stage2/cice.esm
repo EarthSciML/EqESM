@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cice",
-  "description": "CICE sea-ice top-level component (stage 2 of the EqESM project): the cesm3_cice6_6_3_22 ice component as an esm 1.3.0 assembly, per the stage1/boundaries.md 1.3 boundary table. Five systems: IceCap (mounted from ./cice_coupling.esm, the med<->ice cap renames, the med2mod/mod2med areacor scaling, and the merge_fluxes export aggregation of ice_import_export.F90), Thermodynamics (./cice_thermodynamics.esm, the BL99 column physics: prep_radiation shortwave/albedo, step_therm1 vertical conduction and surface energy balance, step_therm2 growth/melt/ponds and the ocean heat/fresh/salt fluxes), Dynamics (./cice_dynamics.esm, the EVP momentum balance and stress relaxation of step_dyn_horiz), Transport (./cice_transport.esm, the per-category conservative advection of the incremental-remap scheme), and the inline Control model, which is the ice_step orchestration (CICE_RunMod.F90:109-369 via ice_step_mod.F90) written as algebraic rate rules over one coupling period: the subcycling dt_dyn = dt/ndtd of the dynamics loop (CICE_RunMod.F90:271-281, ice_calendar dt_dyn), and the atmosphere boundary layer of the constant scheme (atmo_boundary_const, icepack_atmo.F90:398-496): wind = sqrt(uatm^2 + vatm^2) (prepare_forcing, ice_forcing.F90:1796), tau = rhoa*0.0012*wind with the components strairx = tau*uatm, strairy = tau*vatm (F90:460-464), shcoef = senscoef*cp_air*rhoa*wind (F90:493) and lhcoef = latncoef*Lsub*rhoa*wind (F90:494, Lheat = Lsub for ice F90:472-476). The coupling array wires the data flow with variable_map param_to_var entries in the ice_step order: the cap state fields (potT, Qa, rhoa, the four shortwave bands, flw, sst, sss, frzmlt, frain, fsnow, uocn, vocn, ss_tltx, ss_tlty) into Thermodynamics and Dynamics; the transport-owned mass states aicen/vicen/vsnon into Thermodynamics, Dynamics, and the cap aggregation; the thermodynamics-owned enthalpy states qicen/qsnon into the Transport tracers; the dynamics-owned velocity uvel/vvel into Transport and the full ocean stress taux/tauy into the cap's Fioi_taux/tauy sign flip and the thermodynamics' ustar; and the per-category thermodynamics fluxes and albedos into the cap's export aggregation. Deferred to stage 3 (documented in the subcomponent descriptions and stage2/README-cice.md): the Tsfc implicit surface-energy-balance solve (carried as a free parameter), the incremental-remap discretization of the transport PDEs (EarthSciDiscretizations lowering), the kstrength = 1 Rothrock ridging and the kdyn/ktherm alternates, the similarity atmbndy scheme, the per-band Fioi_swpen_* fields, and the wave/aerosol/isotope exports. The tests block is empty: the dynamics and transport subcomponents are now lowered onto the traced 3x5 subdomain with the EarthSciDiscretizations B-grid rules (their own dump pins live in their files), but the assembly couples those 3x5 systems to the single-cell Thermodynamics/IceCap through shape-mismatched variable_map edges (the validator accepts them with an UNKNOWN compatibility verdict), so the whole-coupling-period trace over [0, 3600] from the cold start remains a stage-3 concern. See stage2/README-cice.md 'Testing'. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/."
+  "description": "CICE sea-ice top-level component (stage 2 of the EqESM project): the cesm3_cice6_6_3_22 ice component as an esm 1.3.0 assembly, per the stage1/boundaries.md 1.3 boundary table. Five systems: IceCap (mounted from ./cice_coupling.esm, the med<->ice cap renames, the med2mod/mod2med areacor scaling, and the merge_fluxes export aggregation of ice_import_export.F90), Thermodynamics (./cice_thermodynamics.esm, the BL99 column physics: prep_radiation shortwave/albedo, step_therm1 vertical conduction and surface energy balance, step_therm2 growth/melt/ponds and the ocean heat/fresh/salt fluxes), Dynamics (./cice_dynamics.esm, the EVP momentum balance and stress relaxation of step_dyn_horiz), Transport (./cice_transport.esm, the per-category conservative advection of the incremental-remap scheme), and the inline Control model, which is the ice_step orchestration (CICE_RunMod.F90:109-369 via ice_step_mod.F90) written as algebraic rate rules over one coupling period: the subcycling dt_dyn = dt/ndtd of the dynamics loop (CICE_RunMod.F90:271-281, ice_calendar dt_dyn), and the atmosphere boundary layer of the constant scheme (atmo_boundary_const, icepack_atmo.F90:398-496): wind = sqrt(uatm^2 + vatm^2) (prepare_forcing, ice_forcing.F90:1796), tau = rhoa*0.0012*wind with the components strairx = tau*uatm, strairy = tau*vatm (F90:460-464), shcoef = senscoef*cp_air*rhoa*wind (F90:493) and lhcoef = latncoef*Lsub*rhoa*wind (F90:494, Lheat = Lsub for ice F90:472-476). The coupling array wires the data flow with variable_map param_to_var entries in the ice_step order: the cap state fields (potT, Qa, rhoa, the four shortwave bands, flw, sst, sss, frzmlt, frain, fsnow, uocn, vocn, ss_tltx, ss_tlty) into Thermodynamics and Dynamics; the transport-owned mass states aicen/vicen/vsnon into Thermodynamics, Dynamics, and the cap aggregation; the thermodynamics-owned enthalpy states qicen/qsnon into the Transport tracers; the dynamics-owned velocity uvel/vvel into Transport and the full ocean stress taux/tauy into the cap's Fioi_taux/tauy sign flip and the thermodynamics' ustar; and the per-category thermodynamics fluxes and albedos into the cap's export aggregation. Deferred to stage 3 (documented in the subcomponent descriptions and stage2/README-cice.md): the Tsfc implicit surface-energy-balance solve (carried as a free parameter), the incremental-remap discretization of the transport PDEs (EarthSciDiscretizations lowering), the kstrength = 1 Rothrock ridging and the kdyn/ktherm alternates, the similarity atmbndy scheme, the per-band Fioi_swpen_* fields, and the wave/aerosol/isotope exports. The shape-mismatched variable_map edges (3x5 dynamics/transport to the single-cell Thermodynamics/IceCap) carry faq full-map broadcast and single-cell select transforms (index of the traced cell (2,2) = global (3,5) inside a faq over ncat; the native compiler requires the full-rank index form), and the tests block pins the coupled assembly at the step-1 export-time state (17 assertions: the export-state chain through the coupling, the constant-scheme Control chain, and the broadcast ocean/tilt stress). The whole-coupling-period trace over [0, 3600] from the cold start remains a stage-3 concern. See stage2/README-cice.md 'Testing'. Reference: stage1/cesm/components/cice/src/cicecore/drivers/nuopc/cmeps/."
  },
  "solver": {
   "stiffness": "high",
@@ -28,6 +28,14 @@
   "snow_layer": {
    "kind": "interval",
    "size": "N_SLYR"
+  },
+  "i": {
+   "kind": "interval",
+   "size": "N_I"
+  },
+  "j": {
+   "kind": "interval",
+   "size": "N_J"
   }
  },
  "metaparameters": {
@@ -35,6 +43,16 @@
    "type": "integer",
    "default": 1,
    "description": "number of ice grid cells in the stage-2 skeleton (one cell; the full model runs the block-decomposed B grid), [-]"
+  },
+  "N_I": {
+   "type": "integer",
+   "default": 3,
+   "description": "number of T cells along the B-grid x axis of the traced subdomain (global cells 2..4 of the stage-1 dump; declared here so the mounted dynamics/transport grids fold to the traced 3x5 size), [-]"
+  },
+  "N_J": {
+   "type": "integer",
+   "default": 5,
+   "description": "number of T cells along the B-grid y axis (global cells 4..8 of the dump; see N_I), [-]"
   },
   "N_CAT": {
    "type": "integer",
@@ -53,14 +71,14 @@
   }
  },
  "models": {
-  "Thermodynamics": {
-   "ref": "./cice_thermodynamics.esm"
+  "Transport": {
+   "ref": "./cice_transport.esm"
   },
   "Dynamics": {
    "ref": "./cice_dynamics.esm"
   },
-  "Transport": {
-   "ref": "./cice_transport.esm"
+  "Thermodynamics": {
+   "ref": "./cice_thermodynamics.esm"
   },
   "IceCap": {
    "ref": "./cice_coupling.esm"
@@ -234,7 +252,919 @@
      }
     }
    ],
-   "tests": []
+  "tests": [
+  {
+    "id": "assembly_exports_dynamics_step1_cell3_5",
+    "description": "Instantaneous assembly pins of the step-1 export-time state (the end of the first coupling period; the run's step-1 exports aggregate the entry(2) state to round-off, so the export pins are exact): the traced cell local (2,2) = global (3,5). Initial conditions: Transport aicen/vicen/vsnon = the post-step-1 advected field, cice_thermo_state.csv step-2 entry rows at the 15 cells; Dynamics uvel/vvel = the export-time velocity field, cice_transport_state.csv step-1 t_entr uvel/vvel at the 15 U points (the advection uses the post-dynamics velocity; the U(4,4) = (0,0) convention cell local (3,1) is zero in the dump); Thermodynamics qicen/qsnon = the step-2 entry column state at (3,5). Parameter overrides: Thermodynamics Tsfc = the entry(2) Tsfc tracer (the surface temperature the Si_t export aggregates; the converged-solve Tsfcn is a different quantity, 0.7 K warmer, so the flux exports are not pinned here), albedos = the step-1 cice_albedo.csv rows at (3,5) (export-time albedos); the B-grid geometry dxT/dyT/cxp/cyp/cxm/cym/dxhy/dyhx (cice_evp_stress.csv step-2 ksub1 corner-1 rows) with HTE/HTN = (3cyp-cym)/4, (3cxp-cxm)/4 and the momentum-dump aiX/uarear (cice_evp_momentum.csv step-2 ksub1; U(4,4) missing from the dump, zeroed by the (0,0) convention); IceCap raw CMEPS fields = the step-1 (3,5) cice_run_imports.csv values inverted through the import equations (Sa_u = uatm, Sa_v = vatm, Sa_dens = rhoa, So_u = uocn, So_v = vocn, So_dhdx = ss_tltx, So_dhdy = ss_tlty) with med2mod_areacor = the row's areacor and mod2med_areacor = 1/areacor (the step-1 (3,5) export rows carry the inverse). Pins against cice_run_exports.csv step-1 (3,5): the export chain through the coupling (Transport->Thermodynamics/IceCap single-cell selects and the Thermodynamics->IceCap Tsfc/albedo edges) Si_ifrac/Si_vice/Si_vsno/Si_snowh/Si_t and the albedo aggregation Si_avsdr/Si_anidr/Si_avsdf/Si_anidf. Formulation pins (transcribed from the same inputs; no dump column is directly comparable): Faii_taux/Faii_tauy = strairxT/aice*areacor with the constant-scheme Control chain strairx = tau*uatm, tau = rhoa*0.0012*wind (icepack_atmo.F90:460-461; the run's similarity-scheme export differs, a stage-3 concern); the ocean-ice stress Dynamics.taux/tauy at U(1,1) and U(2,2) (the traced cell's NE corner), vrel = aiX*rhow*Cw*sqrt((uocn-uvel)^2+(vocn-vvel)^2) with rhow = 1026, Cw = 0.00536 and the broadcast step-1 (3,5) uocn/vocn; and the tilt stress strtltx/strtlty at T(2,2) as wiring pins of the ss_tltx/ss_tlty broadcast (the traced-cell So_dhdx/So_dhdy imports are identically zero in this run).",
+    "time_span": {
+      "start": 0.0,
+      "end": 0.0
+    },
+    "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+    },
+    "parameter_overrides": {
+      "Thermodynamics.Tsfc": [
+        -3.992162719228986,
+        -3.992162719228986,
+        -3.992162719228986,
+        -3.992162719228986,
+        -3.992162719228986
+      ],
+      "Thermodynamics.alvdrn": [
+        0.8012425142819971,
+        0.9746582279641268,
+        0.9760305748565534,
+        0.9765002562339028,
+        0.9765440798804994
+      ],
+      "Thermodynamics.alidrn": [
+        0.6223107683813334,
+        0.6767922519895798,
+        0.6767903895434615,
+        0.6767902342356835,
+        0.6767902682755257
+      ],
+      "Thermodynamics.alvdfn": [
+        0.7031456254426053,
+        0.9613931086200608,
+        0.9634970346676461,
+        0.9642170957905419,
+        0.9642842813645289
+      ],
+      "Thermodynamics.alidfn": [
+        0.5105101748076409,
+        0.5888751644670052,
+        0.5888722846514182,
+        0.5888720442041272,
+        0.588872096889385
+      ],
+      "Dynamics.aiX": [
+        [
+          0.8864372661049056,
+          0.7919662066536575,
+          0.8077055334869097,
+          0.8159818452074996,
+          0.8182679973964321
+        ],
+        [
+          0.8846778445343791,
+          0.7923124136324644,
+          0.8038357038651518,
+          0.8007595526771868,
+          0.8023657323503273
+        ],
+        [
+          0.0,
+          0.7950656699846108,
+          0.7941886908765261,
+          0.7807671380302491,
+          0.7826019104024559
+        ]
+      ],
+      "Dynamics.uarear": [
+        [
+          6.413528696759567e-10,
+          6.146806591704998e-10,
+          5.901875919798776e-10,
+          5.676191263820463e-10,
+          5.467588875253487e-10
+        ],
+        [
+          6.413528696759567e-10,
+          6.146806591704998e-10,
+          5.901875919798776e-10,
+          5.676191263820463e-10,
+          5.467588875253487e-10
+        ],
+        [
+          0.0,
+          6.146806591704998e-10,
+          5.901875919798776e-10,
+          5.676191263820463e-10,
+          5.467588875253487e-10
+        ]
+      ],
+      "Dynamics.dxT": [
+        [
+          25680.547570607527,
+          26820.781783958108,
+          27958.68417287352,
+          29094.15580703113,
+          30227.097967440433
+        ],
+        [
+          25680.547570607527,
+          26820.781783958108,
+          27958.68417287352,
+          29094.15580703113,
+          30227.097967440433
+        ],
+        [
+          25680.547570607527,
+          26820.781783958108,
+          27958.68417287352,
+          29094.15580703113,
+          30227.097967440433
+        ]
+      ],
+      "Dynamics.dyT": [
+        [
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161
+        ],
+        [
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161
+        ],
+        [
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161,
+          59395.45501642161
+        ]
+      ],
+      "Dynamics.cxp": [
+        [
+          26821.922937715524,
+          27959.874843551268,
+          29095.39589111118,
+          30228.38735710868,
+          31358.750738181487
+        ],
+        [
+          26821.922937715524,
+          27959.874843551268,
+          29095.39589111118,
+          30228.38735710868,
+          31358.750738181487
+        ],
+        [
+          26821.922937715524,
+          27959.874843551268,
+          29095.39589111118,
+          30228.38735710868,
+          31358.750738181487
+        ]
+      ],
+      "Dynamics.cyp": [
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ],
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ],
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ]
+      ],
+      "Dynamics.cxm": [
+        [
+          -24539.172203499533,
+          -25681.688724364943,
+          -26821.972454635856,
+          -27959.92425695357,
+          -29095.445196699373
+        ],
+        [
+          -24539.172203499533,
+          -25681.688724364943,
+          -26821.972454635856,
+          -27959.92425695357,
+          -29095.445196699373
+        ],
+        [
+          -24539.172203499533,
+          -25681.688724364943,
+          -26821.972454635856,
+          -27959.92425695357,
+          -29095.445196699373
+        ]
+      ],
+      "Dynamics.cym": [
+        [
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605
+        ],
+        [
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605
+        ],
+        [
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605,
+          -59395.455016421605
+        ]
+      ],
+      "Dynamics.dxhy": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "Dynamics.dyhx": [
+        [
+          570.6876835539988,
+          569.546529796582,
+          568.3558591188303,
+          567.1157750387774,
+          565.8263853705284
+        ],
+        [
+          570.6876835539988,
+          569.546529796582,
+          568.3558591188303,
+          567.1157750387774,
+          565.8263853705284
+        ],
+        [
+          570.6876835539988,
+          569.546529796582,
+          568.3558591188303,
+          567.1157750387774,
+          565.8263853705284
+        ]
+      ],
+      "Dynamics.HTE": [
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ],
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ],
+        [
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605,
+          59395.455016421605
+        ]
+      ],
+      "Dynamics.HTN": [
+        [
+          26251.235254161526,
+          27390.328313754686,
+          28527.04003199235,
+          29661.271582069905,
+          30792.92435281096
+        ],
+        [
+          26251.235254161526,
+          27390.328313754686,
+          28527.04003199235,
+          29661.271582069905,
+          30792.92435281096
+        ],
+        [
+          26251.235254161526,
+          27390.328313754686,
+          28527.04003199235,
+          29661.271582069905,
+          30792.92435281096
+        ]
+      ],
+      "IceCap.Sa_u": 0.16233199134639076,
+      "IceCap.Sa_v": 1.7327887040729173,
+      "IceCap.Sa_dens": 1.2698312342884206,
+      "IceCap.So_u": 7.407083176076412e-05,
+      "IceCap.So_v": -0.0018844332390775284,
+      "IceCap.So_dhdx": 0.0,
+      "IceCap.So_dhdy": 0.0,
+      "IceCap.med2mod_areacor": 1.0003304865245655,
+      "IceCap.mod2med_areacor": 0.9996696226606931
+    },
+    "initial_conditions": {
+      "Transport.aicen": [
+        [
+          [
+            0.009852850608356705,
+            0.012855529713203084,
+            0.02967522239569254,
+            0.16810878906591015,
+            0.7737677729487741
+          ],
+          [
+            0.19517072496325305,
+            0.1751699959445424,
+            0.20299608331332739,
+            0.0925064216149051,
+            0.1216558550800837
+          ],
+          [
+            0.2400766653663879,
+            0.2634254615164032,
+            0.17909871909393293,
+            0.06249002808294717,
+            0.05508345318458766
+          ],
+          [
+            0.2426919186506009,
+            0.3004531702096642,
+            0.16427604885302102,
+            0.05917420533990415,
+            0.05122228568500235
+          ],
+          [
+            0.21451075412464132,
+            0.3379989394191858,
+            0.16112464237950028,
+            0.06074169961893066,
+            0.05272389186144788
+          ]
+        ],
+        [
+          [
+            0.019998693835139206,
+            0.018689741990952156,
+            0.021232919112523535,
+            0.2325707828522124,
+            0.7062446404306936
+          ],
+          [
+            0.19509920997698144,
+            0.19102973190363176,
+            0.19874352490657504,
+            0.08527745905757382,
+            0.10446119777225216
+          ],
+          [
+            0.2665298255694812,
+            0.2729006570477799,
+            0.16778864231529517,
+            0.05189257221180012,
+            0.04558044632846786
+          ],
+          [
+            0.27103888359345235,
+            0.30545283008105073,
+            0.14120833461467586,
+            0.049371543416734685,
+            0.04065491374870835
+          ],
+          [
+            0.2505253846079861,
+            0.3313992567197806,
+            0.1347485950838977,
+            0.051994107144722954,
+            0.042375364226296966
+          ]
+        ],
+        [
+          [
+            0.014546987533488643,
+            0.01437960674157303,
+            0.02220442303290164,
+            0.1984641673481961,
+            0.7493161481210983
+          ],
+          [
+            0.19333932043753435,
+            0.21621557270682965,
+            0.20867510730854066,
+            0.07229338771572755,
+            0.08563417081152437
+          ],
+          [
+            0.2936476965493385,
+            0.27663678612600096,
+            0.15417825363337812,
+            0.04715026122523659,
+            0.04079790528181482
+          ],
+          [
+            0.29897249929682534,
+            0.2972514558583821,
+            0.11590817072822045,
+            0.04343285529264439,
+            0.035316375642820606
+          ],
+          [
+            0.2969767469479995,
+            0.3099130350920145,
+            0.10536018111674159,
+            0.04494354825801149,
+            0.03608501290682929
+          ]
+        ]
+      ],
+      "Transport.vicen": [
+        [
+          [
+            0.003367779812266007,
+            0.01554109629578779,
+            0.06637380864748238,
+            0.5907909709038863,
+            21.611477507853053
+          ],
+          [
+            0.03491946025185333,
+            0.18814639271223785,
+            0.38033637662938874,
+            0.3246554490612238,
+            1.4503495281475627
+          ],
+          [
+            0.043477700357756895,
+            0.27346944321742317,
+            0.31914578046197933,
+            0.2170465257476389,
+            0.4266181762050393
+          ],
+          [
+            0.047425102701226636,
+            0.3090959875522784,
+            0.288350670979356,
+            0.20467440652634913,
+            0.38238750791847226
+          ],
+          [
+            0.05151028998780184,
+            0.34622448934561495,
+            0.277254649932636,
+            0.208908156368402,
+            0.38682674902647435
+          ]
+        ],
+        [
+          [
+            0.005397850213129078,
+            0.023942140179348897,
+            0.0399397078635164,
+            0.9741575968869286,
+            19.81721380475162
+          ],
+          [
+            0.034088386566977734,
+            0.20815767151363995,
+            0.35599114941687404,
+            0.3057965536376442,
+            1.16761539928305
+          ],
+          [
+            0.04903782434030179,
+            0.2793888801133831,
+            0.2937598042356065,
+            0.1784789205962492,
+            0.34514955458031565
+          ],
+          [
+            0.05585454615812537,
+            0.304542063396575,
+            0.244903908142195,
+            0.16873640672255447,
+            0.29602051740744867
+          ],
+          [
+            0.06560256128663951,
+            0.32605815989667336,
+            0.23101073278912002,
+            0.1772147938588419,
+            0.306575838211402
+          ]
+        ],
+        [
+          [
+            0.0035009181434715966,
+            0.01786339513832903,
+            0.04490632324489385,
+            0.72865381404801,
+            18.890818548001892
+          ],
+          [
+            0.03649328146221779,
+            0.23308233517458105,
+            0.36955180944062754,
+            0.25386734439471803,
+            0.8305763143679897
+          ],
+          [
+            0.05634645838924221,
+            0.27798653967298403,
+            0.2676293029172479,
+            0.16162479045002112,
+            0.30798566757939755
+          ],
+          [
+            0.06849435654093011,
+            0.28666165091875834,
+            0.20065034643770607,
+            0.14761639927580525,
+            0.25636991886702826
+          ],
+          [
+            0.08542000309789063,
+            0.29181575997788195,
+            0.1820959899616643,
+            0.15249234122882746,
+            0.26033223338002337
+          ]
+        ]
+      ],
+      "Transport.vsnon": [
+        [
+          [
+            0.0,
+            0.0019751743022568325,
+            0.02041996777347029,
+            0.18230923273106475,
+            3.4177127644477934
+          ],
+          [
+            0.002558356414974736,
+            0.04642576613403754,
+            0.08453248286313512,
+            0.053012962507745155,
+            0.1605960490536185
+          ],
+          [
+            0.00553598157465553,
+            0.07728705324754334,
+            0.06980509698675395,
+            0.036068005322586666,
+            0.05585367606992837
+          ],
+          [
+            0.007353967025129856,
+            0.09274582612967944,
+            0.06849663028892658,
+            0.03713058599776843,
+            0.05309667884903127
+          ],
+          [
+            0.014124431456488227,
+            0.10679293196387488,
+            0.07205204828275692,
+            0.04204083889759989,
+            0.05727704593061239
+          ]
+        ],
+        [
+          [
+            0.0,
+            0.002794718458647137,
+            0.007228721893417195,
+            0.28218578938214034,
+            3.004742960880409
+          ],
+          [
+            0.00214517760028279,
+            0.05120298134744836,
+            0.07438735896096987,
+            0.04898132510697397,
+            0.13861653386722464
+          ],
+          [
+            0.006340468223430725,
+            0.07946324998047163,
+            0.06586036950499848,
+            0.03021851368098695,
+            0.045054634606847464
+          ],
+          [
+            0.009785562302312392,
+            0.09062862360583843,
+            0.05974037355438814,
+            0.031027370420451242,
+            0.04116342782161753
+          ],
+          [
+            0.018981912797212026,
+            0.09717172432401758,
+            0.060931163985563794,
+            0.0354460377803012,
+            0.04492604738499721
+          ]
+        ],
+        [
+          [
+            0.0,
+            0.002899236964468358,
+            0.01394477152813959,
+            0.2273555088341527,
+            3.5161499945474426
+          ],
+          [
+            0.003218285658443744,
+            0.05975237736986469,
+            0.08166282501213593,
+            0.04051420325329327,
+            0.10498356329369356
+          ],
+          [
+            0.008165464538160408,
+            0.07717990701755018,
+            0.058871124493702284,
+            0.027103019740494994,
+            0.03940362547334395
+          ],
+          [
+            0.013555664833365838,
+            0.08037619308780151,
+            0.048655868863786554,
+            0.0265439737208536,
+            0.03462717095865928
+          ],
+          [
+            0.023912868305829872,
+            0.07888423600446277,
+            0.047916895060079664,
+            0.02943443630689699,
+            0.03689197610152237
+          ]
+        ]
+      ],
+      "Dynamics.uvel": [
+        [
+          0.00012200831259922484,
+          -0.00430503734325033,
+          -0.006404552971129575,
+          -0.0029079564379971357,
+          -0.0037366886985347827
+        ],
+        [
+          1.349728123413932e-05,
+          -0.0049893802525858445,
+          -0.006556908183432414,
+          -0.004013004944111566,
+          -0.0042590499452267415
+        ],
+        [
+          0.0,
+          -0.006049027918925767,
+          -0.0058923320164812176,
+          -0.0045391275967812655,
+          -0.004738980872614332
+        ]
+      ],
+      "Dynamics.vvel": [
+        [
+          0.0007204892821085377,
+          0.0007865942006418693,
+          0.0037168927343423233,
+          0.013900356415145056,
+          0.015928611364519916
+        ],
+        [
+          0.0009977387642852074,
+          0.001620845665338858,
+          0.00661497866621736,
+          0.011651221033965178,
+          0.012191539845748306
+        ],
+        [
+          0.0,
+          0.003975027437344815,
+          0.009118244672511678,
+          0.01094051866825294,
+          0.010805999470988786
+        ]
+      ],
+      "Thermodynamics.qicen": [
+        [
+          -299745570.55563176,
+          -298729215.3734631,
+          -297784537.8242855,
+          -296521779.2307301,
+          -293954215.2851075,
+          -288569024.12406754,
+          -271530709.23044425,
+          -214338206.79563126
+        ],
+        [
+          -295867814.07185423,
+          -294956506.8840964,
+          -294154293.11888206,
+          -293620457.76648116,
+          -293369020.0450227,
+          -293092878.05803216,
+          -292520167.6976286,
+          -287034635.01228637
+        ],
+        [
+          -295425634.7961048,
+          -294492386.3103499,
+          -294028871.87121654,
+          -294084684.3971227,
+          -294727808.3367829,
+          -294579802.6180682,
+          -293192497.59631324,
+          -285742794.39152205
+        ],
+        [
+          -295830121.1648516,
+          -295500925.71526706,
+          -295407817.6053068,
+          -295303574.99141634,
+          -295544496.66183215,
+          -297469692.4776547,
+          -298744465.534943,
+          -291872746.99332786
+        ],
+        [
+          -297451926.7221619,
+          -285340619.3968445,
+          -269645718.1760381,
+          -257487554.7701041,
+          -248400334.46339342,
+          -237951452.21243778,
+          -209380141.79298782,
+          -173195697.94371974
+        ]
+      ],
+      "Thermodynamics.qsnon": [
+        [
+          -112391836.04929295,
+          -112318823.05957381,
+          -112264688.14831108
+        ],
+        [
+          -115022655.1186357,
+          -113892544.09169255,
+          -112966462.42543253
+        ],
+        [
+          -115152261.60677192,
+          -114192712.78580083,
+          -113370140.06140642
+        ],
+        [
+          -115367131.97608271,
+          -114831240.84226657,
+          -114056410.92514798
+        ],
+        [
+          -114830251.97507223,
+          -114248384.96547455,
+          -113796535.70086242
+        ]
+      ]
+    },
+    "assertions": [
+      {
+        "variable": "IceCap.Si_ifrac",
+        "time": 0.0,
+        "expected": 0.7746111236170142
+      },
+      {
+        "variable": "IceCap.Si_vice",
+        "time": 0.0,
+        "expected": 2.071649160418186
+      },
+      {
+        "variable": "IceCap.Si_vsno",
+        "time": 0.0,
+        "expected": 0.31533337688289964
+      },
+      {
+        "variable": "IceCap.Si_snowh",
+        "time": 0.0,
+        "expected": 0.40708604262028103
+      },
+      {
+        "variable": "IceCap.Si_t",
+        "time": 0.0,
+        "expected": 269.157837280771
+      },
+      {
+        "variable": "IceCap.Si_avsdr",
+        "time": 0.0,
+        "expected": 0.9317896958382746
+      },
+      {
+        "variable": "IceCap.Si_anidr",
+        "time": 0.0,
+        "expected": 0.6630691804696613
+      },
+      {
+        "variable": "IceCap.Si_avsdf",
+        "time": 0.0,
+        "expected": 0.8975896091057705
+      },
+      {
+        "variable": "IceCap.Si_anidf",
+        "time": 0.0,
+        "expected": 0.5691360902633934
+      },
+      {
+        "variable": "IceCap.Faii_taux",
+        "time": 0.0,
+        "expected": 0.0005555807645563837
+      },
+      {
+        "variable": "IceCap.Faii_tauy",
+        "time": 0.0,
+        "expected": 0.005930464260548856
+      },
+      {
+        "variable": "Dynamics.taux",
+        "time": 0.0,
+        "expected": -6.088407333962123e-07,
+        "coords": {
+          "i": 1,
+          "j": 1
+        }
+      },
+      {
+        "variable": "Dynamics.tauy",
+        "time": 0.0,
+        "expected": -3.30844030704005e-05,
+        "coords": {
+          "i": 1,
+          "j": 1
+        }
+      },
+      {
+        "variable": "Dynamics.taux",
+        "time": 0.0,
+        "expected": 0.00013586918958307404,
+        "coords": {
+          "i": 2,
+          "j": 2
+        }
+      },
+      {
+        "variable": "Dynamics.tauy",
+        "time": 0.0,
+        "expected": -9.405826106981281e-05,
+        "coords": {
+          "i": 2,
+          "j": 2
+        }
+      },
+      {
+        "variable": "Dynamics.strtltx",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+          "i": 2,
+          "j": 2
+        }
+      },
+      {
+        "variable": "Dynamics.strtlty",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+          "i": 2,
+          "j": 2
+        }
+      }
+    ]
+  }
+  ]
   }
  },
  "coupling": [
@@ -277,15 +1207,15 @@
    "type": "variable_map",
    "from": "Control.strairx",
    "to": "Dynamics.strairx",
-   "transform": "param_to_var",
-   "description": "T-point air-ice stress mapped to the U-point momentum balance (grid_average_X2Y of strairxT, ice_dyn_evp.F90:474-475; identity on the single-cell skeleton)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "Control.strairx", "args": ["Control.strairx"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "T-point air-ice stress mapped to the U-point momentum balance (grid_average_X2Y of strairxT, ice_dyn_evp.F90:474-475; the single-cell value broadcast over the traced 3x5 dynamics grid by the faq full-map transform)"
   },
   {
    "type": "variable_map",
    "from": "Control.strairy",
    "to": "Dynamics.strairy",
-   "transform": "param_to_var",
-   "description": "T-point air-ice stress mapped to the U-point momentum balance"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "Control.strairy", "args": ["Control.strairy"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "T-point air-ice stress mapped to the U-point momentum balance (broadcast over the 3x5 grid)"
   },
   {
    "type": "variable_map",
@@ -305,127 +1235,127 @@
    "type": "variable_map",
    "from": "Control.shcoef",
    "to": "Thermodynamics.shcoef",
-   "transform": "param_to_var",
-   "description": "sensible-heat transfer coefficient into the surface energy balance (atmo_boundary_const F90:493)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "Control.shcoef", "args": ["Control.shcoef"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sensible-heat transfer coefficient into the surface energy balance (atmo_boundary_const F90:493; the single-cell value broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Control.lhcoef",
    "to": "Thermodynamics.lhcoef",
-   "transform": "param_to_var",
-   "description": "latent-heat transfer coefficient into the surface energy balance (F90:494)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "Control.lhcoef", "args": ["Control.lhcoef"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "latent-heat transfer coefficient into the surface energy balance (F90:494; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.potT",
    "to": "Thermodynamics.potT",
-   "transform": "param_to_var",
-   "description": "air potential temperature into the surface energy balance (ice_import Sa_ptem or the Sa_pbot branch)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.potT", "args": ["IceCap.potT"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air potential temperature into the surface energy balance (ice_import Sa_ptem or the Sa_pbot branch; the single-cell value broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.Qa",
    "to": "Thermodynamics.Qa",
-   "transform": "param_to_var",
-   "description": "air specific humidity into the surface energy balance (ice_import Sa_shum)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.Qa", "args": ["IceCap.Qa"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air specific humidity into the surface energy balance (ice_import Sa_shum; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.rhoa",
    "to": "Thermodynamics.rhoa",
-   "transform": "param_to_var",
-   "description": "air density into the saturation humidity and surface energy balance"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.rhoa", "args": ["IceCap.rhoa"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "air density into the saturation humidity and surface energy balance (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swvdr",
    "to": "Thermodynamics.swvdr",
-   "transform": "param_to_var",
-   "description": "visible direct shortwave into the absorbed_solar/prep_radiation step"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swvdr", "args": ["IceCap.swvdr"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "visible direct shortwave into the absorbed_solar/prep_radiation step (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swvdf",
    "to": "Thermodynamics.swvdf",
-   "transform": "param_to_var",
-   "description": "visible diffuse shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swvdf", "args": ["IceCap.swvdf"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "visible diffuse shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swidr",
    "to": "Thermodynamics.swidr",
-   "transform": "param_to_var",
-   "description": "near-IR direct shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swidr", "args": ["IceCap.swidr"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "near-IR direct shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.swidf",
    "to": "Thermodynamics.swidf",
-   "transform": "param_to_var",
-   "description": "near-IR diffuse shortwave into prep_radiation"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.swidf", "args": ["IceCap.swidf"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "near-IR diffuse shortwave into prep_radiation (broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.flw",
    "to": "Thermodynamics.flw",
-   "transform": "param_to_var",
-   "description": "downward longwave into the surface energy balance (ice_import Faxa_lwdn)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.flw", "args": ["IceCap.flw"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "downward longwave into the surface energy balance (ice_import Faxa_lwdn; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.sst",
    "to": "Thermodynamics.sst",
-   "transform": "param_to_var",
-   "description": "sea surface temperature into the ocean heat flux fbot (ice_import So_t)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.sst", "args": ["IceCap.sst"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sea surface temperature into the ocean heat flux fbot (ice_import So_t; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.sss",
    "to": "Thermodynamics.sss",
-   "transform": "param_to_var",
-   "description": "sea surface salinity into the bottom liquidus (ice_import So_s)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.sss", "args": ["IceCap.sss"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "sea surface salinity into the bottom liquidus (ice_import So_s; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.frzmlt",
    "to": "Thermodynamics.frzmlt",
-   "transform": "param_to_var",
-   "description": "ocean-to-ice heat flux into fbot (ice_import Fioo_q)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.frzmlt", "args": ["IceCap.frzmlt"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "ocean-to-ice heat flux into fbot (ice_import Fioo_q; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.frain",
    "to": "Thermodynamics.frain",
-   "transform": "param_to_var",
-   "description": "rain rate (m/s) into the melt-pond volume change (ice_import Faxa_rain divided by rhofresh)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.frain", "args": ["IceCap.frain"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "rain rate (m/s) into the melt-pond volume change (ice_import Faxa_rain divided by rhofresh; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.fsnow",
    "to": "Thermodynamics.fsnow",
-   "transform": "param_to_var",
-   "description": "snowfall rate into the new-snow thickness (ice_import Faxa_snow)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": "IceCap.fsnow", "args": ["IceCap.fsnow"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "snowfall rate into the new-snow thickness (ice_import Faxa_snow; broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Transport.aicen",
    "to": "Thermodynamics.aicen",
-   "transform": "param_to_var",
-   "description": "advected category area into the column physics (the Fortran advects aicen before step_therm1 of the next step)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.aicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.aicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category area into the column physics (the Fortran advects aicen before step_therm1 of the next step; the single-cell skeleton selects the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vicen",
    "to": "Thermodynamics.vicen",
-   "transform": "param_to_var",
-   "description": "advected category ice volume into the column physics"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category ice volume into the column physics (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vsnon",
    "to": "Thermodynamics.vsnon",
-   "transform": "param_to_var",
-   "description": "advected category snow volume into the column physics"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vsnon", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vsnon"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "advected category snow volume into the column physics (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
@@ -452,22 +1382,22 @@
    "type": "variable_map",
    "from": "Transport.aicen",
    "to": "IceCap.aicen",
-   "transform": "param_to_var",
-   "description": "category area into the export aggregation (ailohi, Tsrf, fluxes)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.aicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.aicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category area into the export aggregation (ailohi, Tsrf, fluxes; single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vicen",
    "to": "IceCap.vicen",
-   "transform": "param_to_var",
-   "description": "category ice volume into the Si_vice export"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vicen", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vicen"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category ice volume into the Si_vice export (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
    "from": "Transport.vsnon",
    "to": "IceCap.vsnon",
-   "transform": "param_to_var",
-   "description": "category snow volume into the Si_vsno/Si_snowh exports"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Transport.vsnon", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}, "ncat"]}, "args": ["Transport.vsnon"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "category snow volume into the Si_vsno/Si_snowh exports (single-cell select of the traced cell (2,2) = global (3,5), keeping the ncat axis)"
   },
   {
    "type": "variable_map",
@@ -501,57 +1431,57 @@
    "type": "variable_map",
    "from": "IceCap.uocn",
    "to": "Dynamics.uocn",
-   "transform": "param_to_var",
-   "description": "ocean surface current into the ocean stress vrel (ice_import So_u)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.uocn", "args": ["IceCap.uocn"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_u; the single-cell value broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.vocn",
    "to": "Dynamics.vocn",
-   "transform": "param_to_var",
-   "description": "ocean surface current into the ocean stress vrel (ice_import So_v)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.vocn", "args": ["IceCap.vocn"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "ocean surface current into the ocean stress vrel (ice_import So_v; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.ss_tltx",
    "to": "Dynamics.ss_tltx",
-   "transform": "param_to_var",
-   "description": "sea-surface slope into the tilt stress (ice_import So_dhdx)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.ss_tltx", "args": ["IceCap.ss_tltx"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdx; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "IceCap.ss_tlty",
    "to": "Dynamics.ss_tlty",
-   "transform": "param_to_var",
-   "description": "sea-surface slope into the tilt stress (ice_import So_dhdy)"
+   "transform": {"op": "faq", "output_idx": ["i", "j"], "expr": "IceCap.ss_tlty", "args": ["IceCap.ss_tlty"], "ranges": {"i": {"from": "i"}, "j": {"from": "j"}}},
+   "description": "sea-surface slope into the tilt stress (ice_import So_dhdy; broadcast over the traced 3x5 dynamics grid)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.taux",
    "to": "Thermodynamics.strocnxT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the ustar of fbot (the single-cell skeleton collapses the T-point average of strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072)"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Dynamics.taux", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]}, "args": ["Dynamics.taux"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "full ocean stress into the ustar of fbot (the single-cell skeleton collapses the T-point average of strocnxU/aiU of step_dyn_horiz, ice_step_mod.F90:1051-1072, to the traced cell's NE-corner U point (2,2), broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.tauy",
    "to": "Thermodynamics.strocnyT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the ustar of fbot"
+   "transform": {"op": "faq", "output_idx": ["ncat"], "expr": {"op": "index", "args": ["Dynamics.tauy", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]}, "args": ["Dynamics.tauy"], "ranges": {"ncat": {"from": "ncat"}}},
+   "description": "full ocean stress into the ustar of fbot (traced cell's NE-corner U point (2,2), broadcast over the ncat categories)"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.taux",
    "to": "IceCap.strocnxT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the Fioi_taux sign flip (tauxo = -strocnxT_iavg, ice_import_export.F90:966-968)"
+   "transform": {"op": "index", "args": ["Dynamics.taux", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]},
+   "description": "full ocean stress into the Fioi_taux sign flip (tauxo = -strocnxT_iavg, ice_import_export.F90:966-968; the T-point average collapsed to the traced cell's NE-corner U point (2,2))"
   },
   {
    "type": "variable_map",
    "from": "Dynamics.tauy",
    "to": "IceCap.strocnyT",
-   "transform": "param_to_var",
-   "description": "full ocean stress into the Fioi_tauy sign flip"
+   "transform": {"op": "index", "args": ["Dynamics.tauy", {"op": "const", "args": [], "value": 2, "units": "1"}, {"op": "const", "args": [], "value": 2, "units": "1"}]},
+   "description": "full ocean stress into the Fioi_tauy sign flip (T-point average collapsed to the traced cell's NE-corner U point (2,2))"
   },
   {
    "type": "variable_map",
