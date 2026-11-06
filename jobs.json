@@ -990,7 +990,7 @@
     "agent_status": "done",
     "outcome": "superseded",
     "merge_commit": null,
-    "notes": "Session ended after 8.4 h with 'now let me author cism_velo.esm' and only uncommitted template additions (salvaged as WIP ce67180); continued as cism-velo2."
+    "notes": "Analysis + WIP templates (ce67180) completed by cism-velo2."
   },
   {
     "name": "cism-transport",
@@ -1274,15 +1274,15 @@
     "llm": "v4",
     "prompt_chars": 1548,
     "submitted": "2026-11-06 10:22:09",
-    "started": null,
-    "ended": null,
-    "wait_minutes": null,
-    "run_minutes": null,
-    "slurm_state": null,
-    "agent_status": null,
-    "outcome": "pending",
-    "merge_commit": null,
-    "notes": ""
+    "started": "2026-11-06 10:24:53",
+    "ended": "2026-11-06 15:00:54",
+    "wait_minutes": 2.6,
+    "run_minutes": 276.0,
+    "slurm_state": "COMPLETED",
+    "agent_status": "done",
+    "outcome": "merged",
+    "merge_commit": "8b33314",
+    "notes": "DIVA pointwise laws merged (13 tests/136 assertions, omega_k/omega as sigma integrals); stagger fields still dump-fed and 2-D solve left for stage 3."
   },
   {
     "name": "cdeps-datm-jra2",

@@ -1362,3 +1362,14 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
   (~27 min of suite time). Apply the same pattern as the GSWP3 decision: NCAR inputdata URL template
   by default, reader tests against a small generated fixture. The GSWP3 Streams model still inlines
   the law now in `stream_interp`; switch it to the template in the same follow-up.
+
+### 2026-11-06 (cont.): cism-velo2 merged
+
+- `wt/cism-velo2` merged as 8b33314: `stage2/cism_velo.esm` (DivaGeometry, DivaIntegrals, DivaVelocity;
+  BasalTraction mounted by reference), `cism_velo_discretization.esm` (σ-column rules importing
+  ESD `integral_lev_*`), extractor that re-verifies the laws on all 128 exit rows. Branch suite
+  2004P/0F/0E. No new bugs.
+- Gaps (README-cism-velo.md): per-level vertex stagger (`stag_omega_k`, θ, F, ω) still dump-fed in
+  DivaVelocity; β-chain pinned at rel 1e-5 (last-accepted-pass mismatch, documented); 2-D FEM solve
+  and Picard iteration are stage-3. Fork commits db624ec/76d170d on `instrument/cism-dumps` not pushed.
+- cism-transport2 (queued) will now merge onto this; expect an append conflict in `cism_templates.esm`.
