@@ -1271,7 +1271,7 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
 Independent read-only review agents (5, two-three branches each) checked
 every code branch, spot-checking test values against the dumps; the manager
 acted on their verdicts. Previous suite (main a922c00, job 12095573):
-1415P/0F/0E. Combined suite on main `ca8340a` runs as job **12179824**
+1415P/0F/0E. Combined suite on main `ca8340a` (job **12179824**): **1868P/0F/0E**, validate-failures=0, units-issues=0
 (`.work/suite-ca8340a/suite.log`, worktree `../EqESM-suite-ca8340a`).
 
 - **Merged (5):** `cam-surface3` (04c46f5; identity pins gone, named
@@ -1318,7 +1318,7 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
   `file:///projects/...` URLs. Awaiting user decision on pushing.
 - **Stranded slurm jobs:** 4 `st_archive` jobs (12047778, 12119694,
   12125371, 12127464) pending with DependencyNeverSatisfied after their
-  C_JRA case runs failed; cancellation needs the user.
-- **Next:** check suite 12179824; review the 11 queued agent jobs. Merge
+  C_JRA case runs failed; cancelled by the user.
+- **Next:** review the 11 queued agent jobs. Merge
   order: cam-vdiff3; clm-soiltemp4 before clm-soilfluxes2; cism-transport2
   before cism-velo2 (both touch cism_templates.esm).
