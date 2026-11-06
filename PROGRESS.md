@@ -1322,3 +1322,11 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
 - **Next:** review the 11 queued agent jobs. Merge
   order: cam-vdiff3; clm-soiltemp4 before clm-soilfluxes2; cism-transport2
   before cism-velo2 (both touch cism_templates.esm).
+- **2026-11-06 later:** pushed `cice` (0fd6b16 → PR #37) and `mosart-routing`
+  (52f6e14 → PR #33) to the ctessum-claude fork (user go-ahead). For
+  `cdeps-datm` the user decided: default data URLs on the public NCAR
+  inputdata server (verified HTTP 200), no live-data tests in the
+  component (upstream earthsci_data convention: empty tests, small
+  committed fixtures under `test/fixtures/` with a driver). Job
+  `esm-pr-cdeps2` makes that change; EqESM's stage2 copy keeps its local
+  paths and live test.
