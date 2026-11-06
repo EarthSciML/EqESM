@@ -212,6 +212,29 @@ user_nl_cism) — compared bit-identical via `stage1/analysis/compare_cism.py`.
   the final dumps; instrumented vs dump-off run bit-identical modulo
   timestamps (`stage1/analysis/compare_cism.py`).
 
+## 4c. Thermo-extension rerun (2026-11-03, stage-2 lane row 5)
+
+The stage-2 temperature lane needs four more pieces from the thermo trace:
+`dttem` (the 0.5-yr solve step), `dissip_001..010` (interior strain heating
+divided by rhoi·shci, deg/s), and the grid coordinates `sigma_001..011` /
+`stagsigma_001..010`.  A dissip = 0 reproduction of the backward-Euler step
+fails the operator identity at 3–5% of the step-1 temperature change, and the
+pin needs the exit rows plus the exact geometry.  `cism_dump_thermo` gained the
+four column groups (both call sites, `glissade_therm.F90:727,1331`); committed
+at all three fork levels — source_cism `b33660b6`, cism wrapper `142a4cb`,
+fork superproject `a95fe50` (branch `instrument/cism-dumps`, not pushed).
+Case rebuilt and rerun (dump-on only; the extension is solution-neutral by
+construction — it only adds trace columns): job 12053984 COMPLETED 22:47.
+New `cism_thermo.csv` (256 rows × 78 cols) validated in the stage-2 lane:
+sigma/stagsigma match the glide_calc_sigma SIGMA_COMPUTE_GLIDE predictions
+exactly, dttem = 1.5768e7 s on every row, dissip entry == exit, and the
+operator identity (T_exit − T_entry)/dttem = L·T_exit + dissip holds to
+≤6e-9 relative (pinned in `stage2/cism_thermo.esm`).  Old dumps backed up to
+`/scratch.local/ctessum/cism_dumps_backup/`.  Note: the stage-1 validator
+`.work/cism_validate.py` was removed in the shared-repo cleanup; the
+extended-dump validation now lives in the stage-2 test suite
+(`stage2/cism_thermo.esm`, `stage2/README-cism.md`).
+
 ## 5. Risks
 
 - **gland20.input_c150415.nc is a 2015-era file** — if CISM 3.0 rejects it
