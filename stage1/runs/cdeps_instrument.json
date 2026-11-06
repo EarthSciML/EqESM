@@ -41,5 +41,38 @@
     "row_counts": "cdeps_strdata_streams.csv 12 steps x 16 points x 25 field-rows = 4800 data rows (+2 header lines); datm_gswp3_streams.csv and datm_gswp3_exports.csv 12 x 16 = 192 data rows each",
     "no_blank_lines": "all 3 CSVs have zero blank lines; headers are '# description = ...' / '# columns = ...' with the spval text corrected to 1e30 (= SHR_CONST_SPVAL) in commit 9d6dc95",
     "reproducibility": "both runs produced identical row counts and law-verified values; the run-1 CSVs were overwritten in place by the final run, so no byte-level diff was retained"
+  },
+  "jra_run": {
+    "case": "C_JRA_t62_datm_inst",
+    "job_id": "12132709 (COMPLETED in 7:32; earlier attempts 12125370/12130063 etc. failed on the SLURM_MEM_* environment conflict until the srun env-clean workaround; job requeued several times by the cluster)",
+    "result": "COMPLETED exit 0:0, case.run success, st_archive success",
+    "compset": "2000_DATM%JRA-1p5-2023_SLND_DICE%SSMI_MOM6_DROF%JRA-1p5-2023_SGLC_SWAV_SESP (C_JRA_t62)",
+    "grid": "a%T62_l%null_oi%tx2_3v2_r%rx1_g%null_w%null_z%null_m%tx2_3v2 (T62_040121_ESMFmesh.nc datm mesh; the reference case C_JRA_t62 uses the same grid)",
+    "dates": "start 0001-01-01, STOP_OPTION=ndays STOP_N=1 (one day, 24 DATM advance calls at ATM_NCPL=24)",
+    "coupling": "ATM_NCPL=24 (dt=3600 s coupling interval; DATM advance once per coupling step, 12 traced steps = first 12 h)",
+    "pes": "TOTALPES=72 (machine-derived; the reference C_JRA_t62 run used the same derived decomposition - restarts are bit-identical regardless, see jra_checks)",
+    "precision": "real64 everywhere (CESM default)",
+    "machine": "illinois (ctessum partition, SLURM), gcc/13.3.0 + openmpi/5.0.1-gcc-13.3.0; MPI_RUN_COMMAND='env -u SLURM_MEM_PER_CPU -u SLURM_MEM_PER_GPU -u SLURM_MEM_PER_NODE srun --mpi=pmix -n 72' (the SLURM_MEM_* vars conflict with this ESMF build)",
+    "namelist_deltas": {
+      "user_nl_datm": "dump_datm=.true., dump_dir=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/dumps/cdeps/, dump_first_cells=16, dump_first_steps=12",
+      "user_nl_mom": "AUTO_MASKTABLE = False (required: without it MOM6 init FATALs 'Couldn't auto-eliminate any land blocks' on this grid; the reference case C_JRA_t62 carries the same setting)",
+      "note": "All other settings identical to the reference run C_JRA_t62 (the datm fork adds the JRA55 datamode dump instrumentation of datm/datm_datamode_jra_mod.F90 + the datm_dump_mod tag). The dump code is additive (PET 0 pure reads + CSV writes) and gated off by default."
+    }
+  },
+  "jra_dump_files": {
+    "datm_jra_streams.csv": "step,ymd,tod,n,lon,lat,separates_rain_snow,strm_tbot,strm_pslv,strm_u,strm_v,strm_shum,strm_prec,strm_prrn,strm_prsn,strm_lwdn,strm_swdn - interpolated stream values as consumed by datm_datamode_jra_advance (the strm_* pointers into the model-grid field bundles); 12 steps x 16 points = 192 rows",
+    "datm_jra_exports.csv": "step,ymd,tod,n,lon,lat,avg_alb,Sa_z,Sa_u,Sa_v,Sa_u10m,Sa_v10m,Sa_tbot,Sa_ptem,Sa_shum,Sa_dens,Sa_pbot,Sa_pslv,Faxa_rainc,Faxa_rainl,Faxa_snowc,Faxa_snowl,Faxa_swndr,Faxa_swndf,Faxa_swvdr,Faxa_swvdf,Faxa_swnet,Faxa_swdn,Faxa_lwdn - exact export-state values computed by datm_datamode_jra_advance; 192 rows",
+    "cdeps_strdata_streams_jra.csv": "step,ymd,tod,ns,field,n,lon,lat,algo,lb,ub,flb,fub,value - streams layer rows (one per (stream, field, point)); 12 steps x 16 points x 24 field-rows = 4608 rows (8 streams x 3 fields: lb/ub/flb/fub/value per field, see the GSWP3 lane for the format)"
+  },
+  "jra_traced_domain": {
+    "pet": "0 only (dump_pet gate; streams layer additionally gated on istr=='datm' and mainproc)",
+    "cells": "first 16 mesh points of PET 0 (dump_first_cells=16) in the cap's 1-D state order; the 16 traced T62 points are all on the southernmost latitude row (lat -88.5419498460687, the T62 Gaussian row), lon 360.0, 1.875, ..., 28.125",
+    "steps": "first 12 advance calls (dump_first_steps=12) of the 24-call day, steps 0..11"
+  },
+  "jra_checks": {
+    "bit_identical_outputs": "instrumented run restart files (cpl.r, datm.r, dice.r, drof.r, mom6.r, all 0001-01-02-00000) are bit-identical to the reference C_JRA_t62 run's restart files (np.ma.allequal over every data variable) - verified with the check_datm_neutral.py pattern, so the JRA dump code changes nothing when enabled",
+    "stream_interp_laws": "all 4608 streams-layer rows verified to round-off (coszen/linear/nearest/lower factors, value = flb*lb + fub*ub, 0 at night for the coszen streams) - check_datm_jra_laws.py",
+    "datamode_laws": "all 192 datamode rows verified to round-off against datm_datamode_jra_mod.F90: copies (Sa_pslv=Sa_pbot=strm_pslv, Sa_tbot=Sa_ptem=strm_tbot, Sa_u/v=strm_u/v, Sa_shum=strm_shum uncapped, Faxa_swdn/lwdn), Sa_z=10, Sa_u10m/v10m, Sa_dens = pbot/(rdair*tbot*(1 + qcoef*shum)) with qcoef = r4(0.608), the precip step split at tbot<TKFRZ (or prrn/prsn passthrough), rainc=snowc=0, the swdn split 0.28/0.31/0.24/0.17, avg_alb = r4(0.069) - r4(0.011)*cos(2*lat*degtorad) and Faxa_swnet = swdn*(1-avg_alb) - check_datm_jra_laws.py; the UNSUFFIXED single-precision literals 0.608/0.069/0.011 are a CDEPS finding, see bugs.md (TBD entries)",
+    "row_counts": "datm_jra_streams.csv and datm_jra_exports.csv 12 x 16 = 192 data rows each; cdeps_strdata_streams_jra.csv 4608 data rows; zero blank lines; GSWP3 dumps untouched (separate tag suffix)"
   }
 }

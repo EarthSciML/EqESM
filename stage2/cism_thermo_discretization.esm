@@ -1,0 +1,253 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_thermo_discretization",
+  "description": "Local EarthSciDiscretizations-format discretization rules for the CISM vertical temperature operator (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 as built in CESM cesm3.0-alphabranch, glissade_therm.F90:1324-1507 glissade_temperature_matrix_elements, whichtemp = TEMP_PROGNOSTIC). (a) cism_sigma_diffusion - the node-centered conservative finite-volume diffusion d/dz(K du/dz) of the exact dups stencil of glissade_temperature_matrix_elements (F90:151-163, 1410-1418), fired on the compound D( {op:*, args:[K, D(u, wrt: lev)]}, wrt: lev ) with the state on the INTERIOR temperature nodes (index set lev = the UPN-1 CISM layer midpoints stagsigma(1..upn-1)). The CISM boundary nodes are ALGEBRAIC, not diffusion rows: the surface matrix row pins temp(0) = min(0, artm) (the Dirichlet value, F90:843, 1405-1408) and the bed matrix row is the basal flux-balance / pressure-melting-point row (F90:1473-1476 frozen: temp(upn) - temp(upn-1) = (bfricflx + bhydroflx - bheatflx)*dsigbot*thck/coni; F90:1497-1504 thawed: temp(upn) = bpmp). The rule therefore takes the boundary VALUES as consumer free names - temp_sfc at the surface face (sigma_node[1]) and temp_bed at the bed face (sigma_node[UPN+1]) - and builds the interior stencil from them: L u[n] = ( G[n+2] - G[n+1] ) / ( thck * dsigma_cv[n+1] ), the flux difference over the CISM layer control volume, with the node-to-node face flux G[m] = cism_interface_flux(K, u[m-1], u[m], sigma_node[m-1], sigma_node[m], thck) = K*(u[m]-u[m-1])/(thck*(sigma_node[m]-sigma_node[m-1])) (the dups stencil; stagsigma(0) = sigma(1), stagsigma(upn) = sigma(upn), F90:151-163). CISM-specific parts: the sigma-node geometry contract (free names sigma_node, dsigma_cv, thck) and the algebraic boundary-value contract (temp_sfc/temp_bed free names); the stencil itself - a variable-coefficient conservative flux-difference on a stretched node-centered column - is generic finite-volume math and a candidate for an EarthSciDiscretizations PR (a node-centered analogue of grids/column_nonuniform_1d/rules/varcoeff_face_laplacian_lev_flux_bc with consumer-supplied Dirichlet/flux boundary values). (b) The whole-column integral rule of EarthSciDiscretizations (grids/column_nonuniform_1d/rules/integral_lev_whole.esm), imported by reference at the edge bindings NLEV = UPN-1 and rename lev_nodes -> lay_nodes (the grid's lev axis is deep-equal to this file's lev; the grid's NLEV+1 interfaces are renamed away from this file's lev_nodes, which carries the UPN+1 temperature nodes): the column integral of the TEMP_PROGNOSTIC internal-melt energy density (glissade_basal_melting_internal, F90:2127-2155) lowers to the composite midpoint sum over the CISM layers with the free-name measure dz (the consumer's cism_layer_thickness). (c) The two match-less support templates: cism_interface_flux - the pointwise CISM face-flux law K*(uR-uL)/(thck*(zR-zL)), shared by the diffusion stencil and the basal conductive-flux law of the consuming model - and cism_layer_thickness - the CISM layer widths thck*dsigma_cv[l+1], the integral measure of the melt column integral.",
+  "license": "MIT",
+  "tags": [
+   "esd:rule",
+   "family:finite_volume",
+   "grid:cism_sigma_column",
+   "op:varcoeff_laplacian",
+   "axes:lev",
+   "order:2",
+   "stencil_width:3",
+   "bc:algebraic_boundary_values",
+   "spec:9.6.8"
+  ],
+  "references": [
+   {
+    "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002, libglissade/glissade_therm.F90 glissade_temperature_matrix_elements (F90:1324-1507) and the dups grid quantities (F90:151-163)."
+   },
+   {
+    "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+   }
+  ]
+ },
+ "metaparameters": {
+  "UPN": { "type": "integer", "default": 11, "description": "Number of CISM sigma levels (layer interfaces); the temperature nodes number UPN+1 (k = 0 surface .. k = UPN bed: the layer midpoints plus the two boundary faces) and the interior temperature nodes number UPN-1." }
+ },
+ "index_sets": {
+  "lev_nodes": { "kind": "interval", "size": { "op": "+", "args": ["UPN", 1] } },
+  "lev": { "kind": "interval", "size": { "op": "-", "args": ["UPN", 1] } }
+ },
+ "expression_template_imports": [
+  {
+   "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_whole.esm",
+   "bindings": { "NLEV": { "op": "-", "args": ["UPN", 1] } },
+   "rename": { "lev_nodes": "lay_nodes" }
+  }
+ ],
+ "expression_templates": {
+  "cism_interface_flux": {
+   "description": "Pointwise CISM face flux through one sigma face: the diffusive flux G = K*(uR - uL)/(thck*(zR - zL)) between the two adjacent temperature nodes uL (at sigma zL) and uR (at sigma zR) - the exact dups stencil of glissade_temperature_matrix_elements (glissade_therm.F90:151-163: the face sigma(k) flux uses the node distance stagsigma(k)-stagsigma(k-1) with stagsigma(0)=sigma(1) and stagsigma(upn)=sigma(upn); the temperature difference divided by thck times the sigma distance). Positive in the +lev (downward, surface-to-bed) direction. Match-less named template. The diffusion rule applies it with the index operands (u[n-1], u[n], sigma_node[n-1], sigma_node[n]); the consuming model applies it with the boundary operands (temp[UPN-1], temp_bed, sigma_node[UPN], sigma_node[UPN+1]) for the basal conductive flux lcondflx_ground = -G[UPN+1].",
+   "params": ["K", "uL", "uR", "zL", "zR", "thck"],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "K",
+       {
+        "op": "-",
+        "args": ["uR", "uL"]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "thck",
+       {
+        "op": "-",
+        "args": ["zR", "zL"]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_layer_thickness": {
+   "description": "CISM layer thickness in metres: dz[l] = thck * dsigma_cv[l+1], the width of the CISM layer [sigma(l), sigma(l+1)] (the control volume of temperature node l+1; dsigma_cv[n] = sigma(n) - sigma(n-1), the dumped layer widths in sigma units). The layer 1..10 widths sum to thck. Used as the free-name measure dz of the imported whole-column integral rule (the composite midpoint sum of the internal-melt energy density over the column).",
+   "params": ["thck", "dsigma_cv"],
+   "body": {
+    "op": "faq",
+    "output_idx": ["l"],
+    "args": ["dsigma_cv"],
+    "ranges": { "l": { "from": "lev" } },
+    "expr": {
+     "op": "*",
+     "args": [
+      "thck",
+      { "op": "index", "args": ["dsigma_cv", { "op": "+", "args": ["l", 1] }] }
+     ]
+    }
+   }
+  },
+  "cism_sigma_diffusion": {
+   "description": "Node-centered conservative finite-volume variable-coefficient vertical diffusion d/dz(K du/dz) on the CISM sigma column, state on the INTERIOR temperature nodes (index set lev = the UPN-1 layer midpoints): the consumer writes the compound D( {op:*, args:[K, D(u, wrt: lev)]}, wrt: lev ) and the rule fires on the whole compound at priority 10 before any plain-D rule can lower the inner derivative; match-scoped with where {u: {shape: [lev]}} (esm-spec 9.6.1). The CISM boundary nodes are algebraic (see the file description): the rule builds the interior stencil from the boundary VALUES as consumer free names - temp_sfc (the surface Dirichlet value min(0, artm), F90:843) at the surface face sigma_node[1] and temp_bed (the basal row solution, F90:1473-1476 / 1497-1504) at the bed face sigma_node[UPN+1] - so the surface and bed temperatures feed the interior rows and no boundary state rows exist. Interior stencil: L u[n] = ( G[n+2] - G[n+1] ) / ( thck * dsigma_cv[n+1] ) for n in lev, where G[m] = cism_interface_flux(K, u[m-1], u[m], sigma_node[m-1], sigma_node[m], thck) is the CISM face flux and thck*dsigma_cv[n+1] is the CISM layer control volume [sigma(n), sigma(n+1)]. Free-name contract (resolved in the consuming model): sigma_node (shape [lev_nodes], the temperature-node sigma coordinates), dsigma_cv (shape [lev_nodes], the layer widths in sigma units), thck (the column thickness), temp_sfc and temp_bed (the algebraic boundary temperatures). A future EarthSciDiscretizations PR generalizes the rule to consumer-supplied Dirichlet/flux boundary values on a generic node-centered stretched column (the CISM case: constant coefficient K and the sigma-node geometry).",
+   "params": ["u", "K"],
+   "priority": 10,
+   "match": {
+    "op": "D",
+    "args": [
+     {
+      "op": "*",
+      "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }]
+     }
+    ],
+    "wrt": "lev"
+   },
+   "where": {
+    "u": { "shape": ["lev"] }
+   },
+   "body": {
+    "op": "makearray",
+    "args": [],
+    "regions": [
+     [[1, 1]],
+     [[2, { "op": "-", "args": ["UPN", 2] }]],
+     [[{ "op": "-", "args": ["UPN", 1] }, { "op": "-", "args": ["UPN", 1] }]]
+    ],
+    "values": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_interface_flux",
+          "bindings": {
+           "K": "K",
+           "uL": { "op": "index", "args": ["u", 1] },
+           "uR": { "op": "index", "args": ["u", 2] },
+           "zL": { "op": "index", "args": ["sigma_node", 2] },
+           "zR": { "op": "index", "args": ["sigma_node", 3] },
+           "thck": "thck"
+          }
+         },
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_interface_flux",
+          "bindings": {
+           "K": "K",
+           "uL": "temp_sfc",
+           "uR": { "op": "index", "args": ["u", 1] },
+           "zL": { "op": "index", "args": ["sigma_node", 1] },
+           "zR": { "op": "index", "args": ["sigma_node", 2] },
+           "thck": "thck"
+          }
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "thck",
+         { "op": "index", "args": ["dsigma_cv", 2] }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "faq",
+      "output_idx": ["n"],
+      "args": ["u", "K", "sigma_node", "dsigma_cv", "thck"],
+      "ranges": { "n": [2, { "op": "-", "args": ["UPN", 2] }] },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "cism_interface_flux",
+           "bindings": {
+            "K": "K",
+            "uL": { "op": "index", "args": ["u", "n"] },
+            "uR": { "op": "index", "args": ["u", { "op": "+", "args": ["n", 1] }] },
+            "zL": { "op": "index", "args": ["sigma_node", { "op": "+", "args": ["n", 1] }] },
+            "zR": { "op": "index", "args": ["sigma_node", { "op": "+", "args": ["n", 2] }] },
+            "thck": "thck"
+           }
+          },
+          {
+           "op": "apply_expression_template",
+           "args": [],
+           "name": "cism_interface_flux",
+           "bindings": {
+            "K": "K",
+            "uL": { "op": "index", "args": ["u", { "op": "-", "args": ["n", 1] }] },
+            "uR": { "op": "index", "args": ["u", "n"] },
+            "zL": { "op": "index", "args": ["sigma_node", "n"] },
+            "zR": { "op": "index", "args": ["sigma_node", { "op": "+", "args": ["n", 1] }] },
+            "thck": "thck"
+           }
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "thck",
+          { "op": "index", "args": ["dsigma_cv", { "op": "+", "args": ["n", 1] }] }
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_interface_flux",
+          "bindings": {
+           "K": "K",
+           "uL": { "op": "index", "args": ["u", { "op": "-", "args": ["UPN", 1] }] },
+           "uR": "temp_bed",
+           "zL": { "op": "index", "args": ["sigma_node", "UPN"] },
+           "zR": { "op": "index", "args": ["sigma_node", { "op": "+", "args": ["UPN", 1] }] },
+           "thck": "thck"
+          }
+         },
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_interface_flux",
+          "bindings": {
+           "K": "K",
+           "uL": { "op": "index", "args": ["u", { "op": "-", "args": ["UPN", 2] }] },
+           "uR": { "op": "index", "args": ["u", { "op": "-", "args": ["UPN", 1] }] },
+           "zL": { "op": "index", "args": ["sigma_node", { "op": "-", "args": ["UPN", 1] }] },
+           "zR": { "op": "index", "args": ["sigma_node", "UPN"] },
+           "thck": "thck"
+          }
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "thck",
+         { "op": "index", "args": ["dsigma_cv", "UPN"] }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

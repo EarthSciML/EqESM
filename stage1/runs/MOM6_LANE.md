@@ -266,3 +266,56 @@ transcription). The derivative columns (drho/dT, drho/dS) let the tests pin
 both the law and its derivatives. KPP is the second target (per-column
 CVMix law with OBL depth + profile functions); the surface forcing import
 is the third (pure field mapping, no physics).
+
+## Wave-2 results (2026-11-05)
+
+Wave-2 boundary dumps (five new boundaries) were added to the fork
+(`MOM6` submodule HEAD 5df49d288 on top of the wave-1 219c8ccee; fork HEAD
+234c605) and validated on the final rerun of `C_JRA_t62_mom6_inst`
+(case.run 12139764, st_archive 12139765, COMPLETED 2026-11-05 18:00:59):
+
+- **mom6_sw_abs.csv** (156 rows = 12 cells × 13 steps; nsw=2): per-band
+  surface split `sw_pen_band_n`, exponential band decay
+  `pen_sw_rem(n,k) == pen_sw_rem(n,k-1)·exp(-opacity(n,k)·h(k))` above the
+  min_SW_heat cutoff (3431 testable layers, all exact), net penetrating SW
+  `netPen_k`, layer heating `dT_k`; total absorption identity vs
+  `penSW_bnd` (surface in − bottom leftover) holds on all 156 rows.
+- **mom6_frazil.csv** (312 rows = 2 calls × 156): heat conservation
+  `frazil_out − frazil_in == −RHO_0·C_P·Σ h·(T_after − T_before)` on all
+  312 rows; freezing-point law (LINEAR: 0.0 − 0.054·S − 7.75e-8·p) on all
+  312; `T_after ≥ T_freeze` on all 23400 layer values.  No frazil heat
+  forms in this window (early-summer Antarctic cells; sum of changes is 0)
+  — the formation/reclaim branches need a winter window.
+- **mom6_bflux.csv** (156 rows): mass/salt/heat update laws hold on all
+  rows (heat: `Σ h·T_after − h·T_before == netHeat + Σ penSW_bnd −
+  leftover`, max rel 1.6e-11; `nonpenSW` is inside `netHeat`; the earlier
+  draft that added `nonpenSW` separately was wrong).  netMassIn ≡ 0
+  (AGGREGATE_FW_FORCING); netMassOut −1.6e-5..2.0e-3 m.
+- **mom6_diabatic_tri.csv** (156 rows): conservation and the tridiagonal
+  law hold (max residual 1.2e-12 relative to an operand-magnitude scale —
+  convective interfaces carry ent ~ 1e6 m, which makes the plain h·T
+  relative scale meaningless); cross-file equality with bflux
+  (h_after, T_after, S_after == tri h, T_before, S_before) on all 156 rows.
+- **mom6_kpp_wide.csv** (8164 rows over 33 PEs): unstable (surfBuoyFlux<0)
+  or warm (T_sfc > 20 °C) columns of the first 32 ocean cells of every PE,
+  per-PE per-cell per-step rows merged at finalize; selection bits,
+  Kt/Ks/Kv update rule, NLT structure, and z_inter/kOBL/OBLdepth geometry
+  verified on all 8164 rows.  `step` is a per-PE ordinal over the PE's
+  *qualifying* steps (the counter increments only when a traced column
+  qualifies), so PET 0's Antarctic shelf cells — stable until late in the
+  day — contribute rows at tods 64800..75600 with ordinals 1..4; `tod` is
+  the model time.
+
+Bugs found and fixed during wave-2 validation (all in the dump code, not
+the model): wide-file merge line buffer truncation (rows are ~24 KB, not
+~5 KB — 20000 → 40000 chars), bflux header band-10 name (`i1` overflow
+wrote `*`; `i2.2` now zero-pads all band names), and the wave-1-style
+`penSW_bnd_ 1` leading space (`i2` → `i2.2`).  Neutrality of the final run
+re-verified: mom6.r/mom6.r_stoch/cpl.r/datm.r/dice.r/drof.r restarts +
+ocean.stats.nc + Vertical_coordinate.nc all bit-identical to the reference
+(8 files, 0 differences).  Wave-1 validator still green on the regenerated
+CSVs (eos 11700, kpp 156, kpp_obl 156, sfc_forcing 144 rows).
+
+Wave-2 stage-2 targets (see `stage2/README-mom6-w2.md`): shortwave
+absorption, frazil formation, boundary flux application, tridiagonal
+mixing, and widened KPP tests (unstable/warm columns).
