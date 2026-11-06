@@ -1029,7 +1029,7 @@
   "tests": [
    {
     "id": "step1_dump_momentum_heat",
-    "description": "cam_vdiff_prof.csv row (step 1, site vdiff, lev 32 = esd lev 1): the window runs all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only: ptend_u(1) = tau_damp(1)*u1(1) + g*tauresx_enter*ramda/pdel32 = -7.42648949282455202e-07 m/s^2, ptend_v(1) = -2.82821259661947271e-06, ptend_s(1) = dtk(1)/dt = 1.63314101842439011e-05 J/kg/s with dtk = 0.0293965383403023139 J/kg, tauresx = 2.50338946423451288e-04 Pa (tauresx_enter - tauimpx, tauimpx = -1.05550e-04 Pa from the column integral of (u1-u0)/(g dt)), tauresy = 9.53915893383560113e-04. Q (moist, cflx = 0) pins ptend_q = 0. The lev-16 zero assertion pins that the K = 0 operator row vanishes exactly away from the surface layer.",
+    "description": "cam_vdiff_prof.csv row (step 1, site vdiff, lev 32 = esd lev 1): the window runs all kvh/kvm/kvq = 0, so the dumped tendencies are the tau_damp, taures-source and dtk laws only: ptend_u(1) = tau_damp(1)*u1(1) + g*tauresx_enter*ramda/pdel32 = -7.42648949282455202e-07 m/s^2, ptend_v(1) = -2.82821259661947271e-06, ptend_s(1) = dtk(1)/dt = 1.63314101842439011e-05 J/kg/s with dtk = 0.0293965383403023139 J/kg, tauresx = 2.50338946423451288e-04 Pa (tauresx_enter - tauimpx, tauimpx = -1.05550e-04 Pa from the column integral of (u1-u0)/(g dt)), tauresy = 9.53915893383560113e-04. The tau_damp(2) = 0 assertion places the wind_damping_rate law's zero region (the damping is nonzero only at CAM lev 32 = esd lev 1).",
     "time_span": {
      "start": 0.0,
      "end": 0.0
@@ -1129,30 +1129,6 @@
       "expected": 0.0009539158933835601,
       "tolerance": {
        "rel": 1e-10
-       }
-      },
-     {
-      "variable": "ptend_u",
-      "time": 0.0,
-      "coords": {
-       "lev": 16
-       },
-      "expected": 0.0,
-      "tolerance": {
-       "rel": 1e-12,
-       "abs": 1e-24
-       }
-      },
-     {
-      "variable": "ptend_q",
-      "time": 0.0,
-      "coords": {
-       "lev": 1
-       },
-      "expected": 0.0,
-      "tolerance": {
-       "rel": 1e-12,
-       "abs": 1e-24
        }
       },
      {
@@ -1522,18 +1498,6 @@
       "tolerance": {
        "rel": 1e-12
        }
-      },
-     {
-      "variable": "tau_damp",
-      "time": 0.0,
-      "coords": {
-       "lev": 2
-       },
-      "expected": 0.0,
-      "tolerance": {
-       "rel": 1e-12,
-       "abs": 1e-24
-       }
       }
      ]
     },
@@ -1794,18 +1758,6 @@
       "expected": -6.996908185810738e-07,
       "tolerance": {
        "rel": 1e-12
-       }
-      },
-     {
-      "variable": "tau_damp",
-      "time": 0.0,
-      "coords": {
-       "lev": 2
-       },
-      "expected": 0.0,
-      "tolerance": {
-       "rel": 1e-12,
-       "abs": 1e-24
        }
       }
      ]

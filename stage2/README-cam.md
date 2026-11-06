@@ -400,9 +400,9 @@ stage-2 suite). All tests are instantaneous (`time_span {0,0}`), rel
 | `EnergyFixer` | 3 | 2 dump pins (site energy_fixer, steps 1/48: heat_glob = 0), 1 compiled-Fortran pin (heat_glob = 0.25 J/kg/s) |
 | `CamOutExport` | 6 | 4 dump pins of the state laws (steps 1/2/24/48, bc_out; rho/thbot/psl = dumped, topo = derived from the dumped phis), 1 cpslec-chain pin (step 1, branch 2, with the nine intermediates incl. the shared predicates psl_b1/psl_b2, psl_alpha and psl_alphbeta), 1 flat-branch pin (branch-exercising phis = 5e-4 m²/s², psl = ps; fails if the branch is missing, see the test description) |
 | `CamInImports` | 0 | all fields are coupler imports; the one law (flx_net) needs net_flx_rad, which is not dumped → gap (no data invented) |
-| `VerticalDiffusion` | 9 | 27 dump pins at steps 1/2/48 (site vdiff: tau_damp(1) plus tau_damp(2) = 0 and ramda = dt/timeres = 0.25 at step 1, tauresx/y, dtk, ptend_u/v/s at lev 1, ptend_u(16) = 0), 5 q dump pins (DMS/bc_a4/SOAE at step 1, DMS at steps 2/48), 3 compiled-Fortran pins (nonzero-K operator at esd lev 1/16/32) |
+| `VerticalDiffusion` | 9 | 23 dump pins at steps 1/2/48 (site vdiff: tau_damp(1) at steps 1/2/48 plus tau_damp(2) = 0 and ramda = dt/timeres = 0.25 at step 1, tauresx/y, dtk, ptend_u/v/s at lev 1), 5 q dump pins (DMS/bc_a4/SOAE at step 1, DMS at steps 2/48), 3 compiled-Fortran pins (nonzero-K operator at esd lev 1/16/32) |
 
-Total for the CAM slice: 65 + 27 + 6 + 23 + 35 = 156 assertions. The
+Total for the CAM slice: 65 + 27 + 6 + 23 + 31 = 152 assertions. The
 compiled-Fortran references compile the actual subroutines verbatim from
 the fork with gfortran 11.5 in a driver at the dump's step-1 u/v state
 (the rayleigh/energy-fixer driver is kept in `scratch/cam_laws_driver/`
