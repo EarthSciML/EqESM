@@ -235,6 +235,43 @@ operator identity (T_exit − T_entry)/dttem = L·T_exit + dissip holds to
 extended-dump validation now lives in the stage-2 test suite
 (`stage2/cism_thermo.esm`, `stage2/README-cism.md`).
 
+## 4d. DIVA neighbour-stencil rerun (2026-11-05, stage-2 lane row 6)
+
+The stage-2 DIVA velocity lane (`stage2/cism_velo.esm`) needs vertex and
+neighbour quantities the original `cism_velo.csv` trace does not carry: the
+4-cell stencil of the NE-corner vertex (usrf/thck/ice_mask/land_mask of the
+SW/SE/NW/NE cells) for the hybrid-margin surface gradient (`dusrf_dx/dy`) and
+the 4-cell mean staggered thickness, the quadrature-point effective
+viscosities (`efvs_q1..q4` per layer) that enter the Goldberg (2011) `omega_k`
+integrand, the `compute_integrals_diva` outputs (`omega_k` at the interfaces,
+the four cell `omega`s and their vertex mean `stag_omega`, `stag_omega_k`),
+and the solve-exit DIVA state (`beta_eff_x/y`, `beta_internal`,
+`stag_theta_slope_x/y`, `stag_diva_slope_factor_x/y`, `dusrf_dx/dy`).
+`cism_dump_mod.F90` gained the `cism_velo_nbr.csv` trace (122 columns,
+described in `stage1/runs/cism_instrument.json`), committed at the fork
+superproject `db624ec` with the cism wrapper bump `76d170d` (components/cism =
+`cismwrap_3_00_002-4-g2a8316d`, branch `instrument/cism-dumps`, not pushed).
+Case rerun (dump-on only; the extension is solution-neutral by construction —
+it only adds trace columns): job 12118489 COMPLETED exit 0:0 (2026-11-05,
+08:41). 256 rows = 32 cells × 4 steps × 2 phases (128 exit rows).
+Validation: `stage1/analysis/extract_cism_velo_test_rows.py` recomputes every
+DIVA pointwise law on all 128 exit rows — efvs quad-point arithmetic mean
+(exact), `omega_k` cumulative integral (≤4e-16 rel), `omega` trapezoid (exact),
+`stag_omega` 4-cell mean (≤3e-16), `theta_x/y` from the plain vertex gradient
+of `z_mean = usrf − thck/2` (≤7e-14), the F slope factors (exact),
+`beta_eff` (exact), `dusrf_dx/dy` hybrid gradient with the max_slope clamp
+(≤7e-13), `taudx/dy` (≤7e-13), the bwat = 0 identity
+`effecpress_stag = rhoi·g·stagthck` (≤3e-16), the basal-recovery law
+`uvel(nz) = uvel_2d·beta_eff_x/beta_internal` (exact) and the full 3-D
+profiles (≤3e-16) — and emits the numeric test tuples pinned in
+`stage2/cism_velo.esm` (136 assertions, suite 2004P/0F/0E).  Note: the
+beta chain (`beta_raw → beta_internal → beta_eff_x/y → uvel_2d`) is asserted
+at rel 1e-5 because the dumped `beta_internal` is the last *accepted*
+calcbeta pass of the Picard iteration while the exit velocities come from the
+next iteration's accepted `beta_eff` (worst chain deviation 6.0e-7 over the
+128 rows); `cism_instrument.json`'s `dump_files` registry gains the
+`cism_velo_nbr.csv` entry with this commit.
+
 ## 5. Risks
 
 - **gland20.input_c150415.nc is a 2015-era file** — if CISM 3.0 rejects it
