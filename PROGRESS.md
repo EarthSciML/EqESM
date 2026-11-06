@@ -1330,3 +1330,23 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
   committed fixtures under `test/fixtures/` with a driver). Job
   `esm-pr-cdeps2` makes that change; EqESM's stage2 copy keeps its local
   paths and live test.
+- **Batch submitted 2026-11-06 (10 new tasks; 22 agent jobs queued in
+  total):**
+  - stage 2: `cam-zm-parcel` (buoyan_dilute CAPE integral + closure; owns
+    new `cam_zm_templates.esm`), `cam-zm-evap` (q1q2 + evap precip-flux
+    integral), `mom6-shortwave`, `mom6-frazil-bflux`, `mom6-vertdiff`
+    (tridiagonal solve written as a PDE on an ESD column rule),
+    `cice-tracer-transport` (Tsfcn/qice/qsno conservation PDEs).
+  - stage 1 (fork owners): `clm-veg-instrument` (vegetated-patch selection;
+    canopyflux/two-stream/interception/soilwater dumps),
+    `cam-rad-instrument` (radiation inputs, cloud optics, solver boundary,
+    fluxes/heating).
+  - stage 1 + 2: `cmeps-prep-atm` (atm-export merges; owns CMEPS fork).
+  - M9: `m9-clm-mosart` (land→river, feasibility-gated).
+  - Shared rule block for all new prompts:
+    `.slurm-agents/prompts/_rules-2026-11-06.md` (parallel-job + house +
+    session-hygiene rules).
+  - Expected merge conflicts: appends to `mom6_templates.esm` (kpp3,
+    shortwave, frazil-bflux, vertdiff), `cam_templates.esm` (vdiff3,
+    zm-evap), `cice_templates.esm` (dedd2, tracer-transport),
+    `cmeps_templates.esm` (ocnalb2, prep-atm).
