@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cam_templates",
-  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the estbl table itself lives in cam_wv_saturation.esm as a function_tables entry, generated from svp_trans at T = 127.16..377.16 K); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, factored into the shared pcf_transition_poly(tc) template, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The repeated temperature constants are named as zero-parameter constant-fragment templates applied with empty bindings: tmelt = TKFRZ = 273.15 K, tboil = TBOIL = 373.16 K, ttrice = TTRICE = 20 K (TKTRIP = 273.16 K stays inline in goff_gratch_ice). The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
+  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the estbl table itself lives in cam_wv_saturation.esm as a function_tables entry, generated from svp_trans at T = 127.16..377.16 K); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, factored into the shared pcf_transition_poly(tc) template, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The repeated temperature constants are named as zero-parameter constant-fragment templates applied with empty bindings: tmelt = TKFRZ = 273.15 K, tboil = TBOIL = 373.16 K, ttrice = TTRICE = 20 K (TKTRIP = 273.16 K stays inline in goff_gratch_ice). The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. The library also carries (e) the two cam_export laws of the surface-exchange slice (camsrfexch.F90:496, 503): density_dry_air = p/(rair t) and exner_function = (p_surf/p)^cappa, both generic in their physical constants (rair, cappa taken as template parameters and bound by the caller to the named parameters of CamOutExport); and (f) the four laws of the vertical-diffusion slice (diffusion_solver.F90): interface_diffusivity = kv*dpidz_sq (the coef_q_diff of the z-coordinate finite-volume flux form, F90:524-528, 952), surface_layer_source (the g*F/dz[1] lowest-layer injection of a surface flux F, F90:440), surface_stress_coefficient = ksrftms + max(tau/ws, ksrfmin) (the implicit-surface-stress drag, F90:232-239) and wind_damping_rate = -g*ksrf/dz[1] in the lowest layer, 0 elsewhere (F90:274-285), all consumed by cam_vertical_diffusion.esm. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
  },
  "expression_templates": {
   "ice_weight": {
@@ -1131,6 +1131,48 @@
      "zero": "zero"
     }
    }
+  },
+  "density_dry_air": {
+   "description": "Dry-air density of cam_export (camsrfexch.F90:503): rho = p / (rair t). rair is the caller's dry-air gas constant (this run SHR_CONST_RDAIR = AVOGAD * BOLTZ / MWDAIR = 287.0423113650487 J/(kg K), physconst.F90:102). This is the dry form: the cdeps density law (datm_datamode_clmncep_mod.F90:428-429) is the moist variant rho = (p - eps1 vp) / (t RDAIR) = (p - 0.378 e)/(R T) with vp the vapor pressure and eps1 = 1 - eps = 0.378, which reduces to the dry form only when e = 0.",
+   "params": [
+    "p",
+    "t",
+    "rair"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "p",
+     {
+      "op": "*",
+      "args": [
+       "rair",
+       "t"
+      ]
+     }
+    ]
+   }
+  },
+  "exner_function": {
+   "description": "Exner function of the SE dycore pressure-temperature coupling (dp_coupling.F90:731-733) used by cam_export (camsrfexch.F90:496): thbot = tbot * exner_function(pmid, ps, cappa) with exner = (pint(pver+1)/pmid(pver))^cappav = (ps/p)^cappa; pint(pver+1) is the surface pressure. cappa is the caller's cappav = rairv/cpairv, with dry_air_species = '' (this run) rairv = rair and cpairv = cpair (air_composition.F90:354), i.e. the quotient SHR_CONST_RDAIR/SHR_CONST_CPDAIR.",
+   "params": [
+    "p",
+    "p_surf",
+    "cappa"
+   ],
+   "body": {
+    "op": "^",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       "p_surf",
+       "p"
+      ]
+     },
+     "cappa"
+    ]
+   }
+  }
   }
  }
-}

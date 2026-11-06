@@ -2,19 +2,24 @@
 
 Stage-2 implementation of the CAM6 atmospheric physics slice for the
 EqESM project: the saturation specific humidity `qsat`, the energy
-fixer, the Rayleigh friction, and the vertical diffusion (the implicit
-surface-stress solve of `diffusion_solver.F90`), as esm 1.3.0 files
-pinned by the stage-1 instrumentation dumps of the SCAM reference run
+fixer, the Rayleigh friction, the surface exchange (cam_out exports +
+cam_in imports), and the vertical diffusion (the implicit surface-stress
+solve of `diffusion_solver.F90`), as esm 1.3.0 files pinned by the
+stage-1 instrumentation dumps of the SCAM reference run
 (`stage1/dumps/cam/cam_qsat.csv`, `stage1/dumps/cam/cam_phys_tend.csv`,
-`stage1/dumps/cam/cam_vdiff_prof.csv`, `stage1/dumps/cam/cam_vdiff_q.csv`).
+`stage1/dumps/cam/cam_vdiff_prof.csv`, `stage1/dumps/cam/cam_vdiff_q.csv`,
+`stage1/dumps/cam/cam_surface_exchange.csv`,
+`stage1/dumps/cam/cam_surface_cflx.csv`).
 Sources: `components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90`
 and `wv_sat_methods.F90`, `components/cam/src/atmos_phys/schemes/
 conservation_adjust/check_energy/check_energy_fix.F90` +
 `components/cam/src/physics/cam/check_energy.F90`,
 `components/cam/src/atmos_phys/schemes/rayleigh_friction/
-rayleigh_friction.F90`, and `components/cam/src/atmos_phys/schemes/
+rayleigh_friction.F90`, `components/cam/src/atmos_phys/schemes/
 vertical_diffusion/vertical_diffusion_solver.F90` +
-`diffusion_solver.F90` of the instrumented cam6_4_212 fork
+`diffusion_solver.F90`, and `components/cam/src/control/camsrfexch.F90`
+(cam_export) + `components/cam/src/utils/cam_diagnostic_utils.F90`
+(cpslec) of the instrumented cam6_4_212 fork
 (`stage1/EqESM-cesm-cam`, branch `instrument/cam-dumps`); site
 numbering per `stage1/runs/CAM_LANE.md` (energy_fixer = tphysbc site 1,
 dump call physpkg.F90:2399; rayleigh = tphysac site 16, dump call
@@ -25,10 +30,11 @@ physpkg.F90:1757; vdiff = site vdiff) and the boundary table in
 
 | file | content |
 |---|---|
-| `cam_templates.esm` | expression-template library of the shared pointwise laws: `ice_weight` (clamp form `min(1, max(0, (tmelt − t)/ttrice))`, bit-identical to the Fortran's three-branch if), `goff_gratch_water`, `goff_gratch_ice`, `svp_trans`, `svp_to_qsat`, `hltalt_no_ip`, `hltalt_mixed`, `pcf_transition_poly` (the shared pcf(5) Horner polynomial in tc), `tterm_transition`, the zero-parameter constant fragments `tmelt`/`tboil`/`ttrice` (applied with empty bindings; TKTRIP = 273.16 K stays inline in `goff_gratch_ice`), and the vertical-diffusion laws `interface_diffusivity` (K = kv·dpidz_sq on the interfaces), `surface_layer_source` (the pver injection g·flux/dz[1]), `surface_stress_coefficient` (ksrf = ksrftms + max(tau/ws, ksrfmin)), `wind_damping_rate` (tau_damp = −g·ksrf/dz[1] at pver, 0 elsewhere) |
+| `cam_templates.esm` | expression-template library of the shared pointwise laws: the saturation laws `ice_weight` (clamp form `min(1, max(0, (tmelt − t)/ttrice))`, bit-identical to the Fortran's three-branch if), `goff_gratch_water`, `goff_gratch_ice`, `svp_trans`, `svp_to_qsat`, `hltalt_no_ip`, `hltalt_mixed`, `pcf_transition_poly` (the shared pcf(5) Horner polynomial in tc), `tterm_transition`, and the zero-parameter constant fragments `tmelt`/`tboil`/`ttrice` (applied with empty bindings; TKTRIP = 273.16 K stays inline in `goff_gratch_ice`); the two surface-exchange laws `density_dry_air` (ρ = p/(rair·t), camsrfexch.F90:503) and `exner_function` ((ps/p)^κ, dp_coupling.F90:731-733), both generic in their physical constants (rair, cappa taken as template parameters, bound by the caller to the named parameters of `CamOutExport`); and the vertical-diffusion laws `interface_diffusivity` (K = kv·dpidz_sq on the interfaces), `surface_layer_source` (the pver injection g·flux/dz[1]), `surface_stress_coefficient` (ksrf = ksrftms + max(tau/ws, ksrfmin)), `wind_damping_rate` (tau_damp = −g·ksrf/dz[1] at pver, 0 elsewhere) |
 | `cam_wv_saturation.esm` | the `estbl` function table (251 entries, Goff–Gratch mixed phase) + the `WvSaturation` model (the run's qsat law) + the `SvpTransLaw` model (pins the table-generation formula) |
 | `cam_rayleigh_friction.esm` | the `RayleighFriction` model (otau profile + Euler-backward tendencies) |
 | `cam_energy_fixer.esm` | the `EnergyFixer` model (uniform heat_glob tendency + implied surface flux) |
+| `cam_surface_exchange.esm` | the `CamOutExport` model (cam_export's cam_out export **laws**: dry-air density, Exner potential temperature, topo, the cpslec sea-level-pressure chain incl. the flat branch, the precipitation split, co2diag/co2prog; the pass-through exports tbot/zbot/ubot/vbot/qbot/pbot/netsw/flwds/soll/sols/solld/solsd/ozone are documented **imports** with no equations) + the `CamInImports` model (the cam_in coupler imports with their consumption sites, and the flx_net accumulation with the latent-heat constants as named parameters) |
 | `cam_vertical_diffusion.esm` | the `VerticalDiffusion` model (the implicit Euler-backward vdiff solve as four PDEs, section below) |
 
 ## The qsat law (wv_saturation.F90:739-784, as this run evaluates it)
@@ -116,6 +122,102 @@ k ≥ 12 even when enabled — pinned as `enabled_krange0_k12_saturation`;
 a raykrange = 10 pin set exercises nonzero damping of the O(1) winds.
 The esm c3 writes `/ztodt` where the Fortran multiplies by rztodt =
 1/ztodt (≤ 1 ulp).
+
+## The surface exchange (camsrfexch.F90 cam_export, cam_in)
+
+`cam_surface_exchange.esm` covers the coupler-facing boundary of the
+physics. Model `CamOutExport` transcribes the cam_out export laws of
+`cam_export` (camsrfexch.F90:405-577):
+
+```
+rho    = pbot/(rair·tbot)                 ! dry-air density (F90:503),
+                                          ! rair = AVOGAD·BOLTZ/MWDAIR (shr_const)
+thbot  = tbot·exner_function(pbot, ps, κ) ! (F90:496, dp_coupling.F90:731-733),
+                                          ! κ = cappa = rair/cpair (this run)
+topo   = phis/gravit                      ! surface topographic height (F90:498)
+psl    = cpslec(t, pmid, ps, phis)        ! ECMWF sea-level pressure
+                                          ! (cam_diagnostics.F90:1080-1081,
+                                          !  cam_diagnostic_utils.F90:20-81)
+precc  = max(0, prec_dp + prec_sh)        ! pbuf PREC/Snow fields (F90:537-575)
+precl  = max(0, prec_sed + prec_pcw)
+precsc = min(precc, max(0, snow_dp + snow_sh))
+precsl = min(precl, max(0, snow_sed + snow_pcw))
+co2diag = co2vmr·1e6 [ppmv]               ! chem_surfvals CO2VMR (F90:506-511)
+co2prog = 0                               ! co2_transport() false here (F90:512-516)
+```
+
+The remaining cam_out exports — tbot/zbot/ubot/vbot/qbot/pbot (direct state
+copies, F90:495-507) and ozone/netsw/flwds/soll/sols/solld/solsd (the pbuf
+SRFOZONE field and the radiation_tend outputs,
+rrtmg/radiation.F90:1272-1316,1429) — are **documented imports**: cam_export
+copies them without transformation, so the esm declares them as parameters
+with no equations (an equation `tbot = t_bot` cannot fail and would only
+restate the import). The physical constants are named, unit-carrying
+parameters: rair/gravit/cpair (physconst.F90:89-102 =
+SHR_CONST_RDAIR/G/CPDAIR), xlapse and the branch temperatures tstar0 =
+290.5 K / tstar_cold = 255 K (cam_diagnostic_utils.F90:44, 64-72), and
+cappa = rair/cpair (this run's cappav, air_composition.F90:354).
+
+| cam_out field | status in the esm |
+|---|---|
+| tbot, zbot, ubot, vbot, qbot, pbot | **imports**: direct copies of the bottom-level state (F90:495-507), no equations |
+| rho, thbot | **laws**: `density_dry_air` and `exner_function` templates (cam_templates.esm), bound to the named parameters rair and cappa |
+| topo | **law**: topo = phis/gravit (F90:498), pinned as a derived value from the dumped phis (topo itself is not a dump column, see gaps) |
+| psl | **law**: the cpslec chain incl. the flat branch (see below) |
+| precc/precl/precsc/precsl | **law**: the pbuf-field split + clamps (F90:537-575), unpinned (see gaps) |
+| co2diag | **law** co2diag = CO2VMR·1e6 [ppmv] with the input **imported** (chem_surfvals); provenance open question (see gaps) |
+| co2prog | **law**: identically 0 in this configuration (co2_transport off) |
+| ozone, netsw, flwds, soll, sols, solld, solsd | **imports**: pass-throughs from the radiation component (rrtmg/radiation.F90:1272-1316,1429) and the SRFOZONE pbuf, no equations |
+
+The psl law runs in `diag_phys_writeout` **before** this step's
+radiation update (verified bit-exact against the dumped psl using the
+pre-radiation state), so the model takes two bottom-level temperatures:
+`tbot` (at cam_export) and `t_psl` (at psl time). The dump pins
+reconstruct `tbot` as T + ptend_s·dt/cpairv with cpairv = cpair =
+1004.64 J/(kg·K) (this run has `dry_air_species = ''`; verified bit-
+exact against the dumped tbot at steps 1/2/24/48).
+
+The cpslec chain is transcribed with the branch structure of
+cam_diagnostic_utils.F90:44-77: the shared branch predicates (b1:
+Tstar ≤ 290.5 ∧ TT0 > 290.5; b2: Tstar > 290.5 ∧ TT0 > 290.5) are named
+boolean intermediates used by both `psl_alph` and `psl_tstar_final`, and
+the flat branch (|phis/gravit| < 1e-4 → psl = ps, F90:57-59) is written
+as `ifelse(|topo| < 1e-4 m, ps, ps·exp(...))` reusing the topo law. The
+pressure-reduction series reads psl = ps·exp(β·(1 − αβ/2 + (αβ)²/3))
+with the shared product αβ = `psl_alphbeta` (F90:77). Note: the first
+draft of this file had the two series signs flipped (1 + αβ/2 − (αβ)²/3);
+all 48 window steps take branch 2 where α = 0 makes the correction
+vanish, so the dump pins could not detect it — the esm now transcribes
+the Fortran signs exactly, and the flip would only matter in branches 1
+and 3, which remain unpinned (see gaps).
+
+Model `CamInImports` documents the 20 cam_in fields as **pure coupler
+imports** (camsrfexch.F90:86-125) with their physics consumption sites:
+albedos asdir/asdif/aldir/aldif → SW radiation (physpkg.F90:3086-3087);
+lwup → LW surface skin temperature (rrtmg_state.F90:115); shf/lhf/cflx
+→ qneg4 (physpkg.F90:1572-1574) and the vdiff/CLUBB energy checks
+(1768-1769, 2775-2779); wsx/wsy → CLUBB surface momentum flux
+(clubb_intr.F90:3902, 3916-3917); ts/sst → CLUBB (2742-2744, 2637-2698);
+landfrac → convect_deep (2493); tref/qref → diagnostics only
+(cam_diagnostics.F90:1801-1811); u10 → CARMA dust/sea-salt emissions
+(off in this run); snowhland/snowhice/icefrac/ocnfrac → CLUBB/CARMA.
+The per-constituent cflx array (34 constituents, all coupler-provided)
+is dumped in cam_surface_cflx.csv and documented on the `cflx_Q`
+parameter. CAM has **no law** relating cam_in%lhf to cam_in%cflx: the
+coupler computes both consistently (dumped lhf/cflx_Q = LATVAP exactly
+on every row), so the esm keeps them as independent inputs — the
+consistency is a coupler property, not implemented. The one CAM-side
+combination of coupler fluxes is the flx_net accumulation of tphysac
+(physpkg.F90:1533):
+
+```
+flx_net = net_flx_rad + shf
+         + (precc + precl)·latvap·rhoh2o + (precsc + precsl)·latice·rhoh2o
+```
+
+with net_flx_rad the radiation-side net surface flux set by
+radiation_tend (physpkg.F90:3090-3092, radheat.F90:348-364); neither
+term is dumped (gap).
 
 ## Vertical diffusion (vertical_diffusion_solver.F90, diffusion_solver.F90; site vdiff)
 
@@ -296,9 +398,11 @@ stage-2 suite). All tests are instantaneous (`time_span {0,0}`), rel
 | `SvpTransLaw` | 5 | analytic formula at 127.16/220.16/260.16/300.16/375.16 K (ice, transition, water branches; knots 1 and 250 of estbl) |
 | `RayleighFriction` | 9 | 3 dump pins (site rayleigh, steps 1/48: all-zero branch), 3 compiled-Fortran pins (enabled, default profile: k = 1, 11, tanh saturation), 3 compiled-Fortran pins (enabled, raykrange = 10: k = 12, 16, 32) |
 | `EnergyFixer` | 3 | 2 dump pins (site energy_fixer, steps 1/48: heat_glob = 0), 1 compiled-Fortran pin (heat_glob = 0.25 J/kg/s) |
+| `CamOutExport` | 6 | 4 dump pins of the state laws (steps 1/2/24/48, bc_out; rho/thbot/psl = dumped, topo = derived from the dumped phis), 1 cpslec-chain pin (step 1, branch 2, with the nine intermediates incl. the shared predicates psl_b1/psl_b2, psl_alpha and psl_alphbeta), 1 flat-branch pin (branch-exercising phis = 5e-4 m²/s², psl = ps; fails if the branch is missing, see the test description) |
+| `CamInImports` | 0 | all fields are coupler imports; the one law (flx_net) needs net_flx_rad, which is not dumped → gap (no data invented) |
 | `VerticalDiffusion` | 9 | 27 dump pins at steps 1/2/48 (site vdiff: tau_damp(1) plus tau_damp(2) = 0 and ramda = dt/timeres = 0.25 at step 1, tauresx/y, dtk, ptend_u/v/s at lev 1, ptend_u(16) = 0), 5 q dump pins (DMS/bc_a4/SOAE at step 1, DMS at steps 2/48), 3 compiled-Fortran pins (nonzero-K operator at esd lev 1/16/32) |
 
-Total for the CAM slice: 65 + 27 + 6 + 35 = 133 assertions. The
+Total for the CAM slice: 65 + 27 + 6 + 23 + 35 = 156 assertions. The
 compiled-Fortran references compile the actual subroutines verbatim from
 the fork with gfortran 11.5 in a driver at the dump's step-1 u/v state
 (the rayleigh/energy-fixer driver is kept in `scratch/cam_laws_driver/`
@@ -346,6 +450,53 @@ column_cell_center(ze)` grid-geometry equation of
   as the entering residual (the pbuf memory), per the verified law.
 - **nonzero-K stencil** is pinned by the compiled reference, not by
   dumps (all kv ≡ 0 in the window).
+- **zbot**: zm(pver) at cam_export time is not dumped. `physics_update`
+  recomputes zm after the temperature update (physics_types.F90:423-449),
+  so the pre-radiation zm of the dump differs from what cam_export sees;
+  reconstructing it needs the geopotential law (geopotential_temp.F90)
+  plus the condensate mixing ratios at the radiation site (not dumped).
+  zbot is an import (no equation) — the geopotential law itself is a
+  separate component.
+- **topo**: cam_out%topo (camsrfexch.F90:498) is not a dump column; the
+  law topo = phis/gravit is implemented and pinned as a derived value
+  from the dumped phis (constant 8704.816911504207 m²/s² across the
+  window). A stage-1 dump of cam_out%topo would make it a direct pin.
+- **precipitation split**: the eight pbuf fields (PREC_DP, SNOW_DP,
+  PREC_SH, SNOW_SH, PREC_SED, SNOW_SED, PREC_PCW, SNOW_PCW) are not
+  dumped, so the precc/precl/precsc/precsl laws are unpinned. The dump
+  shows nonzero precc/precl on 15 of the 48 window steps, so the split
+  is exercised by the run but its inputs are not observable; the laws
+  are implemented per camsrfexch.F90:537-575.
+- **cpslec branches**: all 48 window steps take branch 2 (Tstar >
+  290.5 K and TT0 > 290.5 K → alph = 0, Tstar ← 0.5·(290.5+Tstar)). The
+  flat branch (|phis/gravit| < 1e-4 → psl = ps) is implemented and
+  pinned by a branch-exercising pin (phis = 5e-4 m²/s², a near-sea-level
+  column; the test description quantifies how the assertion fails if the
+  branch is missing). Branch 1 (Tstar ≤ 290.5, TT0 > 290.5) and branch 3
+  (incl. the Tstar < 255 K sub-branch) are implemented per the Fortran
+  but unpinned — the 887 m SCAM column never exercises them. Because
+  branch 2 sets alph = 0, the dump pins also cannot distinguish the
+  sign of the series correction (1 − αβ/2 + (αβ)²/3); the esm transcribes
+  the Fortran signs (the first draft had them flipped, see the surface-
+  exchange section).
+- **flx_net / net_flx_rad**: neither tend%flx_net nor the radiation
+  side's net_flx is dumped, so the CamInImports accumulation law is
+  unpinned. No data was invented (inputs would be fabricated).
+- **co2diag provenance (open question, not a CESM defect)**: the dumped
+  co2diag ≈ 1.127278 ppm (drifting slowly across the window) could not
+  be traced to any prescribed input: the LBC climo file
+  (LBC_2000climo_CMIP6_0p5degLat_c180227.nc) implies a global-mean
+  CO2VMR of ~369 ppm, the IOP file has no co2vmr variable, and no
+  namelist sets co2vmr. chem_surfvals_get('CO2VMR') is treated as a
+  pass-through import with the discrepancy documented; resolving it
+  would need a stage-1 dump of the chem_surfvals value at the cam_export
+  site. The esm gives co2diag the unit ppmv (the Fortran's mol/mol
+  CO2VMR × 1e6); the dump header labels the co2diag column mol/mol while
+  the dumped values are ppmv-scale (~1.127) — an instrumentation
+  labeling slip in our fork, not a data corruption (the README of the
+  dump is the source of truth for the values).
+- **lhf = cflx·LATVAP** holds in the dump on every row but is a coupler
+  (aoflux) property, not a CAM law — deliberately not implemented.
 
 ## Bugs found in the CAM code
 
