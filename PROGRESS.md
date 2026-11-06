@@ -1350,3 +1350,15 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
     shortwave, frazil-bflux, vertdiff), `cam_templates.esm` (vdiff3,
     zm-evap), `cice_templates.esm` (dedd2, tracer-transport),
     `cmeps_templates.esm` (ocnalb2, prep-atm).
+
+### 2026-11-06 (cont.): cdeps-datm-jra2 merged
+
+- `wt/cdeps-datm-jra2` merged as 7bb74a3: CDEPS DATM JRA55 datamode
+  (`stage2/cdeps_datm_jra.esm`, Streams/Jra/JRAFiles models; `stream_interp`, `density_jra`,
+  `rain_frac_jra`, `jra_albedo` appended to `cdeps_templates.esm`). Branch suite 1990P/0F/0E.
+  bugs.md TBD entries renumbered to #36 (r4 literals 0.608/0.069/0.011) and #37 (dead code).
+- **Follow-up (after esm-pr-cdeps2 lands):** the JRA `data_sources` still point at absolute
+  `file:///projects/...` paths, and the two JRAFiles reader tests read 2920-record netcdf files
+  (~27 min of suite time). Apply the same pattern as the GSWP3 decision: NCAR inputdata URL template
+  by default, reader tests against a small generated fixture. The GSWP3 Streams model still inlines
+  the law now in `stream_interp`; switch it to the template in the same follow-up.

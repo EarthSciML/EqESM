@@ -1111,7 +1111,7 @@
     "agent_status": "done",
     "outcome": "superseded",
     "merge_commit": null,
-    "notes": "Stage 1 + stage-2 draft written but session stopped while 'waiting on the background test run' with nothing committed; salvaged as WIP b6538d6, continued as cdeps-datm-jra2.",
+    "notes": "Stage-1 work salvaged as WIP b6538d6 and completed by cdeps-datm-jra2.",
     "yields": 8
   },
   {
@@ -1298,15 +1298,15 @@
     "llm": "v4",
     "prompt_chars": 1966,
     "submitted": "2026-11-06 10:22:19",
-    "started": null,
-    "ended": null,
-    "wait_minutes": null,
-    "run_minutes": null,
-    "slurm_state": null,
-    "agent_status": null,
-    "outcome": "pending",
-    "merge_commit": null,
-    "notes": ""
+    "started": "2026-11-06 10:25:28",
+    "ended": "2026-11-06 12:22:18",
+    "wait_minutes": 3.1,
+    "run_minutes": 116.8,
+    "slurm_state": "COMPLETED",
+    "agent_status": "done",
+    "outcome": "merged",
+    "merge_commit": "7bb74a36996820073fa9253c790eaa0b1142689e",
+    "notes": "JRA55 datamode merged (Streams/Jra/JRAFiles, 4 appended templates, bugs #36/#37); data_sources still use absolute file:// paths and the JRAFiles reader tests take ~27 min \u2014 to move to NCAR URL + generated fixture once esm-pr-cdeps2 sets the pattern."
   },
   {
     "name": "cam-physics-update2",
