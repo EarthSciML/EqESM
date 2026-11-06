@@ -1220,3 +1220,105 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
   (clm-surfalbedo, clm-soiltemp2); opencode appears to cache the failed
   lookup. Every grep call made after the install succeeded. No action
   needed.
+- **Batch submitted 2026-11-04 (afternoon), 10 new tasks** (16 agent jobs
+  queued in total; ctessum nodes are in rolling maintenance, so they run
+  as nodes return):
+  - stage 2: `clm-soilfluxes`, `cism-velo` (owns the CISM fork),
+    `cism-transport`, `cam-physics-update`
+  - stage 1: `cam-zm-instrument` (owns the CAM fork), `mom6-dumps-w2`
+    (owns the MOM6 fork)
+  - stage 1 + 2: `cmeps-ocnalb` (CMEPS fork), `cdeps-datm-jra` (CDEPS
+    fork; own C_JRA case), `cice-dedd` (CICE fork; also dumps the
+    qicen/qsnon/Tsfcn tracers for a later tracer-transport job)
+  - M9 subassembly with a feasibility gate: `m9-datm-clm`
+
+  New prompts add parallel-job rules:
+  - each job writes its own `stage2/README-<slice>.md`;
+  - shared `*_templates.esm` files are append-only;
+  - only the named job owns a lane's fork;
+  - existing dump CSVs must stay bit-identical.
+
+  Expect concatenation conflicts in the shared template files at merge.
+  Held back:
+  - ZM closure (needs cam-zm-instrument);
+  - CLM vegetated dump wave (collides with clm-soiltemp3 on the CLM fork);
+  - `${EQICE_ROOT}` import paths (collides with cism-thermo3);
+  - EarthSciModels/ESD PR wave (outward-facing; needs user go-ahead).
+- **ESD checkout:** another session reset the shared EarthSciDiscretizations
+  checkout to origin/main at 13:49. That dropped the local cice_bgrid
+  rules and broke the 3 CICE files on main. The rules are now upstream
+  (PR #50, `85963d7`), and the checkout was fast-forwarded. The suite on
+  main is rerunning as job 12095573 from a sibling worktree
+  `../EqESM-suite-a922c00`; a snapshot under `.work/` breaks the
+  `../../eqice` relative imports.
+- **EarthSciModels PR wave (user go-ahead 2026-11-04):**
+  - **CLMU:** opened **EarthSciML/EarthSciModels#44** from
+    `ctessum-claude:clmu-verify2` @ `dea8780` (rebased cleanly onto
+    origin/main `bf6a072`; urban_radiation.esm unchanged upstream).
+  - **MOSART #33:** the channel-depth fix `705518c` is already the PR head
+    (the "not pushed" note above is stale).
+  - **CICE #37:** its ESD dependency is resolved (ESD PR #50 merged).
+  - Jobs submitted to prepare branches, which the manager pushes after
+    review:
+    - `esm-pr-refresh` re-ports CICE (coupling transforms + assembly test)
+      onto #37 and syncs #33 with origin/main.
+    - `esm-pr-cdeps` creates the new `cdeps-datm` port.
+  - Upstream `test-esm` CI on EarthSciModels main is red independently of
+    us (user confirmed), so red PR CI is not a blocker.
+
+## Lane round 2026-11-06 (manager review of 18 finished runs)
+
+Independent read-only review agents (5, two-three branches each) checked
+every code branch, spot-checking test values against the dumps; the manager
+acted on their verdicts. Previous suite (main a922c00, job 12095573):
+1415P/0F/0E. Combined suite on main `ca8340a` (job **12179824**): **1868P/0F/0E**, validate-failures=0, units-issues=0
+(`.work/suite-ca8340a/suite.log`, worktree `../EqESM-suite-ca8340a`).
+
+- **Merged (5):** `cam-surface3` (04c46f5; identity pins gone, named
+  constants, cpslec flat branch, topo — 1438P on branch); `cam-zm-instrument`
+  (f099438; ZM stage-1 dump run 12112551, neutral, validator identities in dp);
+  `mom6-kpp2` (2a9aea0; 2776→262 assertions, `wright_rho` — residual
+  trims to mom6-kpp3); `cism-thermo3` (b0729c9; interior-node state with
+  coupled boundary nodes, EqIce pmp, integral melt, cap `tsfc_c`);
+  `clm-bareground2` (ca8340a; 0.333 fidelity, templates for repeated flux
+  blocks, qsat/MO reuse).
+- **Landed directly on main by workers:** `mom6-dumps-w2` (b52468f; MOM6
+  wave-2 dumps sw_abs/frazil/bflux/tri/kpp_wide, all validated, neutral) and
+  the stage-1 half of `cmeps-ocnalb` (b1c98f5). `cice-dedd` also wrote its
+  run record into the main checkout uncommitted; moved to its branch.
+- **Sent back (6):** `cam-vdiff3` (2 zero-region pins + union merge with
+  cam-surface3), `m9-datm-clm2` (test descriptions, unlabelled derived
+  forc_wind/forc_solar, bare constants, rhos params, factoring),
+  `cmeps-ocnalb2` (mean anomaly 5×, float32 literals repeated,
+  misused fraction_weighted_sum, copy pins), `cism-transport2` (unfailable
+  ablation pins, invented synthetic inputs, thickness ODE carries a negative
+  deficit, factoring; plus thermo3 touch-ups), `clm-soiltemp4` (small: one
+  duplicated tendency, 3 tautological pins; PDE design accepted),
+  `clm-soilfluxes2` (suffix-repeated correction law, ~10 unfailable pins).
+  Follow-up after merge: `mom6-kpp3` (single-source Wright coeffs, trims,
+  kfirst labels).
+- **Interrupted, continued (4):** `cice-dedd2` (stage 1 done: fork a34b33d,
+  run 12124251; opencode crashed before stage 2), `cism-velo2` (8.4 h, ended
+  on "now let me author cism_velo.esm"), `cdeps-datm-jra2` (stopped
+  "waiting on the background test run", nothing committed — WIP b6538d6),
+  `cam-physics-update2` (never started: llama-server CUDA init failure on
+  ccc0235).
+- **Session-death lessons → prompt text:** cam-surface3 killed itself with
+  `pkill -f 'esm test'` (pattern matches the agent's own command line);
+  cdeps-datm-jra and cism-velo ended turns while promising further work.
+  All new prompts carry a "Session-hygiene rules" block (no pattern pkill,
+  never end a turn with a background job running or with "now let me …").
+- **bugs.md numbering:** main ends at #32; clm-soiltemp4 keeps #33/#34;
+  cmeps-ocnalb2 and cdeps-datm-jra2 use `## TBD.` → number at merge
+  (#35 cmeps, #36/#37 cdeps).
+- **EarthSciModels PR prep (not pushed):** `esm-pr-refresh` prepared
+  `cice` (0fd6b16, #37) and `mosart-routing` (52f6e14, #33), byte-identical
+  to stage2 modulo metadata, Rust 151P/135P. `esm-pr-cdeps` prepared
+  `cdeps-datm` (2e0a565, 58P) but its data sources are machine-specific
+  `file:///projects/...` URLs. Awaiting user decision on pushing.
+- **Stranded slurm jobs:** 4 `st_archive` jobs (12047778, 12119694,
+  12125371, 12127464) pending with DependencyNeverSatisfied after their
+  C_JRA case runs failed; cancelled by the user.
+- **Next:** review the 11 queued agent jobs. Merge
+  order: cam-vdiff3; clm-soiltemp4 before clm-soilfluxes2; cism-transport2
+  before cism-velo2 (both touch cism_templates.esm).

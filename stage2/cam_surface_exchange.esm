@@ -1,0 +1,1367 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_surface_exchange",
+  "description": "The surface-exchange slice of the CAM6 physics (stage 2 of the EqESM project): the cam_out export laws of cam_export (components/cam/src/control/camsrfexch.F90:405-577 of the instrumented cam6_4_212 fork) and the cam_in import surface. Model CamOutExport transcribes the true cam_export laws - rho = pbot/(rair tbot) (F90:503), thbot = tbot exner_function(pbot, ps, cappa) (F90:496, dp_coupling.F90:731-733), topo = phis/gravit (F90:498), the cpslec sea-level pressure chain incl. the flat branch (cam_diagnostics.F90:1080-1081 + cam_diagnostic_utils.F90:20-81), the precipitation split precc/precl/precsc/precsl from the eight pbuf PREC/Snow fields (F90:537-575), and the trace-gas exports co2diag = CO2VMR*1e6 ppmv (F90:506-511, unit ppmv) and co2prog = 0 (F90:512-516). The exports cam_export copies without transformation (tbot/zbot/ubot/vbot/qbot/pbot from the state, F90:495-507; netsw/flwds/soll/sols/solld/solsd from radiation_tend, rrtmg/radiation.F90:1272-1316,1429; ozone from the pbuf SRFOZONE field, F90:519-525) are modeled as imports (parameters) rather than equations: they are documented pass-throughs with no cam_export law, and asserting them would be tautological. The physical constants are named parameters with physconst/shr_const provenance: rair (physconst.F90:102), gravit (physconst.F90:89), cpair (physconst.F90:92), xlapse and the cpslec branch temperatures tstar0/tstar_cold (cam_diagnostic_utils.F90:44, 64-72); cappa = rair/cpair is this run's cappav (air_composition.F90:354, dry_air_species = ''). Model CamInImports documents the cam_in fields as pure coupler imports (camsrfexch.F90:86-125) with their physics consumption sites (physpkg.F90:1532-1536, 1547, 1572-1574, 1768-1769, 2493, 2742-2749, 2775-2779, 3086-3092) and transcribes the one CAM-side combination of coupler fluxes, the flx_net accumulation of tphysac (physpkg.F90:1533) with the latent-heat constants LATVAP/LATICE/RHOFW named as parameters (shr_const_mod.F90:52-55). Tests pin the export laws to the stage-1 dump rows (stage1/dumps/cam/cam_surface_exchange.csv and cam_phys_tend.csv, rows cited per test) at rel 1e-12; values not present in the dump are marked 'derived (not a dump column)'."
+ },
+ "models": {
+  "CamOutExport": {
+   "expression_template_imports": [
+    {
+     "ref": "./cam_templates.esm"
+    }
+   ],
+   "variables": {
+    "tbot": {
+     "type": "parameter",
+     "units": "K",
+     "default": 301.8637376908711,
+     "description": "bottom-level temperature export, cam_out%tbot = state%t(pver) (camsrfexch.F90:495), [K]; a direct state copy, modeled as an import. The dump pins reconstruct it from the radiation-site dump row as T + ptend_s*dt/cpairv (cpairv = cpair = 1004.64 J/(kg K) because dry_air_species = ''; verified bit-exact vs the dumped tbot)."
+    },
+    "zbot": {
+     "type": "parameter",
+     "units": "m",
+     "default": 67.28351083631732,
+     "description": "bottom-level geopotential height export, cam_out%zbot = state%zm(pver) (camsrfexch.F90:497), [m]; a direct state copy, modeled as an import. zm at cam_export time is not dumped (physics_update recomputes zm after the temperature update, physics_types.F90:423-449), so the pre-radiation zm of the dump differs from the value cam_export sees; the geopotential law itself is a separate component (gap, see README-cam.md)."
+    },
+    "ubot": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 1.418813430289268,
+     "description": "bottom-level zonal wind export, cam_out%ubot = state%u(pver) (camsrfexch.F90:499), [m/s]; a direct state copy, modeled as an import. The radiation tendency leaves u unchanged, so the dumped ubot equals the pre-radiation state value."
+    },
+    "vbot": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 5.404623820236974,
+     "description": "bottom-level meridional wind export, cam_out%vbot = state%v(pver) (camsrfexch.F90:500), [m/s]; a direct state copy, modeled as an import."
+    },
+    "qbot": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.011442792557680562,
+     "description": "bottom-level specific humidity export, cam_out%qbot = state%q(pver,1) (camsrfexch.F90:507), [kg/kg]; a direct state copy, modeled as an import."
+    },
+    "pbot": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 92152.10177120629,
+     "description": "bottom-level pressure export, cam_out%pbot = state%pmid(pver) (camsrfexch.F90:501), [Pa]; a direct state copy, modeled as an import."
+    },
+    "ps": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 92848.96251956573,
+     "description": "surface pressure, state%ps, [Pa]; the SE dycore surface interface pressure pint(pver+1) of dp_coupling.F90:693-695."
+    },
+    "phis": {
+     "type": "parameter",
+     "units": "m^2/s^2",
+     "default": 8704.816911504207,
+     "description": "surface geopotential, state%phis, [m^2/s^2]; dumped in cam_phys_tend.csv (constant 8704.816911504207 m^2/s^2 across the window, the 887 m SCAM column)."
+    },
+    "t_psl": {
+     "type": "parameter",
+     "units": "K",
+     "default": 302.4585882010374,
+     "description": "temperature at pver at the time the PSL pbuf field is computed (diag_phys_writeout, cam_diagnostics.F90:1080-1081, which runs before this step's radiation update), [K]; cpslec uses only the bottom level. The dump pins set it to the pre-radiation state temperature."
+    },
+    "prec_dp": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "deep-convection precipitation, pbuf PREC_DP (produced by convect_deep), [m/s] (camsrfexch.F90:542-546). Not dumped; the default is nominal (this run: Zhang-McFarlane deep convection)."
+    },
+    "snow_dp": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "deep-convection snow, pbuf SNOW_DP, [m/s] (camsrfexch.F90:542-546). Not dumped."
+    },
+    "prec_sh": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "shallow-convection precipitation, pbuf PREC_SH (produced by the shallow convection scheme), [m/s] (camsrfexch.F90:538-541). Not dumped."
+    },
+    "snow_sh": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "shallow-convection snow, pbuf SNOW_SH, [m/s] (camsrfexch.F90:538-541). Not dumped."
+    },
+    "prec_sed": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "stratiform sedimentation precipitation, pbuf PREC_SED (produced by the microphysics), [m/s] (camsrfexch.F90:548-553). Not dumped."
+    },
+    "snow_sed": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "stratiform sedimentation snow, pbuf SNOW_SED, [m/s] (camsrfexch.F90:548-553). Not dumped."
+    },
+    "prec_pcw": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "stratiform condensation precipitation, pbuf PREC_PCW, [m/s] (camsrfexch.F90:548-553). Not dumped."
+    },
+    "snow_pcw": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "stratiform condensation snow, pbuf SNOW_PCW, [m/s] (camsrfexch.F90:548-553). Not dumped."
+    },
+    "co2vmr": {
+     "type": "parameter",
+     "units": "mol/mol",
+     "default": 0.0,
+     "description": "CO2 mole fraction from chem_surfvals_get('CO2VMR') (camsrfexch.F90:506-511), [mol/mol]. The run's value ~1.127e-6 (dumped co2diag/1e6) is prescribed data whose provenance is unresolved: the LBC climo file implies a global-mean CO2VMR of ~369e-6 and the IOP file has no co2vmr variable (see README-cam.md). The nominal default is 0."
+    },
+    "netsw": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 8.144525054376572e-10,
+     "description": "net surface shortwave flux export, cam_out%netsw = fsns of radiation_tend (rrtmg/radiation.F90:1429), [W/m^2]; copied through unchanged by cam_export, modeled as an import (no law)."
+    },
+    "flwds": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 303.50578808378003,
+     "description": "downwelling surface longwave flux export, cam_out%flwds (rrtmg/radiation.F90:1315), [W/m^2]; copied through unchanged, modeled as an import."
+    },
+    "soll": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 187.13785670985106,
+     "description": "surface direct-beam visible downwelling flux export, cam_out%soll (rrtmg/radiation.F90:1272), [W/m^2]; copied through unchanged, modeled as an import."
+    },
+    "sols": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 159.18446120267862,
+     "description": "surface direct-beam near-IR downwelling flux export, cam_out%sols (rrtmg/radiation.F90:1272), [W/m^2]; copied through unchanged, modeled as an import."
+    },
+    "solld": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 5.421589434476402,
+     "description": "surface diffuse visible downwelling flux export, cam_out%solld (rrtmg/radiation.F90:1273), [W/m^2]; copied through unchanged, modeled as an import."
+    },
+    "solsd": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 58.778936577866546,
+     "description": "surface diffuse near-IR downwelling flux export, cam_out%solsd (rrtmg/radiation.F90:1273), [W/m^2]; copied through unchanged, modeled as an import."
+    },
+    "ozone": {
+     "type": "parameter",
+     "units": "mol/mol",
+     "default": 4.657186972314521e-08,
+     "description": "surface ozone export, cam_out%ozone = pbuf SRFOZONE (set by radiation, rrtmg/radiation.F90:1270; copied at camsrfexch.F90:519-525), [mol/mol]; modeled as an import."
+    },
+    "rair": {
+     "type": "parameter",
+     "units": "J/(kg*K)",
+     "default": 287.0423113650487,
+     "description": "dry-air gas constant rair = SHR_CONST_RDAIR = AVOGAD*BOLTZ/MWDAIR (physconst.F90:102, shr_const_mod.F90:46-48), [J/(kg K)]; the gas constant of the rho law and the cpslec chain."
+    },
+    "gravit": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration gravit = SHR_CONST_G (physconst.F90:89, shr_const_mod.F90:24-27), [m/s^2]; enters topo and the cpslec chain."
+    },
+    "cpair": {
+     "type": "parameter",
+     "units": "J/(kg*K)",
+     "default": 1004.64,
+     "description": "specific heat of dry air cpair = SHR_CONST_CPDAIR (physconst.F90:92, shr_const_mod.F90:52-54), [J/(kg K)]; enters cappa = rair/cpair."
+    },
+    "xlapse": {
+     "type": "parameter",
+     "units": "K/m",
+     "default": 0.0065,
+     "description": "cpslec temperature lapse rate xlapse (cam_diagnostic_utils.F90:44), [K/m]."
+    },
+    "tstar0": {
+     "type": "parameter",
+     "units": "K",
+     "default": 290.5,
+     "description": "ECMWF reference temperature T0 of the cpslec branch thresholds, the inline 290.5 K of cam_diagnostic_utils.F90:64-72, [K]."
+    },
+    "tstar_cold": {
+     "type": "parameter",
+     "units": "K",
+     "default": 255.0,
+     "description": "cpslec branch-3 cold threshold, the inline 255 K of cam_diagnostic_utils.F90:71-72, [K]."
+    },
+    "cappa": {
+     "type": "unknown",
+     "units": "1",
+     "description": "the dycore pressure-temperature exponent cappav of dp_coupling.F90:731-733: cappa = rairv/cpairv, and with dry_air_species = '' (this run) rairv = rair, cpairv = cpair (air_composition.F90:354), so cappa = rair/cpair."
+    },
+    "topo": {
+     "type": "unknown",
+     "units": "m",
+     "description": "surface topographic height export, cam_out%topo = phis/gravit (camsrfexch.F90:498), [m]; not a dump column (gap: pinned as a derived value from the dumped phis, see README-cam.md). Also the flat-branch threshold input of cpslec."
+    },
+    "rho": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "bottom-level dry-air density export, cam_out%rho (camsrfexch.F90:503), [kg/m^3]; dump column rho."
+    },
+    "thbot": {
+     "type": "unknown",
+     "units": "K",
+     "description": "bottom-level potential temperature export, cam_out%thbot (camsrfexch.F90:496), [K]; dump column thbot."
+    },
+    "psl": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "sea-level pressure export, cam_out%psl = pbuf PSL (camsrfexch.F90:503-504), computed by cpslec in diag_phys_writeout (cam_diagnostics.F90:1080-1081), [Pa]; dump column psl."
+    },
+    "psl_alpha": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cpslec lapse-rate parameter alpha = rair*xlapse/gravit (cam_diagnostic_utils.F90:49), dimensionless."
+    },
+    "psl_tstar": {
+     "type": "unknown",
+     "units": "K",
+     "description": "cpslec sea-level temperature Tstar = t(pver)*(1 + alpha*(ps/pmid - 1)) before branch adjustment (cam_diagnostic_utils.F90:52-53), [K]."
+    },
+    "psl_tt0": {
+     "type": "unknown",
+     "units": "K",
+     "description": "cpslec test temperature TT0 = Tstar + xlapse*phis/gravit (cam_diagnostic_utils.F90:54-55), [K]."
+    },
+    "psl_b1": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cpslec branch-1 predicate Tstar <= tstar0 and TT0 > tstar0 (cam_diagnostic_utils.F90:64), boolean; shared by the psl_alph and psl_tstar_final branches."
+    },
+    "psl_b2": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cpslec branch-2 predicate Tstar > tstar0 and TT0 > tstar0 (cam_diagnostic_utils.F90:66), boolean; shared by the psl_alph and psl_tstar_final branches."
+    },
+    "psl_alph": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cpslec branch-adjusted lapse-rate parameter alph (cam_diagnostic_utils.F90:56-66), dimensionless."
+    },
+    "psl_tstar_final": {
+     "type": "unknown",
+     "units": "K",
+     "description": "cpslec Tstar after the branch adjustment of cam_diagnostic_utils.F90:56-72 (the Fortran overwrites Tstar in branches 2 and 3), [K]."
+    },
+    "psl_beta": {
+     "type": "unknown",
+     "units": "1",
+     "description": "cpslec exponent beta = phis/(rair*Tstar) (cam_diagnostic_utils.F90:73), dimensionless."
+    },
+    "psl_alphbeta": {
+     "type": "unknown",
+     "units": "1",
+     "description": "the product alph*beta of the cpslec pressure-reduction series (cam_diagnostic_utils.F90:77), dimensionless; the shared factor of the two series terms."
+    },
+    "precc": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "convective precipitation export, cam_out%precc (camsrfexch.F90:538-547, 568-570), [m/s]; dump column precc."
+    },
+    "precl": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "large-scale (stratiform) precipitation export, cam_out%precl (camsrfexch.F90:548-553, 568-570), [m/s]; dump column precl."
+    },
+    "precsc": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "convective snow export, cam_out%precsc (camsrfexch.F90:554-559, 570-573), [m/s]; dump column precsc."
+    },
+    "precsl": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "large-scale snow export, cam_out%precsl (camsrfexch.F90:560-565, 570-573), [m/s]; dump column precsl."
+    },
+    "co2diag": {
+     "type": "unknown",
+     "units": "ppmv",
+     "description": "diagnostic CO2 mixing ratio export, cam_out%co2diag = CO2VMR*1e6 (camsrfexch.F90:506-511), in CAM ppmv; the mol/mol CO2VMR times a 1e6 ppmv-per-mol/mol scale factor, [ppmv]. The dump column co2diag carries ppmv values (~1.127 ppm) although the dump header labels it mol/mol (instrumentation labeling slip, see README-cam.md)."
+    },
+    "co2prog": {
+     "type": "unknown",
+     "units": "mol/mol",
+     "description": "prognostic CO2 mixing ratio export, cam_out%co2prog (camsrfexch.F90:512-516), [mol/mol]; identically 0 because co2_transport() is false in this configuration."
+    }
+   },
+   "equations": [
+    {
+     "lhs": "cappa",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "rair",
+       "cpair"
+      ]
+     }
+    },
+    {
+     "lhs": "topo",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "phis",
+       "gravit"
+      ]
+     }
+    },
+    {
+     "lhs": "rho",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "density_dry_air",
+      "bindings": {
+       "p": "pbot",
+       "t": "tbot",
+       "rair": "rair"
+      }
+     }
+    },
+    {
+     "lhs": "thbot",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "tbot",
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "exner_function",
+        "bindings": {
+         "p": "pbot",
+         "p_surf": "ps",
+         "cappa": "cappa"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_alpha",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "rair",
+         "xlapse"
+        ]
+       },
+       "gravit"
+      ]
+     }
+    },
+    {
+     "lhs": "psl_tstar",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "t_psl",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           "psl_alpha",
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               "ps",
+               "pbot"
+              ]
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_tt0",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "psl_tstar",
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "xlapse",
+           "phis"
+          ]
+         },
+         "gravit"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_b1",
+     "rhs": {
+      "op": "and",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "psl_tstar",
+         "tstar0"
+        ]
+       },
+       {
+        "op": ">",
+        "args": [
+         "psl_tt0",
+         "tstar0"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_b2",
+     "rhs": {
+      "op": "and",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "psl_tstar",
+         "tstar0"
+        ]
+       },
+       {
+        "op": ">",
+        "args": [
+         "psl_tt0",
+         "tstar0"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_alph",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       "psl_b1",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "rair",
+           "phis"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           "tstar0",
+           "psl_tstar"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         "psl_b2",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         },
+         "psl_alpha"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_tstar_final",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       "psl_b1",
+       "psl_tstar",
+       {
+        "op": "ifelse",
+        "args": [
+         "psl_b2",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.5,
+            "units": "1"
+           },
+           {
+            "op": "+",
+            "args": [
+             "tstar0",
+             "psl_tstar"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": "<",
+            "args": [
+             "psl_tstar",
+             "tstar_cold"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.5,
+              "units": "1"
+             },
+             {
+              "op": "+",
+              "args": [
+               "tstar_cold",
+               "psl_tstar"
+              ]
+             }
+            ]
+           },
+           "psl_tstar"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_beta",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "phis",
+       {
+        "op": "*",
+        "args": [
+         "rair",
+         "psl_tstar_final"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "psl_alphbeta",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "psl_alph",
+       "psl_beta"
+      ]
+     }
+    },
+    {
+     "lhs": "psl",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<",
+        "args": [
+         {
+          "op": "abs",
+          "args": [
+           "topo"
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0001,
+          "units": "m"
+         }
+        ]
+       },
+       "ps",
+       {
+        "op": "*",
+        "args": [
+         "ps",
+         {
+          "op": "exp",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "psl_beta",
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.0,
+                    "units": "1"
+                   },
+                   {
+                    "op": "/",
+                    "args": [
+                     "psl_alphbeta",
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 2.0,
+                      "units": "1"
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "^",
+                    "args": [
+                     "psl_alphbeta",
+                     {
+                      "op": "const",
+                      "args": [],
+                      "value": 2.0,
+                      "units": "1"
+                     }
+                    ]
+                   },
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 3.0,
+                    "units": "1"
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "precc",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/s"
+       },
+       {
+        "op": "+",
+        "args": [
+         "prec_dp",
+         "prec_sh"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "precl",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/s"
+       },
+       {
+        "op": "+",
+        "args": [
+         "prec_sed",
+         "prec_pcw"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "precsc",
+     "rhs": {
+      "op": "min",
+      "args": [
+       "precc",
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m/s"
+         },
+         {
+          "op": "+",
+          "args": [
+           "snow_dp",
+           "snow_sh"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "precsl",
+     "rhs": {
+      "op": "min",
+      "args": [
+       "precl",
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m/s"
+         },
+         {
+          "op": "+",
+          "args": [
+           "snow_sed",
+           "snow_pcw"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "co2diag",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "co2vmr",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1000000.0,
+        "units": "ppmv/(mol/mol)"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "co2prog",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "mol/mol"
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "export_state_laws_step1",
+     "description": "cam_surface_exchange.csv row (step 1, phase bc_out) and cam_phys_tend.csv row (step 1, site radiation, lev 32): the cam_export laws at the first step. tbot is reconstructed as T + ptend_s*dt/cpairv (cpairv = cpair because dry_air_species = ''), t_psl is the pre-radiation state temperature (the PSL pbuf is computed before the radiation update). rho/thbot/psl expected = dumped cam_out values; topo expected = phis/gravit with the dumped phis (derived, not a dump column: cam_out%topo is not in the stage-1 dump).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "tbot": 301.8637376908711,
+      "pbot": 92152.10177120629,
+      "ps": 92848.96251956573,
+      "phis": 8704.816911504207,
+      "t_psl": 302.4585882010374
+     },
+     "assertions": [
+      {
+       "variable": "rho",
+       "time": 0.0,
+       "expected": 1.0635266603911044,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "thbot",
+       "time": 0.0,
+       "expected": 302.5141933745016,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "topo",
+       "time": 0.0,
+       "expected": 887.6886479013403,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 102841.17870757317,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "export_state_laws_step2",
+     "description": "cam_surface_exchange.csv row (step 2, phase bc_out) and cam_phys_tend.csv row (step 2, site radiation, lev 32): the same laws at the second step (the radiation component still produces a tendency this step, so tbot is reconstructed from T + ptend_s*dt/cpair as in step 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "tbot": 301.21208009408,
+      "pbot": 92132.4985534579,
+      "ps": 92829.33881667865,
+      "phis": 8704.816911504207,
+      "t_psl": 301.80694809117387
+     },
+     "assertions": [
+      {
+       "variable": "rho",
+       "time": 0.0,
+       "expected": 1.0656008182441197,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "thbot",
+       "time": 0.0,
+       "expected": 301.8612502831876,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 102831.01263886281,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "export_state_laws_step24",
+     "description": "cam_surface_exchange.csv row (step 24, phase bc_out) and cam_phys_tend.csv row (step 24, site radiation, lev 32): the state laws at the night step of the window (24 h in).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "tbot": 298.2024755875054,
+      "pbot": 92332.47341926683,
+      "ps": 93034.97640040005,
+      "phis": 8704.816911504207,
+      "t_psl": 298.3039845069846
+     },
+     "assertions": [
+      {
+       "variable": "rho",
+       "time": 0.0,
+       "expected": 1.078691624566032,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "thbot",
+       "time": 0.0,
+       "expected": 298.84896856497875,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 103121.56152307746,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "export_state_laws_step48",
+     "description": "cam_surface_exchange.csv row (step 48, phase bc_out) and cam_phys_tend.csv row (step 48, site radiation, lev 32): the state laws at the last step of the window (warming radiation tendency this step, +0.022 K).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "tbot": 297.51651141275073,
+      "pbot": 92093.95980611096,
+      "ps": 92794.70931858035,
+      "phis": 8704.816911504207,
+      "t_psl": 297.4943176112296
+     },
+     "assertions": [
+      {
+       "variable": "rho",
+       "time": 0.0,
+       "expected": 1.078385787510838,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "thbot",
+       "time": 0.0,
+       "expected": 298.16157346380277,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 102869.83469753234,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "cpslec_psl_chain_step1",
+     "description": "The cpslec intermediate chain (cam_diagnostic_utils.F90:44-77) at step 1, branch 2 (Tstar > 290.5 K and TT0 > 290.5 K: alph = 0 and Tstar replaced by 0.5*(290.5 K + Tstar)): the intermediates psl_alpha/psl_tstar/psl_tt0/psl_b1/psl_b2/psl_alph/psl_tstar_final/psl_beta are Fortran-formula values (derived, not dump columns; validator replica, reproducing the dumped psl of cam_surface_exchange.csv row (step 1, bc_out)) computed from the dumped pre-radiation state (cam_phys_tend.csv row (step 1, site radiation, lev 32)); psl expected = the dumped value. All 48 window steps take branch 2; the other cpslec branches are unpinned (see README-cam.md).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "t_psl": 302.4585882010374,
+      "pbot": 92152.10177120629,
+      "ps": 92848.96251956573,
+      "phis": 8704.816911504207
+     },
+     "assertions": [
+      {
+       "variable": "psl_alpha",
+       "time": 0.0,
+       "expected": 0.1902656109907259,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl_tstar",
+       "time": 0.0,
+       "expected": 302.8937662480276,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl_tt0",
+       "time": 0.0,
+       "expected": 308.6637424593863,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl_b1",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "psl_b2",
+       "time": 0.0,
+       "expected": 1.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl_alph",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "psl_tstar_final",
+       "time": 0.0,
+       "expected": 296.69688312401377,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl_beta",
+       "time": 0.0,
+       "expected": 0.1022117298886724,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 102841.17870757317,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "cpslec_flat_branch_pin",
+     "description": "Branch-exercising pin (derived, not a dump column): the flat branch |phis/gravit| < 1e-4 -> psl = ps of cpslec (cam_diagnostic_utils.F90:57-59), which the 887 m SCAM column never exercises. Inputs: the step-1 dumped ps/t_psl/pbot with the branch-exercising phis = 5e-4 m^2/s^2 (|phis/gravit| = 5.1e-5 m < 1e-4). The assertion fails if the branch is missing: the exp branch would give ps*exp(beta*(1 - ...)) with beta = phis/(rair*Tstar_final) ~ 5.87e-9, i.e. psl ~ ps*(1 + 5.87e-9), a relative difference 5.9e-9 far above the 1e-12 tolerance.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "phis": 0.0005,
+      "ps": 92848.96251956573,
+      "t_psl": 302.4585882010374,
+      "pbot": 92152.10177120629
+     },
+     "assertions": [
+      {
+       "variable": "psl",
+       "time": 0.0,
+       "expected": 92848.96251956573,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "CamInImports": {
+   "variables": {
+    "asdir": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "surface albedo, direct visible, from the coupler via cam_in (camsrfexch.F90:86-125), [1]; consumed by the SW radiation (physpkg.F90:3086-3087 radiation_tend(cam_out, cam_in), rrtmg/radiation.F90:1268-1273). This run's coupler delivers 1.0 (all-ocean SCAM column, no albedo model), so the RRTMG net surface SW is ~0 despite ~410 W/m^2 downwelling (see README-cam.md)."
+    },
+    "asdif": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "surface albedo, diffuse visible, from the coupler, [1]; consumed by the SW radiation (physpkg.F90:3086-3087, rrtmg/radiation.F90:1268-1273)."
+    },
+    "aldir": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "surface albedo, direct near-IR, from the coupler, [1]; consumed by the SW radiation (physpkg.F90:3086-3087, rrtmg/radiation.F90:1268-1273)."
+    },
+    "aldif": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "surface albedo, diffuse near-IR, from the coupler, [1]; consumed by the SW radiation (physpkg.F90:3086-3087, rrtmg/radiation.F90:1268-1273)."
+    },
+    "lwup": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 452.09518167857084,
+     "description": "upwelling surface longwave flux, from the coupler, [W/m^2]; the LW radiation derives the surface skin temperature from it (rrtmg_state.F90:115)."
+    },
+    "lhf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 37.44389435238985,
+     "description": "latent heat flux, from the coupler, [W/m^2]; consumed by qneg4 (physpkg.F90:1572-1574). CAM has no law relating lhf to cflx: the coupler computes both consistently (the dump shows lhf/cflx_Q = LATVAP; see README-cam.md)."
+    },
+    "shf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": -5.392309114356713,
+     "description": "sensible heat flux, from the coupler, [W/m^2]; enters flx_net (physpkg.F90:1533), flx_heat (physpkg.F90:2749), the vdiff and CLUBB energy checks (physpkg.F90:1768-1769, 2775-2779) and qneg4 (1572-1574)."
+    },
+    "wsx": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": -0.002622286182182339,
+     "description": "zonal surface wind stress, from the coupler, [N/m^2]; CLUBB surface momentum flux and friction velocity (clubb_intr.F90:3902, 3916-3917, 5611)."
+    },
+    "wsy": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": -0.00999645990606174,
+     "description": "meridional surface wind stress, from the coupler, [N/m^2]; CLUBB surface momentum flux (clubb_intr.F90:3902, 3916-3917, 5611)."
+    },
+    "tref": {
+     "type": "parameter",
+     "units": "K",
+     "default": 301.43990760812324,
+     "description": "2-m reference temperature, from the coupler, [K]; diagnostics only (cam_diagnostics.F90:1801-1803, TREFHT/TREFHTMX/TREFHTMN history fields)."
+    },
+    "qref": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.016094024517984952,
+     "description": "2-m reference specific humidity, from the coupler, [kg/kg]; diagnostics only (cam_diagnostics.F90:1804-1811, QREFHT)."
+    },
+    "u10": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 2.7070994452744213,
+     "description": "10-m wind speed, from the coupler, [m/s]; consumed only by the CARMA dust/sea-salt emission models (carma_model_mod.F90), not active in this run."
+    },
+    "ts": {
+     "type": "parameter",
+     "units": "K",
+     "default": 298.8214060350357,
+     "description": "surface temperature, from the coupler, [K]; CLUBB surface theta (clubb_intr.F90:5907 via clubb_tend_cam, physpkg.F90:2742-2744)."
+    },
+    "sst": {
+     "type": "parameter",
+     "units": "K",
+     "default": 298.8214060350357,
+     "description": "sea surface temperature, from the coupler, [K]; CLUBB (physpkg.F90:2637, 2698)."
+    },
+    "snowhland": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "snow depth on land, from the coupler, [m]; CARMA cloud fraction (carma_cloudfraction.F90:117), not active in this run."
+    },
+    "snowhice": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.2,
+     "description": "snow depth on sea ice, from the coupler, [m]."
+    },
+    "landfrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "land fraction, from the coupler, [1]; the land/sea mask of convect_deep (physpkg.F90:2493)."
+    },
+    "icefrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "sea-ice fraction, from the coupler, [1]."
+    },
+    "ocnfrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "ocean fraction, from the coupler, [1]."
+    },
+    "cflx_Q": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 1.4971569113310615e-05,
+     "description": "surface constituent flux of water vapor, cam_in%cflx(:,1), from the coupler, [kg/m^2/s]; the energy checks use cflx(:,1) with LATVAP (physpkg.F90:1768-1769, 2775-2779) and qneg4 clamps the (shf, lhf, cflx) triple (1572-1574). The full per-constituent cflx array (34 constituents) is dumped in cam_surface_cflx.csv; all entries are coupler-provided."
+    },
+    "precc": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "convective precipitation export of cam_out at this step (CamOutExport.precc), [m/s]; enters the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "precl": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "large-scale precipitation export of cam_out at this step (CamOutExport.precl), [m/s]; enters the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "precsc": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "convective snow export of cam_out at this step (CamOutExport.precsc), [m/s]; enters the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "precsl": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "large-scale snow export of cam_out at this step (CamOutExport.precsl), [m/s]; enters the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "net_flx_rad": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "radiation-side net surface flux, net_flx of radiation_tend (physpkg.F90:3090-3092, radheat.F90:348-364 calculate_net_heating_run), [W/m^2]; the leading term of the flx_net accumulation. Not dumped."
+    },
+    "latvap": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 2501000.0,
+     "description": "latent heat of vaporization latvap = SHR_CONST_LATVAP (shr_const_mod.F90:52-55), [J/kg]; the water-vapor latent-heat factor of the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "latice": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 333700.0,
+     "description": "latent heat of fusion latice = SHR_CONST_LATICE (shr_const_mod.F90:52-55), [J/kg]; the frozen-precipitation latent-heat factor of the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "rhoh2o": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1000.0,
+     "description": "density of liquid water rhoh2o = SHR_CONST_RHOFW (shr_const_mod.F90:52-55), [kg/m^3]; converts the m/s precipitation rates to kg/m^2/s in the flx_net accumulation (physpkg.F90:1533)."
+    },
+    "flx_net": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "surface flux convergence accumulated by tphysac (physpkg.F90:1533): the radiation net surface flux plus the sensible heat flux plus the latent heat of the total and frozen precipitation, tend%flx_net, [W/m^2]. Not dumped (tend%flx_net is not in the stage-1 dump); coverage gap (see README-cam.md)."
+    }
+   },
+   "equations": [
+    {
+     "lhs": "flx_net",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "net_flx_rad",
+       {
+        "op": "+",
+        "args": [
+         "shf",
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               "precc",
+               "precl"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               "latvap",
+               "rhoh2o"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "+",
+              "args": [
+               "precsc",
+               "precsl"
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               "latice",
+               "rhoh2o"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": []
+  }
+ }
+}

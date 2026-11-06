@@ -152,3 +152,72 @@ window/domain, and gustiness/cold-air-outbreak would need namelist changes).
 Stage 2 complete (model + templates + tests green, 468 cmeps assertions, whole
 suite 1327P/0F/0E). Next: import `cmeps_aoflux` by reference into the top-level
 `eqesm.esm` coupling (stage 3).
+
+## 2026-11-05: ocean albedo and ocean-export merge dumps (ocnalb/merge lane)
+
+Second instrumentation round on the same fork (branch `instrument/cmeps-dumps`,
+commits `cb613113` in the cmeps submodule, pointer `43ccf07` in
+EqESM-cesm-cmeps): two more phase traces of the same C_JRA_t62_inst run, gated
+by the new mediator attributes `dump_ocnalb`/`dump_merge` (default .false.).
+
+- `cmeps_ocnalb.csv` (288 rows = 12 cells × 24 steps): the
+  `med_phases_ocnalb_run` albedo phase — orbital inputs/outputs
+  (nextsw_cday, eccen/obliqr/lambm0/mvelpp, delta/eccf), the albedo settings
+  (albdif/albdir/min_albedo/use_min_albedo/use_briegleb/flux_albav), rlat/rlon,
+  cosz, the FBFrac fractions (ifrac/ofrac/ifrad/ofrad) and the four albedos
+  (anidr/avsdr/anidf/avsdf), 31 columns.
+- `cmeps_merge.csv` (288 rows): the `med_phases_prep_ocn_accum` ocn-export
+  merges plus the `med_phases_prep_ocn_custom` shortwave computation — merge
+  inputs (atm/aoflux/ice/runoff), the 4 ocean albedos (`FBMed_ocnalb_o` So_*,
+  the link to the albedo phase), the derived columns (fswabsv/fswabsi, the
+  scaled fractions), the 13 merged outputs and the 4 shortwave bands, 60
+  columns.
+
+Trace selection: the same fixed `dump_first_cells = 12` window (n 6933..7117)
+unioned with the per-step partial-ice cells; all 12 window cells are
+partial-ice (ifrac 0.0683..0.6246), so the traced set is the fixed 12 every
+step.
+
+Runs (all solution-neutral: restarts md5-identical to the reference — cpl.r
+0f47e2f0…, mom6.r 2f19de03… — and ocean.stats.nc byte-identical):
+
+| Job | Build | Result |
+|---|---|---|
+| 12119693 | first ocnalb/merge attempt | hung, killed (scancel), superseded |
+| 12126699 | writers v1 | merge dump complete; ocnalb dump headers-only (shared selection cursor bug) |
+| 12127523 | cursor fix (`inext2o`) | both dumps 288 rows, trailing-comma artifact |
+| 12134714 | + trailing-comma fix | **definitive** dumps; also regenerated cmeps_aoflux_wide.csv (md5 166a90fc…, stats identical to the recorded 12055973 stats) |
+
+Validation (`stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py`, replay in
+Fortran term order): **all 7 ocnalb columns and all 23 merge columns reproduce
+bit-identically** (0.000e+00 relative error over all 288 rows of each dump),
+including the Berger 1978 declination/cosz/Briegleb chain and the swnet chain
+with the scaled fractions and the band split. Two findings pinned by the
+dumps: (1) the custom shortwave band coefficients `c1..c4 = 0.285/0.215`
+(med_phases_prep_ocn_mod.F90:830-834) are single-precision literals promoted
+to r8 — every row has vdr/swnet = 0.28499999642372131, not 0.285; (2) the
+radiation fractions lag the current fractions by one coupling step (the
+ocnalb phase copies ifrac/ofrac into ifrad/ofrad after its albedo loop:
+ifrad(k) = ifrac(k−1), verified on all 288 rows).
+
+Bugs: bugs.md #34 (ocnalb init else branch sets the dead local `use_min_ocnalb`
+instead of the module `use_min_albedo`, benign in the traced run); two
+instrumentation bugs fixed during the lane (shared `inext2` cursor between the
+new writers starved the ocnalb dump; trailing empty CSV field from the
+`55(es26.17e3,",")` format — fixed in 12134714).
+
+Stage-2 handoff (this round): 12 new expression templates in
+`stage2/cmeps_templates.esm` (earth_true_longitude, solar_declination,
+earth_sun_distance_factor, solar_zenith_cosine, briegleb_direct_albedo,
+taylor_direct_albedo, ocean_albedo_scheme, ocean_albedo_visible,
+ocean_albedo_nearinfrared, scaled_fraction, fraction_weighted_sum,
+shortwave_band); `stage2/cmeps_ocnalb.esm` (model `OcnAlb`, 7 equations, 9
+tests × 7 assertions) and `stage2/cmeps_merge.esm` (model `OcnMerge`, 23
+equations, 9 tests × 23 assertions), both importing the shared templates by
+reference; `stage2/README-cmeps-ocnalb.md`. Whole stage2 suite
+**1685P/0F/0E** under `./esm test stage2/` at `rel 1e-12`, `time_span {0,0}`.
+Gaps (documented, unpinned): Taylor scheme, flux_albav branch, use_min_albedo
+clamp and dark side (all 288 ocnalb rows are Briegleb day-side with
+flux_albav = use_min_albedo = 0); the import_swpen_by_bands per-band branch
+(SICE exports no Fioi_swpen_* bands); the enthalpy merges (not dumped); the
+prep_atm atmosphere merges (needs a CAM case).

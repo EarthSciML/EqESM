@@ -1,0 +1,1412 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_kpp_templates",
+  "description": "Expression-template library for the MOM6 CVMix KPP boundary-layer parameterization (stage 2 of the EqESM project), shared by the mom6_kpp.esm component. Every law is transcribed from the MOM6 dev/ncar_260909 @301879336 fork (stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps), CVMix-src/src/shared/cvmix_kpp.F90 and cvmix_math.F90 and MOM6 src/parameterizations/vertical/MOM_CVMix_KPP.F90, with the run configuration C_JRA_t62_mom6_inst (RI_CRIT=0.3, VON_KARMAN=0.4, SURF_LAYER_EXT=0.1, MINIMUM_OBL_DEPTH=5.0, MINIMUM_VT2=1e-10, INTERP_TYPE=quadratic, COMPUTE_MONIN_OBUKHOV=True, COMPUTE_EKMAN=False, USE_KPP_LT_K/VT2=False, KPP_IS_ADDITIVE=False, l_LMD_ws=false, lnoDGat1=true). The library holds the pointwise laws: the LMD94 stability functions phi_m^-1/phi_s^-1 and their Large-et-al.-1994 coefficients (compute_phi_inv, cvmix_kpp.F90:2910-3005, with a_m/c_m/a_s/c_s derived from zeta_m/zeta_s at init, cvmix_kpp.F90:369-376), the turbulent velocity scales w_m/w_s (turbulent_scales_1d_OBL, cvmix_kpp.F90:2416-2604, not lStokesMOST, l_LMD_ws=false, u* != 0), the unresolved shear Vt^2 with the Danabasoglu et al. 2006 Cv (unresolved_shear, cvmix_kpp.F90:2611-2903, the LANGMUIR_ENTRAINMENT default branch), the bulk Richardson number (bulk_Richardson, cvmix_kpp.F90:2031-2132), the KPP shape function G(sigma) as the cubic a0 + a1*sigma + a2*sigma^2 + a3*sigma^3 with a2 = 3*G(1) - G'(1) - 2 and a3 = -2*G(1) + G'(1) + 1 (shape_function_coeffs, cvmix_kpp.F90:3079-3112, and evaluate_cubic's summation order, cvmix_math.F90:325-332, with integer powers expanded as repeated multiplication exactly as gfortran evaluates x**2 and x**3), the KPP_IS_ADDITIVE=False replacement kpp_override_nonzero (cvmix_kpp.F90:1023-1038: where the KPP value is nonzero it replaces the incoming one, else the incoming is kept — shared by the Kt_out/Ks_out/Kv_out triple of coeffs_kpp_low), and the quadratic interpolation used by OBL_depth_low (cvmix_kpp.F90:1585-1814, the CVMIX_MATH_INTERP_QUAD case of linear_through_cubic_poly_interp, cvmix_math.F90:103-138: the quadratic f(x) = a + b*x + c*x^2 matches f(x1) = y1, f(x2) = y2 and f'(x1) = slope, with c = (y2 - y1 - slope*(x2 - x1))/(x2 - x1)^2, b = slope - 2*c*x1, a = y1 - slope*x1 + c*x1^2; the OBL depth is then the root of f(x) - ri_crit = 0 found by Newton's method from the interval midpoint (cvmix_math.F90:260-294, TOL = 1e-12)). The closed-form root kpp_quad_root reproduces the Newton result to round-off (worst 4.6e-13 relative over all 156 traced columns) with the selection rule: the root inside [min(x1,x2), max(x1,x2)] if any, else the root nearest the midpoint, else the midpoint itself when the discriminant is negative (never hit in the trace); all 156 traced crossings have c > 0 and a non-negative discriminant. All templates are match-less, invoked by name via apply_expression_template, and parameterized only through their params (bound at the call site from the component's named parameters); zeta and sigma are dimensionless, so every branch of the stability functions and the shape function is unit-consistent.",
+  "authors": [
+   "EqESM stage 2 (wt/mom6-kpp)"
+  ]
+ },
+ "expression_templates": {
+  "kpp_phi_coeffs_m_a": {
+   "description": "The a_m coefficient of the momentum stability function for zeta < zeta_m (cvmix_kpp.F90:369-371): a_m = (1 - 16*zm)^(-1/4) * (1 - 4*zm), derived from zeta_m at CVMix init (default zeta_m = -0.2, giving a_m = 1.2573615701844176). Dimensionless.",
+   "params": [
+    "zm"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "^",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           16.0,
+           "zm"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         -1.0,
+         4.0
+        ]
+       }
+      ]
+     },
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         4.0,
+         "zm"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_phi_coeffs_m_c": {
+   "description": "The c_m coefficient of the momentum stability function for zeta < zeta_m (cvmix_kpp.F90:372-373): c_m = (1 - 16*zm)^(-1/4) * 12, derived from zeta_m at CVMix init (c_m = 8.382410467896117). Dimensionless.",
+   "params": [
+    "zm"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "^",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           16.0,
+           "zm"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         -1.0,
+         4.0
+        ]
+       }
+      ]
+     },
+     12.0
+    ]
+   }
+  },
+  "kpp_phi_coeffs_s_a": {
+   "description": "The a_s coefficient of the scalar stability function for zeta < zeta_s (cvmix_kpp.F90:374-375): a_s = sqrt(1 - 16*zs) * (1 + 8*zs), derived from zeta_s at CVMix init (default zeta_s = -1, giving a_s = -7*sqrt(17) = -28.861739379323623). Dimensionless.",
+   "params": [
+    "zs"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "sqrt",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           16.0,
+           "zs"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         8.0,
+         "zs"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_phi_coeffs_s_c": {
+   "description": "The c_s coefficient of the scalar stability function for zeta < zeta_s (cvmix_kpp.F90:376-377): c_s = 24 * sqrt(1 - 16*zs), derived from zeta_s at CVMix init (c_s = 24*sqrt(17) = 98.95453501482385). Dimensionless.",
+   "params": [
+    "zs"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     24.0,
+     {
+      "op": "sqrt",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           16.0,
+           "zs"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_phi_inv_m": {
+   "description": "The inverse momentum stability function 1/phi_m (compute_phi_inv, cvmix_kpp.F90:2954-2968, not lStokesMOST): 1/(1 + 5*zeta) for zeta >= 0 (stable), (1 - 16*zeta)^(1/4) for zeta_m <= zeta < 0, and (a_m - c_m*zeta)^(1/3) for zeta < zeta_m (LMD94 eq. 18-19, matched at zeta_m = -0.2). zeta = sigma*OBL*B0*kappa/u*^3 is dimensionless; the coefficients am/cm are bound from kpp_phi_coeffs_m_a/c at the call site.",
+   "params": [
+    "zeta",
+    "zm",
+    "am",
+    "cm"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">=",
+      "args": [
+       "zeta",
+       0.0
+      ]
+     },
+     {
+      "op": "/",
+      "args": [
+       1.0,
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           5.0,
+           "zeta"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">=",
+        "args": [
+         "zeta",
+         "zm"
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           {
+            "op": "*",
+            "args": [
+             16.0,
+             "zeta"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           1.0,
+           4.0
+          ]
+         }
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "am",
+           {
+            "op": "*",
+            "args": [
+             "cm",
+             "zeta"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           1.0,
+           3.0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_phi_inv_s": {
+   "description": "The inverse scalar stability function 1/phi_s (compute_phi_inv, cvmix_kpp.F90:2970-2984, not lStokesMOST): 1/(1 + 5*zeta) for zeta >= 0 (stable), (1 - 16*zeta)^(1/2) for zeta_s <= zeta < 0, and (a_s - c_s*zeta)^(1/3) for zeta < zeta_s (LMD94 eq. 18-19, matched at zeta_s = -1). The coefficients as/cs are bound from kpp_phi_coeffs_s_a/c at the call site.",
+   "params": [
+    "zeta",
+    "zs",
+    "as",
+    "cs"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">=",
+      "args": [
+       "zeta",
+       0.0
+      ]
+     },
+     {
+      "op": "/",
+      "args": [
+       1.0,
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           5.0,
+           "zeta"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">=",
+        "args": [
+         "zeta",
+         "zs"
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           {
+            "op": "*",
+            "args": [
+             16.0,
+             "zeta"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           1.0,
+           2.0
+          ]
+         }
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "as",
+           {
+            "op": "*",
+            "args": [
+             "cs",
+             "zeta"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           1.0,
+           3.0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_ws": {
+   "description": "The scalar turbulent velocity scale w_s = kappa*u* * (1/phi_s)(zeta) with zeta = min(eps, sigma)*OBL*B0*kappa/u*^3 (turbulent_scales_1d_OBL, cvmix_kpp.F90:2456-2478 and 2515-2527, not lStokesMOST, l_LMD_ws=false, u* != 0): sigma_loc = min(surf_layer_ext, sigma), then the phi_s^-1 branch of kpp_phi_inv_s at the bound zs/as/cs. [m s-1]. Used by the BLD for the unresolved shear at sigma = 1 and by the coefficient step at the interface sigma values.",
+   "params": [
+    "sigma",
+    "OBL",
+    "B0",
+    "uStar",
+    "eps",
+    "kappa",
+    "zs",
+    "as",
+    "cs"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "kpp_phi_inv_s",
+      "bindings": {
+       "zeta": {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "min",
+            "args": [
+             "eps",
+             "sigma"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "OBL",
+             {
+              "op": "*",
+              "args": [
+               "B0",
+               "kappa"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "uStar",
+           {
+            "op": "*",
+            "args": [
+             "uStar",
+             "uStar"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "zs": "zs",
+       "as": "as",
+       "cs": "cs"
+      }
+     },
+     {
+      "op": "*",
+      "args": [
+       "kappa",
+       "uStar"
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_wm": {
+   "description": "The momentum turbulent velocity scale w_m = kappa*u* * (1/phi_m)(zeta) with zeta = min(eps, sigma)*OBL*B0*kappa/u*^3 (turbulent_scales_1d_OBL, cvmix_kpp.F90:2502-2514, not lStokesMOST, l_LMD_ws=false, u* != 0), the phi_m^-1 branch of kpp_phi_inv_m at the bound zm/am/cm. [m s-1].",
+   "params": [
+    "sigma",
+    "OBL",
+    "B0",
+    "uStar",
+    "eps",
+    "kappa",
+    "zm",
+    "am",
+    "cm"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "kpp_phi_inv_m",
+      "bindings": {
+       "zeta": {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "min",
+            "args": [
+             "eps",
+             "sigma"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "OBL",
+             {
+              "op": "*",
+              "args": [
+               "B0",
+               "kappa"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "uStar",
+           {
+            "op": "*",
+            "args": [
+             "uStar",
+             "uStar"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "zm": "zm",
+       "am": "am",
+       "cm": "cm"
+      }
+     },
+     {
+      "op": "*",
+      "args": [
+       "kappa",
+       "uStar"
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_unresolved_shear": {
+   "description": "The squared unresolved shear Vt^2 (unresolved_shear, cvmix_kpp.F90:2712-2741, the LANGMUIR_ENTRAINMENT default branch with lscalar_Cv=false and Vt2_Enhancement=1): Vt^2 = max(-Cv*Vtc*zt*N_cntr*w_s/Ri_crit, min_vtsqr) with Vtc = sqrt(0.2/(c_s*eps))/kappa^2 (LMD94 eq. 23, beta_T = 0.2) and the Danabasoglu et al. 2006 Cv = 2.1 - 200*N_cntr for N_cntr < 0.002 s-1, else 1.7 (the fit constant 200 carries the implicit units s so that Cv stays dimensionless). zt is the (negative) cell-center height, N_cntr the buoyancy frequency at the cell center (the interface value below, N_iface(kt+1)), w_s the scalar turbulent scale at the center. [m2 s-2].",
+   "params": [
+    "zt",
+    "N",
+    "ws",
+    "ri_crit",
+    "min_vtsqr",
+    "cs",
+    "eps",
+    "kappa"
+   ],
+   "body": {
+    "op": "max",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": "<",
+              "args": [
+               "N",
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.002,
+                "units": "s^-1"
+               }
+              ]
+             },
+             {
+              "op": "-",
+              "args": [
+               2.1,
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 200.0,
+                  "units": "s"
+                 },
+                 "N"
+                ]
+               }
+              ]
+             },
+             1.7
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "sqrt",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               0.2,
+               {
+                "op": "*",
+                "args": [
+                 "cs",
+                 "eps"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "kappa",
+             "kappa"
+            ]
+           }
+          ]
+         },
+         "zt",
+         "N",
+         "ws"
+        ]
+       },
+       "ri_crit"
+      ]
+     },
+     "min_vtsqr"
+    ]
+   }
+  },
+  "kpp_bulk_richardson": {
+   "description": "The bulk Richardson number at a cell center (bulk_Richardson, cvmix_kpp.F90:2092-2128): Ri_bulk = (1 - 0.5*eps)*(-zt)*delta_buoy/(delta_U2 + Vt^2), the scaling (1 - 0.5*eps) from (d - dr) = (d - 0.5*eps*d) with eps = surf_layer_ext. zt is the (negative) cell-center height, delta_buoy = B_r - B(z) the surface-layer-mean-minus-cell buoyancy [m s-2], delta_U2 the resolved shear squared [m2 s-2], Vt^2 the unresolved shear squared [m2 s-2]. Dimensionless.",
+   "params": [
+    "zt",
+    "delta_buoy",
+    "delta_U2",
+    "vt2",
+    "eps"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           0.5,
+           "eps"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "zt"
+          ]
+         },
+         "delta_buoy"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "delta_U2",
+       "vt2"
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_shape_cubic": {
+   "description": "The KPP shape function G(sigma) = (a0 + a1*sigma) + a2*sigma^2 + a3*sigma^3 with a0 = 0, a1 = 1, a2 = 3*G(1) - G'(1) - 2 and a3 = -2*G(1) + G'(1) + 1 (shape_function_coeffs, cvmix_kpp.F90:3079-3112; evaluate_cubic summation order, cvmix_math.F90:325-332, with integer powers expanded as repeated multiplication exactly as gfortran evaluates x**2 and x**3). With G1 = G'(1) = 0 (the MatchGradient case with zeroed interior diffusivities used by MOM6) this is sigma*(1 - sigma)^2. sigma is dimensionless; the result is dimensionless. The evaluation order (sigma + a2*sigma*sigma) + a3*sigma*sigma*sigma is pinned to round-off against the Fortran.",
+   "params": [
+    "sigma",
+    "G1",
+    "dG1"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "sigma",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               3.0,
+               "G1"
+              ]
+             },
+             "dG1"
+            ]
+           },
+           2.0
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "sigma",
+           "sigma"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             2.0,
+             "G1"
+            ]
+           }
+          ]
+         },
+         "dG1",
+         1.0
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "sigma",
+         {
+          "op": "*",
+          "args": [
+           "sigma",
+           "sigma"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_quad_interp_c": {
+   "description": "The quadratic coefficient c of the OBL-depth interpolation (the CVMIX_MATH_INTERP_QUAD case of linear_through_cubic_poly_interp, cvmix_math.F90:103-138): for f(x) = a + b*x + c*x^2 with f(x1) = y1, f(x2) = y2 and f'(x1) = slope, c = (y2 - y1 - slope*(x2 - x1))/(x2 - x1)^2. [Ri units / length^2]; with y the bulk Richardson numbers and x the (negative) heights, [m-2].",
+   "params": [
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "slope"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "y2",
+         "y1"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "slope",
+         {
+          "op": "-",
+          "args": [
+           "x2",
+           "x1"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "x2",
+         "x1"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         "x2",
+         "x1"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_quad_interp_b": {
+   "description": "The linear coefficient b of the OBL-depth interpolation quadratic (the CVMIX_MATH_INTERP_QUAD case of linear_through_cubic_poly_interp, cvmix_math.F90:103-138): b = slope - 2*c*x1, from f'(x1) = slope. [Ri units / length]; [m-1] for the bulk-Richardson use.",
+   "params": [
+    "x1",
+    "slope",
+    "c"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     "slope",
+     {
+      "op": "*",
+      "args": [
+       2.0,
+       {
+        "op": "*",
+        "args": [
+         "c",
+         "x1"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_quad_interp_a": {
+   "description": "The constant coefficient a of the OBL-depth interpolation quadratic, already offset by -ri_crit (the CVMIX_MATH_INTERP_QUAD case of linear_through_cubic_poly_interp, cvmix_math.F90:103-138, with coeffs(1) = coeffs(1) - ri_crit, cvmix_kpp.F90:1799-1800): a = y1 - slope*x1 + c*x1^2 - ri_crit, from f(x1) = y1. Dimensionless (Ri units).",
+   "params": [
+    "x1",
+    "y1",
+    "slope",
+    "c",
+    "ri_crit"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "y1",
+         {
+          "op": "*",
+          "args": [
+           "slope",
+           "x1"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "c",
+         {
+          "op": "*",
+          "args": [
+           "x1",
+           "x1"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "ri_crit"
+    ]
+   }
+  },
+  "kpp_quad_root": {
+   "description": "The closed-form root of the OBL-depth quadratic a + b*x + c*x^2 = 0. cvmix_math_cubic_root_find (cvmix_math.F90:260-294) finds the root by Newton's method from the interval midpoint 0.5*(x1 + x2) with TOL = 1e-12. For the crossing layer the quadratic has f(x1) = y1 - ri_crit < 0 and f(x2) = y2 - ri_crit > 0, so exactly one root lies in [min(x1,x2), max(x1,x2)] and Newton converges to it; the closed form selects that root (r_plus = (-b + sqrt(b^2 - 4ac))/(2c) if it falls in the interval, else r_minus), reproducing Newton to round-off (worst 4.6e-13 relative over all 156 traced columns; all traced crossings have c > 0 and a non-negative discriminant). For the degenerate cases that are never the selected crossing (a negative discriminant, c = 0, or no root in the interval) it returns the interval midpoint, which is the Newton starting point and is never used by the OBL depth. x1, x2 are the (negative) heights bracketing the crossing; the root is negative and the OBL depth is its negation. [m].",
+   "params": [
+    "a",
+    "b",
+    "c",
+    "x1",
+    "x2"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "b",
+           "b"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           4.0,
+           {
+            "op": "*",
+            "args": [
+             "a",
+             "c"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       0.0
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       0.5,
+       {
+        "op": "+",
+        "args": [
+         "x1",
+         "x2"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "c",
+         0.0
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         0.5,
+         {
+          "op": "+",
+          "args": [
+           "x1",
+           "x2"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": ">=",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "b"
+                  ]
+                 },
+                 {
+                  "op": "sqrt",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     {
+                      "op": "*",
+                      "args": [
+                       "b",
+                       "b"
+                      ]
+                     },
+                     {
+                      "op": "*",
+                      "args": [
+                       4.0,
+                       {
+                        "op": "*",
+                        "args": [
+                         "a",
+                         "c"
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "*",
+                "args": [
+                 2.0,
+                 "c"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "min",
+              "args": [
+               "x1",
+               "x2"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "<=",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "b"
+                  ]
+                 },
+                 {
+                  "op": "sqrt",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     {
+                      "op": "*",
+                      "args": [
+                       "b",
+                       "b"
+                      ]
+                     },
+                     {
+                      "op": "*",
+                      "args": [
+                       4.0,
+                       {
+                        "op": "*",
+                        "args": [
+                         "a",
+                         "c"
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "*",
+                "args": [
+                 2.0,
+                 "c"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "max",
+              "args": [
+               "x1",
+               "x2"
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "b"
+              ]
+             },
+             {
+              "op": "sqrt",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   "b",
+                   "b"
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   4.0,
+                   {
+                    "op": "*",
+                    "args": [
+                     "a",
+                     "c"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             2.0,
+             "c"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": "and",
+            "args": [
+             {
+              "op": ">=",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     "b"
+                    ]
+                   },
+                   {
+                    "op": "sqrt",
+                    "args": [
+                     {
+                      "op": "-",
+                      "args": [
+                       {
+                        "op": "*",
+                        "args": [
+                         "b",
+                         "b"
+                        ]
+                       },
+                       {
+                        "op": "*",
+                        "args": [
+                         4.0,
+                         {
+                          "op": "*",
+                          "args": [
+                           "a",
+                           "c"
+                          ]
+                         }
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   2.0,
+                   "c"
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "min",
+                "args": [
+                 "x1",
+                 "x2"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "<=",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "-",
+                    "args": [
+                     "b"
+                    ]
+                   },
+                   {
+                    "op": "sqrt",
+                    "args": [
+                     {
+                      "op": "-",
+                      "args": [
+                       {
+                        "op": "*",
+                        "args": [
+                         "b",
+                         "b"
+                        ]
+                       },
+                       {
+                        "op": "*",
+                        "args": [
+                         4.0,
+                         {
+                          "op": "*",
+                          "args": [
+                           "a",
+                           "c"
+                          ]
+                         }
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   2.0,
+                   "c"
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "max",
+                "args": [
+                 "x1",
+                 "x2"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 "b"
+                ]
+               },
+               {
+                "op": "sqrt",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   {
+                    "op": "*",
+                    "args": [
+                     "b",
+                     "b"
+                    ]
+                   },
+                   {
+                    "op": "*",
+                    "args": [
+                     4.0,
+                     {
+                      "op": "*",
+                      "args": [
+                       "a",
+                       "c"
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               2.0,
+               "c"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             0.5,
+             {
+              "op": "+",
+              "args": [
+               "x1",
+               "x2"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "kpp_override_nonzero": {
+   "description": "The KPP_IS_ADDITIVE=False replacement law of the Kt/Ks/Kv update (cvmix_kpp.F90:1023-1038; the MOM6 call site is MOM_CVMix_KPP.F90:1006-1024): where the KPP diffusivity/viscosity is nonzero, it REPLACES the incoming interior value; where it is zero the incoming value is kept. One template for the Kd_heat/Kd_salt/Kv -> Kt_out/Ks_out/Kv_out triple, applied per interface by the KPPCoefs model (incoming = Kt_in/Ks_in/Kv_in).",
+   "params": [
+    "K_kpp",
+    "K_in"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "!=",
+      "args": [
+       "K_kpp",
+       0.0
+      ]
+     },
+     "K_kpp",
+     "K_in"
+    ]
+   }
+  }
+ }
+}
