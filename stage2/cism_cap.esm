@@ -30,10 +30,15 @@
      "default": 273.15,
      "description": "freezing point of fresh water SHR_CONST_TKFRZ (glc_constants.F90:22-23, shr_const_mod.F90:37)"
     },
+    "tsfc_c": {
+     "type": "unknown",
+     "units": "degC",
+     "description": "Converted surface temperature (degC) before the sentinel clamp: tsfc_c = tsfc_raw - tkfrz, the cap import_fields conversion of glc_import_export.F90:326-333 (Sl_tsrf in K minus SHR_CONST_TKFRZ = 273.15 K, glc_constants.F90:22-23, shr_const_mod.F90:37). Named intermediate consumed once by cism_tsfc_import (the -250 degC sentinel clamp), so the conversion and the clamp stay separate templates."
+    },
     "tsfc": {
      "type": "unknown",
      "units": "degC",
-     "description": "surface temperature as consumed by CISM (degC): tsfc = ifelse(tsfc_raw - tkfrz < -250, 0, tsfc_raw - tkfrz), the cap import_fields processing of glc_import_export.F90:326-333"
+     "description": "surface temperature as consumed by CISM (degC): the sentinel clamp of the converted intermediate, tsfc = ifelse(tsfc_c < -250, 0, tsfc_c) with tsfc_c = tsfc_raw - tkfrz - the cap import_fields processing of glc_import_export.F90:326-333"
     },
     "qsmb": {
      "type": "unknown",
@@ -43,14 +48,24 @@
    },
    "equations": [
     {
+     "lhs": "tsfc_c",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "tsfc_raw",
+       "tkfrz"
+      ]
+     },
+     "_comment": "The K -> degC conversion of the cap import (F90:326-333), named once and consumed by the clamp below"
+    },
+    {
      "lhs": "tsfc",
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
       "name": "cism_tsfc_import",
       "bindings": {
-       "tsfc_raw": "tsfc_raw",
-       "tkfrz": "tkfrz"
+       "tsfc_c": "tsfc_c"
       }
      }
     },
@@ -62,7 +77,7 @@
    "tests": [
     {
      "id": "import_step1_cell2511",
-     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 25,11): tsfc = -1.71672789484000532 degC and qsmb = 4.05302216536369290e-06 kg/m2/s as consumed by CISM. The raw mediator value is reconstructed by inverting the -tkfrz conversion, tsfc_raw = tsfc + 273.15 = 271.43327210516 K (no dump row hits the clamp: all 64 import rows have tsfc in [-9.68, -0.004] degC). The model reproduces both the temperature conversion and the qsmb pass-through to round-off.",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 25,11): tsfc = -1.71672789484000532 degC and qsmb = 4.05302216536369290e-06 kg/m2/s as consumed by CISM. The raw mediator value is rebuilt from the dumped tsfc by inverting the conversion, tsfc_raw = tsfc_dump + tkfrz = -1.7167278948400053 + 273.15 = 271.43327210516 K, and the converted intermediate comes back as tsfc_c = tsfc_dump: the round-trip pins the named intermediate, and the reconstructed value sits far above the -250 degC clamp threshold, showing the sentinel clamp did not fire on any traced row (all 64 import rows have tsfc in [-9.68, -0.004] degC; the clamp itself is pinned by the synthetic import_clamp_* tests).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -81,6 +96,14 @@
        }
       },
       {
+       "variable": "tsfc_c",
+       "time": 0.0,
+       "expected": -1.7167278948400053,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
        "variable": "qsmb",
        "time": 0.0,
        "expected": 4.053022165363693e-06,
@@ -92,7 +115,7 @@
     },
     {
      "id": "import_step1_cell2811_negative_smb",
-     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 28,11): a negative-SMB cell (ablation): qsmb = -2.05729925935643034e-05 kg/m2/s passes through unchanged; tsfc = -2.38918507155790394 degC from tsfc_raw = 270.7608149284421 K.",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 28,11): a negative-SMB cell (ablation): qsmb = -2.05729925935643034e-05 kg/m2/s passes through unchanged; tsfc = -2.38918507155790394 degC, rebuilt as tsfc_raw = tsfc_dump + tkfrz = 270.7608149284421 K and converted back to tsfc_c = tsfc_dump (again far above the -250 degC clamp threshold, which did not fire).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -111,6 +134,14 @@
        }
       },
       {
+       "variable": "tsfc_c",
+       "time": 0.0,
+       "expected": -2.389185071557904,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
        "variable": "qsmb",
        "time": 0.0,
        "expected": -2.0572992593564303e-05,
@@ -122,7 +153,7 @@
     },
     {
      "id": "import_step2_cell2511",
-     "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 25,11): the second coupling year's forcing: tsfc = -1.5278547818759307 degC (tsfc_raw = 271.62214521812405 K), qsmb = -1.69074734385491e-05 kg/m2/s (this cell's SMB turned negative in year 2).",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 25,11): the second coupling year's forcing: tsfc = -1.5278547818759307 degC (tsfc_raw = tsfc_dump + tkfrz = 271.62214521812405 K, round-tripping to tsfc_c = tsfc_dump - no clamp), qsmb = -1.69074734385491e-05 kg/m2/s (this cell's SMB turned negative in year 2).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -141,6 +172,14 @@
        }
       },
       {
+       "variable": "tsfc_c",
+       "time": 0.0,
+       "expected": -1.5278547818759307,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
        "variable": "qsmb",
        "time": 0.0,
        "expected": -1.69074734385491e-05,
@@ -152,7 +191,7 @@
     },
     {
      "id": "import_step1_cell2714_coldest",
-     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 27,14): the coldest traced surface temperature, tsfc = -9.678254083449986 degC (tsfc_raw = 263.47174591655 K; qsmb = 6.438260380534927e-05 kg/m2/s), exercising the conversion away from the clamp.",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 27,14): the coldest traced surface temperature, tsfc = -9.678254083449986 degC (tsfc_raw = tsfc_dump + tkfrz = 263.47174591655 K, round-tripping to tsfc_c = tsfc_dump - still ~240 degC above the clamp threshold, which did not fire; qsmb = 6.438260380534927e-05 kg/m2/s), exercising the conversion away from the clamp.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -171,6 +210,14 @@
        }
       },
       {
+       "variable": "tsfc_c",
+       "time": 0.0,
+       "expected": -9.678254083449986,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
        "variable": "qsmb",
        "time": 0.0,
        "expected": 6.438260380534927e-05,
@@ -182,7 +229,7 @@
     },
     {
      "id": "import_step2_cell2812_warmest",
-     "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 28,12): the warmest traced surface temperature, tsfc = -0.003957271002548168 degC (tsfc_raw = 273.14604272899743 K, barely below freezing; qsmb = 1.2898195203542923e-05 kg/m2/s).",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 28,12): the warmest traced surface temperature, tsfc = -0.003957271002548168 degC (tsfc_raw = tsfc_dump + tkfrz = 273.14604272899743 K, barely below freezing; the round-trip tsfc_c = tsfc_dump is ~250 degC above the clamp threshold, which did not fire; qsmb = 1.2898195203542923e-05 kg/m2/s).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -194,6 +241,14 @@
      "assertions": [
       {
        "variable": "tsfc",
+       "time": 0.0,
+       "expected": -0.003957271002548168,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tsfc_c",
        "time": 0.0,
        "expected": -0.003957271002548168,
        "tolerance": {
@@ -337,7 +392,7 @@
     "T_coupling": {
      "type": "parameter",
      "units": "s",
-     "default": 3.1536e7,
+     "default": 31536000.0,
      "description": "coupling interval length 8760 h = 1 yr (tstep_mbal at GLC_NCPL = 1; = n_icetstep * dt = 2 * 0.5 yr). The Fortran divides the flux sum by the step count av_count_output = n_icetstep (F90:152-154); the continuous limit replaces sum_k f_k / count by (1/T_coupling) * integral_0^T_coupling f dt, identical for piecewise-constant f_k over the count steps of length dt"
     },
     "active_grid": {
@@ -407,8 +462,18 @@
          }
         ]
        },
-       1.0,
-       0.0
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
       ]
      }
     },
@@ -421,7 +486,12 @@
         "op": "==",
         "args": [
          "active_grid",
-         1.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
         ]
        },
        "usrf",
@@ -443,7 +513,12 @@
         "op": "==",
         "args": [
          "active_grid",
-         1.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
         ]
        },
        {
@@ -461,11 +536,26 @@
            }
           ]
          },
-         1.0,
-         0.0
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
         ]
        },
-       0.0
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
       ]
      }
     },
@@ -785,25 +875,25 @@
     },
     {
      "id": "export_fluxes_zero_dump",
-     "description": "Dump pin of the flux exports: all 64 export rows of cism_cap.csv (both cap steps, all 32 cells) carry hflx = rofi = rofl = 0 exactly - the 2-year cold-base window has no calving (calving_thck = 0), no removal, no basal/lateral melt (bmlt = 0) and ucondflx = 0 - so with all five integrand inputs at their zero defaults the model reproduces the dumped zeros (S stays 0, S/T_coupling = 0). The averaging LAW itself is pinned by the synthetic constant-flux tests below.",
+     "description": "Dump pin of the flux exports: all 64 export rows of cism_cap.csv (both cap steps, all 32 cells) carry hflx = rofi = rofl = 0 exactly - the 2-year cold-base window has no calving (calving_thck = 0), no removal, no basal/lateral melt (bmlt = 0) and ucondflx = 0 - so with all five integrand inputs at their zero defaults the model integrates the storages over the full coupling interval [0, T_coupling] and the interval averages S/T_coupling stay 0 at t = T_coupling (the ODE integration is exercised, not just the t = 0 defaults). The averaging LAW itself is pinned by the synthetic constant-flux tests below.",
      "time_span": {
       "start": 0.0,
-      "end": 0.0
+      "end": 31536000.0
      },
      "assertions": [
       {
        "variable": "rofi",
-       "time": 0.0,
+       "time": 31536000.0,
        "expected": 0.0
       },
       {
        "variable": "rofl",
-       "time": 0.0,
+       "time": 31536000.0,
        "expected": 0.0
       },
       {
        "variable": "hflx",
-       "time": 0.0,
+       "time": 31536000.0,
        "expected": 0.0
       }
      ]
@@ -813,7 +903,7 @@
      "description": "The solid-runoff average law, from the SOURCE FORMULA (glad_output_fluxes.F90:104-105, 143-161; the dump carries only zeros): over one coupling interval [0, T_coupling] with constant calving_rate = 1.5 m/yr = 1.5/3.1536e7 m/s and removal_rate = 0.25 m/yr, D(S_rofi)/dt = rhoi*(calving_rate + removal_rate) integrates to S_rofi(T) = rhoi*1.75/3.1536e7 * T = rhoi*1.75 m (1.75 m of ice lost per year), and rofi = S_rofi/T_coupling = 917*1.75/3.1536e7 = 5.088628868594622e-05 kg/m2/s. The Fortran's per-step sum with piecewise-constant rates gives the identical value (sum_k rhoi*(m_k)/dt / count = rhoi*sum(m_k)/T). The intermediate assertion at t = T/2 pins the accumulation itself (S_rofi = rhoi*1.75/2 = 802.375 kg/m2), not just the end state.",
      "time_span": {
       "start": 0.0,
-      "end": 3.1536e7
+      "end": 31536000.0
      },
      "parameter_overrides": {
       "calving_rate": 4.756468797564688e-08,
@@ -825,7 +915,7 @@
      "assertions": [
       {
        "variable": "S_rofi",
-       "time": 1.5768e7,
+       "time": 15768000.0,
        "expected": 802.375,
        "tolerance": {
         "rel": 1e-12
@@ -833,7 +923,7 @@
       },
       {
        "variable": "rofi",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": 5.088628868594622e-05,
        "tolerance": {
         "rel": 1e-12
@@ -846,7 +936,7 @@
      "description": "The liquid-runoff average law, from the SOURCE FORMULA (F90:128-129): over [0, T_coupling] with constant bmlt = 0.5 m/yr and lateral_melt_rate = 0.1 m/yr, rofl = 917*0.6/3.1536e7 = 1.7446727549467272e-05 kg/m2/s at t = T_coupling.",
      "time_span": {
       "start": 0.0,
-      "end": 3.1536e7
+      "end": 31536000.0
      },
      "parameter_overrides": {
       "bmlt": 1.5854895991882293e-08,
@@ -858,7 +948,7 @@
      "assertions": [
       {
        "variable": "rofl",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": 1.7446727549467272e-05,
        "tolerance": {
         "rel": 1e-12
@@ -871,7 +961,7 @@
      "description": "The heat-flux average law, from the SOURCE FORMULA (F90:138-139): over [0, T_coupling] with constant ucondflx = 20 W/m2 (positive down), hflx = -ucondflx = -20 W/m2 (positive up per the F90:135-136 comment; see metadata and bugs.md for the label contradiction - unpinned by the dump because ucondflx = 0 everywhere in this window).",
      "time_span": {
       "start": 0.0,
-      "end": 3.1536e7
+      "end": 31536000.0
      },
      "parameter_overrides": {
       "ucondflx": 20.0
@@ -882,7 +972,7 @@
      "assertions": [
       {
        "variable": "S_hflx",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": -630720000.0,
        "tolerance": {
         "rel": 1e-12
@@ -890,7 +980,7 @@
       },
       {
        "variable": "hflx",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": -20.0,
        "tolerance": {
         "rel": 1e-12
@@ -903,7 +993,7 @@
      "description": "All three averages together, from the SOURCE FORMULA: over [0, T_coupling] with calving_rate = 1.5 m/yr, removal_rate = 0.25 m/yr, bmlt = 0.5 m/yr, lateral_melt_rate = 0.1 m/yr and ucondflx = 20 W/m2, the three storages evolve independently and the exports are rofi = 5.088628868594622e-05, rofl = 1.7446727549467272e-05 kg/m2/s and hflx = -20 W/m2 at t = T_coupling - the same values as the three single-source tests, confirming the additivity of the Fortran's sums (F90:104-129).",
      "time_span": {
       "start": 0.0,
-      "end": 3.1536e7
+      "end": 31536000.0
      },
      "parameter_overrides": {
       "calving_rate": 4.756468797564688e-08,
@@ -920,7 +1010,7 @@
      "assertions": [
       {
        "variable": "rofi",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": 5.088628868594622e-05,
        "tolerance": {
         "rel": 1e-12
@@ -928,7 +1018,7 @@
       },
       {
        "variable": "rofl",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": 1.7446727549467272e-05,
        "tolerance": {
         "rel": 1e-12
@@ -936,7 +1026,7 @@
       },
       {
        "variable": "hflx",
-       "time": 3.1536e7,
+       "time": 31536000.0,
        "expected": -20.0,
        "tolerance": {
         "rel": 1e-12

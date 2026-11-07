@@ -95,7 +95,7 @@ inactive site per 16 steps; the q file was unaffected). Fixed by writing
 `'none'`/`0`/`0` when the ptend has no active fields
 (`cam_dump_mod.F90:344-356`). Rerun required for clean CSVs.
 
-## Instrumentation (cam_dump_mod.F90, cam submodule @ bcfd15b3)
+## Instrumentation (cam_dump_mod.F90, cam submodule @ 369b5cd7 + atmos_phys @ c379d7a)
 
 - `src/physics/cam/cam_dump_mod.F90` — dump module (namelist `cam_dump_nml`:
   `dump_cam` [logical, default .false.], `dump_dir`, `dump_first_steps`;
@@ -105,6 +105,26 @@ inactive site per 16 steps; the q file was unaffected). Fixed by writing
   When `dump_cam=.false.` the module is a no-op ⇒ default builds are
   bit-identical to pristine CAM.
 - `src/physics/cam/physpkg.F90` — 34 dump call sites (see table).
+- ZM deep-convection chain (added 2026-11-05, cam submodule `369b5cd7`,
+  atmos_phys `c379d7a`, EqESM-cesm-cam pointer `8e54769`):
+  `zm_convr.F90` `zm_convr_run` dumps the convr boundary (state inputs,
+  p/z/s/pf/zf working arrays, buoyan_dilute/cldprp/closure/q1q2_pjr
+  outputs incl. mu/eu/du/md/ed/mc, mb, prec, rliq, the zmconv_* namelist
+  constants and the physconst values passed in) into the cam_dump_mod
+  buffers (`cam_dump_zm_convr`, only when `lengath > 0`); `zm_conv_intr.F90`
+  `zm_conv_tend` dumps the evap (`cam_dump_zm_evap` after
+  `zm_conv_evap_run`: t1/q1, cldfrc, fsnow_conv, tend_s/snwprd/snwevmlt,
+  tend_q, ntprprd/ntsnprd, flxprec/flxsnow, prec/snow, jctop/jcbot),
+  momtran (`cam_dump_zm_momtran` after `zm_conv_momtran_run`: u1/v1,
+  ptend_u/v, seten, pguallu/v, pgdallu/v, icwuu/v, icwdu/v) and convtran
+  (`cam_dump_zm_convtran` after `zm_conv_convtran_run`: CLDLIQ/CLDICE
+  pre-transport q and ptend; also flushes the buffered rows).  Rows are
+  written only for active steps/columns (cape > capelmt, lengath > 0);
+  the buffers carry slot-mismatch endrun checks and a completeness
+  sentinel (zm_sentinel) checked at the flush.
+- `src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90` — the convr dump
+  call at the end of `zm_convr_run` (gated by `lengath > 0`; passes the
+  routine-local working arrays, buoyan_dilute outputs and constants).
 - `src/control/runtime_opts.F90` — `use cam_dump_mod, only: cam_dump_readnl` +
   call in `read_namelist`.
 - `bld/namelist_files/namelist_definition.xml` — `cam_dump_nml` group
@@ -198,13 +218,19 @@ Notes:
 | `cam_tend_total.csv` | (step, phase, lev) | tend%dtdt/dudt/dvdt at end of tphysbc (bc) and tphysac (ac) |
 | `cam_vdiff_prof.csv` | (step, lev) | vdiff (site 15) solver context after tendencies_run: solve-grid mid/ifc_lo/ifc_hi (Coords1D(state%pint)), interface rhoi/tint/dpidz_sq, kvh/kvm/kvq + cgh/cgs at lo/hi interfaces, tau_damp_rate, dtk, post-solve u1/v1/s1, ptend_s/u/v, pdel/pdeldry, dragblj, tauresx/y, ksrftms, clubbtop, taux/tauy/shflux, dse_top |
 | `cam_vdiff_q.csv` | (step, lev, cnst) | vdiff tracer context: q0 (pre-solve), q1 (post-solve q_tmp), ptend_q, cflx, do_diffusion flag — one row per constituent (pcnst = 34) |
+| `cam_zm.csv` | (step, g, lev) | ZM deep-convection chain, per-level (active steps only, cape > capelmt): zm_convr boundary (t/q/pmid/pint/pdel/zm/zi inputs; p/z/s/pf/zf working arrays; tp/qstp/cape/lcl/lel/lon0/maxi/pblt; gathered qg..qhat; qs/hmn/hsat/qu/su/qd/sd/ql/qcde; mu/eu/du/md/ed/mc; dqdt/dsdt/dlf/cme/rprd), evap boundary (t1/q1, cldfrc, fsnow_conv, tend_s/snwprd/snwevmlt, tend_q, ntprprd/ntsnprd, flxprec/flxsnow lo/hi), momtran boundary (u1/v1, ptend_u/v, seten, pguallu/v, pgdallu/v, icwuu/v, icwdu/v), convtran1 boundary (q_cliq/q_cice, ptend_cliq/ptend_cice) — 83 columns |
+| `cam_zm_scal.csv` | (step, g) | ZM chain scalars (active steps only): g/ideep/lengath, lat/lon, pblh, tpert, landfrac, phis, ps, ztodt; cape/tl, the level indices lcl/lel/lon0/maxi/pblt/jt/maxg/j0/jd/jlcl; mb, dsubcld, prec_convr, rliq, prec_evap, snow_evap, jctop/jcbot; the zmconv_* namelist constants and the physconst values passed to zm_convr_run (c0_lnd..latice) — 60 columns |
 
 Row counts for the 48-step run (verified): `cam_phys_tend` 48 × 26 × 32 =
 39936 rows (26 = 20 single sites + clubb×3 + microp×3); `cam_phys_tend_q`
 48 × Σ(site lq count) × 32; `cam_qsat`/`cam_tend_total` 48 × 2 × 32 =
 3072 each; `cam_surface_exchange` 48 × 3 = 144; `cam_surface_cflx`
 48 × pcnst = 1632 (pcnst = 34); `cam_vdiff_prof` 48 × 32 = 1536;
-`cam_vdiff_q` 48 × 32 × 34 = 52224.
+`cam_vdiff_q` 48 × 32 × 34 = 52224.  ZM dumps (added 2026-11-05): only
+the 15 active steps have rows — steps 18–23 and 40–48 (cape > capelmt =
+70 J/kg; the trigger test is `cape(i) > capelmt` at zm_convr.F90:555);
+`cam_zm.csv` 15 × 32 = 480 rows, `cam_zm_scal.csv` 15 rows (ncol = 1 so
+g = 1, ideep = 1 on every row).
 
 All CSVs: `# description =` / `# columns =` headers naming columns + units +
 Fortran file:line, one row per sample, no blank lines, no trailing commas,
@@ -219,7 +245,11 @@ es26.17 reals.
   differences. Verified twice: (pristine 11999519 vs inst 11999518) and
   (pristine 11999519 vs inst 12001684, the final CSV format). Re-verified
   2026-11-03 after adding the vdiff solver-context dump (run 12048430):
-  bit-identical again (same two differences only).
+  bit-identical again (same two differences only). Re-verified
+  2026-11-05 after adding the ZM deep-convection dump (run 12112551):
+  bit-identical again (`case` attr + `date_written`/`time_written` only),
+  and the 8 pre-existing dump CSVs are byte-identical to the pre-ZM run
+  (backup `/scratch.local/ctessum/cam_dump_backup_20261105/`).
 - [x] **Structural:** `python3 stage1/analysis/validate_cam_dumps.py` —
   ALL STRUCTURAL CHECKS PASSED. Row counts: cam_phys_tend 39936 =
   48 × 26 × 32; cam_phys_tend_q 511488 = 48 × Σ(calls×lq×32); qsat and
@@ -243,6 +273,50 @@ es26.17 reals.
   the IOP observed-precip forcing (from IOP hour 23.5) drives the
   precipitating regime as expected.
 
+### ZM deep-convection dump (2026-11-05, run 12112551)
+
+`python3 stage1/analysis/validate_cam_zm_dump.py stage1/dumps/cam` — ALL
+ZM DUMP CHECKS PASSED (480 cam_zm rows + 15 cam_zm_scal rows):
+
+- **structure / grouping:** headers, no blank lines, 83/60 fields per
+  row; the (step,g) pairs of both files coincide; lev = 1..32 in order
+  per pair; g = 1..lengath and lengath = rows-per-step; steps ⊆ 1..48;
+  ymd/tod constant within a step.
+- **constants:** the c0_lnd..latice block is identical on every row and
+  matches the lane's zmconv namelist (c0_lnd=0.0075, c0_ocn=0.03,
+  ke=5e-6, ke_lnd=1e-5, momcu=momcd=0.7, num_cin=1, tau=3600,
+  capelmt=70, dmpdz=-1e-3, tiedke_add=0.5, parcel_hscale=0.5,
+  parcel_pbl=F, deepconv_pbl=F); msg = limcnv−1 (= 5, 6).
+- **updraft mass continuity (identity):**
+  mu(k) − mu(k+1) = (eu(k) − du(k))·dp(k), dp = 0.01·pdel, k = 1..31 —
+  holds to 1.9e-16 (machine precision) on all 465 rows.  NOTE: eu/du
+  are dumped in final units (1/s); cldprp computes them per-meter and
+  zm_convr.F90:651-661 converts to per-mb and 700-714 scales by mb, so
+  the continuity identity is in **pressure** thickness dp, not the
+  geometric dz (the dump header's "mu=eu-du identity" phrasing is loose).
+- **precip/snow production (identity):** prec_evap/snow_evap = the
+  zm_conv_evap.F90:219-224 clamped column chain of
+  ntprprd/ntsnprd·pdel/(grav·1000) — reproduced bit-exactly (rel resid
+  0.0) on all 15 columns; the unclamped sum differs by ≤ 3.0e-22 m/s
+  (the amount absorbed by the `max(flux,0)` roundoff guard).  On steps
+  18–23 all ZM precip evaporates before reaching the surface
+  (prec_evap = 0 with prec_convr up to 2.7e-8 m/s); from step 40 on
+  prec_evap ≈ 4.5e-9..1.0e-8 m/s.
+- **interface fluxes (identity):** flxprec_hi = max(flxprec_lo +
+  ntprprd·pdel/grav, 0) per row (snow analog) — bit-exact on all 960
+  rows; flxprec_lo(lev=1) = 0 and flxprec_hi(lev=pver) =
+  prec_evap·1000 verified.
+- **mass-flux bookkeeping:** mc = mu + md per row (2.2e-16).
+- **working arrays:** p = 0.01·pmid, pf = 0.01·pint (bit-exact),
+  z = zm + phis/grav (2.1e-16; FORTRAN uses zs = geos·rgrav, rgrav =
+  1/grav), s = t + (grav/cpres)·z (bit-exact).
+- **trigger / indices:** cape > capelmt on all 15 rows (min 94.2 J/kg);
+  1 ≤ jt ≤ maxg ≤ pver; jctop == jt and jcbot == maxg
+  (zm_conv_intr.F90:581-586); all level indices in bounds.
+- Quirk logged: the cam_zm.csv `# description` header mentions
+  "mcon [kg/m2/s]" but no mcon column is written (mcon = mc·100/grav is
+  derivable; zm_convr.F90:769).  Cosmetic only.
+
 ## Stage-2 ranking (proposed pinning order)
 
 Ranked by (a) standalone-ness (pure state→tendency laws, no pbuf),
@@ -256,7 +330,13 @@ of the Fortran chain:
    whole column; `cam_phys_tend.csv` site 1.
 3. **rayleigh friction** (rayleigh_friction.F90) — tiny analytic law.
 4. **convect_deep (ZM)** — the dominant precip source in this case; large
-   chain (convect_deep.F90) but high value.
+   chain (convect_deep.F90) but high value.  The full chain is now pinned
+   at its four boundaries by `cam_zm.csv`/`cam_zm_scal.csv` (convr, evap,
+   momtran, convtran1), including the closure mass flux mb, the
+   mu/eu/du/md/ed/mc flux profiles and the ntprprd/ntsnprd/flxprec/
+   flxsnow precip chain, with the internal identities above verified to
+   machine precision; convect_deep's own state→tendency contract is
+   also available at site 3 of `cam_phys_tend.csv`.
 5. **microp (MG/PUMAS)** — the largest and most coupled; needs
    cam_phys_tend_q (lq constituents) plus pbuf context; defer.
 6. **CLUBB_SGS (macrop/clubb/shallow)** — state-dependent closure, needs
