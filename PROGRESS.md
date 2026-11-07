@@ -1379,7 +1379,7 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
 Four independent read-only review agents checked the nine code branches
 (spot-checking pins against the dumps); the manager acted on their verdicts.
 Combined suite on main `ed25fde`: job **12225099** (`.work/suite-ed25fde/suite.log`,
-worktree `../EqESM-suite-ed25fde`) — result below.
+worktree `../EqESM-suite-ed25fde`): **2662P/0F/0E**, validate-failures=0, units-issues=0 (previous main d568216: 2126P).
 
 - **Merged (7):** `cam-vdiff3` (cb86b42; union with cam-surface3 verified,
   2157P on branch), `mom6-kpp3` (2d81bc3; Wright coeffs single-sourced,
