@@ -1265,3 +1265,111 @@ combined suite on main (`eaa2f23`) runs as slurm job **12095377**
     - `esm-pr-cdeps` creates the new `cdeps-datm` port.
   - Upstream `test-esm` CI on EarthSciModels main is red independently of
     us (user confirmed), so red PR CI is not a blocker.
+
+## Lane round 2026-11-06 (manager review of 18 finished runs)
+
+Independent read-only review agents (5, two-three branches each) checked
+every code branch, spot-checking test values against the dumps; the manager
+acted on their verdicts. Previous suite (main a922c00, job 12095573):
+1415P/0F/0E. Combined suite on main `ca8340a` (job **12179824**): **1868P/0F/0E**, validate-failures=0, units-issues=0
+(`.work/suite-ca8340a/suite.log`, worktree `../EqESM-suite-ca8340a`).
+
+- **Merged (5):** `cam-surface3` (04c46f5; identity pins gone, named
+  constants, cpslec flat branch, topo — 1438P on branch); `cam-zm-instrument`
+  (f099438; ZM stage-1 dump run 12112551, neutral, validator identities in dp);
+  `mom6-kpp2` (2a9aea0; 2776→262 assertions, `wright_rho` — residual
+  trims to mom6-kpp3); `cism-thermo3` (b0729c9; interior-node state with
+  coupled boundary nodes, EqIce pmp, integral melt, cap `tsfc_c`);
+  `clm-bareground2` (ca8340a; 0.333 fidelity, templates for repeated flux
+  blocks, qsat/MO reuse).
+- **Landed directly on main by workers:** `mom6-dumps-w2` (b52468f; MOM6
+  wave-2 dumps sw_abs/frazil/bflux/tri/kpp_wide, all validated, neutral) and
+  the stage-1 half of `cmeps-ocnalb` (b1c98f5). `cice-dedd` also wrote its
+  run record into the main checkout uncommitted; moved to its branch.
+- **Sent back (6):** `cam-vdiff3` (2 zero-region pins + union merge with
+  cam-surface3), `m9-datm-clm2` (test descriptions, unlabelled derived
+  forc_wind/forc_solar, bare constants, rhos params, factoring),
+  `cmeps-ocnalb2` (mean anomaly 5×, float32 literals repeated,
+  misused fraction_weighted_sum, copy pins), `cism-transport2` (unfailable
+  ablation pins, invented synthetic inputs, thickness ODE carries a negative
+  deficit, factoring; plus thermo3 touch-ups), `clm-soiltemp4` (small: one
+  duplicated tendency, 3 tautological pins; PDE design accepted),
+  `clm-soilfluxes2` (suffix-repeated correction law, ~10 unfailable pins).
+  Follow-up after merge: `mom6-kpp3` (single-source Wright coeffs, trims,
+  kfirst labels).
+- **Interrupted, continued (4):** `cice-dedd2` (stage 1 done: fork a34b33d,
+  run 12124251; opencode crashed before stage 2), `cism-velo2` (8.4 h, ended
+  on "now let me author cism_velo.esm"), `cdeps-datm-jra2` (stopped
+  "waiting on the background test run", nothing committed — WIP b6538d6),
+  `cam-physics-update2` (never started: llama-server CUDA init failure on
+  ccc0235).
+- **Session-death lessons → prompt text:** cam-surface3 killed itself with
+  `pkill -f 'esm test'` (pattern matches the agent's own command line);
+  cdeps-datm-jra and cism-velo ended turns while promising further work.
+  All new prompts carry a "Session-hygiene rules" block (no pattern pkill,
+  never end a turn with a background job running or with "now let me …").
+- **bugs.md numbering:** main ends at #32; clm-soiltemp4 keeps #33/#34;
+  cmeps-ocnalb2 and cdeps-datm-jra2 use `## TBD.` → number at merge
+  (#35 cmeps, #36/#37 cdeps).
+- **EarthSciModels PR prep (not pushed):** `esm-pr-refresh` prepared
+  `cice` (0fd6b16, #37) and `mosart-routing` (52f6e14, #33), byte-identical
+  to stage2 modulo metadata, Rust 151P/135P. `esm-pr-cdeps` prepared
+  `cdeps-datm` (2e0a565, 58P) but its data sources are machine-specific
+  `file:///projects/...` URLs. Awaiting user decision on pushing.
+- **Stranded slurm jobs:** 4 `st_archive` jobs (12047778, 12119694,
+  12125371, 12127464) pending with DependencyNeverSatisfied after their
+  C_JRA case runs failed; cancelled by the user.
+- **Next:** review the 11 queued agent jobs. Merge
+  order: cam-vdiff3; clm-soiltemp4 before clm-soilfluxes2; cism-transport2
+  before cism-velo2 (both touch cism_templates.esm).
+- **2026-11-06 later:** pushed `cice` (0fd6b16 → PR #37) and `mosart-routing`
+  (52f6e14 → PR #33) to the ctessum-claude fork (user go-ahead). For
+  `cdeps-datm` the user decided: default data URLs on the public NCAR
+  inputdata server (verified HTTP 200), no live-data tests in the
+  component (upstream earthsci_data convention: empty tests, small
+  committed fixtures under `test/fixtures/` with a driver). Job
+  `esm-pr-cdeps2` makes that change; EqESM's stage2 copy keeps its local
+  paths and live test.
+- **Batch submitted 2026-11-06 (10 new tasks; 22 agent jobs queued in
+  total):**
+  - stage 2: `cam-zm-parcel` (buoyan_dilute CAPE integral + closure; owns
+    new `cam_zm_templates.esm`), `cam-zm-evap` (q1q2 + evap precip-flux
+    integral), `mom6-shortwave`, `mom6-frazil-bflux`, `mom6-vertdiff`
+    (tridiagonal solve written as a PDE on an ESD column rule),
+    `cice-tracer-transport` (Tsfcn/qice/qsno conservation PDEs).
+  - stage 1 (fork owners): `clm-veg-instrument` (vegetated-patch selection;
+    canopyflux/two-stream/interception/soilwater dumps),
+    `cam-rad-instrument` (radiation inputs, cloud optics, solver boundary,
+    fluxes/heating).
+  - stage 1 + 2: `cmeps-prep-atm` (atm-export merges; owns CMEPS fork).
+  - M9: `m9-clm-mosart` (land→river, feasibility-gated).
+  - Shared rule block for all new prompts:
+    `.slurm-agents/prompts/_rules-2026-11-06.md` (parallel-job + house +
+    session-hygiene rules).
+  - Expected merge conflicts: appends to `mom6_templates.esm` (kpp3,
+    shortwave, frazil-bflux, vertdiff), `cam_templates.esm` (vdiff3,
+    zm-evap), `cice_templates.esm` (dedd2, tracer-transport),
+    `cmeps_templates.esm` (ocnalb2, prep-atm).
+
+### 2026-11-06 (cont.): cdeps-datm-jra2 merged
+
+- `wt/cdeps-datm-jra2` merged as 7bb74a3: CDEPS DATM JRA55 datamode
+  (`stage2/cdeps_datm_jra.esm`, Streams/Jra/JRAFiles models; `stream_interp`, `density_jra`,
+  `rain_frac_jra`, `jra_albedo` appended to `cdeps_templates.esm`). Branch suite 1990P/0F/0E.
+  bugs.md TBD entries renumbered to #36 (r4 literals 0.608/0.069/0.011) and #37 (dead code).
+- **Follow-up (after esm-pr-cdeps2 lands):** the JRA `data_sources` still point at absolute
+  `file:///projects/...` paths, and the two JRAFiles reader tests read 2920-record netcdf files
+  (~27 min of suite time). Apply the same pattern as the GSWP3 decision: NCAR inputdata URL template
+  by default, reader tests against a small generated fixture. The GSWP3 Streams model still inlines
+  the law now in `stream_interp`; switch it to the template in the same follow-up.
+
+### 2026-11-06 (cont.): cism-velo2 merged
+
+- `wt/cism-velo2` merged as 8b33314: `stage2/cism_velo.esm` (DivaGeometry, DivaIntegrals, DivaVelocity;
+  BasalTraction mounted by reference), `cism_velo_discretization.esm` (σ-column rules importing
+  ESD `integral_lev_*`), extractor that re-verifies the laws on all 128 exit rows. Branch suite
+  2004P/0F/0E. No new bugs.
+- Gaps (README-cism-velo.md): per-level vertex stagger (`stag_omega_k`, θ, F, ω) still dump-fed in
+  DivaVelocity; β-chain pinned at rel 1e-5 (last-accepted-pass mismatch, documented); 2-D FEM solve
+  and Picard iteration are stage-3. Fork commits db624ec/76d170d on `instrument/cism-dumps` not pushed.
+- cism-transport2 (queued) will now merge onto this; expect an append conflict in `cism_templates.esm`.

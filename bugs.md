@@ -437,3 +437,19 @@ Format template:
   unpinned by the dump.
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
+
+## 36. DATM JRA55 datamode: unsuffixed real literals 0.608/0.069/0.011 silently round to single precision
+
+- **Location:** `components/cdeps/datm/datm_datamode_jra_mod.F90:292` (qcoef 0.608), `:324` (LY08 albedo 0.069, 0.011); every other literal in the datamode is `_R8`-suffixed.
+- **Description:** the three coefficients are written as unsuffixed Fortran literals (default real kind = single precision), so the compiled laws use the r4-rounded values r4(0.608) = 0.607999980449676513671875, r4(0.069) = 0.068999998271465301513671875, r4(0.011) = 0.010999999940395355224609375 rather than the intended decimal values. Found 2026-11-05 while matching the C_JRA_t62_datm_inst stage-1 dumps: the Sa_dens and avg_alb values are ~2e-8 relative off from the exact-r8 laws (density 1.6e-11, albedo 2.2e-8). qcoef = 0.608 is itself an intentional rounding of eps1/eps = 0.607717... (documented in the code comment), but the r4 rounding is an additional 8th-decimal effect that survives into the forcing.
+- **Impact on results:** none practically (forcing-level rounding), but the laws differ subtly from the CLMNCEP/GSWP3 equivalents and from any naive transcription, so tests must use the r4-rounded constants.
+- **Reproduced/corrected in .esm:** reproduced exactly by `density_jra` and `jra_albedo` in `stage2/cdeps_templates.esm` (constants carry the r4-rounded values with provenance notes); `stage2/cdeps_datm_jra.esm` tests pin the dumps to 1e-12 relative.
+- **Status:** open (cosmetic; suggest suffixing `_R8` upstream).
+
+## 37. DATM JRA55 datamode: dead code cosfactor/phs_c0/dLWarc in advance
+
+- **Location:** `components/cdeps/datm/datm_datamode_jra_mod.F90:64-65,274`.
+- **Description:** `cosfactor = cos((2π·rday)/365 − phs_c0)` is computed every advance (F90:274) but never used; the constants `phs_c0 = 0.298` and `dLWarc = −5.0` are declared but never referenced. The rday computation at F90:271-273 is therefore also dead weight (rday is used only by cosfactor).
+- **Impact on results:** none (dead code).
+- **Reproduced/corrected in .esm:** not reproduced (omitted from the Jra model in `stage2/cdeps_datm_jra.esm`).
+- **Status:** open (cleanup; suggest removing upstream).

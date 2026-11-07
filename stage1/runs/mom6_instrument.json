@@ -45,5 +45,43 @@
     "kpp_obl_law": "kbl = int(kOBL) in [1,ke] (ke+1 only when the OBL reaches the bottom clamp), fractional part in [0,1), and -OBLdepth bracketed by the interface pair around kOBL on all 156 columns; OBLdepth > 0, kOBL >= 1; z_inter identical between the OBL and KPP dumps for the same (cell, step)",
     "forcing_law": "latent = q_flux*Lv - fprec*Lf - frunoff*Lf - frunoff_glc*Lf, latent_evap_diag = q_flux*Lv, latent_fprec_diag = -fprec*Lf, latent_frunoff_diag = -frunoff*Lf (Lv=2.501e6, Lf=3.337e5 J/kg); sw = sw_vis_dir+sw_vis_dif+sw_nir_dir+sw_nir_dif; evap = q_flux; lprec_o/fprec_o/lrunoff_o/frunoff_o/seaice_melt_o/seaice_melt_heat_o/ice_fraction_o = the imported values (conversions 1.0); p_surf_full = p and p_surf_full_o = p; tau_mag_o = GUST_CONST + sqrt(u_flux^2+v_flux^2) (GUST_CONST=4.0e-4 Pa; AGRID builds tau_mag from the imported u_flux/v_flux, mom_surface_forcing_nuopc.F90:956-959); ustar_o = sqrt((GUST_CONST+sqrt(u_flux^2+v_flux^2))/RHO_0) (RHO_0=1035); omega_w2x = atan2(v_flux,u_flux); salt_flux: with RESTORE_SALINITY=True the coupler import is copied into salt_flux_in by convert_IOB_to_fluxes (fluxes%salt_flux_in = mask*kg_m2_s_conversion*IOB%salt_flux, mom_surface_forcing_nuopc.F90:686-689) and added to the salinity-restoring flux in fluxes%salt_flux (salt_flux_o = salt_flux_in + restore); the mediator sends salt_flux = 0 in this run, so salt_flux_in == salt_flux == 0 on all 144 rows and salt_flux_o (4.90e-7..1.02e-6) is purely the restoring flux (SALT_RESTORE_FILE=state_restore_tx2_3_20230416.nc, ADJUST_NET_SRESTORE_TO_ZERO=True) - all on 144 rows",
     "row_counts": "eos 12x75x13 = 11700 (13 thermo steps incl. the lag double-step); kpp_obl, kpp 12x13 = 156 each; sfc_forcing 12x12 = 144; zero blank lines in all 4 CSVs"
+  },
+  "wave_2": {
+    "date": "2026-11-05",
+    "commit": "fork HEAD 234c605 instrument/mom6-dumps: bump mom (penSW_bnd header zero-pad); MOM6 submodule HEAD 5df49d288 (7a789d46c wave-2 dumps, aa732639c cycle fix, bb11c6a22 compile fixes, 068aacdcd merge buffer 20000, 805b73822 bflux header band-10, b648d94eb merge buffer 40000, 5df49d288 penSW_bnd i2.2)",
+    "run": {
+      "case": "C_JRA_t62_mom6_inst (final wave-2 rerun)",
+      "job_id": "12139764 (case.run), 12139765 (st_archive, success 2026-11-05 18:00:59)",
+      "supersedes": "12134790 (wide merge truncated at 20000 chars: rows cut to 748 of 931 fields) and 12137101/12139210 (bflux header penSW_bnd_ 1..9 with i2 leading space; 12139210's wide file was complete but the header bug persisted)",
+      "result": "COMPLETED; all 9 dump CSVs written",
+      "neutrality": "bit-identical to reference C_JRA_t62 run: mom6.r, mom6.r_stoch, cpl.r, datm.r, dice.r, drof.r, ocean.stats.nc, Vertical_coordinate.nc - 8 files, 0 differences (compare_mom6_restarts.py via /scratch.local/ctessum/w2_neutral symlink staging; verified 2026-11-05)"
+    },
+    "dump_files": {
+      "mom6_sw_abs.csv": "156 rows (12 cells x 13 thermo steps); nsw=2 (OHLMANN_03); per-row: cpl_step,ymd,tod,gi,gj,i,j,lon,lat,nsw,sw_pen_band_1..2, opacity_1_1..2_75, pen_sw_rem_1_1..2_75, dT_1..75, netPen_01..76",
+      "mom6_frazil.csv": "312 rows (2 calls x 156); per-row: cpl_step,ymd,tod,gi,gj,i,j,lon,lat,call,p_surf,frazil_in,frazil_out,fraz_col,T_before_1..75,S_1..75,p_1..75,T_freeze_1..75,h_1..75",
+      "mom6_bflux.csv": "156 rows; per-row: cpl_step,ymd,tod,gi,gj,i,j,lon,lat,dt,netMassInOut,netMassIn,netMassOut,netHeat,netSalt,nonpenSW,penSW_bnd_01..10,h_before_1..75,h_after_1..75,T_before_1..75,T_after_1..75,S_before_1..75,S_after_1..75",
+      "mom6_diabatic_tri.csv": "156 rows; per-row: cpl_step,ymd,tod,gi,gj,i,j,lon,lat,dt,ent_t_1..76,ent_s_1..76,Kd_heat_1..76,Kd_salt_1..76,h_1..75,T_before_1..75,T_after_1..75,S_before_1..75,S_after_1..75",
+      "mom6_kpp_wide.csv": "8164 rows over 33 of 36 PEs (per-PE per-cell per-step rows, merged at finalize by PE order; per-PE files deleted); sel bits: 1 unstable (surfBuoyFlux<0), 2 warm (T_sfc>DUMP_WIDE_WARM_T=20 degC): 3490 unstable-only, 1401 warm-only, 3273 both; T_sfc -1.86..29.96 degC, surfBuoyFlux -4.5e-7..5.9e-7, OBLdepth 5..397 m; step = per-PE ordinal over the PE's qualifying thermo steps (the counter increments only when a traced column qualifies), so PEs whose columns qualify only late in the day (e.g. PET 0's Antarctic shelf cells, steps 1..4 at tods 64800..75600) carry their own ordinals; tod is the model time"
+    },
+    "traced_domain": {
+      "cells": "the 12 ocean cells of PET 0 (SW-corner block, gi/gj ~ (2..7, 78..80))",
+      "steps": "13 thermo steps (cpl_step 1..12; cpl_step 1 covers two thermo steps - the CESM startup ocean lag; tods 3600..46800)",
+      "wide": "first dump_first_cells=32 ocean cells of EVERY PE, restricted to unstable or warm columns (see mom6_kpp_wide.csv note)"
+    },
+    "validation": {
+      "validator": "stage1/analysis/validate_mom6_w2.py (all checks passed 2026-11-05 on the final run's CSVs)",
+      "sw_abs": "surface consistency 468/468; exponential band decay 3431/3431 testable layers (max rel 0.0; layers below the min_SW_heat cutoff are clamped/zeroed and untestable); total absorption 156/156",
+      "frazil": "heat conservation 312/312; T_freeze law (LINEAR: 0.0 - 0.054*S - 7.75e-8*p) 312/312; T_after >= T_freeze 23400/23400",
+      "bflux": "mass 156/156; salt 156/156; heat 156/156 (max rel 1.6e-11; dh == netHeat + sum penSW_bnd - bottom leftover; nonpenSW is inside netHeat)",
+      "tri": "conservation 312/312; tridiagonal residual 156/156 (max 1.2e-12 rel to operand-magnitude scale; convective interfaces carry ent ~ 1e6 m); bflux->tri cross-file h/T/S equality 156/156",
+      "wide": "selection bits 8164/8164 (6763 unstable, 4674 warm rows); Kt/Ks/Kv update rule 8164/8164; NLT structure 8164/8164 (NLT_heat==NLT_salt, sfc-zero 8164, zero iff stable); geometry (z_inter, kOBL bracket, uStar>=0, OBLdepth>0) 8164/8164",
+      "wave1_regression": "validate_mom6_dumps.py all checks passed on the regenerated wave-1 CSVs (eos 11700, kpp 156, kpp_obl 156, sfc_forcing 144 rows)"
+    },
+    "notes": [
+      "run 1 (12134790) and run 2 (12137101) had bugs fixed during validation: wide-file merge line buffer (20000 -> 40000 chars; rows are ~24 KB, 931 es26.17 fields) and the bflux penSW_bnd header (i2 -> i2.2, zero-padded names)",
+      "no frazil heat forms in this window (sum of frazil_out - frazil_in over all 312 rows is 0): the traced Antarctic cells are in early summer; stage-2 pins the no-op branches and the freezing-point law",
+      "netMassIn == 0 on all rows (AGGREGATE_FW_FORCING=True); netMassOut -1.6e-5..2.0e-3 m; nonpenSW up to 0.108 degC m; Kd_heat == Kd_salt on every tri row (KPP sets both)",
+      "no bugs found in the reference C++/Fortran code during this wave (bugs.md unchanged)"
+    ]
   }
 }
