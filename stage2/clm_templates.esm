@@ -481,6 +481,33 @@
       {"op": "+", "args": ["wv", {"op": "*", "args": [
        {"op": "-", "args": [1.0, "wv"]}, "q"]}]}]}]}]},
     {"op": "*", "args": ["tbot", "rair"]}]}
+   },
+  "ground_temperature_blend": {
+   "description": "Area-weighted blend of the snow/soil/surface-water temperatures t = frac_sno_fluxes*t_snow + (1 - frac_sno_fluxes - frac_h2osfc)*t_soil + frac_h2osfc*t_h2osfc: the previous-time-step ground temperature t_grnd0 (SoilFluxesMod.F90:176-178) and the ground T^4 longwave-weighted temperature lw_grnd (SoilFluxesMod.F90:344-346), and the preflux ground temperature of CalcInitialTemperatureAndEnergyVars (BiogeophysPreFluxCalcsMod.F90:334-339, where the same blend appears with frac_sno_fluxes = 0 when there is no snow; the blend then reduces to (1 - frac_h2osfc)*t_soil + frac_h2osfc*t_h2osfc, the SoilFluxesMod.F90:180 no-snow branch).",
+   "params": ["frac_sno_fluxes", "t_snow", "frac_h2osfc", "t_soil", "t_h2osfc"],
+   "body": {"op": "+", "args": [
+    {"op": "*", "args": ["frac_sno_fluxes", "t_snow"]},
+    {"op": "*", "args": [{"op": "-", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_sno_fluxes"]}, "frac_h2osfc"]}, "t_soil"]},
+    {"op": "*", "args": ["frac_h2osfc", "t_h2osfc"]}
+   ]}
+  },
+  "stefan_boltzmann_emission": {
+   "description": "Black-body longwave emission law emg*sb*T4 [W/m^2]: the ground longwave emission terms of SoilFluxesMod.F90:350 (eflx_soil_grnd) and :471 (eflx_lwrad_out), with T4 the fourth power of the radiating temperature (the weighted-mean lw_grnd of SoilFluxesMod.F90:344-346) and sb the Stefan-Boltzmann constant SHR_CONST_STEBOL = 5.67e-8 (shr_const_mod.F90:23; CESM carries the rounded value rather than the CODATA 5.670374419e-8, and the stage-1 dump pins sb = 5.67e-8 exactly — see stage2/README-clm-soilfluxes.md).",
+   "params": ["emg", "sb", "T4"],
+   "body": {"op": "*", "args": ["emg", "sb", "T4"]}
+  },
+  "flux_temperature_correction": {
+   "description": "Temperature-increment correction of a pre-solve surface flux, pre + tinc*deriv: the shift of the ground sensible/latent fluxes to the present soil temperature of SoilFluxesMod.F90:192-204 (eflx_sh_grnd = eflx_sh_grnd + tinc*cgrnds at :192, qflx_evap_soi = qflx_evap_soi + tinc*cgrndl at :193, qflx_ev_snow/qflx_ev_soil/qflx_ev_h2osfc at :202-204), with deriv the flux derivative wrt the ground temperature (cgrnds [W/m2/K] for the sensible flux, cgrndl [kg/m2/s/K] for the mass fluxes) and tinc = t_grnd - t_grnd0 the ground-temperature increment of :183. The non-urban branch is the only one transcribed (the urban branch of :197-200 replaces the soil/h2osfc partitions).",
+   "params": ["pre", "tinc", "deriv"],
+   "body": {"op": "+", "args": ["pre", {"op": "*", "args": ["tinc", "deriv"]}]}
+  },
+  "stefan_boltzmann_emission_dT": {
+   "description": "dT-derivative of the black-body longwave emission law, 4*emg*sb*T^3 [W/m^2/K]: d/dT(emg*sb*T^4) of the stefan_boltzmann_emission template, the linearization coefficient of the emission about the previous-time-step ground temperature. Times tinc it is the longwave increment lwrad_increment = 4*emg*sb*t_grnd0^3*tinc that SoilFluxesMod.F90:350 and :472 add into eflx_soil_grnd and eflx_lwrad_out so the ground energy balance closes when the soil temperature changes by tinc between the flux evaluation and the energy accounting (the urban eflx_lwrad_del of :361 is the same linearization at t_grnd).",
+   "params": ["emg", "sb", "T"],
+   "body": {"op": "*", "args": [
+    {"op": "const", "args": [], "value": 4.0, "units": "1"},
+    "emg", "sb", {"op": "^", "args": ["T", 3]}
+   ]}
   }
  }
 }
