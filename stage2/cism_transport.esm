@@ -2,2168 +2,1911 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cism_transport",
-  "description": "Stage-2 implementation of the pointwise slice of the CISM thickness/tracer solve (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00_002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20; CISM_LANE.md rows 6/7/14): the parts of glissade_thickness_tracer_solve that are not horizontal/vertical grid operations. (a) GladSmb - the cap qsmb-to-acab conversion and the glad-level zeroing (libglad/glad_main.F90:810-824, libglad/glad_timestep.F90:171-187): acab = qsmb*tstep_mbal*3600/rhoi [m/yr ice, with tstep_mbal = 8760 h = 1 yr in the reference run], then acab = 0 where thck <= 0 and acab < 0 (ice-free ablation) and where the cell is ice-free ocean (GLIDE_IS_OCEAN: topg < eus and no ice, glide_mask.inc:33-34). The further cap 'acab = -thck_temp' of glad_timestep.F90:233-235 is applied AFTER glide_set_acab and only adjusts the glad output variable, not the applied field - it is documented, not transcribed. (b) MassBalance - the surface/basal mass-balance application of add_surface_and_basal_mass_balance (libglissade/glissade_mass_balance.F90:819-1571) as a continuous rate law d(thck)/dt = acab - bmlt (m/yr ice; bmlt = bmlt_ground + bmlt_float) applied to the unclipped thickness state thck_raw with the physical thickness thck = max(0, thck_raw) - the Fortran's layer-by-layer removal clips the column at zero - the per-step melt_potential = max(0, -(thck + (acab-bmlt)*dt)) of fully melted columns (a per-step diagnostic in the Fortran, not a model state: it is zeroed at the top of every mass_balance_driver call, F90:1096; the esm form reproduces the per-step value when started at zero, which is how the tests pin it), the applied-rate bookkeeping acab_applied/bmlt_applied in their exact per-step forms, the tracer surface/bed handling: the layer-1 accumulation blend T1' = (H1*T1 + s*Tsurf)/(H1 + s) with H1 = sigma2*thck (new snow arrives at the current surface temperature temp(0), glissade_transport.F90:166), the layer-10 freeze-on blend T10' = (H10*T10 + b*Tbed)/(H10 + b) with H10 = (1 - sigma10)*thck (freeze-on arrives at the bed temperature temp(upn), F90:172-174), the column-mean temperature law Tbar' = (thck*Tbar + s*Tsurf + b*Tbed)/(thck + s + b) for accumulation/freeze-on and Tbar' = (thck*Tbar + s*T1)/(thck + s) for ablation (the Fortran removes the ablated ice from the top layers; the layer-free form removes it at the layer-1 temperature, exact while the ablation stays within layer 1, see README-cism-transport.md), the tracer zeroing of fully melted layers (tracer = 0, F90:1411-1413), the ice-age increment d(age)/dt = 1 where thck > 0 (libglissade/glissade.F90:1203-1213) with age_usrf = 0 and age_lsrf = age (the tracer surface/bed values of glissade_transport.F90:204-208), and the sigma layer thicknesses via the glide stretched-sigma template (cism_templates.esm cism_sigma, libglide/glide_setup.F90:303-308, 380-387). (c) SurfaceUpdate - the post-transport surface/bed elevation cleanup calc_lsrf_usrf (libglimmer/glimmer_utils.F90:344-378): lsrf = topg where grounded, lsrf = eus - (rhoi/rhoo)*thck where floating, usrf = lsrf + thck. The horizontal transport and the first-order vertical remap (libglissade/glissade_transport.F90) are grid operations that need the discretization machinery and live in the stage-3 assembly; the tests pin the SMB application, tracer surface/bed handling and cleanup against the cism_transport.csv dump (phase=entry before transport, phase=exit after SMB and cleanup), with the horizontal-advection residuals documented in README-cism-transport.md. The reference window has bmlt_ground = bmlt_float = 0 everywhere (cold base, no shelf melt) and no ice-age dump column, so the basal-melt/freeze-on branches and the age law are pinned from the source formulas."
+  "description": "Stage-2 implementation of the pointwise slice of the CISM thickness/tracer solve (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00_002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20; CISM_LANE.md rows 6/7/14): the parts of glissade_thickness_tracer_solve that are not horizontal/vertical grid operations. (a) GladSmb - the cap qsmb-to-acab conversion and the glad-level zeroing (libglad/glad_main.F90:810-824, libglad/glad_timestep.F90:171-200): the Fortran chain acab = qsmb*tstep_mbal*hours2seconds/rhow*rhow/rhoi*windows_per_year with the named glad/glimmer constants hours2seconds = 3600 s/h (glad_constants.F90:44), rhow = SHR_CONST_RHOFW = 1000 kg/m3 and rhoi = SHR_CONST_RHOICE = 917 kg/m3 (glimmer_physcon.F90:41-43) and scyr = 31536000 s/yr (glimmer_physcon.F90:90) driving the DERIVED windows_per_year = scyr/(tstep_mbal*hours2seconds) [1/yr; = 1 in the reference run, tstep_mbal = 8760 h = 1 yr; the Fortran's per-window accumulation m w.e., converted to m/yr ice], then acab = 0 where thck <= 0 and acab < 0 (ice-free ablation) and where the cell is ice-free ocean (the cism_ocean predicate: topg < eus and no ice, glide_mask.inc:33-34). The further cap 'acab = -thck_temp' of glad_timestep.F90:233-235 is applied AFTER glide_set_acab and only adjusts the glad output variable, not the applied field - it is documented, not transcribed. (b) MassBalance - the surface/basal mass-balance application of add_surface_and_basal_mass_balance (libglissade/glissade_mass_balance.F90:819-1571) as the rate law d(thck)/dt = ifelse(thck <= 0 and net < 0, 0, net) with net = acab - bmlt (m/yr ice; bmlt = bmlt_ground + bmlt_float, 0 everywhere in the reference window): the RATE-LEVEL zeroing reproduces the Fortran's layer-by-layer removal that clips the column at zero (F90:1398-1419) without carrying a deficit into the next step (the Fortran's melt_potential accumulator is zeroed at the top of every mass_balance_driver call, F90:1096). The per-step melt_potential = max(0, -(H_pre + net_applied*dt)) of fully melted columns, the applied-rate bookkeeping acab_applied/bmlt_applied, and the tracer surface/bed handling are per-step ALGEBRAIC MAPS of the dumped entry state (the entry thickness H_pre and the entry tracers T1/Tbar/Tsurf/Tbed/T10), evaluated at the step start (time_span {0,0} in the tests): the layer-1 accumulation blend (H1*T1 + s*Tsurf)/(H1 + s) with H1 = sigma2*H_pre (new snow arrives at the current surface temperature temp(0), glissade_transport.F90:166), the layer-10 freeze-on blend (H10*T10 + b*Tbed)/(H10 + b) with H10 = (1 - sigma10)*H_pre (freeze-on arrives at the bed temperature, F90:172-174), and the column-mean law (H_pre*Tbar + s*T_surf_or_1 + b*Tbed)/(H_pre + s + b) as the nested application of the same cism_tracer_mix law (ablation removes the top layers at their own temperature, the layer-free form at the layer-1 temperature - exact while the ablation stays within layer 1; the Fortran's tracer = 0 of fully removed layers, F90:1411-1413, is the zero of fully melted columns); the ocean mask of glissade_get_masks (glissade_masks.F90:70-96) skips the application entirely in ice-free ocean cells (the same cism_ocean predicate); and the ice-age increment d(age)/dt = 1 where thck > 0 (glissade.F90:1203-1213) with age_usrf = 0 and age_lsrf = age (glissade_transport.F90:204-208) - the Fortran's age reset on ice-free cells is a documented difference for the stage-3 assembly. (c) SurfaceUpdate - the post-transport cleanup calc_lsrf_usrf (glimmer_utils.F90:344-378): lsrf = topg where grounded, lsrf = eus - (rhoi/rhoo)*thck where floating, usrf = lsrf + thck. The horizontal remapping and the first-order vertical remap are grid operations (one traced cell cannot pin them); their fingerprints are the documented advection residuals of the thickness and tracer pins."
+ },
+ "solver": {
+  "stiffness": "low",
+  "abstol": 1e-10,
+  "reltol": 1e-6
+ },
+ "models": {
+  "GladSmb": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    }
+   ],
+   "variables": {
+    "qsmb": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "surface mass balance from the cap (glad_inputs%qsmb, kg m-2 s-1 = mm s-1; the cism_cap.csv import column, accumulated over the mass-balance window)"
+    },
+    "tstep_mbal": {
+     "type": "parameter",
+     "units": "h",
+     "default": 8760.0,
+     "description": "mass-balance accumulation window (params%tstep_mbal, hours; glad_main.F90:814-816). 8760 h = 1 yr in the reference run"
+    },
+    "hours2seconds": {
+     "type": "parameter",
+     "units": "s/h",
+     "default": 3600.0,
+     "description": "hours-to-seconds conversion factor (glad_constants.F90:44: hours2seconds = 3600)"
+    },
+    "rhow": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1000.0,
+     "description": "fresh-water density (glimmer_physcon rhow = SHR_CONST_RHOFW = 1000 kg/m3; glimmer_physcon.F90:43,58)"
+    },
+    "rhoi": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 917.0,
+     "description": "ice density (glimmer_physcon rhoi = SHR_CONST_RHOICE = 917 kg/m3, glimmer_physcon.F90:41)"
+    },
+    "scyr": {
+     "type": "parameter",
+     "units": "s/yr",
+     "default": 31536000.0,
+     "description": "seconds per year of exactly 365 days (glimmer_physcon.F90:90: scyr = 31536000), the Fortran's year for the acab m/yr convention (glide_set_acab divides the m/yr input by scyr)"
+    },
+    "thck": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness at the time of the glad step (glide_geometry%thck, m; the pre-step thickness used by the glad-level zeroing)"
+    },
+    "topg": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "bedrock topography elevation (glide_geometry%topg, m)"
+    },
+    "eus": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "eustatic sea level (model%climate%eus, m; 0 in the reference run)"
+    },
+    "ocean": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "GLIDE_IS_OCEAN: the cism_ocean predicate on the pre-step thickness - bed below sea level and no ice (glide_mask.inc:33-34; the OCEAN bit of the thkmask is set where topg < eus, glide_set_geometry)"
+    },
+    "window_seconds": {
+     "type": "unknown",
+     "units": "s",
+     "default": 0.0,
+     "description": "length of the mass-balance accumulation window in seconds = tstep_mbal*hours2seconds (the Fortran's accumulation factor of glad_main.F90:824)"
+    },
+    "windows_per_year": {
+     "type": "unknown",
+     "units": "1/yr",
+     "default": 0.0,
+     "description": "number of mass-balance windows per year = scyr/(tstep_mbal*hours2seconds), DERIVED from the named glad/glimmer constants (scyr, tstep_mbal, hours2seconds) rather than hand-set: the Fortran accumulates the window's SMB and passes the result to glide_set_acab as an m/yr rate (glad_main.F90:810-824, glad_timestep.F90:200), which is exact only when the window is 1 yr - the reference run has tstep_mbal = 8760 h = 1 yr, so windows_per_year = 1 and the per-window value equals the dump's m/yr ice column"
+    },
+    "acab_raw": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "unmasked surface mass balance (m/yr ice; glad_main.F90:810-824, glad_timestep.F90:200): the Fortran chain qsmb*tstep_mbal*hours2seconds/rhow*rhow/rhoi*windows_per_year - qsmb*tstep_mbal*hours2seconds is the kg/m2 of water over the window, /rhow is the mm-to-m depth conversion of the Fortran's /1000 (a kg/m2 water column is mm of water), *rhow/rhoi converts water-equivalent to ice (glad_timestep.F90:200), and *windows_per_year turns the per-window accumulation into the per-year rate of the dump column (the rhow factors cancel, which is why the Fortran's own chain reduces to qsmb*tstep_mbal*3600/rhoi in the reference run)"
+    },
+    "acab": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "the surface mass balance as applied to the ice sheet (m/yr ice; model%climate%acab after the glad-level zeroing of glad_timestep.F90:171-187 and the m/yr conversion of glide_set_acab)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "ocean",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_ocean",
+      "bindings": {
+       "thck": "thck",
+       "topg": "topg",
+       "eus": "eus"
+      }
+     }
+    },
+    {
+     "lhs": "window_seconds",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "tstep_mbal",
+       "hours2seconds"
+      ]
+     }
+    },
+    {
+     "lhs": "windows_per_year",
+     "rhs": {
+      "op": "/",
+      "args": [
+       "scyr",
+       "window_seconds"
+      ]
+     }
+    },
+    {
+     "lhs": "acab_raw",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "qsmb",
+             "rhow"
+            ]
+           },
+           "tstep_mbal"
+          ]
+         },
+         "hours2seconds"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "rhow",
+           "rhoi"
+          ]
+         },
+         "windows_per_year"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "acab",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ocean",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/yr"
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "<=",
+            "args": [
+             "thck",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.0,
+              "units": "m"
+             }
+            ]
+           },
+           {
+            "op": "<",
+            "args": [
+             "acab_raw",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.0,
+              "units": "m/yr"
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m/yr"
+         },
+         "acab_raw"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "qsmb_to_acab_step1_cell2511",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 25,11): qsmb = 4.05302216536369290e-06 kg/m2/s, tstep_mbal = 8760 h give the Fortran chain acab_raw = qsmb*8760*3600/1000*1000/917*1 = 0.13938506761931235 m/yr ice (windows_per_year = scyr/(8760*3600) = 1), identical to the cism_transport.csv entry acab of the same cell at step 1 (rel 0.0e+00 on all 64 traced cells, see README-cism-transport.md). thck = 1.30004894733428955 m > 0, so no zeroing fires and acab = acab_raw.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "qsmb": 4.05302216536369290e-06,
+      "thck": 1.30004894733428955,
+      "topg": 1082.0
+     },
+     "assertions": [
+      {
+       "variable": "acab_raw",
+       "time": 0.0,
+       "expected": 0.13938506761931235,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "acab",
+       "time": 0.0,
+       "expected": 0.13938506761931235,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ocean",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "qsmb_to_acab_cap2_cell2511",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 25,11): qsmb = -1.69074734385490992e-05 kg/m2/s gives acab = -0.58145483354207683 m/yr ice, identical to the cism_transport.csv entry acab of the same cell at step 3 (the ablation year). thck = 1.4394647029325882 m > 0, so the ice-free zeroing does not fire.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "qsmb": -1.69074734385490992e-05,
+      "thck": 1.4394647029325882,
+      "topg": 1082.0
+     },
+     "assertions": [
+      {
+       "variable": "acab",
+       "time": 0.0,
+       "expected": -0.58145483354207683,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "qsmb_to_acab_step1_cell2611",
+     "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 26,11): the largest traced accumulation qsmb = 6.05103156348133181e-05 kg/m2/s gives acab = 2.0809741699667099 m/yr ice, identical to the cism_transport.csv entry acab (step 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "qsmb": 6.05103156348133181e-05,
+      "thck": 14.0,
+      "topg": 1752.9000244140625
+     },
+     "assertions": [
+      {
+       "variable": "acab",
+       "time": 0.0,
+       "expected": 2.0809741699667099,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "zeroing_icefree_ablation_cell2811_step2",
+     "description": "Dump pin of the glad-level ice-free zeroing (glad_timestep.F90:171-175): the cism_transport.csv entry row of cell 28,11 at step 2 has thck = 0 exactly (the step-1 SMB melted the 0.0199585 m column out) and the dump's acab column reads 0 - the raw cap value for cap_step 1 (qsmb = -2.05729925935643034e-05 kg/m2/s, i.e. acab_raw = -0.7075135162820545 m/yr ice) is zeroed because thck <= 0 and acab_raw < 0. The acab_raw assertion pins the raw value; the acab = 0 assertion pins the zeroing.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "qsmb": -2.05729925935643034e-05,
+      "thck": 0.0,
+      "topg": 921.1400146484375
+     },
+     "assertions": [
+      {
+       "variable": "acab_raw",
+       "time": 0.0,
+       "expected": -0.7075135162820545,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "acab",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "thin_ice_no_zeroing_cell2811_step3",
+     "description": "Dump pin of the zeroing branch boundary: the cism_transport.csv entry row of cell 28,11 at step 3 has thck = 1.6503583323323985e-05 m > 0 (thin ice advected in during step 2) and the dump's acab column reads -1.7674468845051972 m/yr ice - the raw cap_step-2 value (qsmb = -5.13936070868615494e-05 kg/m2/s), NOT zeroed: the glad-level condition thck <= 0 fails for any ice at all, however thin.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "qsmb": -5.13936070868615494e-05,
+      "thck": 1.6503583323323985e-05,
+      "topg": 921.1400146484375
+     },
+     "assertions": [
+      {
+       "variable": "acab",
+       "time": 0.0,
+       "expected": -1.7674468845051972,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
   },
-  "models": {
-   "GladSmb": {
-    "variables": {
-     "qsmb": {
-      "type": "parameter",
-      "units": "kg/m^2/s",
-      "default": 0.0,
-      "description": "surface mass balance from the cap (glad_inputs%qsmb, kg m-2 s-1 = mm s-1; the cism_cap.csv import column, accumulated over the mass-balance window)"
-     },
-     "tstep_mbal": {
-      "type": "parameter",
-      "units": "h",
-      "default": 8760.0,
-      "description": "mass-balance accumulation window (params%tstep_mbal, hours; glad_main.F90:814-816). 8760 h = 1 yr in the reference run, so the conversion is numerically m/yr ice"
-     },
-     "rhoi": {
-      "type": "parameter",
-      "units": "kg/m^3",
-      "default": 917.0,
-      "description": "ice density (glimmer_physcon rhoi = 917 kg/m3)"
-     },
-     "windows_per_year": {
-      "type": "parameter",
-      "units": "1/yr",
-      "default": 1.0,
-      "description": "number of mass-balance accumulation windows per year = 8760 h / tstep_mbal; 1 for the reference run (tstep_mbal = 8760 h = 1 yr). Converts the per-window accumulation of the glad conversion into the per-year rate of the dump's acab column (glad_main.F90:810-824 accumulates over the window; the dump labels the result m/yr ice)"
-     },
-     "thck": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "ice thickness at the time of the glad step (glide_geometry%thck, m; the pre-step thickness used by the glad-level zeroing)"
-     },
-     "topg": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "bedrock topography elevation (glide_geometry%topg, m)"
-     },
-     "eus": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "eustatic sea level (model%climate%eus, m; 0 in the reference run)"
-     },
-     "ocean": {
-      "type": "unknown",
-      "units": "1",
-      "default": 0.0,
-      "description": "GLIDE_IS_OCEAN: bed below sea level and no ice (glide_mask.inc:33-34; the OCEAN bit of the thkmask is set where topg < eus, glide_set_geometry)"
-     },
-     "acab_raw": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "unmasked surface mass balance = qsmb*tstep_mbal*3600/rhoi*windows_per_year (m/yr ice; glad_main.F90:810-824, where the rhow factor of the Fortran cancels: qsmb*3600*tstep_mbal is kg/m2 over the window, divided by rhoi gives m of ice per window, and windows_per_year = 1 turns it into the per-year rate of the dump column)"
-     },
-     "acab": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "the surface mass balance as applied to the ice sheet (m/yr ice; model%climate%acab after the glad-level zeroing of glad_timestep.F90:171-187 and the m/yr conversion of glide_set_acab)"
-     }
+  "MassBalance": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    }
+   ],
+   "variables": {
+    "acab": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "surface mass balance (m/yr ice), as zeroed by GladSmb (model%climate%acab, m/s in the Fortran; glad_timestep.F90:171-187)"
     },
-    "equations": [
-     {
-      "lhs": "ocean",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "and",
-         "args": [
-          {
-           "op": "<=",
-           "args": [
-            "thck",
-            {
-             "op": "const",
-             "args": [],
-             "value": 0.0,
-             "units": "m"
-            }
-           ]
-          },
-          {
-           "op": "<",
-           "args": [
-            "topg",
-            "eus"
-           ]
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 1.0,
-         "units": "1"
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "1"
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "acab_raw",
-      "rhs": {
-       "op": "/",
-       "args": [
-        {
-         "op": "*",
-         "args": [
-          "qsmb",
-          "tstep_mbal",
-          {
-           "op": "const",
-           "args": [],
-           "value": 3600.0,
-           "units": "s/h"
-          },
-          "windows_per_year"
-         ]
-        },
-        "rhoi"
-       ]
-      }
-     },
-     {
-      "lhs": "acab",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "==",
-         "args": [
-          "ocean",
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m/yr"
-        },
-        {
-         "op": "ifelse",
-         "args": [
-          {
-           "op": "and",
-           "args": [
-            {
-             "op": "<=",
-             "args": [
-              "thck",
-              {
-               "op": "const",
-               "args": [],
-               "value": 0.0,
-               "units": "m"
-              }
-             ]
-            },
-            {
-             "op": "<",
-             "args": [
-              "acab_raw",
-              {
-               "op": "const",
-               "args": [],
-               "value": 0.0,
-               "units": "m/yr"
-              }
-             ]
-            }
-           ]
-          },
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m/yr"
-          },
-          "acab_raw"
-         ]
-        }
-       ]
-      }
-     }
-    ],
-    "tests": [
-     {
-      "id": "qsmb_to_acab_step1_cell2511",
-      "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 25,11): qsmb = 4.05302216536369290e-06 kg/m2/s, tstep_mbal = 8760 h, rhoi = 917 kg/m3 give acab_raw = qsmb*8760*3600/917 = 0.13938506761931235 m/yr ice, identical to the cism_transport.csv entry acab of the same cell at step 1 (rel 0.0e+00 on all 64 traced cells, see README-cism-transport.md). thck = 1.30004894733428955 m > 0, so no zeroing fires and acab = acab_raw.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": 4.05302216536369290e-06,
-       "thck": 1.30004894733428955,
-       "topg": 1082.0
-      },
-      "assertions": [
-       {
-        "variable": "acab_raw",
-        "time": 0.0,
-        "expected": 0.13938506761931235,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": 0.13938506761931235,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "ocean",
-        "time": 0.0,
-        "expected": 0.0
-       }
-      ]
-     },
-     {
-      "id": "qsmb_to_acab_cap2_cell2511",
-      "description": "Dump pin, cism_cap.csv import row (cap_step 2, cell 25,11): qsmb = -1.69074734385490992e-05 kg/m2/s gives acab = -0.58145483354207683 m/yr ice, identical to the cism_transport.csv entry acab of the same cell at step 3 (the ablation year). thck = 1.4394647029325882 m > 0, so the ice-free zeroing does not fire.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": -1.69074734385490992e-05,
-       "thck": 1.4394647029325882,
-       "topg": 1082.0
-      },
-      "assertions": [
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": -0.58145483354207683,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "qsmb_to_acab_step1_cell2611",
-      "description": "Dump pin, cism_cap.csv import row (cap_step 1, cell 26,11): the largest traced accumulation qsmb = 6.05103156348133181e-05 kg/m2/s gives acab = 2.0809741699667099 m/yr ice, identical to the cism_transport.csv entry acab (step 1).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": 6.05103156348133181e-05,
-       "thck": 14.0,
-       "topg": 1752.9000244140625
-      },
-      "assertions": [
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": 2.0809741699667099,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "zeroing_icefree_ablation_cell2811_step2",
-      "description": "Dump pin of the glad-level ice-free zeroing (glad_timestep.F90:171-175): the cism_transport.csv entry row of cell 28,11 at step 2 has thck = 0 exactly (the step-1 SMB melted the 0.0199585 m column out) and the dump's acab column reads 0 - the raw cap value for cap_step 1 (qsmb = -2.05729925935643034e-05 kg/m2/s, i.e. acab_raw = -0.7075135162820545 m/yr ice) is zeroed because thck <= 0 and acab_raw < 0. The acab_raw assertion pins the raw value; the acab = 0 assertion pins the zeroing.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": -2.05729925935643034e-05,
-       "thck": 0.0,
-       "topg": 921.1400146484375
-      },
-      "assertions": [
-       {
-        "variable": "acab_raw",
-        "time": 0.0,
-        "expected": -0.7075135162820545,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": 0.0
-       }
-      ]
-     },
-     {
-      "id": "thin_ice_no_zeroing_cell2811_step3",
-      "description": "Dump pin of the zeroing branch boundary: the cism_transport.csv entry row of cell 28,11 at step 3 has thck = 1.6503583323323985e-05 m > 0 (thin ice advected in during step 2) and the dump's acab column reads -1.7674468845051972 m/yr ice - the raw cap_step-2 value (qsmb = -5.13936070868615494e-05 kg/m2/s), NOT zeroed: the glad-level condition thck <= 0 fails for any ice at all, however thin.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": -5.13936070868615494e-05,
-       "thck": 1.6503583323323985e-05,
-       "topg": 921.1400146484375
-      },
-      "assertions": [
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": -1.7674468845051972,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "zeroing_ocean_synthetic",
-      "description": "The ocean-cell zeroing branch, from the SOURCE FORMULA (glad_timestep.F90:177-178, GLIDE_IS_OCEAN = bed below sea level and no ice, glide_mask.inc:33-34): an ice-free cell below sea level (topg = -100 m < eus = 0, thck = 0) gets acab = 0 even for a positive qsmb - the ocean zeroing is independent of the sign of acab (no traced cell is ocean in the reference window; all 32 traced cells have topg >= 921 m).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "qsmb": 1.0e-04,
-       "thck": 0.0,
-       "topg": -100.0
-      },
-      "assertions": [
-       {
-        "variable": "ocean",
-        "time": 0.0,
-        "expected": 1.0
-       },
-       {
-        "variable": "acab",
-        "time": 0.0,
-        "expected": 0.0
-       }
-      ]
-     }
-    ]
+    "bmlt": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal melt rate bmlt_ground + bmlt_float (m/yr ice; positive melting, negative freeze-on; model%basal_melt%bmlt, glissade_apply_smb F90:842-850). 0 everywhere in the reference window (cold base, no shelf melt), so the bmlt branches are unpinned source formulas (see README-cism-transport.md)"
+    },
+    "topg": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "bedrock topography elevation (m), for the ocean mask"
+    },
+    "eus": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "eustatic sea level (m; 0 in the reference run)"
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "yr",
+     "default": 0.5,
+     "description": "dynamics time step (model%numerics%dt, yr; 0.5 yr in the reference run: two dynamics steps per cap year)"
+    },
+    "x_sigma2": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.1,
+     "description": "normalized level of the layer-1 interface: x = (up-1)/(upn-1) = 1/10 for upn = 11 (glide_setup.F90:303-308)"
+    },
+    "x_sigma10": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.9,
+     "description": "normalized level of the layer-10 interface: x = 9/10 for upn = 11"
+    },
+    "n_sigma": {
+     "type": "parameter",
+     "units": "1",
+     "default": 2.0,
+     "description": "SIGMA_COMPUTE_GLIDE stretch exponent n = 2 (glide_setup.F90:303-308)"
+    },
+    "H_pre": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "pre-step ice thickness (m; the dumped entry thck of the step, the thickness the Fortran's layer loops start from, F90:1330-1332: thck_layer = thck*(sigma(k+1)-sigma(k))). The tracer blends, the applied-rate bookkeeping and melt_potential are per-step algebraic maps of this entry state, evaluated at the step start"
+    },
+    "T1": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "pre-step layer-1 temperature (model%temper%temp(1,:,:), degC)"
+    },
+    "Tbar": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "pre-step column-mean temperature over layers 1..10 (the layer-free representation of the temperature tracer column; not a Fortran state - the dump's exit mean is derived)"
+    },
+    "Tsurf": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "upper-surface temperature temp(0), the temperature of new accumulation (tracers_usrf of the temperature tracer, glissade_transport.F90:166)"
+    },
+    "Tbed": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "lower-surface temperature temp(upn), the temperature of basal freeze-on (tracers_lsrf, glissade_transport.F90:172-174)"
+    },
+    "T10": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "pre-step layer-10 temperature (model%temper%temp(10,:,:), degC)"
+    },
+    "sigma2": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "glide sigma level 2 = glide_calc_sigma(0.1, 2) = 0.23140495867768607 (glide_setup.F90:380-387); the layer-1 thickness fraction"
+    },
+    "sigma10": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "glide sigma level 10 = glide_calc_sigma(0.9, 2) = 0.96398891966759004; the layer-10 thickness fraction is 1 - sigma10"
+    },
+    "ocean_mask": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "ocean mask of the mass-balance driver: the cism_ocean predicate on the ENTRY thickness (topg < eus and H_pre <= 0; glissade_get_masks, glissade_masks.F90:70-96, computed from the pre-step state). The SMB and BMB are not applied to ocean cells (glissade_mass_balance.F90:1333-1341) and their applied rates and melt_potential stay 0 (the effective_areafrac = 0 of ocean cells, F90:893-901). No traced cell is ocean (all 32 cells have topg >= 921 m): source formula, unpinned"
+    },
+    "net": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "unmasked net mass balance acab - bmlt (m/yr ice)"
+    },
+    "net_applied": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "net mass balance actually applied: 0 in ocean cells, else net (the Fortran's ocean_mask guard, F90:1333-1341, and the effective_areafrac = 0 of ocean cells, F90:893-901)"
+    },
+    "thck": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness (m; glide_geometry%thck after the SMB application). The ODE state of the rate law d(thck)/dt = ifelse(thck <= 0 and net_applied < 0, 0, net_applied): the rate-level guard reproduces the Fortran's layer-by-layer removal that clips the column at zero (F90:1398-1419) while never carrying a negative thickness - and its deficit - into the next step (the Fortran re-derives thck from the clipped layers every step; the state-level max(0, thck_raw) of the first review round could not express the per-step zeroing and was replaced by the guard). The guard is discontinuous at the clip, so the diffsol BDF arm of the runner freezes the state at its first negative step; the document's declared solver tolerances (abstol 1e-10, reltol 1e-6) keep that landing within ~1e-9 m, covered by the abs tolerances of the full-melt pins"
+    },
+    "H_post": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "end-of-step thickness H_pre + net_applied*dt (m), the per-step algebraic image of the entry state: the pre-clip thickness the Fortran's layer loops produce (the layer-free continuous limit is exact at step boundaries for the constant-net dump steps). H_post <= 0 marks the fully melted columns (tracers zeroed, melt_potential > 0)"
+    },
+    "melt_potential": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "total thickness (m) of additional ice that could have been melted by the available acab/bmlt in columns that melted out completely: max(0, -H_post) (derived, not a dump column). The Fortran's per-step melt_potential accumulator (F90:1418-1422, 1452-1457) is zeroed at the top of every mass_balance_driver call (F90:1096) - it is a per-step diagnostic, not a model state - so the esm form is the algebraic map of the entry state, which is what the tests pin"
+    },
+    "s": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "signed surface thickness change per step (m): acab*dt; positive accumulation, negative ablation"
+    },
+    "b": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "freeze-on thickness per step (m): -bmlt*dt for bmlt < 0, else 0 (bed_accum, F90:1455-1456)"
+    },
+    "H1": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "pre-step layer-1 thickness = sigma2*H_pre (thck_layer(:,:,1), F90:1330-1332)"
+    },
+    "H10": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "pre-step layer-10 thickness = (1 - sigma10)*H_pre"
+    },
+    "acab_applied": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "surface mass balance actually applied (m/yr ice; model%climate%acab_applied, m/s in the Fortran): the full acab while the column survives, -H_pre/dt when the ablation removes the whole column (F90:1385-1422; the Fortran accumulates the applied amount in m per step and converts back to m/s at F90:1567). Derived (not a dump column) - the dump carries the input acab, not the applied value; pinned from the source formula at the full-melt pins"
+    },
+    "bmlt_applied": {
+     "type": "unknown",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal melt rate actually applied (m/yr ice; model%basal_melt%bmlt_applied): the full bmlt for freeze-on and for basal melt while the column survives, the remaining column thickness per step when the melt removes it all (F90:1437-1457). Derived (not a dump column); unpinned (bmlt = 0 in the reference window, see README-cism-transport.md)"
+    },
+    "T1_out": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "layer-1 temperature after the SMB application (the dump's exit temp_001): the accumulation blend (H1*T1 + s*Tsurf)/(H1 + s) of F90:1380-1386 (new ice arrives at the surface temperature), unchanged by ablation while the ablation stays within layer 1 (F90:1398-1413 removes ice without changing the tracer; the layer-free model keeps T1 once the ablated depth exceeds H1 - the layer-2 identity is lost, a documented approximation), and 0 in fully melted columns (the tracer = 0 of F90:1411-1413; the dump's exit temp_001 of the melted cells reads 0 exactly)"
+    },
+    "Tbar_blend": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "column-mean temperature after the surface term of the step: the cism_tracer_mix law (H_pre*Tbar + s*T_in)/(H_pre + s) with T_in = Tsurf for accumulation (s > 0) and T_in = T1 for ablation (the layer-free form removes the ablated ice at the layer-1 temperature, exact while the ablation stays within layer 1). The basal freeze-on term of the mean law is applied on top by Tbar_out (the mixing law composes: mass times tracer is conserved step by step)"
+    },
+    "Tbar_out": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "column-mean temperature after the SMB application (derived, not a dump column - the Fortran has no column-mean state): the nested cism_tracer_mix law (H_pre*Tbar + s*T_in + b*Tbed)/(H_pre + s + b), i.e. the surface blend of Tbar_blend followed by the freeze-on blend at the bed temperature (mass x tracer conservation of the Fortran's layer updates), 0 in fully melted columns. Unpinned: on the window's only ablation cells the law's effect (4.7e-4 / 3.8e-5 relative) lies inside the advection-dominated tolerance, so no assertion could fail - see README-cism-transport.md"
+    },
+    "T10_out": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "layer-10 temperature after the SMB application (the dump's exit temp_010): the freeze-on blend (H10*T10 + b*Tbed)/(H10 + b) of F90:1458-1465 (freeze-on arrives at the bed temperature), unchanged otherwise, 0 in fully melted columns. Unpinned (bmlt = 0 in the reference window)"
+    },
+    "age": {
+     "type": "unknown",
+     "units": "yr",
+     "default": 0.0,
+     "description": "ice age (yr; model%geometry%ice_age, seconds internally, converted to years on output). Incremented d(age)/dt = 1 where thck > 0 (glissade.F90:1203-1213). The Fortran additionally RESETS the age to 0 on ice-free cells (F90:1209-1213); the ODE form only stops the increment - the reset is unobservable in the reference window (no traced cell refreezes) and is a documented difference for the stage-3 assembly. Unpinned (no age column in the dump, and the reference window never refreezes - see README-cism-transport.md)"
+    },
+    "age_usrf": {
+     "type": "unknown",
+     "units": "yr",
+     "default": 0.0,
+     "description": "ice age of new surface accumulation = 0 (tracers_usrf of the age tracer, glissade_transport.F90:204-206). Unpinned"
+    },
+    "age_lsrf": {
+     "type": "unknown",
+     "units": "yr",
+     "default": 0.0,
+     "description": "ice age of basal freeze-on = the bottom-layer age (tracers_lsrf, glissade_transport.F90:207-208); the layer-free model's bottom-layer age is the age state. Unpinned"
+    }
    },
-   "MassBalance": {
-    "expression_template_imports": [
-     {
-      "ref": "./cism_templates.esm"
-     }
-    ],
-    "variables": {
-     "acab": {
-      "type": "parameter",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "surface mass balance (m/yr ice), as zeroed by GladSmb (model%climate%acab, m/s in the Fortran; glad_timestep.F90:171-187)"
-     },
-     "bmlt": {
-      "type": "parameter",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "basal melt rate bmlt_ground + bmlt_float (m/yr ice; positive melting, negative freeze-on; model%basal_melt%bmlt, glissade_apply_smb F90:842-850). 0 everywhere in the reference window (cold base, no shelf melt), so the bmlt branches are pinned from the source formula"
-     },
-     "topg": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "bedrock topography elevation (m), for the ocean mask"
-     },
-     "eus": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "eustatic sea level (m; 0 in the reference run)"
-     },
-     "dt": {
-      "type": "parameter",
-      "units": "yr",
-      "default": 0.5,
-      "description": "dynamics time step (model%numerics%dt, yr; 0.5 yr in the reference run: two dynamics steps per cap year)"
-     },
-     "x_sigma2": {
-      "type": "parameter",
-      "units": "1",
-      "default": 0.1,
-      "description": "normalized level of the layer-1 interface: x = (up-1)/(upn-1) = 1/10 for upn = 11 (glide_setup.F90:303-308)"
-     },
-     "x_sigma10": {
-      "type": "parameter",
-      "units": "1",
-      "default": 0.9,
-      "description": "normalized level of the layer-10 interface: x = 9/10 for upn = 11"
-     },
-     "n_sigma": {
-      "type": "parameter",
-      "units": "1",
-      "default": 2.0,
-      "description": "SIGMA_COMPUTE_GLIDE stretch exponent n = 2 (glide_setup.F90:303-308)"
-     },
-     "T1": {
-      "type": "parameter",
-      "units": "degC",
-      "default": 0.0,
-      "description": "pre-step layer-1 temperature (model%temper%temp(1,:,:), degC)"
-     },
-     "Tbar": {
-      "type": "parameter",
-      "units": "degC",
-      "default": 0.0,
-      "description": "pre-step column-mean temperature over layers 1..10 (the layer-free representation of the temperature tracer column)"
-     },
-     "Tsurf": {
-      "type": "parameter",
-      "units": "degC",
-      "default": 0.0,
-      "description": "upper-surface temperature temp(0), the temperature of new accumulation (tracers_usrf of the temperature tracer, glissade_transport.F90:166)"
-     },
-     "Tbed": {
-      "type": "parameter",
-      "units": "degC",
-      "default": 0.0,
-      "description": "lower-surface temperature temp(upn), the temperature of basal freeze-on (tracers_lsrf, glissade_transport.F90:172-174)"
-     },
-     "T10": {
-      "type": "parameter",
-      "units": "degC",
-      "default": 0.0,
-      "description": "pre-step layer-10 temperature (model%temper%temp(10,:,:), degC)"
-     },
-     "sigma2": {
-      "type": "unknown",
-      "units": "1",
-      "default": 0.0,
-      "description": "glide sigma level 2 = glide_calc_sigma(0.1, 2) = 0.23140495867768607 (glide_setup.F90:380-387); the layer-1 thickness fraction"
-     },
-     "sigma10": {
-      "type": "unknown",
-      "units": "1",
-      "default": 0.0,
-      "description": "glide sigma level 10 = glide_calc_sigma(0.9, 2) = 0.96398891966759004; the layer-10 thickness fraction is 1 - sigma10"
-     },
-     "ocean_mask": {
-      "type": "unknown",
-      "units": "1",
-      "default": 0.0,
-      "description": "ocean mask of the mass-balance driver: 1 where topg < eus and thck <= thklim = 0, else 0 (glissade_get_masks, glissade_masks.F90:70-96; the SMB and BMB are not applied to ocean cells, glissade_mass_balance.F90:1333-1341)"
-     },
-     "net": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "unmasked net mass balance acab - bmlt (m/yr ice)"
-     },
-     "net_applied": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "net mass balance actually applied: 0 in ocean cells, else net (the Fortran's ocean_mask guard, F90:1333-1341, and the effective_areafrac = 0 of ocean cells, F90:893-901)"
-     },
-     "thck_raw": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "unclipped ice thickness (m). The Fortran removes the ablation layer by layer and clips the column at zero (F90:1398-1419); the esm model integrates the unclipped thickness and clamps the output, which is exact at step boundaries for the constant-net steps of the dump"
-     },
-     "thck": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "physical ice thickness (m) = max(0, thck_raw), the clipped column thickness of the Fortran (glide_geometry%thck after the SMB application)"
-     },
-     "melt_potential": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "total thickness (m) of additional ice that could have been melted by the available acab/bmlt in columns that melted out completely: max(0, -thck_raw) (the Fortran's per-step melt_potential accumulator of F90:1418-1422/1452-1457, zeroed at the top of every mass_balance_driver call - it is a per-step diagnostic, not a model state; the esm form reproduces the per-step value for a step starting from an ice-covered state, which is what the tests pin; not a dump column)"
-     },
-     "H_pre": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "pre-step ice thickness (m): thck_raw - net_applied*dt is the thickness at the start of the step for constant net, the thickness the Fortran's layer loops start from (F90:1330-1332, thck_layer = thck*(sigma(k+1)-sigma(k)))"
-     },
-     "s": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "signed surface thickness change per step (m): acab*dt; positive accumulation, negative ablation"
-     },
-     "b": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "freeze-on thickness per step (m): -bmlt*dt for bmlt < 0, else 0 (bed_accum, F90:1455-1456)"
-     },
-     "H1": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "pre-step layer-1 thickness = sigma2*H_pre (thck_layer(:,:,1), F90:1330-1332)"
-     },
-     "H10": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "pre-step layer-10 thickness = (1 - sigma10)*H_pre"
-     },
-     "acab_applied": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "surface mass balance actually applied (m/yr ice; model%climate%acab_applied, m/s in the Fortran): the full acab while the column survives, -H_pre/dt when the ablation removes the whole column (F90:1385-1422; the Fortran accumulates the applied amount in m per step and converts back to m/s at F90:1567). Not a dump column (the dump carries the input acab, not the applied value) - pinned from the source formula at the full-melt pins"
-     },
-     "bmlt_applied": {
-      "type": "unknown",
-      "units": "m/yr",
-      "default": 0.0,
-      "description": "basal melt rate actually applied (m/yr ice; model%basal_melt%bmlt_applied): the full bmlt for freeze-on and for basal melt while the column survives, the remaining column thickness per step when the melt removes it all (F90:1437-1457). Not a dump column; pinned from the source formula at the full-melt pins (bmlt = 0 in the reference window, so bmlt_applied = 0 there)"
-     },
-     "T1_out": {
-      "type": "unknown",
-      "units": "degC",
-      "default": 0.0,
-      "description": "layer-1 temperature after the SMB application: the accumulation blend (H1*T1 + s*Tsurf)/(H1 + s) of F90:1380-1386 (new ice arrives at the surface temperature), unchanged by ablation while the ablation stays within layer 1 (F90:1398-1413 removes ice without changing the tracer; the layer-free model keeps T1 once the ablated depth exceeds H1 - the layer-2 identity is lost, a documented approximation), and 0 in fully melted columns (the tracer = 0 of F90:1411-1413; the dump's exit temp_001 of the melted cells reads 0 exactly)"
-     },
-     "Tbar_out": {
-      "type": "unknown",
-      "units": "degC",
-      "default": 0.0,
-      "description": "column-mean temperature after the SMB application: (H_pre*Tbar + s*Tsurf + b*Tbed)/(H_pre + s + b) for accumulation/freeze-on and (H_pre*Tbar + s*T1)/(H_pre + s) for ablation (mass x tracer conservation of the Fortran's layer updates; the ablation removes the top layers, approximated at the layer-1 temperature - exact while the ablated depth stays within layer 1, see README-cism-transport.md), 0 in fully melted columns"
-     },
-     "T10_out": {
-      "type": "unknown",
-      "units": "degC",
-      "default": 0.0,
-      "description": "layer-10 temperature after the SMB application: the freeze-on blend (H10*T10 + b*Tbed)/(H10 + b) of F90:1458-1465 (freeze-on arrives at the bed temperature), unchanged otherwise, 0 in fully melted columns"
-     },
-     "age": {
-      "type": "unknown",
-      "units": "yr",
-      "default": 0.0,
-      "description": "ice age (yr; model%geometry%ice_age, seconds internally, converted to years on output). Incremented d(age)/dt = 1 where thck > 0 (glissade.F90:1203-1213). The Fortran additionally RESETS the age to 0 on ice-free cells (F90:1209-1213); the ODE form only stops the increment - the reset is unobservable in the reference window (no traced cell refreezes) and is a documented difference for the stage-3 assembly. Not a dump column"
-     },
-     "age_usrf": {
-      "type": "unknown",
-      "units": "yr",
-      "default": 0.0,
-      "description": "ice age of new surface accumulation = 0 (tracers_usrf of the age tracer, glissade_transport.F90:204-206)"
-     },
-     "age_lsrf": {
-      "type": "unknown",
-      "units": "yr",
-      "default": 0.0,
-      "description": "ice age of basal freeze-on = the bottom-layer age (tracers_lsrf, glissade_transport.F90:207-208); the layer-free model's bottom-layer age is the age state"
+   "equations": [
+    {
+     "lhs": "sigma2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_sigma",
+      "bindings": {
+       "x": "x_sigma2",
+       "n": "n_sigma"
+      }
      }
     },
-    "equations": [
-     {
-      "lhs": "sigma2",
-      "rhs": {
-       "op": "apply_expression_template",
-       "args": [],
-       "name": "cism_sigma",
-       "bindings": {
-        "x": "x_sigma2",
-        "n": "n_sigma"
-       }
+    {
+     "lhs": "sigma10",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_sigma",
+      "bindings": {
+       "x": "x_sigma10",
+       "n": "n_sigma"
       }
-     },
-     {
-      "lhs": "sigma10",
-      "rhs": {
-       "op": "apply_expression_template",
-       "args": [],
-       "name": "cism_sigma",
-       "bindings": {
-        "x": "x_sigma10",
-        "n": "n_sigma"
-       }
-      }
-     },
-     {
-      "lhs": "ocean_mask",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "and",
-         "args": [
-          {
-           "op": "<=",
-           "args": [
-            "thck",
-            {
-             "op": "const",
-             "args": [],
-             "value": 0.0,
-             "units": "m"
-            }
-           ]
-          },
-          {
-           "op": "<",
-           "args": [
-            "topg",
-            "eus"
-           ]
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 1.0,
-         "units": "1"
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "1"
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "net",
-      "rhs": {
-       "op": "-",
-       "args": [
-        "acab",
-        "bmlt"
-       ]
-      }
-     },
-     {
-      "lhs": "net_applied",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "==",
-         "args": [
-          "ocean_mask",
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m/yr"
-        },
-        "net"
-       ]
-      }
-     },
-     {
-      "lhs": {
-       "op": "D",
-       "args": [
-        "thck_raw"
-       ],
-       "wrt": "t"
-      },
-      "rhs": "net_applied"
-     },
-     {
-      "lhs": "thck",
-      "rhs": {
-       "op": "max",
-       "args": [
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m"
-        },
-        "thck_raw"
-       ]
-      }
-     },
-     {
-      "lhs": "melt_potential",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "==",
-         "args": [
-          "ocean_mask",
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m"
-        },
-        {
-         "op": "max",
-         "args": [
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m"
-          },
-          {
-           "op": "-",
-           "args": [
-            "thck_raw"
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "H_pre",
-      "rhs": {
-       "op": "-",
-       "args": [
-        "thck_raw",
-        {
-         "op": "*",
-         "args": [
-          "net_applied",
-          "dt"
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "s",
-      "rhs": {
-       "op": "*",
-       "args": [
-        "acab",
-        "dt"
-       ]
-      }
-     },
-     {
-      "lhs": "b",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "<",
-         "args": [
-          "bmlt",
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m/yr"
-          }
-         ]
-        },
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "*",
-           "args": [
-            "bmlt",
-            "dt"
-           ]
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m"
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "acab_applied",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "==",
-         "args": [
-          "ocean_mask",
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m/yr"
-        },
-        {
-         "op": "ifelse",
-         "args": [
-          {
-           "op": "and",
-           "args": [
-            {
-             "op": "<",
-             "args": [
-              "acab",
-              {
-               "op": "const",
-               "args": [],
-               "value": 0.0,
-               "units": "m/yr"
-              }
-             ]
-            },
-            {
-             "op": ">=",
-             "args": [
-              {
-               "op": "-",
-               "args": [
-                "s"
-               ]
-              },
-              "H_pre"
-             ]
-            }
-           ]
-          },
-          {
-           "op": "-",
-           "args": [
-            {
-             "op": "/",
-             "args": [
-              "H_pre",
-              "dt"
-             ]
-            }
-           ]
-          },
-          "acab"
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "bmlt_applied",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "==",
-         "args": [
-          "ocean_mask",
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "m/yr"
-        },
-        {
-         "op": "ifelse",
-         "args": [
-          {
-           "op": "<",
-           "args": [
-            "bmlt",
-            {
-             "op": "const",
-             "args": [],
-             "value": 0.0,
-             "units": "m/yr"
-            }
-           ]
-          },
-          "bmlt",
-          {
-           "op": "ifelse",
-           "args": [
-            {
-             "op": ">=",
-             "args": [
-              {
-               "op": "*",
-               "args": [
-                "bmlt",
-                "dt"
-               ]
-              },
-              {
-               "op": "max",
-               "args": [
-                {
-                 "op": "const",
-                 "args": [],
-                 "value": 0.0,
-                 "units": "m"
-                },
-                {
-                 "op": "+",
-                 "args": [
-                  "H_pre",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "const",
-                     "args": [],
-                     "value": 0.0,
-                     "units": "m"
-                    },
-                    "s"
-                   ]
-                  }
-                 ]
-                }
-               ]
-              }
-             ]
-            },
-            {
-             "op": "/",
-             "args": [
-              {
-               "op": "max",
-               "args": [
-                {
-                 "op": "const",
-                 "args": [],
-                 "value": 0.0,
-                 "units": "m"
-                },
-                {
-                 "op": "+",
-                 "args": [
-                  "H_pre",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "const",
-                     "args": [],
-                     "value": 0.0,
-                     "units": "m"
-                    },
-                    "s"
-                   ]
-                  }
-                 ]
-                }
-               ]
-              },
-              "dt"
-             ]
-            },
-            "bmlt"
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "H1",
-      "rhs": {
-       "op": "*",
-       "args": [
-        "sigma2",
-        "H_pre"
-       ]
-      }
-     },
-     {
-      "lhs": "H10",
-      "rhs": {
-       "op": "*",
-       "args": [
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          },
-          "sigma10"
-         ]
-        },
-        "H_pre"
-       ]
-      }
-     },
-     {
-      "lhs": "T1_out",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "<=",
-         "args": [
-          "thck",
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "degC"
-        },
-        {
-         "op": "ifelse",
-         "args": [
-          {
-           "op": ">",
-           "args": [
-            "s",
-            {
-             "op": "const",
-             "args": [],
-             "value": 0.0,
-             "units": "m"
-            }
-           ]
-          },
-          {
-           "op": "/",
-           "args": [
-            {
-             "op": "+",
-             "args": [
-              {
-               "op": "*",
-               "args": [
-                "H1",
-                "T1"
-               ]
-              },
-              {
-               "op": "*",
-               "args": [
-                "s",
-                "Tsurf"
-               ]
-              }
-             ]
-            },
-            {
-             "op": "+",
-             "args": [
-              "H1",
-              "s"
-             ]
-            }
-           ]
-          },
-          "T1"
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "Tbar_out",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "<=",
-         "args": [
-          "thck",
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "degC"
-        },
-        {
-         "op": "/",
-         "args": [
-          {
-           "op": "+",
-           "args": [
-            {
-             "op": "*",
-             "args": [
-              "H_pre",
-              "Tbar"
-             ]
-            },
-            {
-             "op": "ifelse",
-             "args": [
-              {
-               "op": ">",
-               "args": [
-                "s",
-                {
-                 "op": "const",
-                 "args": [],
-                 "value": 0.0,
-                 "units": "m"
-                }
-               ]
-              },
-              {
-               "op": "*",
-               "args": [
-                "s",
-                "Tsurf"
-               ]
-              },
-              {
-               "op": "*",
-               "args": [
-                "s",
-                "T1"
-               ]
-              }
-             ]
-            },
-            {
-             "op": "*",
-             "args": [
-              "b",
-              "Tbed"
-             ]
-            }
-           ]
-          },
-          {
-           "op": "+",
-           "args": [
-            "H_pre",
-            "s",
-            "b"
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "T10_out",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "<=",
-         "args": [
-          "thck",
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "degC"
-        },
-        {
-         "op": "ifelse",
-         "args": [
-          {
-           "op": "<",
-           "args": [
-            "bmlt",
-            {
-             "op": "const",
-             "args": [],
-             "value": 0.0,
-             "units": "m/yr"
-            }
-           ]
-          },
-          {
-           "op": "/",
-           "args": [
-            {
-             "op": "+",
-             "args": [
-              {
-               "op": "*",
-               "args": [
-                "H10",
-                "T10"
-               ]
-              },
-              {
-               "op": "*",
-               "args": [
-                "b",
-                "Tbed"
-               ]
-              }
-             ]
-            },
-            {
-             "op": "+",
-             "args": [
-              "H10",
-              "b"
-             ]
-            }
-           ]
-          },
-          "T10"
-         ]
-        }
-       ]
-      }
-     },
-     {
-      "lhs": {
-       "op": "D",
-       "args": [
-        "age"
-       ],
-       "wrt": "t"
-      },
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": ">",
-         "args": [
-          "thck",
-          {
-           "op": "const",
-           "args": [],
-           "value": 0.0,
-           "units": "m"
-          }
-         ]
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 1.0,
-         "units": "yr/yr"
-        },
-        {
-         "op": "const",
-         "args": [],
-         "value": 0.0,
-         "units": "yr/yr"
-        }
-       ]
-      }
-     },
-     {
-      "lhs": "age_usrf",
-      "rhs": {
-       "op": "const",
-       "args": [],
-       "value": 0.0,
-       "units": "yr"
-      }
-     },
-     {
-      "lhs": "age_lsrf",
-      "rhs": "age"
      }
-    ],
-    "tests": [
-     {
-      "id": "accumulate_thickness_step1_cell2611",
-      "description": "Dump pin of the thickness rate law d(thck)/dt = acab - bmlt with bmlt = 0: the cism_transport.csv entry row of cell 26,11 at step 1 has thck = 14 m and acab = 2.0809741699667099 m/yr; the SMB-only prediction after one 0.5-yr step is 14 + 0.5*2.0809741699667099 = 15.040487084983354 m, and the dump exit thck is 15.040488048712829 m. The +9.64e-07 m residual is the horizontal advection of the step (the transport happens between the entry and exit phases of the dump; the same cell's step-2 residual drops to +9.6e-10 m, see README-cism-transport.md): tolerance rel 1e-6 is ~10x the residual.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 2.0809741699667099,
-       "topg": 1752.9000244140625
-      },
-      "initial_conditions": {
-       "thck_raw": 14.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 15.040488048712829,
-        "tolerance": {
-         "rel": 1e-6
-        }
-       },
-       {
-        "variable": "acab_applied",
-        "time": 0.5,
-        "expected": 2.0809741699667099,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "bmlt_applied",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.0
-       }
+    },
+    {
+     "lhs": "ocean_mask",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_ocean",
+      "bindings": {
+       "thck": "H_pre",
+       "topg": "topg",
+       "eus": "eus"
+      }
+     }
+    },
+    {
+     "lhs": "net",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "acab",
+       "bmlt"
       ]
-     },
-     {
-      "id": "accumulate_thickness_step2_cell2611",
-      "description": "Dump pin, same cell, step 2: entry thck = 15.040488048712829 m (the step-1 exit), same acab; prediction 16.080975133696185 m vs dump exit 16.080975134653887 m - the advection residual is +9.58e-10 m (rel 6e-11), near round-off: tolerance rel 1e-9.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 2.0809741699667099,
-       "topg": 1752.9000244140625
-      },
-      "initial_conditions": {
-       "thck_raw": 15.040488048712829,
-       "age": 0.0
-      },
-      "assertions": [
+     }
+    },
+    {
+     "lhs": "net_applied",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
        {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 16.080975134653887,
-        "tolerance": {
-         "rel": 1e-9
-        }
-       }
+        "op": "==",
+        "args": [
+         "ocean_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/yr"
+       },
+       "net"
       ]
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "thck"
+      ],
+      "wrt": "t"
      },
-     {
-      "id": "accumulate_thickness_step4_cell2611",
-      "description": "Dump pin, same cell, step 4 (the second cap year's ablation-free second step): entry thck = 16.85918996861492 m with acab = 1.5564316967068248 m/yr (cap_step 2 qsmb of this cell); prediction 17.637405816968332 m vs dump exit 17.637404090581274 m - residual -1.73e-06 m: tolerance rel 1e-6.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 1.5564316967068248,
-       "topg": 1752.9000244140625
-      },
-      "initial_conditions": {
-       "thck_raw": 16.85918996861492,
-       "age": 0.0
-      },
-      "assertions": [
+     "rhs": {
+      "op": "ifelse",
+      "args": [
        {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 17.637404090581274,
-        "tolerance": {
-         "rel": 1e-6
-        }
-       }
+        "op": "and",
+        "args": [
+         {
+          "op": "<=",
+          "args": [
+           "thck",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m"
+           }
+          ]
+         },
+         {
+          "op": "<",
+          "args": [
+           "net_applied",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m/yr"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/yr"
+       },
+       "net_applied"
       ]
-     },
-     {
-      "id": "ablate_thickness_step3_cell2511",
-      "description": "Dump pin of the ablation year: cell 25,11 at step 3 has entry thck = 1.4394647029325882 m and acab = -0.58145483354207683 m/yr; prediction 1.1487372861615497 m vs dump exit 1.1487549741605207 m - residual +1.77e-05 m (rel 1.5e-5): tolerance rel 2e-4.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.58145483354207683,
-       "topg": 1082.0
-      },
-      "initial_conditions": {
-       "thck_raw": 1.4394647029325882,
-       "age": 0.0
-      },
-      "assertions": [
+     }
+    },
+    {
+     "lhs": "H_post",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "H_pre",
        {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 1.1487549741605207,
-        "tolerance": {
-         "rel": 2e-4
-        }
-       }
-      ]
-     },
-     {
-      "id": "ablate_thickness_step4_cell2511",
-      "description": "Dump pin, same cell, step 4: entry thck = 1.1487549741605207 m; prediction 0.8580275573894823 m vs dump exit 0.85804631872704562 m - residual +1.88e-05 m (rel 2.2e-5): tolerance rel 3e-4.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.58145483354207683,
-       "topg": 1082.0
-      },
-      "initial_conditions": {
-       "thck_raw": 1.1487549741605207,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.85804631872704562,
-        "tolerance": {
-         "rel": 3e-4
-        }
-       }
-      ]
-     },
-     {
-      "id": "full_melt_step1_cell2811",
-      "description": "Dump pin of the full-melt clip and the tracer zeroing: cell 28,11 at step 1 has entry thck = 0.019958499819040298 m with acab = -0.7075135162820545 m/yr (the zeroing did not fire: thck > 0). One 0.5-yr step would remove 0.35375675814102725 m - the whole column and more - so the Fortran clips the exit thck to 0 (dump exit thck = 0 exactly) and carries the excess into melt_potential = 0.35375675814102725 - 0.019958499819040298 = 0.33379825832198695 m (not a dump column: the per-step value follows from the same conservation check the Fortran itself runs, F90:1523-1538). The dump's exit temp_001..010 are all 0 (the tracer = 0 of the removed layers, F90:1411-1413), pinning T1_out = Tbar_out = 0. The applied rate is clipped too: acab_applied = -H_pre/dt = -0.039916999638080596 m/yr (the surface ablation applied to the 0.0199585 m that existed), bmlt_applied = 0.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.7075135162820545,
-       "topg": 921.1400146484375,
-       "T1": -2.389185071557904,
-       "Tbar": -2.389185071557904,
-       "Tsurf": -2.389185071557904,
-       "Tbed": -2.389185071557904
-      },
-      "initial_conditions": {
-       "thck_raw": 0.019958499819040298,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.33379825832198695,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "acab_applied",
-        "time": 0.5,
-        "expected": -0.039916999638080596,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "bmlt_applied",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "T1_out",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "Tbar_out",
-        "time": 0.5,
-        "expected": 0.0
-       }
-      ]
-     },
-     {
-      "id": "full_melt_step3_cell2811",
-      "description": "Dump pin of the full-melt clip on re-advected thin ice: cell 28,11 at step 3 has entry thck = 1.6503583323323985e-05 m (advected in during step 2, whose net was zeroed) with acab = -1.7674468845051972 m/yr; one step would remove 0.8837234422525986 m, so the exit thck = 0 (dump exit = 0 exactly) and melt_potential = 0.8837234422525986 - 1.6503583323323985e-05 = 0.8837069386692753 m.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -1.7674468845051972,
-       "topg": 921.1400146484375
-      },
-      "initial_conditions": {
-       "thck_raw": 1.6503583323323985e-05,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.8837069386692753,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "full_melt_step1_cell2913",
-      "description": "Dump pin of the full-melt clip at a second cell: cell 29,13 at step 1 has entry thck = 0.039978031069040298 m with acab = -0.53255152481490176 m/yr; the exit thck = 0 (dump exit = 0 exactly) and melt_potential = 0.26627576240745088 - 0.039978031069040298 = 0.22629773133841058 m.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.53255152481490176,
-       "topg": 980.010009765625
-      },
-      "initial_conditions": {
-       "thck_raw": 0.039978031069040298,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.22629773133841058,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "zeroed_net_step2_cell2811",
-      "description": "Dump pin of the zeroed step: cell 28,11 at step 2 has entry thck = 0 and the dump's entry acab = 0 (the glad-level zeroing of GladSmb fired on the raw cap value; see the GladSmb zeroing_icefree_ablation_cell2811_step2 test). With net = 0 the SMB changes nothing: thck(0.5) = 0 and melt_potential(0.5) = 0 exactly. The dump's step-2 EXIT thck = 1.6503583323323985e-05 m is 100% horizontal advection (thin ice from a neighbor), not SMB - it is documented here rather than asserted; the melt_potential = 0 assertion is the discriminating one (dropping the zeroing would give raw acab = -0.7075 m/yr and melt_potential = 0.3538 m).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 0.0,
-       "topg": 921.1400146484375
-      },
-      "initial_conditions": {
-       "thck_raw": 0.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.0
-       }
-      ]
-     },
-     {
-      "id": "layer1_blend_step1_cell2611",
-      "description": "Dump pin of the layer-1 accumulation blend T1' = (H1*T1 + s*Tsurf)/(H1 + s) with H1 = sigma2*thck, s = acab*dt (F90:1380-1386): cell 26,11 at step 1 has entry thck = 14 m, T1 = temp_001 = -2.4958552232280957 degC, Tsurf = temp_000 = -1.041416074241738 degC (the surface temperature, = artm on this cell) and acab = 2.0809741699667099 m/yr; s = 1.040487084983355 m, H1 = 0.23140495867768607*14 = 3.239669421487605 m, blend = -2.142287509494599 degC. The dump's exit temp_001 is -2.1422892285376252 degC - the residual -1.72e-06 degC is the horizontal advection and vertical remap of the step (the new surface layer lies within the blended layer 1, so the blend itself is the Fortran's exact pre-remap value): tolerance rel 1e-5. Asserted at the span end (t = dt): H_pre = thck_raw - net_applied*dt reconstructs the pre-step thickness there, so the blend evaluates on the entry state.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 2.0809741699667099,
-       "topg": 1752.9000244140625,
-       "T1": -2.4958552232280957,
-       "Tsurf": -1.041416074241738
-      },
-      "initial_conditions": {
-       "thck_raw": 14.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "T1_out",
-        "time": 0.5,
-        "expected": -2.1422892285376252,
-        "tolerance": {
-         "rel": 1e-5
-        }
-       }
-      ]
-     },
-     {
-      "id": "layer1_blend_step1_cell2711",
-      "description": "Dump pin of the accumulation blend with the new snow layer deeper than layer 1 (s = 1.065497900516611 m > H1 = 1.0413223140495873 m): cell 27,11 at step 1 has thck = 4.5 m, T1 = -1.8315649780451615 degC, Tsurf = -1.4796403057549128 degC, acab = 2.1309958010332219 m/yr; blend = -1.6535834887501839 degC vs dump exit temp_001 = -1.6535950045502839 degC (residual -1.15e-05 degC; the blend formula is still exact pre-remap because the new layer 1 of thickness sigma2*(thck + s) lies inside the blended layer of thickness H1 + s): tolerance rel 7e-5.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 2.1309958010332219,
-       "topg": 1752.9000244140625,
-       "T1": -1.8315649780451615,
-       "Tsurf": -1.4796403057549128
-      },
-      "initial_conditions": {
-       "thck_raw": 4.5,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "T1_out",
-        "time": 0.5,
-        "expected": -1.6535950045502839,
-        "tolerance": {
-         "rel": 7e-5
-        }
-       }
-      ]
-     },
-     {
-      "id": "layer1_blend_step1_cell2512",
-      "description": "Dump pin of the accumulation blend at a third cell: cell 25,12 at step 1 has thck = 6.0999760627746582 m, T1 = -1.8445613381693202 degC, Tsurf = -1.2769386424540698 degC, acab = 0.61503345382937313 m/yr; blend = -1.743022533847207 degC vs dump exit temp_001 = -1.7430587941782636 degC (residual -3.63e-05 degC, the largest of the three blend pins - this cell sits in the stronger-advection zone of the traced window): tolerance rel 2.5e-4.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 0.61503345382937313,
-       "topg": 1752.9000244140625,
-       "T1": -1.8445613381693202,
-       "Tsurf": -1.2769386424540698
-      },
-      "initial_conditions": {
-       "thck_raw": 6.0999760627746582,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "T1_out",
-        "time": 0.5,
-        "expected": -1.7430587941782636,
-        "tolerance": {
-         "rel": 2.5e-4
-        }
-       }
-      ]
-     },
-     {
-      "id": "ablation_mean_step3_cell2511",
-      "description": "Dump pin of the ablation mean law Tbar' = (thck*Tbar + s*T1)/(thck + s) with s = acab*dt < 0 (the Fortran removes the ablated ice from the top layers at their own temperatures; the layer-free form removes it at the layer-1 temperature, exact here because the ablation depth 0.29072741677103842 m < H1 = 0.333099... m): cell 25,11 at step 3 has entry thck = 1.4394647029325882 m, Tbar = -1.5370308228805347 degC (mean of temp_001..010), T1 = -1.5304603966752215 degC, acab = -0.58145483354207683 m/yr; the law gives -1.5386936948537588 degC vs the dump exit mean -1.5377598443440328 degC. The +9.34e-04 degC residual is dominated by the step's temperature advection (the same step's thickness residual is only rel 1.5e-5; the traced window's temperature field advects strongly at this cell): tolerance rel 6e-3 is ~10x the residual.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.58145483354207683,
-       "topg": 1082.0,
-       "T1": -1.5304603966752215,
-       "Tbar": -1.5370308228805347
-      },
-      "initial_conditions": {
-       "thck_raw": 1.4394647029325882,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "Tbar_out",
-        "time": 0.5,
-        "expected": -1.5377598443440328,
-        "tolerance": {
-         "rel": 6e-3
-        }
-       }
-      ]
-     },
-     {
-      "id": "ablation_mean_step4_cell2511",
-      "description": "Dump pin of the ablation mean law at the next step: cell 25,11 at step 4 has entry thck = 1.1487549741605207 m, Tbar = -1.5281563015545754 degC, T1 = -1.5279316621208876 degC, acab = -0.58145483354207683 m/yr (the ablation depth 0.29072741677103842 m now exceeds H1 = 0.265828... m and the Fortran bites into layer 2 - the layer-free form still removes at T1; the residual is correspondingly small because T2 ~ T1 on this cell): the law gives -1.5282324166416708 degC vs the dump exit mean -1.5282141687652344 degC (residual +1.83e-05 degC, rel 1.2e-5): tolerance rel 1.5e-4.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -0.58145483354207683,
-       "topg": 1082.0,
-       "T1": -1.5279316621208876,
-       "Tbar": -1.5281563015545754
-      },
-      "initial_conditions": {
-       "thck_raw": 1.1487549741605207,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "Tbar_out",
-        "time": 0.5,
-        "expected": -1.5282141687652344,
-        "tolerance": {
-         "rel": 1.5e-4
-        }
-       }
-      ]
-     },
-     {
-      "id": "freeze_on_blend_synthetic",
-      "description": "The freeze-on branches, from the SOURCE FORMULA (bmlt < 0 is never observed: bmlt_ground = bmlt_float = 0 on all 256 dump rows - the cold base of the reference window): with bmlt = -0.5 m/yr at the cell-26,11 step-1 state (thck = 14 m, T10 = temp_010 = -4.7402398014014206 degC, Tbed = temp_011 = -4.740239499750186 degC, Tbar = -4.3017033151129844 degC), one step freezes on b = 0.25 m at the bed temperature: the layer-10 blend T10' = (H10*T10 + b*Tbed)/(H10 + b) with H10 = (1 - 0.96398891966759004)*14 = 0.50415512465373946 m gives -4.7402397014050059 degC, the mean law Tbar' = (thck*Tbar + b*Tbed)/(thck + b) gives -4.3093969323873207 degC, and the column thickens to thck(0.5) = 14 + 0.25 = 14.25 m (freeze-on adds ice, F90:1458-1465).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": 0.0,
-       "bmlt": -0.5,
-       "topg": 1752.9000244140625,
-       "T10": -4.7402398014014206,
-       "Tbed": -4.740239499750186,
-       "Tbar": -4.3017033151129844
-      },
-      "initial_conditions": {
-       "thck_raw": 14.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 14.25,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "T10_out",
-        "time": 0.5,
-        "expected": -4.7402397014050059,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "Tbar_out",
-        "time": 0.5,
-        "expected": -4.3093969323873207,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "bmlt_applied",
-        "time": 0.5,
-        "expected": -0.5,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "ocean_no_application_synthetic",
-      "description": "The glissade-level ocean mask, from the SOURCE FORMULA (no traced cell is ocean - all 32 cells have topg >= 921 m): an ice-free cell below sea level (topg = -100 m < eus = 0) receives no SMB and no BMB even with acab = -2 m/yr and bmlt = 1 m/yr bypassing the glad-level zeroing (in the composed chain GladSmb would have zeroed the acab first): net_applied = 0, so thck stays 0, melt_potential stays 0 (the Fortran skips the whole column update, F90:1333-1341, and the melt_potential accumulation of F90:1418-1422), and acab_applied = bmlt_applied = 0 (the ocean_mask branches of F90:1385-1389/1443-1447).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.5
-      },
-      "parameter_overrides": {
-       "acab": -2.0,
-       "bmlt": 1.0,
-       "topg": -100.0
-      },
-      "initial_conditions": {
-       "thck_raw": 0.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "ocean_mask",
-        "time": 0.0,
-        "expected": 1.0
-       },
-       {
-        "variable": "thck",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "melt_potential",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "acab_applied",
-        "time": 0.5,
-        "expected": 0.0
-       },
-       {
-        "variable": "bmlt_applied",
-        "time": 0.5,
-        "expected": 0.0
-       }
-      ]
-     },
-     {
-      "id": "age_increment_synthetic",
-      "description": "The ice-age increment, from the SOURCE FORMULA (glissade.F90:1203-1213; the dump has no age column): d(age)/dt = 1 yr/yr where thck > 0, so over a 2-yr span the age grows from 0 to 2 yr at an ice-covered cell (thck = 14 m, acab = 0). age_usrf = 0 (new accumulation is age zero, glissade_transport.F90:204-206) and age_lsrf = age (basal freeze-on takes the bottom-layer age, F90:207-208).",
-      "time_span": {
-       "start": 0.0,
-       "end": 2.0
-      },
-      "parameter_overrides": {
-       "acab": 0.0,
-       "topg": 1752.9000244140625
-      },
-      "initial_conditions": {
-       "thck_raw": 14.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "age",
-        "time": 2.0,
-        "expected": 2.0,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "age_usrf",
-        "time": 2.0,
-        "expected": 0.0
-       },
-       {
-        "variable": "age_lsrf",
-        "time": 2.0,
-        "expected": 2.0,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "age_ice_free_stops_synthetic",
-      "description": "The ice-free age branch, from the SOURCE FORMULA: with thck = 0 the increment stops and the age stays at its initial value. Note the documented difference: the Fortran RESETS ice_age to 0 on ice-free cells (glissade.F90:1209-1213) while the ODE form only stops the increment - the reset is unobservable in the reference window (no traced cell refreezes) and is left to the stage-3 assembly; the pin starts from age = 0 so the two coincide here.",
-      "time_span": {
-       "start": 0.0,
-       "end": 2.0
-      },
-      "parameter_overrides": {
-       "acab": 0.0,
-       "topg": 921.1400146484375
-      },
-      "initial_conditions": {
-       "thck_raw": 0.0,
-       "age": 0.0
-      },
-      "assertions": [
-       {
-        "variable": "age",
-        "time": 2.0,
-        "expected": 0.0
+        "op": "*",
+        "args": [
+         "net_applied",
+         "dt"
+        ]
        }
       ]
      }
-    ]
+    },
+    {
+     "lhs": "melt_potential",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ocean_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m"
+       },
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         },
+         {
+          "op": "-",
+          "args": [
+           "H_post"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "s",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "acab",
+       "dt"
+      ]
+     }
+    },
+    {
+     "lhs": "b",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<",
+        "args": [
+         "bmlt",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m/yr"
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "bmlt",
+           "dt"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "acab_applied",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ocean_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/yr"
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "<",
+            "args": [
+             "acab",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.0,
+              "units": "m/yr"
+             }
+            ]
+           },
+           {
+            "op": ">=",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "s"
+              ]
+             },
+             "H_pre"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "H_pre",
+             "dt"
+            ]
+           }
+          ]
+         },
+         "acab"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "bmlt_applied",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ocean_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/yr"
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "<",
+          "args": [
+           "bmlt",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m/yr"
+           }
+          ]
+         },
+         "bmlt",
+         {
+          "op": "ifelse",
+          "args": [
+           {
+            "op": ">=",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               "bmlt",
+               "dt"
+              ]
+             },
+             {
+              "op": "max",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.0,
+                "units": "m"
+               },
+               {
+                "op": "+",
+                "args": [
+                 "H_pre",
+                 {
+                  "op": "min",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.0,
+                    "units": "m"
+                   },
+                   "s"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "max",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.0,
+                "units": "m"
+               },
+               {
+                "op": "+",
+                "args": [
+                 "H_pre",
+                 {
+                  "op": "min",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.0,
+                    "units": "m"
+                   },
+                   "s"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             "dt"
+            ]
+           },
+           "bmlt"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "H1",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "sigma2",
+       "H_pre"
+      ]
+     }
+    },
+    {
+     "lhs": "H10",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "sigma10"
+        ]
+       },
+       "H_pre"
+      ]
+     }
+    },
+    {
+     "lhs": "T1_out",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "H_post",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "s",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m"
+           }
+          ]
+         },
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_tracer_mix",
+          "bindings": {
+           "H": "H1",
+           "T": "T1",
+           "s": "s",
+           "Tp": "Tsurf"
+          }
+         },
+         "T1"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Tbar_blend",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_tracer_mix",
+      "bindings": {
+       "H": "H_pre",
+       "T": "Tbar",
+       "s": "s",
+       "Tp": {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": ">",
+          "args": [
+           "s",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m"
+           }
+          ]
+         },
+         "Tsurf",
+         "T1"
+        ]
+       }
+      }
+     }
+    },
+    {
+     "lhs": "Tbar_out",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "H_post",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "cism_tracer_mix",
+        "bindings": {
+         "H": {
+          "op": "+",
+          "args": [
+           "H_pre",
+           "s"
+          ]
+         },
+         "T": "Tbar_blend",
+         "s": "b",
+         "Tp": "Tbed"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "T10_out",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "H_post",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "<",
+          "args": [
+           "bmlt",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m/yr"
+           }
+          ]
+         },
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "cism_tracer_mix",
+          "bindings": {
+           "H": "H10",
+           "T": "T10",
+           "s": "b",
+           "Tp": "Tbed"
+          }
+         },
+         "T10"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "age"
+      ],
+      "wrt": "t"
+     },
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "thck",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "yr/yr"
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "yr/yr"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "age_usrf",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "yr"
+     }
+    },
+    {
+     "lhs": "age_lsrf",
+     "rhs": "age"
+    }
+   ],
+   "tests": [
+    {
+     "id": "accumulate_thickness_step1_cell2611",
+     "description": "Dump pin of the thickness rate law d(thck)/dt = acab - bmlt with bmlt = 0: the cism_transport.csv entry row of cell 26,11 at step 1 has thck = 14 m and acab = 2.0809741699667099 m/yr; the SMB-only prediction after one 0.5-yr step is 14 + 0.5*2.0809741699667099 = 15.040487084983354 m, and the dump exit thck is 15.040488048712829 m. The +9.64e-07 m residual is the horizontal advection of the step (the transport happens between the entry and exit phases of the dump; the same cell's step-2 residual drops to +9.6e-10 m, see README-cism-transport.md): tolerance rel 1e-6 is ~10x the residual.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": 2.0809741699667099,
+      "topg": 1752.9000244140625,
+      "H_pre": 14.0
+     },
+     "initial_conditions": {
+      "thck": 14.0,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 15.040488048712829,
+       "tolerance": {
+        "rel": 1e-6
+       }
+      }
+     ]
+    },
+    {
+     "id": "accumulate_thickness_step2_cell2611",
+     "description": "Dump pin, same cell, step 2: entry thck = 15.040488048712829 m (the step-1 exit), same acab; prediction 16.080975133696185 m vs dump exit 16.080975134653887 m - the advection residual is +9.58e-10 m (rel 6e-11), near round-off: tolerance rel 1e-9.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": 2.0809741699667099,
+      "topg": 1752.9000244140625,
+      "H_pre": 15.040488048712829
+     },
+     "initial_conditions": {
+      "thck": 15.040488048712829,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 16.080975134653887,
+       "tolerance": {
+        "rel": 1e-9
+       }
+      }
+     ]
+    },
+    {
+     "id": "accumulate_thickness_step4_cell2611",
+     "description": "Dump pin, same cell, step 4 (the second cap year's ablation-free second step): entry thck = 16.85918996861492 m with acab = 1.5564316967068248 m/yr (cap_step 2 qsmb of this cell); prediction 17.637405816968332 m vs dump exit 17.637404090581274 m - residual -1.73e-06 m: tolerance rel 1e-6.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": 1.5564316967068248,
+      "topg": 1752.9000244140625,
+      "H_pre": 16.85918996861492
+     },
+     "initial_conditions": {
+      "thck": 16.85918996861492,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 17.637404090581274,
+       "tolerance": {
+        "rel": 1e-6
+       }
+      }
+     ]
+    },
+    {
+     "id": "ablate_thickness_step3_cell2511",
+     "description": "Dump pin of the ablation year: cell 25,11 at step 3 has entry thck = 1.4394647029325882 m and acab = -0.58145483354207683 m/yr; prediction 1.1487372861615497 m vs dump exit 1.1487549741605207 m - residual +1.77e-05 m (rel 1.5e-5): tolerance rel 2e-4.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": -0.58145483354207683,
+      "topg": 1082.0,
+      "H_pre": 1.4394647029325882
+     },
+     "initial_conditions": {
+      "thck": 1.4394647029325882,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 1.1487549741605207,
+       "tolerance": {
+        "rel": 2e-4
+       }
+      }
+     ]
+    },
+    {
+     "id": "ablate_thickness_step4_cell2511",
+     "description": "Dump pin, same cell, step 4: entry thck = 1.1487549741605207 m; prediction 0.8580275573894823 m vs dump exit 0.85804631872704562 m - residual +1.88e-05 m (rel 2.2e-5): tolerance rel 3e-4.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": -0.58145483354207683,
+      "topg": 1082.0,
+      "H_pre": 1.1487549741605207
+     },
+     "initial_conditions": {
+      "thck": 1.1487549741605207,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 0.85804631872704562,
+       "tolerance": {
+        "rel": 3e-4
+       }
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step1_cell2811",
+     "description": "Dump pin of the full-melt clip through the rate-level guard: cell 28,11 at step 1 has entry thck = 0.019958499819040298 m with acab = -0.7075135162820545 m/yr (the zeroing did not fire: thck > 0). One 0.5-yr step would remove 0.35375675814102725 m - the whole column and more - so d(thck)/dt = net while thck > 0 and 0 once the column is gone: the exit thck is clipped to 0 (dump exit thck = 0 exactly). The rate guard is discontinuous at the crossing, and the diffsol BDF arm of the runner freezes the state at its first negative step; under the document's declared solver tolerances (abstol 1e-10, reltol 1e-6) that landing is within ~1e-9 m of 0, covered by the abs tolerance (1e-8, still eight orders below the -0.354 m the unguarded law would give). The per-step melt_potential, the applied rates and the tracer zeroing of the same row are pinned in the full_melt_step1_cell2811_rates algebraic test.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": -0.7075135162820545,
+      "topg": 921.1400146484375,
+      "H_pre": 0.019958499819040298
+     },
+     "initial_conditions": {
+      "thck": 0.019958499819040298,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-8
+       }
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step3_cell2811",
+     "description": "Dump pin of the full-melt clip on re-advected thin ice: cell 28,11 at step 3 has entry thck = 1.6503583323323985e-05 m (advected in during step 2) with acab = -1.7674468845051972 m/yr; one step would remove 0.8837234422525986 m, so the exit thck = 0 (dump exit = 0 exactly). As in full_melt_step1_cell2811, the BDF arm of the runner freezes the state at its first negative step at the discontinuous clip (within ~1e-9 m under the document's solver tolerances): abs tolerance 1e-8. The per-step melt_potential is pinned in the full_melt_step3_cell2811_rates algebraic test.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": -1.7674468845051972,
+      "topg": 921.1400146484375,
+      "H_pre": 1.6503583323323985e-05
+     },
+     "initial_conditions": {
+      "thck": 1.6503583323323985e-05,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-8
+       }
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step1_cell2913",
+     "description": "Dump pin of the full-melt clip at a second cell: cell 29,13 at step 1 has entry thck = 0.039978031069040298 m with acab = -0.53255152481490176 m/yr; the exit thck = 0 (dump exit = 0 exactly). As in full_melt_step1_cell2811, the BDF arm of the runner freezes the state at its first negative step at the discontinuous clip (within ~1e-9 m under the document's solver tolerances): abs tolerance 1e-8. The per-step melt_potential is pinned in the full_melt_step1_cell2913_rates algebraic test.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.5
+     },
+     "parameter_overrides": {
+      "acab": -0.53255152481490176,
+      "topg": 980.010009765625,
+      "H_pre": 0.039978031069040298
+     },
+     "initial_conditions": {
+      "thck": 0.039978031069040298,
+      "age": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "thck",
+       "time": 0.5,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-8
+       }
+      }
+     ]
+    },
+    {
+     "id": "layer1_blend_step1_cell2611",
+     "description": "Dump pin of the layer-1 accumulation blend T1' = (H1*T1 + s*Tsurf)/(H1 + s) with H1 = sigma2*H_pre, s = acab*dt (F90:1380-1386), as the per-step algebraic map of the dumped entry state: cell 26,11 at step 1 has entry thck = 14 m (H_pre), T1 = temp_001 = -2.4958552232280957 degC, Tsurf = temp_000 = -1.041416074241738 degC (the surface temperature, = artm on this cell) and acab = 2.0809741699667099 m/yr; s = 1.040487084983355 m, H1 = 0.23140495867768607*14 = 3.239669421487605 m, blend = -2.142287509494599 degC. The dump's exit temp_001 is -2.1422892285376252 degC - the residual -1.72e-06 degC is the horizontal advection and vertical remap of the step (the new surface layer lies within the blended layer 1, so the blend itself is the Fortran's exact pre-remap value): tolerance rel 1e-5. The law's effect (0.354 degC) exceeds the residual by five orders of magnitude, so the assertion fails without the blend.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": 2.0809741699667099,
+      "topg": 1752.9000244140625,
+      "H_pre": 14.0,
+      "T1": -2.4958552232280957,
+      "Tsurf": -1.041416074241738
+     },
+     "assertions": [
+      {
+       "variable": "T1_out",
+       "time": 0.0,
+       "expected": -2.1422892285376252,
+       "tolerance": {
+        "rel": 1e-5
+       }
+      }
+     ]
+    },
+    {
+     "id": "layer1_blend_step1_cell2711",
+     "description": "Dump pin of the accumulation blend with the new snow layer deeper than layer 1 (s = 1.065497900516611 m > H1 = 1.0413223140495873 m): cell 27,11 at step 1 has entry thck = 4.5 m, T1 = -1.8315649780451615 degC, Tsurf = -1.4796403057549128 degC, acab = 2.1309958010332219 m/yr; blend = -1.6535834887501839 degC vs dump exit temp_001 = -1.6535950045502839 degC (residual -1.15e-05 degC; the blend formula is still exact pre-remap because the new layer 1 of thickness sigma2*(thck + s) lies inside the blended layer of thickness H1 + s): tolerance rel 7e-5.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": 2.1309958010332219,
+      "topg": 1752.9000244140625,
+      "H_pre": 4.5,
+      "T1": -1.8315649780451615,
+      "Tsurf": -1.4796403057549128
+     },
+     "assertions": [
+      {
+       "variable": "T1_out",
+       "time": 0.0,
+       "expected": -1.6535950045502839,
+       "tolerance": {
+        "rel": 7e-5
+       }
+      }
+     ]
+    },
+    {
+     "id": "layer1_blend_step1_cell2512",
+     "description": "Dump pin of the accumulation blend at a third cell: cell 25,12 at step 1 has entry thck = 6.0999760627746582 m, T1 = -1.8445613381693202 degC, Tsurf = -1.2769386424540698 degC, acab = 0.61503345382937313 m/yr; blend = -1.743022533847207 degC vs dump exit temp_001 = -1.7430587941782636 degC (residual -3.63e-05 degC, the largest of the three blend pins - this cell sits in the stronger-advection zone of the traced window): tolerance rel 2.5e-4.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": 0.61503345382937313,
+      "topg": 1752.9000244140625,
+      "H_pre": 6.0999760627746582,
+      "T1": -1.8445613381693202,
+      "Tsurf": -1.2769386424540698
+     },
+     "assertions": [
+      {
+       "variable": "T1_out",
+       "time": 0.0,
+       "expected": -1.7430587941782636,
+       "tolerance": {
+        "rel": 2.5e-4
+       }
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step1_cell2811_rates",
+     "description": "Per-step algebraic maps of the dumped entry state of cell 28,11 step 1 (entry thck = 0.019958499819040298 m, acab = -0.7075135162820545 m/yr): melt_potential = max(0, -(H_pre + net*dt)) = 0.35375675814102725 - 0.019958499819040298 = 0.33379825832198695 m (derived, not a dump column - the per-step value follows from the same conservation check the Fortran itself runs, F90:1523-1538); acab_applied = -H_pre/dt = -0.039916999638080596 m/yr (derived, not a dump column - the surface ablation applied to the 0.0199585 m that existed; the Fortran accumulates the applied amount per step, F90:1385-1422). The dump's exit temp_001..010 are all 0 (the tracer = 0 of the removed layers, F90:1411-1413), pinning T1_out = Tbar_out = 0 (the H_post <= 0 zeroing).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": -0.7075135162820545,
+      "topg": 921.1400146484375,
+      "H_pre": 0.019958499819040298,
+      "T1": -2.389185071557904,
+      "Tbar": -2.389185071557904,
+      "Tsurf": -2.389185071557904,
+      "Tbed": -2.389185071557904
+     },
+     "assertions": [
+      {
+       "variable": "melt_potential",
+       "time": 0.0,
+       "expected": 0.33379825832198695,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "acab_applied",
+       "time": 0.0,
+       "expected": -0.039916999638080596,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "T1_out",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Tbar_out",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step3_cell2811_rates",
+     "description": "Per-step algebraic map of the dumped entry state of cell 28,11 step 3 (entry thck = 1.6503583323323985e-05 m, acab = -1.7674468845051972 m/yr): melt_potential = 0.8837234422525986 - 1.6503583323323985e-05 = 0.8837069386692753 m (derived, not a dump column - the per-step excess of the fully melted column).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": -1.7674468845051972,
+      "topg": 921.1400146484375,
+      "H_pre": 1.6503583323323985e-05
+     },
+     "assertions": [
+      {
+       "variable": "melt_potential",
+       "time": 0.0,
+       "expected": 0.8837069386692753,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "full_melt_step1_cell2913_rates",
+     "description": "Per-step algebraic map of the dumped entry state of cell 29,13 step 1 (entry thck = 0.039978031069040298 m, acab = -0.53255152481490176 m/yr): melt_potential = 0.26627576240745088 - 0.039978031069040298 = 0.22629773133841058 m (derived, not a dump column - the per-step excess of the fully melted column).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": -0.53255152481490176,
+      "topg": 980.010009765625,
+      "H_pre": 0.039978031069040298
+     },
+     "assertions": [
+      {
+       "variable": "melt_potential",
+       "time": 0.0,
+       "expected": 0.22629773133841058,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "applied_rates_step1_cell2611",
+     "description": "Per-step algebraic map of the dumped entry state of cell 26,11 step 1 (entry thck = 14 m, acab = 2.0809741699667099 m/yr > 0): the full-application branch of acab_applied (F90:1385-1389) - the accumulation is applied in full while the column survives, so acab_applied = acab (derived, not a dump column).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "acab": 2.0809741699667099,
+      "topg": 1752.9000244140625,
+      "H_pre": 14.0
+     },
+     "assertions": [
+      {
+       "variable": "acab_applied",
+       "time": 0.0,
+       "expected": 2.0809741699667099,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "SurfaceUpdate": {
+   "variables": {
+    "thck": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness (glide_geometry%thck, m; the post-SMB thickness)"
+    },
+    "topg": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "bedrock topography elevation (glide_geometry%topg, m)"
+    },
+    "eus": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "eustatic sea level (model%climate%eus, m; 0 in the reference run)"
+    },
+    "rhoi": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 917.0,
+     "description": "ice density (glimmer_physcon rhoi = SHR_CONST_RHOICE = 917 kg/m3)"
+    },
+    "rhoo": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1026.0,
+     "description": "ocean density (glimmer_physcon rhoo = SHR_CONST_RHOSW = 1026 kg/m3)"
+    },
+    "lsrf": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "lower ice surface elevation (glide_geometry%lsrf, m): topg where the ice is grounded, eus - (rhoi/rhoo)*thck where it floats"
+    },
+    "usrf": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "upper ice surface elevation (glide_geometry%usrf, m) = lsrf + thck"
+    }
    },
-   "SurfaceUpdate": {
-    "variables": {
-     "thck": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "ice thickness (glide_geometry%thck, m; the post-SMB thickness)"
-     },
-     "topg": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "bedrock topography elevation (glide_geometry%topg, m)"
-     },
-     "eus": {
-      "type": "parameter",
-      "units": "m",
-      "default": 0.0,
-      "description": "eustatic sea level (model%climate%eus, m; 0 in the reference run)"
-     },
-     "rhoi": {
-      "type": "parameter",
-      "units": "kg/m^3",
-      "default": 917.0,
-      "description": "ice density (glimmer_physcon rhoi = 917 kg/m3)"
-     },
-     "rhoo": {
-      "type": "parameter",
-      "units": "kg/m^3",
-      "default": 1026.0,
-      "description": "ocean density (glimmer_physcon rhoo = SHR_CONST_RHOSW = 1026 kg/m3)"
-     },
-     "lsrf": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "lower ice surface elevation (glide_geometry%lsrf, m): topg where the ice is grounded, eus - (rhoi/rhoo)*thck where it floats"
-     },
-     "usrf": {
-      "type": "unknown",
-      "units": "m",
-      "default": 0.0,
-      "description": "upper ice surface elevation (glide_geometry%usrf, m) = lsrf + thck"
+   "equations": [
+    {
+     "lhs": "lsrf",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "<",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "topg",
+           "eus"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               "rhoi",
+               "rhoo"
+              ]
+             },
+             "thck"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         "eus",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "rhoi",
+             "rhoo"
+            ]
+           },
+           "thck"
+          ]
+         }
+        ]
+       },
+       "topg"
+      ]
      }
     },
-    "equations": [
-     {
-      "lhs": "lsrf",
-      "rhs": {
-       "op": "ifelse",
-       "args": [
-        {
-         "op": "<",
-         "args": [
-          {
-           "op": "-",
-           "args": [
-            "topg",
-            "eus"
-           ]
-          },
-          {
-           "op": "-",
-           "args": [
-            {
-             "op": "*",
-             "args": [
-              {
-               "op": "/",
-               "args": [
-                "rhoi",
-                "rhoo"
-               ]
-              },
-              "thck"
-             ]
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "op": "-",
-         "args": [
-          "eus",
-          {
-           "op": "*",
-           "args": [
-            {
-             "op": "/",
-             "args": [
-              "rhoi",
-              "rhoo"
-             ]
-            },
-            "thck"
-           ]
-          }
-         ]
-        },
-        "topg"
-       ]
-      }
-     },
-     {
-      "lhs": "usrf",
-      "rhs": {
-       "op": "+",
-       "args": [
-        "lsrf",
-        "thck"
-       ]
-      }
-     }
-    ],
-    "tests": [
-     {
-      "id": "grounded_step1_cell2511",
-      "description": "Dump pin of the grounded branch of calc_lsrf_usrf (glimmer_utils.F90:344-378): the cism_transport.csv exit row of cell 25,11 at step 1 has thck = 1.3697560650243181 m, topg = 1082 m; topg - eus = 1082 > -(rhoi/rhoo)*thck, so lsrf = topg = 1082 m and usrf = lsrf + thck = 1083.3697560650244 m - identical to the dump's exit lsrf/usrf (rel 0.0e+00; verified on all 256 rows: every traced cell is grounded and lsrf = topg exactly).",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "thck": 1.3697560650243181,
-       "topg": 1082.0
-      },
-      "assertions": [
-       {
-        "variable": "lsrf",
-        "time": 0.0,
-        "expected": 1082.0,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "usrf",
-        "time": 0.0,
-        "expected": 1083.3697560650244,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "zero_thickness_cell2811_step3",
-      "description": "Dump pin of the ice-free cleanup: the cism_transport.csv exit row of cell 28,11 at step 3 has thck = 0 (fully melted in step 3) with topg = 921.1400146484375 m; usrf = lsrf + thck = topg = 921.1400146484375 m, identical to the dump's exit usrf.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "thck": 0.0,
-       "topg": 921.1400146484375
-      },
-      "assertions": [
-       {
-        "variable": "lsrf",
-        "time": 0.0,
-        "expected": 921.1400146484375,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "usrf",
-        "time": 0.0,
-        "expected": 921.1400146484375,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "thin_ice_cell2913_step4",
-      "description": "Dump pin on re-advected thin ice: the cism_transport.csv exit row of cell 29,13 at step 4 has thck = 0.00051154483210166042 m, topg = 980.010009765625 m; usrf = 980.01052131045708 m, identical to the dump's exit usrf.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "thck": 0.00051154483210166042,
-       "topg": 980.010009765625
-      },
-      "assertions": [
-       {
-        "variable": "usrf",
-        "time": 0.0,
-        "expected": 980.01052131045708,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
-      ]
-     },
-     {
-      "id": "floating_synthetic",
-      "description": "The floating branch of calc_lsrf_usrf, from the SOURCE FORMULA (glimmer_utils.F90:361-366; no traced cell is floating - floating_mask = 0 on all 256 rows): with thck = 500 m over a deep bed (topg = -600 m, eus = 0), topg - eus = -600 < -(rhoi/rhoo)*thck = -446.88109161793369 m, so the ice floats: lsrf = eus - (rhoi/rhoo)*thck = -446.88109161793369 m (917/1026 = 0.89376218323586742) and usrf = lsrf + thck = 53.118908382066309 m.",
-      "time_span": {
-       "start": 0.0,
-       "end": 0.0
-      },
-      "parameter_overrides": {
-       "thck": 500.0,
-       "topg": -600.0
-      },
-      "assertions": [
-       {
-        "variable": "lsrf",
-        "time": 0.0,
-        "expected": -446.88109161793369,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       },
-       {
-        "variable": "usrf",
-        "time": 0.0,
-        "expected": 53.118908382066309,
-        "tolerance": {
-         "rel": 1e-12
-        }
-       }
+    {
+     "lhs": "usrf",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "lsrf",
+       "thck"
       ]
      }
-    ]
-   }
+    }
+   ],
+   "tests": [
+    {
+     "id": "grounded_step1_cell2511",
+     "description": "Dump pin of the grounded branch of calc_lsrf_usrf (glimmer_utils.F90:344-378): the cism_transport.csv exit row of cell 25,11 at step 1 has thck = 1.3697560650243181 m, topg = 1082 m; topg - eus = 1082 > -(rhoi/rhoo)*thck, so lsrf = topg = 1082 m and usrf = lsrf + thck = 1083.3697560650244 m - identical to the dump's exit lsrf/usrf (rel 0.0e+00; verified on all 256 rows: every traced cell is grounded and lsrf = topg exactly).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 1.3697560650243181,
+      "topg": 1082.0
+     },
+     "assertions": [
+      {
+       "variable": "lsrf",
+       "time": 0.0,
+       "expected": 1082.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "usrf",
+       "time": 0.0,
+       "expected": 1083.3697560650244,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "zero_thickness_cell2811_step3",
+     "description": "Dump pin of the ice-free cleanup: the cism_transport.csv exit row of cell 28,11 at step 3 has thck = 0 (fully melted in step 3) with topg = 921.1400146484375 m; usrf = lsrf + thck = topg = 921.1400146484375 m, identical to the dump's exit usrf.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 0.0,
+      "topg": 921.1400146484375
+     },
+     "assertions": [
+      {
+       "variable": "lsrf",
+       "time": 0.0,
+       "expected": 921.1400146484375,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "usrf",
+       "time": 0.0,
+       "expected": 921.1400146484375,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "thin_ice_cell2913_step4",
+     "description": "Dump pin on re-advected thin ice: the cism_transport.csv exit row of cell 29,13 at step 4 has thck = 0.00051154483210166042 m, topg = 980.010009765625 m; usrf = 980.01052131045708 m, identical to the dump's exit usrf.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "thck": 0.00051154483210166042,
+      "topg": 980.010009765625
+     },
+     "assertions": [
+      {
+       "variable": "usrf",
+       "time": 0.0,
+       "expected": 980.01052131045708,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
   }
  }
+}

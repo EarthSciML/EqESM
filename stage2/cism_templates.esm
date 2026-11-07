@@ -813,6 +813,95 @@
      }
     ]
    }
+  },
+  "cism_ocean": {
+   "description": "The ocean-cell predicate of the CISM mass-balance chain: 1 where the cell is ice-free (thck <= 0) with the bed below sea level (topg < eus), else 0. Two Fortran masks carry the same law: the GLIDE_IS_OCEAN bit of the glad-level thkmask (libglad/glide_mask.inc:33-34: GLIDE_IS_OCEAN = (thkmask == 3), the bed below sea level and no ice, set by glide_set_geometry), used by the glad-level acab zeroing of glad_timestep.F90:177-178, and the ocean_mask of glissade_get_masks (libglissade/glissade_masks.F90:70-96 with the reference run's thklim = 0), used by add_surface_and_basal_mass_balance to skip the SMB/BMB application entirely (glissade_mass_balance.F90:1333-1341) and by the effective_areafrac = 0 of ocean cells (F90:893-901). CISM-specific: the coupled GLC cap zeroes the SMB of ocean cells before the ice model sees it, so PISM/EqIce have no equivalent mask (CISM_LANE.md rows 6/7/14).",
+   "params": [
+    "thck",
+    "topg",
+    "eus"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "and",
+      "args": [
+       {
+        "op": "<=",
+        "args": [
+         "thck",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "m"
+         }
+        ]
+       },
+       {
+        "op": "<",
+        "args": [
+         "topg",
+         "eus"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    ]
+   }
+  },
+  "cism_tracer_mix": {
+   "description": "The mass x tracer mixing law of the CISM surface/basal mass-balance application (glissade_mass_balance.F90): T' = (H*T + s*Tp)/(H + s), the conservative blend of an existing column slice of thickness H [m] at tracer T with a thickness change s [m] at the incoming tracer Tp. s > 0 for accumulation (new ice arrives at the surface temperature: the layer-1 blend of F90:1380-1386, Tp = tracer_usrf) and for basal freeze-on (arrives at the bed temperature: the layer-10 blend of F90:1458-1465, Tp = tracer_lsrf); s < 0 for ablation (ice removed from the top at its own temperature; the layer-free column-mean law removes at the layer-1 temperature Tp = T1, exact while the ablation stays within layer 1). The template is the tracer counterpart of the layer thickness update thck_layer(1) += s: mass times tracer is conserved. CISM-specific: PISM applies SMB with the same blend in its own layer bookkeeping, but CISM's layer-loop form (with the tracer = 0 of fully removed layers, F90:1411-1413) has no EqIce counterpart (CISM_LANE.md rows 6/7).",
+   "params": [
+    "H",
+    "T",
+    "s",
+    "Tp"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "H",
+         "T"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "s",
+         "Tp"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "H",
+       "s"
+      ]
+     }
+    ]
+   }
   }
- }
+  }
 }

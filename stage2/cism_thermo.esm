@@ -580,22 +580,11 @@
      "rhs": {
       "op": "+",
       "args": [
-       {
-        "op": "+",
-        "args": [
-         "bfricflx",
-         "bhydroflx"
-        ]
-       },
+       "bfricflx",
+       "bhydroflx",
        {
         "op": "-",
         "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "W/m^2"
-         },
          "bheatflx"
         ]
        }
@@ -687,18 +676,7 @@
          }
         ]
        },
-       {
-        "op": "min",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "degC"
-         },
-         "artm"
-        ]
-       }
+       "temp_sfc"
       ]
      }
     },
@@ -707,12 +685,6 @@
      "rhs": {
       "op": "-",
       "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "W/m^2"
-       },
        {
         "op": "apply_expression_template",
         "args": [],
