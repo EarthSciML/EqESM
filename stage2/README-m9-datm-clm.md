@@ -20,14 +20,14 @@ forc_wind = sqrt(u^2+v^2) and forc_solar = solad_vis+solad_nir+solai_vis+solai_n
 | variable | law | dump column(s) |
 |---|---|---|
 | Downscale.forc_t | import copy + ifelse (pass-through at needs_downscaling=0); kept once (step1) as coupling-wiring check | clm_bareground.csv forc_t |
-| Downscale.forc_q | datm Sa_shum qsat-at-tbotmax clamp + import copy (m9); import copy (clm_atm_forcing) | clm_bareground.csv forc_q |
+| Downscale.forc_q | datm Sa_shum qsat-at-tbotmax clamp + import copy (m9); import copy, kept once (step1) as coupling-wiring check (clm_atm_forcing) | clm_bareground.csv forc_q |
 | Downscale.forc_pbot | pass-through; kept once (step1) as coupling-wiring check | clm_bareground.csv forc_pbot |
 | Downscale.forc_rho | density law (pbot - 0.378 vp)/(rair t) | clm_bareground.csv forc_rho |
-| ImportFields.forc_u/forc_v | datm wind split Sa_u = Sa_v = wind/sqrt(2) (m9); import copy (clm_atm_forcing) | clm_bareground.csv forc_u/forc_v |
+| ImportFields.forc_u/forc_v | datm wind split Sa_u = Sa_v = wind/sqrt(2) (m9); import copy, kept once (step1) as coupling-wiring check (clm_atm_forcing) | clm_bareground.csv forc_u/forc_v |
 | ImportFields.forc_wind | sqrt(u^2+v^2); kept once (step1), derived (not a dump column) | = datm strm_wind |
 | Downscale.forc_rain | rain channel, identically 0 (all-snow); kept once (step1) as coupling-wiring check | clm_canopyflux.csv forc_rain |
 | Downscale.forc_snow | datm all-snow precip split + partition_precip (frac_rain = 0) | clm_canopyflux.csv forc_snow |
-| Downscale.forc_solad_vis/nir, ImportFields.forc_solai_vis/nir | datm direct/diffuse ratios + copies | clm_surfrad.csv forc_solad_vis/nir/solai_vis/nir |
+| Downscale.forc_solad_vis/nir, ImportFields.forc_solai_vis/nir | datm direct/diffuse ratios + copies (m9); import copies kept once (step1) as coupling-wiring checks (clm_atm_forcing) | clm_surfrad.csv forc_solad_vis/nir/solai_vis/nir |
 | Downscale.forc_solar | sum of the four solar components; kept once (step1), derived (not a dump column) | = datm strm_swdn |
 
 ## Coverage gaps (implemented but not pinned here)
