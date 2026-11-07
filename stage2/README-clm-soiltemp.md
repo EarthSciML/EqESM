@@ -41,9 +41,9 @@ pinned regime.
 
 | File | Contents | Fortran source |
 |---|---|---|
-| `clm_templates.esm` | Expression-template library (31 templates: 11 soil-temperature laws + 15 shared pointwise laws + 5 albedo): snow bulk density, Sturm1997 snow thermal conductivity (with the float32-rounded coefficients of bugs.md #33), Jordan1991 snow thermal conductivity (transcribed, untested — see [Coverage gaps](#coverage-gaps)), Johansen (1975) soil thermal conductivity in the named-intermediate form (`satw`/`dke`/`dksat` params, the caller computes each once), its factor laws (saturation water content, Kersten number, liquid fraction, saturated conductivity), de Vries (1963) soil heat capacity, snow heat capacity with the thin-layer floor, harmonic-mean interface conductivity with the zero bottom boundary | `SoilTemperatureMod.F90`: SoilThermProp :604-903 |
+| `clm_templates.esm` | Expression-template library (49 templates: 11 soil-temperature laws + 18 bare-ground Monin-Obukhov laws of `clm_bareground.esm` + 15 shared pointwise laws + 5 albedo). The soil-temperature laws: snow bulk density, Sturm1997 snow thermal conductivity (with the float32-rounded coefficients of bugs.md #33), Jordan1991 snow thermal conductivity (transcribed, untested — see [Coverage gaps](#coverage-gaps)), Johansen (1975) soil thermal conductivity in the named-intermediate form (`satw`/`dke`/`dksat` params, the caller computes each once), its factor laws (saturation water content, Kersten number, liquid fraction, saturated conductivity), de Vries (1963) soil heat capacity, snow heat capacity with the thin-layer floor, harmonic-mean interface conductivity with the zero bottom boundary | `SoilTemperatureMod.F90`: SoilThermProp :604-903 |
 | `clm_soiltemp_discretization.esm` | ESD-format rewrite rule `varcoeff_face_laplacian_lev_flux_bc_capr` (priority 11): the conservative variable-coefficient vertical diffusion `D(K·D(u, lev), lev)` of `varcoeff_face_laplacian_lev_flux_bc` with the CLM top-row measure `M = 0.5·(ze[NLEV+1] − zc[NLEV] + capr·(ze[NLEV+1] − zc[NLEV−1]))` in place of `dz[NLEV]`; imports the two ESD stencils by reference; candidate EarthSciDiscretizations PR | `SoilTemperatureMod.F90`: ComputeHeatDiffFluxAndFactor :1895, SetMatrix_Snow :2617-2710 |
-| `clm_soiltemp.esm` | Model `SoilTemperature` — the heat-conduction PDE `cv·∂T/∂t = dz·D(K·D(T,lev),lev) + sabg` with the state T, the SoilThermProp property laws (consuming `t_entry`, as in CLM), the harmonic-mean interface conductivities on the face axis, the linearized surface flux `kdudz_top = hs + dhsdT·(T[NLEV] − t_entry[NLEV])`, the bottom flux `kdudz_bot = eflx_bot`, the observeds `fn_esd`, `dTdt`, `cn_balance`; 3 tests × 205 pinned/derived assertions (see [The SoilTemperature model](#the-soiltemperature-model)) | `SoilTemperatureMod.F90`: SoilThermProp :604-903, ComputeGroundHeatFluxAndDeriv :1545-1798, the implicit solve :1825-2859 |
+| `clm_soiltemp.esm` | Model `SoilTemperature` — the heat-conduction PDE `cv·∂T/∂t = dz·D(K·D(T,lev),lev) + sabg` with the state T, the SoilThermProp property laws (consuming `t_entry`, as in CLM), the harmonic-mean interface conductivities on the face axis, the linearized surface flux `kdudz_top = hs + dhsdT·(T[NLEV] − t_entry[NLEV])`, the bottom flux `kdudz_bot = eflx_bot`, the observeds `fn_esd`, `dTdt`, `cn_balance`; 3 tests × 202 pinned/derived assertions (see [The SoilTemperature model](#the-soiltemperature-model)) | `SoilTemperatureMod.F90`: SoilThermProp :604-903, ComputeGroundHeatFluxAndDeriv :1545-1798, the implicit solve :1825-2859 |
 
 ## The SoilTemperature model
 
@@ -72,6 +72,11 @@ of the tridiagonal matrix rows.
   lowered divergence by the *dumped* layer thickness `dz` (a parameter — the
   top layer's dumped dz = 0.015578352833079012 differs from the grid spacing
   ze[NLEV+1] − ze[NLEV] = 0.015517897173545236, bugs.md #34) and adds `sabg`.
+  The whole RHS `F(u) = dz·D(K·D(u, lev), lev) + sabg` is the model-local
+  template `soil_heat_tendency(u)` (declared in `SoilTemperature`'s
+  `expression_templates`), applied once to the state `T` (the `dTdt` observed)
+  and once to the CN mean `t_avg` (the `cn_balance` observed), so the operator
+  is authored in one place.
 - **Boundary fluxes.** The rule's free names carry the CLM boundary fluxes:
   `kdudz_top = hs + dhsdT·(T[NLEV] − t_entry[NLEV])`, the surface flux
   linearized about the entry state (ComputeGroundHeatFluxAndDeriv :1545-1798,
@@ -99,13 +104,17 @@ of the tridiagonal matrix rows.
 - **The three pins.** The state `T` is pinned by initial condition at both
   dumped stages with `time_span {0, 0}` (instantaneous evaluation), and the
   properties are frozen from `t_entry` exactly as in the CLM step:
-  1. *Entry pin* (`clm_soiltemp_entry`, 137 assertions): `T = t_entry`;
-     `K` (35 faces) and `cv` (34 layers) reproduce the dumped `tk`/`cv`
+  1. *Entry pin* (`clm_soiltemp_entry`, 134 assertions): `T = t_entry`;
+     `K` (faces 2..34 — the informative harmonic-mean interfaces; the K[1] = 0
+     bottom and K[35] = 0 dummy entries are literal branches of the K equation
+     and are not asserted) and `cv` (34 layers) reproduce the dumped `tk`/`cv`
      through the full property chain, `fn_esd[n] = −G[n]` reproduces the
      dumped `fn` column (which is exactly the entry-state interface flux
-     `−G(t_entry)` written at the exit stage, verified numerically to 1e-13),
-     and `dTdt` reproduces the *derived* instantaneous PDE tendency
-     `(dz·D(K·D(t_entry,lev),lev) + sabg)/cv`.
+     `−G(t_entry)` written at the exit stage, verified numerically to 1e-13;
+     the `fn_esd[1] = kdudz_bot` entry is a copy of the overridden
+     `eflx_bot = 0` and is not asserted), and `dTdt` reproduces the *derived*
+     instantaneous PDE tendency
+     `soil_heat_tendency(t_entry)/cv = (dz·D(K·D(t_entry,lev),lev) + sabg)/cv`.
   2. *Exit pin* (`clm_soiltemp_exit`, 35 assertions): `T = t_exit` under the
      same frozen properties; `dTdt` reproduces the derived tendency at the
      exit state and `kdudz_top = hs + dhsdT·(t_exit[NLEV] − t_entry[NLEV])`
@@ -132,6 +141,17 @@ of the tridiagonal matrix rows.
   verified numerically against the dumped row. The model's top row (the
   `kdudz_top` linearization in the rule's face closure) reproduces this
   exactly; the top row of `cn_balance` is therefore not pinned.
+- **Known gap for stage-3 integration.** Because CLM's top row is fully
+  implicit in `dhsdT`, a Crank-Nicolson integration of this PDE by the
+  stage-3 coupled integrator (earthsciintegrator) will **not reproduce CLM's
+  top row exactly**: the plain CN average `0.5·(kdudz_top(t_entry) +
+  kdudz_top(t_exit))` evaluates the linearized surface flux with the
+  `(1 − cnfac)` weighting CLM does not use at the top, leaving the
+  `0.5·dhsdT·ΔT` difference above. Rows 2..34 (interior and bottom) match a
+  CN integration exactly; the top-row mismatch is a deliberate transcription
+  of the F90 (the fully-implicit form is a matrix-row property of
+  SetMatrix_Snow that the PDE formulation does not carry), so the stage-3
+  comparison against CLM must tolerate it on the top snow layer.
 - **eflx_bot sign.** The F90 comment at the eflx_bot declaration says
   "+upward" while the `fn(nlevgrnd) = eflx_bot` slot is +downward
   (SetRHSVec_Soil :2379); with eflx_bot = 0 in the dump the sign convention is
@@ -192,7 +212,7 @@ suite requires it for the CICE B-grid rules as well). Then:
 ESD_ROOT=/path/to/EarthSciDiscretizations ./esm test stage2
 ```
 
-`clm_soiltemp.esm` pins 205 assertions (137 entry + 35 exit + 33 derived CN
+`clm_soiltemp.esm` pins 202 assertions (134 entry + 35 exit + 33 derived CN
 identity) from `stage1/dumps/clm/clm_soiltemp.csv` column 1 step 1: every
 direct pin reproduces a dumped value at rel 1e-12; the dTdt and kdudz_top
 values are *derived* (computed in Python from the dumped quantities by

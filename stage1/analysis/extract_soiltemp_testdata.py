@@ -15,9 +15,12 @@ computes (its equations are the same math, see README-clm-soiltemp.md):
              (the ESD lev axis runs bottom-up; lev n = CLM j = 26-n)
   * K:       interface conductivities, K[n] = dumped tk(26-n); K[1] = 0 (bottom
              boundary, tk(nlevgrnd) = 0), K[35] = 0 dummy (no interface above
-             the top snow layer)
+             the top snow layer); only n = 2..34 are embedded in the tests
+             block (K[1]/K[35] are literal branches of the K equation)
   * cv, fn:  dumped (fn is the ENTRY-state interface flux -G(t_entry) written
-             at the exit stage, verified numerically to 1e-13)
+             at the exit stage, verified numerically to 1e-13; fn_esd[1] =
+             kdudz_bot is a copy of the overridden eflx_bot = 0 and is not
+             embedded, so only n = 2..34 are checked)
   * dTdt:    the instantaneous PDE tendency (dz*D(K*D(T,lev),lev) + sabg)/cv
              evaluated at the entry and at the exit state -- derived values,
              computed here from the dump; K is frozen from t_entry as in CLM
@@ -198,13 +201,18 @@ def main(argv=None):
     cmp("override frac_sno_fluxes", d["frac_sno"], ov["frac_sno_fluxes"])
     assert t1["initial_conditions"]["T"] == d["t_ent"]
     assert t2["initial_conditions"]["T"] == d["t_exc"]
-    for n in range(1, 36):
+    # K[1] (bottom) and K[35] (top dummy) are literal branches of the K
+    # equation (K[1] = 0 of SoilTemperatureMod.F90:828, K[35] = 0 dummy) and
+    # fn_esd[1] = kdudz_bot is a copy of the overridden eflx_bot = 0, so none
+    # of the three is embedded in the tests block (tautological assertions).
+    for n in range(2, 35):
         cmp(f"K[lev_nodes {n}]", d["K"][n - 1], a1[("K", (("lev_nodes", n),))])
     for n in range(1, 35):
         cmp(f"cv[lev {n}]", d["cv"][n - 1], a1[("cv", (("lev", n),))])
-        cmp(f"fn_esd[lev {n}]", d["fn"][n - 1], a1[("fn_esd", (("lev", n),))])
         cmp(f"dTdt entry[lev {n}]", c["dTdt_ent"][n - 1], a1[("dTdt", (("lev", n),))])
         cmp(f"dTdt exit[lev {n}]", c["dTdt_exc"][n - 1], a2[("dTdt", (("lev", n),))])
+    for n in range(2, 35):
+        cmp(f"fn_esd[lev {n}]", d["fn"][n - 1], a1[("fn_esd", (("lev", n),))])
     cmp("kdudz_top exit", c["kdudz_top_exit"], a2[("kdudz_top", ())])
     for n in range(1, 34):
         cmp(f"cn_balance[lev {n}] expected", 0.0, a3[("cn_balance", (("lev", n),))])

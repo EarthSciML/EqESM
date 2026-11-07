@@ -57,6 +57,18 @@
      }
     }
    ],
+   "expression_templates": {
+    "soil_heat_tendency": {
+     "description": "Heat-flux divergence of the CLM snow/soil heat-conduction equation, the RHS of cv*dT/dt = F(u): F(u) = dz*D(K*D(u,lev),lev) + sabg, with the divergence lowered by clm_soiltemp_discretization.esm (the capr-weighted top-row measure of SoilTemperatureMod.F90:1895 and the interface fluxes of :825-826; multiplying the lowered divergence by the layer thickness dz reproduces the CLM rows, including the dumped top-layer thickness of bugs.md #34). The operator is linear in the state u with K frozen from the entry state and sabg constant, so it is applied once to the state T (the instantaneous tendency dTdt) and once to the Crank-Nicolson mean state t_avg (the derived identity 0.5*(F(t_entry) + F(t_exit)) = F(t_avg) of the cn_balance test).",
+     "params": ["u", "K", "dz", "sabg"],
+     "body": {"op": "+", "args": [
+      {"op": "*", "args": ["dz", {"op": "D", "args": [
+       {"op": "*", "args": ["K", {"op": "D", "args": ["u"], "wrt": "lev"}]}
+      ], "wrt": "lev"}]},
+      "sabg"
+     ]}
+    }
+   },
    "variables": {
     "ze": {
      "type": "parameter",
@@ -875,35 +887,15 @@
       "op": "/",
       "args": [
        {
-        "op": "+",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "dz",
-           {
-            "op": "D",
-            "args": [
-             {
-              "op": "*",
-              "args": [
-               "K",
-               {
-                "op": "D",
-                "args": [
-                 "T"
-                ],
-                "wrt": "lev"
-               }
-              ]
-             }
-            ],
-            "wrt": "lev"
-           }
-          ]
-         },
-         "sabg"
-        ]
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "soil_heat_tendency",
+        "bindings": {
+         "u": "T",
+         "K": "K",
+         "dz": "dz",
+         "sabg": "sabg"
+        }
        },
        "cv"
       ]
@@ -931,35 +923,15 @@
       "op": "-",
       "args": [
        {
-        "op": "+",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "dz",
-           {
-            "op": "D",
-            "args": [
-             {
-              "op": "*",
-              "args": [
-               "K",
-               {
-                "op": "D",
-                "args": [
-                 "t_avg"
-                ],
-                "wrt": "lev"
-               }
-              ]
-             }
-            ],
-            "wrt": "lev"
-           }
-          ]
-         },
-         "sabg"
-        ]
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "soil_heat_tendency",
+        "bindings": {
+         "u": "t_avg",
+         "K": "K",
+         "dz": "dz",
+         "sabg": "sabg"
+        }
        },
        {
         "op": "*",
@@ -997,7 +969,7 @@
    "tests": [
         {
       "id": "clm_soiltemp_entry",
-      "description": "Entry-state pin: T = t_entry (the value SoilThermProp consumes), all 34+35 properties, the entry-state interface fluxes and the instantaneous PDE tendency. K (lev_nodes) pins the harmonic-mean interface conductivity (K[n] = dumped tk(26-n); K[1] = 0 bottom, K[35] = 0 dummy) through the full property chain bw -> thk -> K; cv pins the heat-capacity law; fn_esd pins the entry-state interface flux (the dumped fn column is exactly -G(t_entry)); dTdt is the derived instantaneous PDE tendency (dz*D(K*D(T,lev),lev) + sabg)/cv evaluated at T = t_entry, computed in Python from the dump (derived, labelled in README-clm-soiltemp.md).",
+      "description": "Entry-state pin: T = t_entry (the value SoilThermProp consumes), all 34+35 properties, the entry-state interface fluxes and the instantaneous PDE tendency. K (lev_nodes) pins the harmonic-mean interface conductivity (K[n] = dumped tk(26-n) for n = 2..34, the informative interior and snow/soil boundary values) through the full property chain bw -> thk -> K; the K[1] = 0 bottom and K[35] = 0 dummy entries are literal branches of the K equation and are not asserted. cv pins the heat-capacity law; fn_esd pins the entry-state interface flux (the dumped fn column is exactly -G(t_entry); the fn_esd[1] = kdudz_bot entry is a copy of the overridden eflx_bot = 0 and is not asserted); dTdt is the derived instantaneous PDE tendency soil_heat_tendency(T)/cv evaluated at T = t_entry, computed in Python from the dump (derived, labelled in README-clm-soiltemp.md).",
       "time_span": {
         "start": 0.0,
         "end": 0.0
@@ -1451,14 +1423,6 @@
           "variable": "K",
           "time": 0,
           "coords": {
-            "lev_nodes": 1
-          },
-          "expected": 0.0
-        },
-        {
-          "variable": "K",
-          "time": 0,
-          "coords": {
             "lev_nodes": 2
           },
           "expected": 3.0
@@ -1718,14 +1682,6 @@
             "lev_nodes": 34
           },
           "expected": 0.1741925750100798
-        },
-        {
-          "variable": "K",
-          "time": 0,
-          "coords": {
-            "lev_nodes": 35
-          },
-          "expected": 0.0
         },
         {
           "variable": "cv",
@@ -1998,14 +1954,6 @@
             "lev": 34
           },
           "expected": 11421.382607743957
-        },
-        {
-          "variable": "fn_esd",
-          "time": 0,
-          "coords": {
-            "lev": 1
-          },
-          "expected": 0.0
         },
         {
           "variable": "fn_esd",
