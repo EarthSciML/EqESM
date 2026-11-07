@@ -1433,3 +1433,17 @@ worktree `../EqESM-suite-ed25fde`): **2662P/0F/0E**, validate-failures=0, units-
   owner should add the ZM parcel fields above; optional clm-soilfluxes
   follow-up (`t_grnd0` no-snow branch → `ground_temperature_blend`);
   JRA data-source portability follow-up after the cdeps push decision.
+
+### 2026-11-07 (cont.): 5 new tasks submitted
+
+`mom6-dynamics-instrument` (owns MOM6 fork: continuity_PPM / CorAdCalc /
+PressureForce_FV dumps, continuity as a PDE on an ESD C-grid rule),
+`cism-velo3` (owns CISM fork: glissade_stagger as one template for
+stag_omega_k/θ/F, β-chain pass mismatch, f_ground < 1 cells),
+`cice-itd-ridge` (owns CICE fork: ridge_ice + linear_itd dumps, the
+redistribution written as integrals over g(h)), `cdeps-jra-portable`
+(JRA data_sources → NCAR URLs, drop the ~27-min reader tests, GSWP3
+Streams via `stream_interp`), `esm-pr-clm-soil` (EarthSciModels branch
+`clm-soil`, not pushed). Fork ownership now: CAM cam-rad-instrument, CLM
+clm-veg-instrument, CMEPS cmeps-prep-atm, MOM6/CISM/CICE the three above.
+18 agent jobs queued or running.
