@@ -1,0 +1,1718 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cmeps_merge",
+  "description": "CMEPS ocean-export merge component (stage 2 of the EqESM project): the fraction-weighted merges of the atmosphere/ocean/ice/runoff fields onto the ocean grid in med_phases_prep_ocn_accum (mediator/med_phases_prep_ocn_mod.F90:161-168, the med_merge_auto of med_merge_mod.F90:405-412 with the merge specs of esmFldsExchange_cesm_mod.F90) plus the med_phases_prep_ocn_custom shortwave computation (F90:582-894), transcribed exactly with the merge expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+SICE+MOM6 case, stage1/dumps/cmeps/cmeps_merge.csv, 288 rows = 12 traced ocean cells x 24 coupling steps of the instrumented run 12134714; all traced cells are partial-ice, ifrac 0.0683..0.6246): the ice component (SICE data ice) is present, so the cice-is-present branch of the custom computation (F90:756-837) is exercised: fswabsv = Faxa_swvdr*(1 - avsdr) + Faxa_swvdf*(1 - avsdf) and fswabsi = Faxa_swndr*(1 - anidr) + Faxa_swndf*(1 - anidf) with the ocean albedos of the ocnalb phase (FBMed_ocnalb_o So_avsdr/avsdf/anidr/anidf, the anidr/avsdr/avsdf outputs of the cmeps_ocnalb component), the scaled fractions ifrac_scaled/ofrac_scaled/ifracr_scaled/ofracr_scaled of F90:800-813 (from ifrac/ofrac and the radiation fractions ifrad/ofrad; the dumped ifrad/ofrad lag the current ifrac/ofrac by one coupling step - ifrad(k) = ifrac(k-1) - because the ocnalb phase copies the fractions after its albedo loop, so the traced swnet weights the PREVIOUS step's radiation fractions; see the cmeps_ocnalb component), Foxx_swnet = ofracr_scaled*(fswabsv + fswabsi) + ifrac_scaled*Fioi_swpen (F90:814) and the shortwave band split Foxx_swnet_vdr/vdf/idr/idf = c*Foxx_swnet with the SINGLE-precision Fortran literals c1 = c2 = 0.285 and c3 = c4 = 0.215 promoted to r8 (0.2849999964237213 / 0.2150000035762787, F90:830-834; the import_swpen_by_bands per-band branch of F90:824-827 is not exercised because SICE does not export Fioi_swpen_vdr/vdf/idr/idf). The accumulated merges (the esmFldsExchange_cesm_mod.F90 specs, all ofrac-weighted for the atm/aoflux sources and ifrac-weighted for the ice sources): Faxa_rain = rainc*ofrac + rainl*ofrac (L1940-1942), Faxa_snow = snowc*ofrac + snowl*ofrac (L1949-1951), Foxx_lwnet = Faox_lwup*ofrac + Faxa_lwdn*ofrac (L1759-1762; Faox_lwup is the negative upward flux of the aoflux phase, so the sum is the net downward longwave), Foxx_sen = Faox_sen*ofrac (L1966-1967), Foxx_taux = Fioi_taux*ifrac + Faox_taux*ofrac (L2154-2158), Foxx_tauy = Fioi_tauy*ifrac + Faox_tauy*ofrac (L2169-2173), Foxx_evap = Faox_evap*ofrac (L1992-1993), Fioi_melth = Fioi_melth*ifrac (L2204-2206), Fioi_meltw = Fioi_meltw*ifrac (L2189-2191), Fioi_salt = Fioi_salt*ifrac (L2218-2220), Foxx_rofl = Forr_rofl (L2354) and Foxx_rofi = Forr_rofi (L2394), each reproduced bit-identically by the replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py (0.000e+00 relative error on all 23 columns over all 288 rows). The enthalpy fields (Foxx_hlat/hsen/etc.) are not dumped (documented gap): the traced run merges only the mass/energy fields above. The Sx_*/Faxx_* atmosphere merges of prep_atm are not exercised by this case (no prep_atm phase in the run sequence; needs a CAM case). Dump input labels carry the _ice suffix for the ice-import fields (FBImp(compice,compocn) names drop it). Reference: stage1/EqESM-cesm-cmeps/components/cmeps/mediator/med_phases_prep_ocn_mod.F90, med_merge_mod.F90 and esmFldsExchange_cesm_mod.F90."
+ },
+ "models": {
+  "OcnMerge": {
+   "expression_template_imports": [
+    {
+     "ref": "./cmeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "ifrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.46472700362047464,
+     "description": "ice-covered ocean fraction (FBFrac(compocn) ifrac), the ice weight of the Foxx_taux/Foxx_tauy/Fioi_* merges and the ifrac_scaled source of F90:800-806, [-]"
+    },
+    "ofrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.5352729963795253,
+     "description": "open-ocean fraction (FBFrac(compocn) ofrac), the weight of the Faxa_*/Faox_* merges and the ofrac_scaled source of F90:800-806, [-]"
+    },
+    "ifrad": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.46472700362047464,
+     "description": "ice-covered ocean RADIATION fraction (FBFrac(compocn) ifrad): the ifracr_scaled source of F90:807-813; lagged one coupling step behind ifrac (see the component description), [-]"
+    },
+    "ofrad": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.5352729963795253,
+     "description": "open-ocean RADIATION fraction (FBFrac(compocn) ofrad): the ofracr_scaled source of F90:807-813; lagged one coupling step behind ofrac, [-]"
+    },
+    "Faxa_rainc": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "convective rain on the ocean grid (FBImp(compatm,compocn) Faxa_rainc), the rain source of L1940-1942, [kg/m2/s]"
+    },
+    "Faxa_rainl": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "large-scale rain on the ocean grid (FBImp(compatm,compocn) Faxa_rainl), the rain source of L1940-1942, [kg/m2/s]"
+    },
+    "Faxa_snowc": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "convective snow on the ocean grid (FBImp(compatm,compocn) Faxa_snowc), the snow source of L1949-1951, [kg/m2/s]"
+    },
+    "Faxa_snowl": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 2.498731829953979e-06,
+     "description": "large-scale snow on the ocean grid (FBImp(compatm,compocn) Faxa_snowl), the snow source of L1949-1951, [kg/m2/s]"
+    },
+    "Faxa_lwdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 239.15028727371768,
+     "description": "downwelling longwave on the ocean grid (FBImp(compatm,compocn) Faxa_lwdn), the downward lwnet source of L1759-1762, [W/m2]"
+    },
+    "Faxa_swvdr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 73.69846131505888,
+     "description": "downwelling visible direct shortwave on the ocean grid (FBImp(compatm,compocn) Faxa_swvdr), the fswabsv source of F90:795, [W/m2]"
+    },
+    "Faxa_swvdf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 63.17010969862189,
+     "description": "downwelling visible diffuse shortwave on the ocean grid (FBImp(compatm,compocn) Faxa_swvdf), the fswabsv source of F90:795, [W/m2]"
+    },
+    "Faxa_swndr": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 81.59472502738662,
+     "description": "downwelling near-infrared direct shortwave on the ocean grid (FBImp(compatm,compocn) Faxa_swndr), the fswabsi source of F90:796, [W/m2]"
+    },
+    "Faxa_swndf": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 44.74549436985718,
+     "description": "downwelling near-infrared diffuse shortwave on the ocean grid (FBImp(compatm,compocn) Faxa_swndf), the fswabsi source of F90:796, [W/m2]"
+    },
+    "Faox_lwup": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": -324.5239621510464,
+     "description": "upwelling longwave of the aoflux phase (FBMed_aoflux_o Faox_lwup, negative upward), the lwnet source of L1759-1762, [W/m2]"
+    },
+    "Faox_sen": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": -19.442891041106655,
+     "description": "sensible heat flux of the aoflux phase (FBMed_aoflux_o Faox_sen, negative upward), the Foxx_sen source of L1966-1967, [W/m2]"
+    },
+    "Faox_taux": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": -0.014252196212372295,
+     "description": "zonal surface stress of the aoflux phase (FBMed_aoflux_o Faox_taux), the Foxx_taux open-ocean source of L2154-2158, [N/m2]"
+    },
+    "Faox_tauy": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.005986287937969016,
+     "description": "meridional surface stress of the aoflux phase (FBMed_aoflux_o Faox_tauy), the Foxx_tauy open-ocean source of L2169-2173, [N/m2]"
+    },
+    "Faox_evap": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": -1.384015679480647e-05,
+     "description": "evaporation of the aoflux phase (FBMed_aoflux_o Faox_evap, negative upward), the Foxx_evap source of L1992-1993, [kg/m2/s]"
+    },
+    "Fioi_taux_ice": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0916117492111106,
+     "description": "zonal surface stress over ice (FBImp(compice,compocn) Fioi_taux, dump label Fioi_taux_ice), the Foxx_taux ice source of L2154-2158, [N/m2]"
+    },
+    "Fioi_tauy_ice": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0916117492111106,
+     "description": "meridional surface stress over ice (FBImp(compice,compocn) Fioi_tauy, dump label Fioi_tauy_ice), the Foxx_tauy ice source of L2169-2173, [N/m2]"
+    },
+    "Fioi_melth_ice": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "heat flux used to melt ice (FBImp(compice,compocn) Fioi_melth, dump label Fioi_melth_ice), the Fioi_melth source of L2204-2206, [W/m2]"
+    },
+    "Fioi_meltw_ice": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "water flux used to melt ice (FBImp(compice,compocn) Fioi_meltw, dump label Fioi_meltw_ice), the Fioi_meltw source of L2189-2191, [kg/m2/s]"
+    },
+    "Fioi_salt_ice": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "salt flux used to melt ice (FBImp(compice,compocn) Fioi_salt, dump label Fioi_salt_ice), the Fioi_salt source of L2218-2220, [kg/m2/s]"
+    },
+    "Fioi_swpen_ice": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 1.4760655679025592,
+     "description": "shortwave penetrating into the ocean under ice (FBImp(compice,compocn) Fioi_swpen, dump label Fioi_swpen_ice), the ice term of Foxx_swnet F90:814, [W/m2]"
+    },
+    "Forr_rofl": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "liquid runoff on the ocean grid (FBForr(compocn) Forr_rofl), the Foxx_rofl source of L2354, [kg/m2/s]"
+    },
+    "Forr_rofi": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "frozen runoff on the ocean grid (FBForr(compocn) Forr_rofi), the Foxx_rofi source of L2394, [kg/m2/s]"
+    },
+    "So_avsdr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.14760655679025592,
+     "description": "direct visible ocean albedo of the ocnalb phase (FBMed_ocnalb_o So_avsdr), the fswabsv weight of F90:795, [-]"
+    },
+    "So_avsdf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.06,
+     "description": "diffuse visible ocean albedo of the ocnalb phase (FBMed_ocnalb_o So_avsdf), the fswabsv weight of F90:795, [-]"
+    },
+    "So_anidr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.14760655679025592,
+     "description": "direct near-infrared ocean albedo of the ocnalb phase (FBMed_ocnalb_o So_anidr), the fswabsi weight of F90:796, [-]"
+    },
+    "So_anidf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.06,
+     "description": "diffuse near-infrared ocean albedo of the ocnalb phase (FBMed_ocnalb_o So_anidf), the fswabsi weight of F90:796, [-]"
+    },
+    "fswabsv": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 122.19998831630774,
+     "description": "visible shortwave absorbed by the open ocean (F90:795): Faxa_swvdr*(1 - So_avsdr) + Faxa_swvdf*(1 - So_avsdf), [W/m2]"
+    },
+    "fswabsi": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 111.61157332151211,
+     "description": "near-infrared shortwave absorbed by the open ocean (F90:796): Faxa_swndr*(1 - So_anidr) + Faxa_swndf*(1 - So_anidf), [W/m2]"
+    },
+    "ifrac_scaled": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.46472700362047464,
+     "description": "ice fraction scaled to sum 1 (F90:800-806): ifrac/(ifrac + ofrac) with the frac_sum = 0 guard, the ice weight of Foxx_swnet F90:814, [-]"
+    },
+    "ofrac_scaled": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.5352729963795253,
+     "description": "open-ocean fraction scaled to sum 1 (F90:800-806): ofrac/(ifrac + ofrac), [-]"
+    },
+    "ifracr_scaled": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.46472700362047464,
+     "description": "ice RADIATION fraction scaled to sum 1 (F90:807-813): ifrad/(ifrad + ofrad) with the frac_sum = 0 guard, [-]"
+    },
+    "ofracr_scaled": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.5352729963795253,
+     "description": "open-ocean RADIATION fraction scaled to sum 1 (F90:807-813): ofrad/(ifrad + ofrad), the open-ocean weight of Foxx_swnet F90:814, [-]"
+    },
+    "Faxa_rain": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "rain on the ocean (the med_merge_auto output, esmFldsExchange L1940-1942): Faxa_rainc*ofrac + Faxa_rainl*ofrac, [kg/m2/s]"
+    },
+    "Faxa_snow": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 1.3375036737683607e-06,
+     "description": "snow on the ocean (L1949-1951): Faxa_snowc*ofrac + Faxa_snowl*ofrac, [kg/m2/s]"
+    },
+    "Foxx_lwnet": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": -45.69822276351914,
+     "description": "net longwave on the ocean (L1759-1762): Faox_lwup*ofrac + Faxa_lwdn*ofrac (Faox_lwup is negative upward, so the sum is the net downward longwave), [W/m2]"
+    },
+    "Foxx_sen": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": -10.40725454585374,
+     "description": "sensible heat on the ocean (L1966-1967): Faox_sen*ofrac, [W/m2]"
+    },
+    "Foxx_taux": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "default": 0.03494563793572437,
+     "description": "zonal surface stress on the ocean (L2154-2158): Fioi_taux*ifrac + Faox_taux*ofrac, [N/m2]"
+    },
+    "Foxx_tauy": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "default": 0.04577875198905709,
+     "description": "meridional surface stress on the ocean (L2169-2173): Fioi_tauy*ifrac + Faox_tauy*ofrac, [N/m2]"
+    },
+    "Foxx_evap": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": -7.408262197918505e-06,
+     "description": "evaporation on the ocean (L1992-1993): Faox_evap*ofrac, [kg/m2/s]"
+    },
+    "Fioi_melth": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "heat flux to melt ice on the ocean (L2204-2206): Fioi_melth*ifrac, [W/m2]"
+    },
+    "Fioi_meltw": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "water flux to melt ice on the ocean (L2189-2191): Fioi_meltw*ifrac, [kg/m2/s]"
+    },
+    "Fioi_salt": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "salt flux to melt ice on the ocean (L2218-2220): Fioi_salt*ifrac, [kg/m2/s]"
+    },
+    "Foxx_rofl": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "liquid runoff on the ocean (L2354): Forr_rofl, [kg/m2/s]"
+    },
+    "Foxx_rofi": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "frozen runoff on the ocean (L2394): Forr_rofi, [kg/m2/s]"
+    },
+    "Foxx_swnet": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 125.1530151860519,
+     "description": "net shortwave on the ocean (F90:814): ofracr_scaled*(fswabsv + fswabsi) + ifrac_scaled*Fioi_swpen, [W/m2]"
+    },
+    "Foxx_swnet_vdr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 35.66860888044273,
+     "description": "net shortwave, visible direct band (F90:831): 0.285f*Foxx_swnet with the single-precision literal promoted to r8, [W/m2]"
+    },
+    "Foxx_swnet_vdf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 35.66860888044273,
+     "description": "net shortwave, visible diffuse band (F90:832): 0.285f*Foxx_swnet, [W/m2]"
+    },
+    "Foxx_swnet_idr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 26.90789871258322,
+     "description": "net shortwave, near-infrared direct band (F90:833): 0.215f*Foxx_swnet, [W/m2]"
+    },
+    "Foxx_swnet_idf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 26.90789871258322,
+     "description": "net shortwave, near-infrared diffuse band (F90:834): 0.215f*Foxx_swnet, [W/m2]"
+    },
+    "sw_band_visible_coefficient": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.2849999964237213,
+     "description": "the visible-band split coefficient c1 = c2 = 0.285 of med_phases_prep_ocn_mod.F90:830-834. The Fortran literal carries NO _r8 kind suffix, so it is a SINGLE-precision literal promoted to r8: 0.285f = 0.2849999964237213134765625, not 0.285 (pinned by the dump: every traced row has Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131), [-]"
+    },
+    "sw_band_nearir_coefficient": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.2150000035762787,
+     "description": "the near-infrared band split coefficient c3 = c4 = 0.215 of med_phases_prep_ocn_mod.F90:830-834. The Fortran literal carries NO _r8 kind suffix, so it is a SINGLE-precision literal promoted to r8: 0.215f = 0.2150000035762786865234375, not 0.215 (pinned by the dump: every traced row has Foxx_swnet_idr/Foxx_swnet = 0.21500000357627869), [-]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "fswabsv",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_absorbed_shortwave",
+      "bindings": {
+       "sw_dr": "Faxa_swvdr",
+       "sw_df": "Faxa_swvdf",
+       "albedo_dr": "So_avsdr",
+       "albedo_df": "So_avsdf"
+      }
+     }
+    },
+    {
+     "lhs": "fswabsi",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_absorbed_shortwave",
+      "bindings": {
+       "sw_dr": "Faxa_swndr",
+       "sw_df": "Faxa_swndf",
+       "albedo_dr": "So_anidr",
+       "albedo_df": "So_anidf"
+      }
+     }
+    },
+    {
+     "lhs": "ifrac_scaled",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "scaled_fraction",
+      "bindings": {
+       "x": "ifrac",
+       "y": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "ofrac_scaled",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "scaled_fraction",
+      "bindings": {
+       "x": "ofrac",
+       "y": "ifrac"
+      }
+     }
+    },
+    {
+     "lhs": "ifracr_scaled",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "scaled_fraction",
+      "bindings": {
+       "x": "ifrad",
+       "y": "ofrad"
+      }
+     }
+    },
+    {
+     "lhs": "ofracr_scaled",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "scaled_fraction",
+      "bindings": {
+       "x": "ofrad",
+       "y": "ifrad"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_rain",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "open_ocean_weighted_sum",
+      "bindings": {
+       "a": "Faxa_rainc",
+       "b": "Faxa_rainl",
+       "ofrac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_snow",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "open_ocean_weighted_sum",
+      "bindings": {
+       "a": "Faxa_snowc",
+       "b": "Faxa_snowl",
+       "ofrac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_lwnet",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "open_ocean_weighted_sum",
+      "bindings": {
+       "a": "Faox_lwup",
+       "b": "Faxa_lwdn",
+       "ofrac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_sen",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faox_sen",
+       "ofrac"
+      ]
+     }
+    },
+    {
+     "lhs": "Foxx_taux",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": "Fioi_taux_ice",
+       "open_value": "Faox_taux",
+       "ice_frac": "ifrac",
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_tauy",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": "Fioi_tauy_ice",
+       "open_value": "Faox_tauy",
+       "ice_frac": "ifrac",
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_evap",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Faox_evap",
+       "ofrac"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_melth",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Fioi_melth_ice",
+       "ifrac"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_meltw",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Fioi_meltw_ice",
+       "ifrac"
+      ]
+     }
+    },
+    {
+     "lhs": "Fioi_salt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "Fioi_salt_ice",
+       "ifrac"
+      ]
+     }
+    },
+    {
+     "lhs": "Foxx_rofl",
+     "rhs": "Forr_rofl"
+    },
+    {
+     "lhs": "Foxx_rofi",
+     "rhs": "Forr_rofi"
+    },
+    {
+     "lhs": "Foxx_swnet",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "ofracr_scaled",
+         {
+          "op": "+",
+          "args": [
+           "fswabsv",
+           "fswabsi"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "ifrac_scaled",
+         "Fioi_swpen_ice"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Foxx_swnet_vdr",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "shortwave_band",
+      "bindings": {
+       "swnet": "Foxx_swnet",
+       "coefficient": "sw_band_visible_coefficient"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_swnet_vdf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "shortwave_band",
+      "bindings": {
+       "swnet": "Foxx_swnet",
+       "coefficient": "sw_band_visible_coefficient"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_swnet_idr",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "shortwave_band",
+      "bindings": {
+       "swnet": "Foxx_swnet",
+       "coefficient": "sw_band_nearir_coefficient"
+      }
+     }
+    },
+    {
+     "lhs": "Foxx_swnet_idf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "shortwave_band",
+      "bindings": {
+       "swnet": "Foxx_swnet",
+       "coefficient": "sw_band_nearir_coefficient"
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "step1_first_cell",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced row: ifrac = 0.46473 (partial-ice), ofrac = 0.53527, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 125.1530 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.46472700362047464,
+      "ofrac": 0.5352729963795253,
+      "ifrad": 0.46472700362047464,
+      "ofrad": 0.5352729963795253,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 2.498731829953979e-06,
+      "Faxa_lwdn": 239.15028727371768,
+      "Faxa_swvdr": 73.69846131505888,
+      "Faxa_swvdf": 63.17010969862189,
+      "Faxa_swndr": 81.59472502738662,
+      "Faxa_swndf": 44.74549436985718,
+      "Faox_lwup": -324.5239621510464,
+      "Faox_sen": -19.442891041106567,
+      "Faox_taux": -0.014252196212372295,
+      "Faox_tauy": 0.005986287937969016,
+      "Faox_evap": -1.384015679480647e-05,
+      "Fioi_taux_ice": 0.0916117492111106,
+      "Fioi_tauy_ice": 0.0916117492111106,
+      "Fioi_melth_ice": 0.0,
+      "Fioi_meltw_ice": 0.0,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 0.0,
+      "Forr_rofi": 0.0,
+      "So_avsdr": 0.14760655679025592,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.14760655679025592,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 122.19998831630774
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 111.61157332151211
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 1.3375036737683607e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -45.69822276351914
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -10.40725454585374
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": 0.03494563793572437
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.04577875198905709
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -7.4082621979185054e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 125.1530151860519
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 35.66860888044273
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 35.66860888044273
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 26.90789871258322
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 26.90789871258322
+      }
+     ]
+    },
+    {
+     "id": "step1_last_cell",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced cell of step 1: ifrac = 0.47877 (partial-ice), ofrac = 0.52123, ifrad = 0.47877, ofrad = 0.52123, Foxx_swnet = 143.9111 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.478768258097852,
+      "ofrac": 0.5212317419021479,
+      "ifrad": 0.478768258097852,
+      "ofrad": 0.5212317419021479,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.9028314278601986e-06,
+      "Faxa_lwdn": 221.14858865421894,
+      "Faxa_swvdr": 86.6587502406165,
+      "Faxa_swvdf": 74.27892877767127,
+      "Faxa_swndr": 95.9436163378254,
+      "Faxa_swndf": 52.614241217517154,
+      "Faox_lwup": -323.3837213976095,
+      "Faox_sen": -48.001326844803,
+      "Faox_taux": -0.030494069339972923,
+      "Faox_tauy": 0.008268079911529376,
+      "Faox_evap": -1.5835823482416998e-05,
+      "Fioi_taux_ice": 0.09149728371667652,
+      "Fioi_tauy_ice": 0.09149728371667652,
+      "Fioi_melth_ice": 0.0,
+      "Fioi_meltw_ice": 0.0,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 4.91923120603026e-06,
+      "Forr_rofi": 5.579127990960267e-06,
+      "So_avsdr": 0.1412019449724799,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.1412019449724799,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 144.24455920876807
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 131.85357784769718
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 9.918161396897226e-07
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -53.288196323434775
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -25.019815204931003
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": 0.027911518265959206
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.04811558084019079
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -8.25413385819515e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 143.91111291387935
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 41.01466666578937
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 41.01466666578937
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 30.940889791150305
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 30.940889791150305
+      }
+     ]
+    },
+    {
+     "id": "step2_first_cell",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 2, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). step 2 first cell (fraction-lag context: ifrad = ifrac of step 1, differing from the current ifrac): ifrac = 0.46925 (partial-ice), ofrac = 0.53075, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 165.9470 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.4692451250438887,
+      "ofrac": 0.5307548749561113,
+      "ifrad": 0.46472700362047464,
+      "ofrad": 0.5352729963795253,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 2.597398944471444e-06,
+      "Faxa_lwdn": 244.63726121829342,
+      "Faxa_swvdr": 95.29296981971486,
+      "Faxa_swvdf": 81.67968841689843,
+      "Faxa_swndr": 105.50293087182715,
+      "Faxa_swndf": 57.856445961969726,
+      "Faox_lwup": -324.5239621510464,
+      "Faox_sen": -21.00182799525637,
+      "Faox_taux": -0.015566466874463149,
+      "Faox_tauy": 0.0030760579113677804,
+      "Faox_evap": -1.4487618078069713e-05,
+      "Fioi_taux_ice": -0.002510599423671783,
+      "Fioi_tauy_ice": 0.0010545161477605515,
+      "Fioi_melth_ice": 0.0,
+      "Fioi_meltw_ice": 0.0,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 0.0,
+      "Forr_rofi": 0.0,
+      "So_avsdr": 0.10924877913488959,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.10924877913488959,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 161.66123631865764
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 148.36192368317893
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 1.3785821519840767e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -42.40025596421958
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -11.146822591472052
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.009440064719960119
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.002127459293722463
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -7.689373921437787e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 165.94702580123206
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 47.29490175987833
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 47.29490175987833
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 35.6786111407377
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 35.6786111407377
+      }
+     ]
+    },
+    {
+     "id": "step24_first_cell",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced cell of the last step: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.45300172164323294,
+      "ofrac": 0.5469982783567671,
+      "ifrad": 0.4589965161030703,
+      "ofrad": 0.5410034838969298,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.3261509040275966e-05,
+      "Faxa_lwdn": 260.39538566738383,
+      "Faxa_swvdr": 42.11969087905094,
+      "Faxa_swvdf": 36.102592182043665,
+      "Faxa_swndr": 46.632514901806395,
+      "Faxa_swndf": 25.57266946228093,
+      "Faox_lwup": -321.3679826227198,
+      "Faox_sen": -18.920389723443908,
+      "Faox_taux": -0.012089459639767855,
+      "Faox_tauy": -0.0008191234146647516,
+      "Faox_evap": -1.2515463505944276e-05,
+      "Fioi_taux_ice": -0.001020428141694055,
+      "Fioi_tauy_ice": -0.0002368274961120921,
+      "Fioi_melth_ice": -300.0,
+      "Fioi_meltw_ice": 0.0008990110878034162,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 0.0,
+      "Forr_rofi": 0.0,
+      "So_avsdr": 0.2009869346792328,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.2009869346792328,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 67.59061997075469
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 61.298297969852754
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 7.254022613443656e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -33.35190556150985
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -10.349420604562885
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.0070751693142172495
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": -0.0005553423610545692
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -6.845936990588467e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": -135.90051649296987
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0004072535705513032
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 69.72935364157411
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 19.87286553847702
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 19.87286553847702
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 14.991811282310035
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 14.991811282310035
+      }
+     ]
+    },
+    {
+     "id": "step24_last_cell",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced row: ifrac = 0.46883 (partial-ice), ofrac = 0.53117, ifrad = 0.46922, ofrad = 0.53078, Foxx_swnet = 88.0867 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.46883382660912704,
+      "ofrac": 0.531166173390873,
+      "ifrad": 0.46921965552459144,
+      "ofrad": 0.5307803444754086,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.5659286641099662e-06,
+      "Faxa_lwdn": 225.38748800375262,
+      "Faxa_swvdr": 53.97495895018981,
+      "Faxa_swvdf": 46.26425052873411,
+      "Faxa_swndr": 59.75799026628157,
+      "Faxa_swndf": 32.770510791186666,
+      "Faox_lwup": -321.0353174170011,
+      "Faox_sen": -43.41140485989716,
+      "Faox_taux": -0.032781587734032426,
+      "Faox_tauy": 0.0003557833465616111,
+      "Faox_evap": -1.4674835145370162e-05,
+      "Fioi_taux_ice": -0.032752454554200595,
+      "Fioi_tauy_ice": 0.0004656392036604664,
+      "Fioi_melth_ice": -300.0,
+      "Fioi_meltw_ice": 0.0008990110878034162,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 4.91923120603026e-06,
+      "Forr_rofi": 5.579127990960267e-06,
+      "So_avsdr": 0.19403937875260785,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.19403937875260785,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 86.99008694430754
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 78.96686710322336
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 8.317683363183724e-07
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -50.804891542578204
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -23.058669800953524
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.032767929113850576
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.0004072874884206929
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -7.794776029308165e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": -140.6501479827381
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0004214868084589095
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 88.086689237438
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 25.10470611764728
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 25.10470611764728
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 18.93863850107172
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 18.93863850107172
+      }
+     ]
+    },
+    {
+     "id": "mid_step12_cell7024",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 12, gid 42124, ocean cell n = 7024, lat -69.269750 deg, lon -284.666667 deg). mid-run step 12, mid cell 7024: ifrac = 0.60688 (partial-ice), ofrac = 0.39312, ifrad = 0.60169, ofrad = 0.39831, Foxx_swnet = 171.5755 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.606880693302204,
+      "ofrac": 0.39311930669779604,
+      "ifrad": 0.6016887264073356,
+      "ofrad": 0.3983112735926644,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 5.240824120804479e-06,
+      "Faxa_lwdn": 251.9145165170503,
+      "Faxa_swvdr": 128.6197605682325,
+      "Faxa_swvdf": 110.24550905848498,
+      "Faxa_swndr": 142.4004492005431,
+      "Faxa_swndf": 78.09056891642688,
+      "Faox_lwup": -321.65715483137984,
+      "Faox_sen": -15.848881690716729,
+      "Faox_taux": -0.005259450618047488,
+      "Faox_tauy": -0.0059956957130994,
+      "Faox_evap": -8.10943205602629e-06,
+      "Fioi_taux_ice": -0.00012090447946269407,
+      "Fioi_tauy_ice": -0.00011758728943837311,
+      "Fioi_melth_ice": -300.0,
+      "Fioi_meltw_ice": 0.0008990110878034162,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 1.5551552973894885e-05,
+      "Forr_rofi": 1.7637736399395588e-05,
+      "So_avsdr": 0.06382842011260781,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.06382842011260781,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 224.0409429708762
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 206.71638828618805
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 2.060269144895743e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -27.417177621404377
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -6.230501382189954
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.0021409661748977853
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": -0.002428385197642471
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -3.1879743075779377e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": -182.06420799066117
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0005455924722525058
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 171.57550122237848
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 48.89901723477606
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 48.89901723477606
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 36.88873337641318
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 36.88873337641318
+      }
+     ]
+    },
+    {
+     "id": "min_ifrac",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42662, ocean cell n = 7112, lat -69.032483 deg, lon -286.000000 deg). the lowest ice fraction: ifrac = 0.06828 (partial-ice), ofrac = 0.93172, ifrad = 0.06884, ofrad = 0.93116, Foxx_swnet = 117.2556 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.06828132564275592,
+      "ofrac": 0.9317186743572441,
+      "ifrad": 0.06883861674133648,
+      "ofrad": 0.9311613832586635,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.014885734258003e-05,
+      "Faxa_lwdn": 254.17357561939428,
+      "Faxa_swvdr": 41.34081127768869,
+      "Faxa_swvdf": 35.434981095161724,
+      "Faxa_swndr": 45.770183914583896,
+      "Faxa_swndf": 25.09977827573956,
+      "Faox_lwup": -324.00383481109833,
+      "Faox_sen": -9.910774514753353,
+      "Faox_taux": -0.0012557064238800193,
+      "Faox_tauy": 0.0034109586343101564,
+      "Faox_evap": -6.622292988100621e-06,
+      "Fioi_taux_ice": -4.859761409854983e-06,
+      "Fioi_tauy_ice": 2.4491321740080602e-05,
+      "Fioi_melth_ice": -300.0,
+      "Fioi_meltw_ice": 0.0008990110878034162,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 1.9426216904772914e-05,
+      "Forr_rofi": 2.490540451776954e-05,
+      "So_avsdr": 0.20766171643387668,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.20766171643387668,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 66.06478967844691
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 59.859260540582376
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 9.45587990946945e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -65.06215652411728
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -9.234053692739552
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.0011702969555907397
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.0031797261569620106
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -6.170114044078384e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": -20.484397692826775
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 6.13856688427533e-05
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 117.25561278748471
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 33.41784922509439
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 33.41784922509439
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 25.20995716864796
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 25.20995716864796
+      }
+     ]
+    },
+    {
+     "id": "max_ifrac",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42126, ocean cell n = 7026, lat -69.269750 deg, lon -283.333333 deg). the highest ice fraction: ifrac = 0.62463 (partial-ice), ofrac = 0.37537, ifrad = 0.62463, ofrad = 0.37537, Foxx_swnet = 103.5541 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.6246313702597078,
+      "ofrac": 0.37536862974029217,
+      "ifrad": 0.6246313702597078,
+      "ofrad": 0.37536862974029217,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.9028314278601986e-06,
+      "Faxa_lwdn": 221.14858865421894,
+      "Faxa_swvdr": 86.6587502406165,
+      "Faxa_swvdf": 74.27892877767127,
+      "Faxa_swndr": 95.9436163378254,
+      "Faxa_swndf": 52.614241217517154,
+      "Faox_lwup": -322.72327348364036,
+      "Faox_sen": -47.42887001153469,
+      "Faox_taux": -0.030827234878216207,
+      "Faox_tauy": 0.0068938690398515174,
+      "Faox_evap": -1.700569447126036e-05,
+      "Fioi_taux_ice": 0.09025651316586203,
+      "Fioi_tauy_ice": 0.09025651316586203,
+      "Fioi_melth_ice": 0.0,
+      "Fioi_meltw_ice": 0.0,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 1.5557118785766237e-05,
+      "Forr_rofi": 1.7644048966433233e-05,
+      "So_avsdr": 0.1424346352693755,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.1424346352693755,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 144.13773580820538
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 131.73530908278846
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 7.142632257026463e-07
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -38.12795026072196
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -17.803309946360212
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": 0.0448054725787376
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": 0.058964791668753846
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -6.383404231459063e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 103.55408684301446
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 29.512914379920847
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 29.512914379920847
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 22.264129041586383
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 22.264129041586383
+      }
+     ]
+    },
+    {
+     "id": "median_ifrac",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the median ice fraction: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "ifrac": 0.45300172164323294,
+      "ofrac": 0.5469982783567671,
+      "ifrad": 0.4589965161030703,
+      "ofrad": 0.5410034838969298,
+      "Faxa_rainc": 0.0,
+      "Faxa_rainl": 0.0,
+      "Faxa_snowc": 0.0,
+      "Faxa_snowl": 1.3261509040275966e-05,
+      "Faxa_lwdn": 260.39538566738383,
+      "Faxa_swvdr": 42.11969087905094,
+      "Faxa_swvdf": 36.102592182043665,
+      "Faxa_swndr": 46.632514901806395,
+      "Faxa_swndf": 25.57266946228093,
+      "Faox_lwup": -321.3679826227198,
+      "Faox_sen": -18.920389723443908,
+      "Faox_taux": -0.012089459639767855,
+      "Faox_tauy": -0.0008191234146647516,
+      "Faox_evap": -1.2515463505944276e-05,
+      "Fioi_taux_ice": -0.001020428141694055,
+      "Fioi_tauy_ice": -0.0002368274961120921,
+      "Fioi_melth_ice": -300.0,
+      "Fioi_meltw_ice": 0.0008990110878034162,
+      "Fioi_salt_ice": 0.0,
+      "Fioi_swpen_ice": 0.0,
+      "Forr_rofl": 0.0,
+      "Forr_rofi": 0.0,
+      "So_avsdr": 0.2009869346792328,
+      "So_avsdf": 0.06,
+      "So_anidr": 0.2009869346792328,
+      "So_anidf": 0.06
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "fswabsv",
+       "time": 0.0,
+       "expected": 67.59061997075469
+      },
+      {
+       "variable": "fswabsi",
+       "time": 0.0,
+       "expected": 61.298297969852754
+      },
+      {
+       "variable": "Faxa_snow",
+       "time": 0.0,
+       "expected": 7.254022613443656e-06
+      },
+      {
+       "variable": "Foxx_lwnet",
+       "time": 0.0,
+       "expected": -33.35190556150985
+      },
+      {
+       "variable": "Foxx_sen",
+       "time": 0.0,
+       "expected": -10.349420604562885
+      },
+      {
+       "variable": "Foxx_taux",
+       "time": 0.0,
+       "expected": -0.0070751693142172495
+      },
+      {
+       "variable": "Foxx_tauy",
+       "time": 0.0,
+       "expected": -0.0005553423610545692
+      },
+      {
+       "variable": "Foxx_evap",
+       "time": 0.0,
+       "expected": -6.845936990588467e-06
+      },
+      {
+       "variable": "Fioi_melth",
+       "time": 0.0,
+       "expected": -135.90051649296987
+      },
+      {
+       "variable": "Fioi_meltw",
+       "time": 0.0,
+       "expected": 0.0004072535705513032
+      },
+      {
+       "variable": "Foxx_swnet",
+       "time": 0.0,
+       "expected": 69.72935364157411
+      },
+      {
+       "variable": "Foxx_swnet_vdr",
+       "time": 0.0,
+       "expected": 19.87286553847702
+      },
+      {
+       "variable": "Foxx_swnet_vdf",
+       "time": 0.0,
+       "expected": 19.87286553847702
+      },
+      {
+       "variable": "Foxx_swnet_idr",
+       "time": 0.0,
+       "expected": 14.991811282310035
+      },
+      {
+       "variable": "Foxx_swnet_idf",
+       "time": 0.0,
+       "expected": 14.991811282310035
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

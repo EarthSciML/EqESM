@@ -1,0 +1,663 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cmeps_ocnalb",
+  "description": "CMEPS ocean albedo component (stage 2 of the EqESM project): the pointwise laws of med_phases_ocnalb_run in mediator/med_phases_ocnalb_mod.F90 (the CESM mediator, cesm3.0-alphabranch checkout) transcribed exactly, with the solar-geometry and albedo expression templates of ./cmeps_templates.esm imported by reference. The traced configuration (the C_JRA_t62 DATM+SICE+MOM6 case, stage1/dumps/cmeps/cmeps_ocnalb.csv, 288 rows = 12 traced ocean cells x 24 coupling steps of the instrumented run 12134714): ocean_albedo_scheme = 0 (use_briegleb = .true., the Briegleb et al. (1986) scheme), orb_iyear = 2000 fixed orbit (the med_phases_ocnalb_orbital_update values: eccen = 0.0167036603927656034, obliqr = 0.409101122579778931 rad, lambm0 = -0.0324724956615293284 rad, mvelpp = 4.93745779048815780 rad), albdif = 0.06, albdir = 0.07, no ocean_albedo_limit (min_albedo = 0, use_min_albedo = .false.), flux_albav = .false., use_nextswcday = .true. (nextsw_cday from the atm scalar) and nextsw_cday = 1.04166666666666674 day throughout (the run starts 2003-01-01 01:00:00). Structure, in the order of the Fortran: (a) the orbital geometry of shr_orb_decl (share/src/shr_orb_mod.F90:736-814, the Berger (1978) mean-longitude series): solar_declination delta and earth_sun_distance_factor eccf; (b) the pointwise solar zenith cosine of shr_orb_cosz (shr_orb_mod.F90:110-159) at the cell latitude/longitude; (c) the albedo law of F90:453-518: ocean_albedo_visible anidr (the scheme selection with the flux_albav flat-albdir branch, the use_min_albedo max-clamp and the dark-side 1.0) and ocean_albedo_nearinfrared anidf, with the avsdr = anidr / avsdf = anidf aliases of F90:510-512. The traced run pins the Briegleb day-side branch only: all 288 rows have use_briegleb = 1, flux_albav = 0, use_min_albedo = 0 and cosz > 0 (cosz range 0.03600..0.69511 at 69.5S in January, delta range -0.40296..-0.40166 rad); the Taylor scheme, the flux_albav branch, the use_min_albedo clamp and the dark-side branch are transcribed but unpinned (documented in the template descriptions). The ifrac/ofrac/ifrad/ofrad columns of the dump are context (the FBFrac(compocn) fractions at the dump point; the phase copies ifrac/ofrac into ifrad/ofrad AFTER the albedo loop, so the dumped ifrad/ofrad lag the current step by one coupling step - ifrad(k) = ifrac(k-1), verified for all 288 rows - and they are consumed by the cmeps_merge component, not by this one). The nextsw_cday >= -0.5 guard of F90:467 is always true in the traced run. Reference: stage1/EqESM-cesm-cmeps/components/cmeps/mediator/med_phases_ocnalb_mod.F90 and share/src/shr_orb_mod.F90."
+ },
+ "models": {
+  "OcnAlb": {
+   "expression_template_imports": [
+    {
+     "ref": "./cmeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "nextsw_cday": {
+     "type": "parameter",
+     "units": "day",
+     "default": 1.0416666666666667,
+     "description": "calendar day of the next atmospheric shortwave (the atm scalar flds_scalar_index_nextsw_cday, med_phases_ocnalb_mod.F90:429-436 with use_nextswcday = .true.); 1.04166666666666674 day = 2003-01-01 01:00:00 throughout the traced run, [day]"
+    },
+    "eccen": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.016703660392765603,
+     "description": "orbital eccentricity (the med_phases_ocnalb_orbital_update value for the traced configuration, orb_iyear = 2000), [-]"
+    },
+    "obliqr": {
+     "type": "parameter",
+     "units": "rad",
+     "default": 0.40910112257977893,
+     "description": "obliquity (the med_phases_ocnalb_orbital_update value for the traced configuration), [rad]"
+    },
+    "lambm0": {
+     "type": "parameter",
+     "units": "rad",
+     "default": -0.03247249566152933,
+     "description": "mean longitude at the vernal equinox (the med_phases_ocnalb_orbital_update value for the traced configuration), [rad]"
+    },
+    "mvelpp": {
+     "type": "parameter",
+     "units": "rad",
+     "default": 4.937457790488158,
+     "description": "longitude of the perihelion minus 180 degrees (the med_phases_ocnalb_orbital_update value for the traced configuration), [rad]"
+    },
+    "albdif": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.06,
+     "description": "diffuse ocean albedo (ocean_albedo_diffuse, the namelist value of the traced run), the anidf/avsdf day-side value of F90:511-512, [-]"
+    },
+    "albdir": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.07,
+     "description": "direct ocean albedo (ocean_albedo_direct, the namelist value of the traced run), the anidr/avsdr value of the flux_albav branch of F90:455-456 (unpinned: flux_albav = .false. in the traced run), [-]"
+    },
+    "min_albedo": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ocean albedo lower limit (ocean_albedo_limit; 0 = unset in the traced run), the floor of the use_min_albedo clamp of F90:507-509 (unpinned: use_min_albedo = .false.), [-]"
+    },
+    "use_min_albedo": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ocean_albedo_limit present flag (all 288 traced rows: 0), selects the max(anidr, min_albedo) clamp of F90:507-509, [-]"
+    },
+    "use_briegleb": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "ocean_albedo_scheme = 0 flag (all 288 traced rows: 1), selects the Briegleb et al. (1986) scheme of F90:498-502 over the Taylor et al. (1996) scheme of F90:503-505, [-]"
+    },
+    "flux_albav": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "flux_albav flag (all 288 traced rows: 0), the flat-albedo shortcut of F90:453-459 that skips the orbital computation, [-]"
+    },
+    "rlat": {
+     "type": "parameter",
+     "units": "rad",
+     "default": -1.2130814809390482,
+     "description": "cell latitude in radians, rlat = const_deg2rad*lats(n) (F90:494); -1.21308148093904822 rad = -69.5044490632870833 deg at the first traced cell, [rad]"
+    },
+    "rlon": {
+     "type": "parameter",
+     "units": "rad",
+     "default": -4.980006132357154,
+     "description": "cell longitude in radians, rlon = const_deg2rad*lons(n) (F90:495); -4.98000613235715406 rad = -285.333333333333371 deg at the first traced cell, [rad]"
+    },
+    "delta": {
+     "type": "unknown",
+     "units": "rad",
+     "default": -0.40295789829336776,
+     "description": "solar declination of shr_orb_decl (shr_orb_mod.F90:783-787), [rad]"
+    },
+    "eccf": {
+     "type": "unknown",
+     "units": "1",
+     "default": 1.0342093269164205,
+     "description": "earth-sun distance factor of shr_orb_decl (shr_orb_mod.F90:775-781), [-]"
+    },
+    "cosz": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.3654444318567215,
+     "description": "cosine of the solar zenith angle of shr_orb_cosz (shr_orb_mod.F90:110-159) at the cell; the day/dark selector of F90:497, [-]"
+    },
+    "anidr": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.10924877913488959,
+     "description": "direct visible ocean albedo (ocnalb%anidr): the scheme law of F90:498-506 with the min_albedo clamp and dark-side branches, [-]"
+    },
+    "avsdr": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.10924877913488959,
+     "description": "direct visible ocean albedo, all-sky (ocnalb%avsdr): avsdr = anidr of F90:510, [-]"
+    },
+    "anidf": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.06,
+     "description": "diffuse near-infrared ocean albedo (ocnalb%anidf): albdif on the day side, 1.0 on the dark side (F90:511, 516), [-]"
+    },
+    "avsdf": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.06,
+     "description": "diffuse near-infrared ocean albedo, all-sky (ocnalb%avsdf): avsdf = anidf of F90:512, [-]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "delta",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "solar_declination",
+      "bindings": {
+       "calday": "nextsw_cday",
+       "eccen": "eccen",
+       "mvelpp": "mvelpp",
+       "lambm0": "lambm0",
+       "obliqr": "obliqr"
+      }
+     }
+    },
+    {
+     "lhs": "eccf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "earth_sun_distance_factor",
+      "bindings": {
+       "calday": "nextsw_cday",
+       "eccen": "eccen",
+       "mvelpp": "mvelpp",
+       "lambm0": "lambm0"
+      }
+     }
+    },
+    {
+     "lhs": "cosz",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "solar_zenith_cosine",
+      "bindings": {
+       "calday": "nextsw_cday",
+       "declin": "delta",
+       "lat": "rlat",
+       "lon": "rlon"
+      }
+     }
+    },
+    {
+     "lhs": "anidr",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_albedo_visible",
+      "bindings": {
+       "cosz": "cosz",
+       "albdir": "albdir",
+       "min_albedo": "min_albedo",
+       "use_min_albedo": "use_min_albedo",
+       "use_briegleb": "use_briegleb",
+       "flux_albav": "flux_albav"
+      }
+     }
+    },
+    {
+     "lhs": "avsdr",
+     "rhs": "anidr"
+    },
+    {
+     "lhs": "anidf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_albedo_nearinfrared",
+      "bindings": {
+       "cosz": "cosz",
+       "albdif": "albdif",
+       "flux_albav": "flux_albav"
+      }
+     }
+    },
+    {
+     "lhs": "avsdf",
+     "rhs": "anidf"
+    }
+   ],
+   "tests": [
+    {
+     "id": "step1_first_cell",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 1, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced row: cosz = 0.36544 (day-side), delta = -0.40296 rad, eccf = 1.034209, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.0416666666666667,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2130814809390482,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.40295789829336776
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342093269164205
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.3654444318567215
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.10924877913488959
+      }
+     ]
+    },
+    {
+     "id": "step1_last_cell",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 1, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced cell of step 1: cosz = 0.37958 (day-side), delta = -0.40296 rad, eccf = 1.034209, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.0416666666666667,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2048441165614037,
+      "rlon": -4.933464018970639
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.40295789829336776
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342093269164205
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.37957664871968444
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.10403834148645334
+      }
+     ]
+    },
+    {
+     "id": "step2_first_cell",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 2, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). step 2 first cell (fraction-lag context: ifrad = ifrac of step 1, differing from the current ifrac): cosz = 0.44883 (day-side), delta = -0.40290 rad, eccf = 1.034211, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.0833333333333335,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2130814809390482,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.40290394753106923
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342107388484996
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.44882545181291444
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.08242935139694438
+      }
+     ]
+    },
+    {
+     "id": "step24_first_cell",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced cell of the last step: cosz = 0.28098 (day-side), delta = -0.40166 rad, eccf = 1.034237, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 2.0,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2130814809390482,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.40165809019879556
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342370781829329
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.28097905550147173
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.14828467920108956
+      }
+     ]
+    },
+    {
+     "id": "step24_last_cell",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 24, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced row: cosz = 0.29284 (day-side), delta = -0.40166 rad, eccf = 1.034237, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 2.0,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2048441165614037,
+      "rlon": -4.933464018970639
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.40165809019879556
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342370781829329
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.2928364392173373
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.14183671781659407
+      }
+     ]
+    },
+    {
+     "id": "mid_step12_cell7024",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 12, gid 42124, ocean cell n = 7024, lat -69.269750 deg, lon -284.666667 deg). mid-run step 12, mid cell 7024: cosz = 0.44870 (day-side), delta = -0.40235 rad, eccf = 1.034224, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.5,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2089852086216004,
+      "rlon": -4.968370604010524
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.4023516163281537
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342238315726358
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.44869717402558995
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.0824642327632751
+      }
+     ]
+    },
+    {
+     "id": "min_cosz",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 19, gid 42663, ocean cell n = 7113, lat -69.032483 deg, lon -285.333333 deg). the lowest day-side solar zenith cosine: cosz = 0.03600 (day-side), delta = -0.40195 rad, eccf = 1.034232, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.7916666666666667,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2048441165614037,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.4019511285118178
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342318855915673
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.0359967165898431
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.3751971164747487
+      }
+     ]
+    },
+    {
+     "id": "max_cosz",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 7, gid 42663, ocean cell n = 7113, lat -69.032483 deg, lon -285.333333 deg). the highest day-side solar zenith cosine: cosz = 0.69511 (day-side), delta = -0.40263 rad, eccf = 1.034218, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.2916666666666667,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2048441165614037,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.402630695218089
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342175185496985
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.6951116212018618
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.03774461796070573
+      }
+     ]
+    },
+    {
+     "id": "median_cosz",
+     "description": "Instantaneous pin of the med_phases_ocnalb_run albedo chain (med_phases_ocnalb_mod.F90, Briegleb et al. (1986) scheme as configured in the C_JRA_t62_inst run: ocean_albedo_scheme = 0, albdif = 0.06, albdir = 0.07, no ocean_albedo_limit, flux_albav = .false., use_nextswcday = .true.) from stage1/dumps/cmeps/cmeps_ocnalb.csv: row (step 13, gid 42663, ocean cell n = 7113, lat -69.032483 deg, lon -285.333333 deg). the median day-side solar zenith cosine: cosz = 0.36752 (day-side), delta = -0.40230 rad, eccf = 1.034225, use_briegleb = 1, flux_albav = 0, use_min_albedo = 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (anidf/avsdf copy the overridden albdif and avsdr duplicates anidr, so those pins are dropped). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "nextsw_cday": 1.5416666666666667,
+      "eccen": 0.016703660392765603,
+      "obliqr": 0.40910112257977893,
+      "lambm0": -0.03247249566152933,
+      "mvelpp": 4.937457790488158,
+      "albdif": 0.06,
+      "albdir": 0.07,
+      "min_albedo": 0.0,
+      "use_min_albedo": 0.0,
+      "use_briegleb": 1.0,
+      "flux_albav": 0.0,
+      "rlat": -1.2048441165614037,
+      "rlon": -4.980006132357154
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "delta",
+       "time": 0.0,
+       "expected": -0.4022951018788195
+      },
+      {
+       "variable": "eccf",
+       "time": 0.0,
+       "expected": 1.0342250381666789
+      },
+      {
+       "variable": "cosz",
+       "time": 0.0,
+       "expected": 0.367521001605971
+      },
+      {
+       "variable": "anidr",
+       "time": 0.0,
+       "expected": 0.10846336898280916
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

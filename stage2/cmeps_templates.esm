@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cmeps_templates",
-  "description": "Expression-template library for the CMEPS atmosphere-ocean bulk flux computation (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly for use by the cmeps_aoflux component. The library carries (a) the Goff & Gratch (1946) saturation vapor pressure over water of shr_wv_sat_qsat_liquid (share/src/shr_wv_sat_mod.F90:942-956, the aofluxes_use_shr_wv_sat = .true. branch of flux_atmocn_Large.F90:217-225; tboil = 373.16 K hard-coded as in the Fortran, wv_sat_use_tables = .false. in the traced run so the analytic form is used, not the lookup table), (b) the saturation specific humidity conversion of shr_wv_sat_svp_to_qsat (shr_wv_sat_mod.F90:351-363: qs = epsilo*es/(p - omeps*es) with the p <= es guard that sets qs = 1, epsilo = 18.016/28.966 and omeps = 1 - epsilo), (c) the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6 (flux_atmocn_Large.F90:153-154), (d) the Paulson (1970) unstable stability functions psimhu(x) = log((1+x*(2+x))*(1+x^2)/8) - 2*atan(x) + 1.571 and psixhu(x) = 2*log((1+x^2)/2) (F90:163-164), (e) the combined stable/unstable psi_m and psi_h of F90:258-259 (psi = -5*hol*stable + (1-stable)*psi_unstable(xqq)), (f) the Monin-Obukhov stability parameter hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2 of F90:252-253 as the unclamped stability_parameter, with the CESM constants karman = 0.4, g = 9.80616 m/s^2 and zvir = 28.966/18.016 - 1 as named parameters (shr_const_mod.F90:32, 21, 31), and the sign-preserving |hol| <= 10 clamp of F90:254 as the separate stability_parameter_clamp (sign(hol_raw)*min(|hol_raw|,10)) so the raw value is available to the composed iteration, (g) the exchange-coefficient shift from the 10-m neutral reference to the measurement height c/(1 + c/karman*(alz - psi)) (F90:282-284) and its clamped variant with max(c/karman*(alz - psi), -0.5) used for the wind-speed shift of F90:272, both with karman as a named parameter, and (h) the neutral heat coefficient rhn = (1-stable)*0.0327 + stable*0.018 (F90:238). All coefficients carry their SI dimensions (the empirical cdn coefficients are declared m/s, s/m, (s/m)^6 so the products close as dimensionless; the Goff-Gratch 100 is declared Pa since the 10^() factor is dimensionless, with the hPa-to-Pa role documented in the description). All templates are match-less and invoked by name via apply_expression_template with bindings; the shared-math dependencies (psi_momentum -> psimhu_unstable, psi_scalar -> psixhu_unstable) are body references checked as an acyclic DAG at import (esm-spec 9.7.3). Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90 and stage1/cesm/share/src/shr_wv_sat_mod.F90."
+  "description": "Expression-template library for the CMEPS atmosphere-ocean bulk flux computation (stage 2 of the EqESM project): the pointwise laws of flux_atmOcn_large in cesm/flux_atmocn/flux_atmocn_Large.F90 (the Large & Pond / Large & Yeager scheme of the CESM mediator, cesm3.0-alphabranch checkout), transcribed exactly for use by the cmeps_aoflux component. The library carries (a) the Goff & Gratch (1946) saturation vapor pressure over water of shr_wv_sat_qsat_liquid (share/src/shr_wv_sat_mod.F90:942-956, the aofluxes_use_shr_wv_sat = .true. branch of flux_atmocn_Large.F90:217-225; tboil = 373.16 K hard-coded as in the Fortran, wv_sat_use_tables = .false. in the traced run so the analytic form is used, not the lookup table), (b) the saturation specific humidity conversion of shr_wv_sat_svp_to_qsat (shr_wv_sat_mod.F90:351-363: qs = epsilo*es/(p - omeps*es) with the p <= es guard that sets qs = 1, epsilo = 18.016/28.966 and omeps = 1 - epsilo), (c) the Large & Yeager (2009) neutral 10-m drag coefficient cdn(U) = 0.0027/min(33,U) + 0.000142 + 0.0000764*min(33,U) - 3.14807e-13*min(33,U)^6 (flux_atmocn_Large.F90:153-154), (d) the Paulson (1970) unstable stability functions psimhu(x) = log((1+x*(2+x))*(1+x^2)/8) - 2*atan(x) + 1.571 and psixhu(x) = 2*log((1+x^2)/2) (F90:163-164), (e) the combined stable/unstable psi_m and psi_h of F90:258-259 (psi = -5*hol*stable + (1-stable)*psi_unstable(xqq)), (f) the Monin-Obukhov stability parameter hol = karman*g*zbot*(tstar/thbot + qstar/(1/zvir + qbot))/ustar^2 of F90:252-253 as the unclamped stability_parameter, with the CESM constants karman = 0.4, g = 9.80616 m/s^2 and zvir = 28.966/18.016 - 1 as named parameters (shr_const_mod.F90:32, 21, 31), and the sign-preserving |hol| <= 10 clamp of F90:254 as the separate stability_parameter_clamp (sign(hol_raw)*min(|hol_raw|,10)) so the raw value is available to the composed iteration, (g) the exchange-coefficient shift from the 10-m neutral reference to the measurement height c/(1 + c/karman*(alz - psi)) (F90:282-284) and its clamped variant with max(c/karman*(alz - psi), -0.5) used for the wind-speed shift of F90:272, both with karman as a named parameter, and (h) the neutral heat coefficient rhn = (1-stable)*0.0327 + stable*0.018 (F90:238); (i) the solar geometry of the ocean-albedo phase (med_phases_ocnalb_run in mediator/med_phases_ocnalb_mod.F90 with the orbit of shr_orb_decl in share/src/shr_orb_mod.F90:736-814): earth_true_longitude/solar_declination/earth_sun_distance_factor (the Berger 1978 mean-longitude series of shr_orb_decl F90:762-797, ve = 80.5 and dayspy = 365 as in the Fortran) and solar_zenith_cosine (shr_orb_cosz F90:110-159, the no-dt_avg branch); (j) the ocean albedo laws of med_phases_ocnalb_run: briegleb_direct_albedo (F90:500-502), taylor_direct_albedo (F90:505, unpinned: the traced run uses the Briegleb scheme), the ocean_albedo_scheme selection and the full ocean_albedo_visible / ocean_albedo_nearinfrared laws of F90:453-518 (the flux_albav and use_min_albedo branches and the dark-side 1.0 are unpinned by the traced run, which is Briegleb day-side with flux_albav = .false., use_min_albedo = .false.); and (k) the merge laws of the ocean exports (med_phases_prep_ocn_mod.F90): scaled_fraction (the ifrac_scaled/ofrac_scaled/ifracr_scaled/ofracr_scaled of F90:800-813 with the exact frac_sum /= 0 guard), fraction_weighted_sum (the med_merge dp = dp + src*weight accumulation of med_merge_mod.F90:405-412 applied with the esmFldsExchange_cesm_mod.F90 weights) and shortwave_band (the c1..c4 band split of F90:830-834; the Fortran literals 0.285/0.215 carry no _r8 suffix and are therefore SINGLE-precision literals promoted to r8 - 0.2849999964237213134765625 and 0.2150000035762786865234375 - pinned by every traced row of the merge dump). All coefficients carry their SI dimensions (the empirical cdn coefficients are declared m/s, s/m, (s/m)^6 so the products close as dimensionless; the Goff-Gratch 100 is declared Pa since the 10^() factor is dimensionless, with the hPa-to-Pa role documented in the description). All templates are match-less and invoked by name via apply_expression_template with bindings; the shared-math dependencies (psi_momentum -> psimhu_unstable, psi_scalar -> psixhu_unstable) are body references checked as an acyclic DAG at import (esm-spec 9.7.3). Reference: stage1/cesm/components/cmeps/cesm/flux_atmocn/flux_atmocn_Large.F90 and stage1/cesm/share/src/shr_wv_sat_mod.F90."
  },
  "expression_templates": {
   "goff_gratch_liquid_svp": {
@@ -956,6 +956,940 @@
      },
      "frozen",
      "value"
+    ]
+   }
+  },
+"earth_mean_anomaly": {
+   "description": "Earth mean anomaly lmm [rad] of Berger (1978) as implemented in shr_orb_decl (share/src/shr_orb_mod.F90:789-791): lmm = lambm0 + (calday - 80.5)*2*pi/365 - mvelpp, the mean longitude lambm minus the perihelion longitude mvelpp. calday is the calendar day of interest [day] (nextsw_cday, including the fraction), 80.5 [day] is the vernal equinox at calday 80.5 and 365 [day] the days per year (shr_orb_mod.F90:762-763); the 2*pi factor closes as rad per orbit, so the unit algebra of the template is rad = dimensionless*rad.",
+   "params": [
+    "calday",
+    "mvelpp",
+    "lambm0"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "lambm0",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "calday",
+           {
+            "op": "const",
+            "args": [],
+            "value": 80.5,
+            "units": "day"
+           }
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 6.283185307179586,
+            "units": "rad"
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 365.0,
+            "units": "day"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "mvelpp"
+    ]
+   }
+  },
+"earth_true_longitude_series": {
+   "description": "The Berger (1978) equation-of-center series added to the mean longitude (shr_orb_decl, share/src/shr_orb_mod.F90:792-797): lambda = (lmm + mvelpp) + eccen*(2*sin(lmm) + eccen*(1.25*sin(2*lmm) + eccen*((13/12)*sin(3*lmm) - 0.25*sin(lmm)))), with lmm the mean anomaly of earth_mean_anomaly (bound once by earth_true_longitude) and lambm = lmm + mvelpp the mean longitude. eccen is the orbital eccentricity [-].",
+   "params": [
+    "lmm",
+    "mvelpp",
+    "eccen"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "lmm",
+       "mvelpp"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "eccen",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 2.0,
+            "units": "1"
+           },
+           {
+            "op": "sin",
+            "args": [
+             "lmm"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "eccen",
+           {
+            "op": "+",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.25,
+                "units": "1"
+               },
+               {
+                "op": "sin",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 2.0,
+                    "units": "1"
+                   },
+                   "lmm"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               "eccen",
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 1.0833333333333333,
+                    "units": "1"
+                   },
+                   {
+                    "op": "sin",
+                    "args": [
+                     {
+                      "op": "*",
+                      "args": [
+                       {
+                        "op": "const",
+                        "args": [],
+                        "value": 3.0,
+                        "units": "1"
+                       },
+                       "lmm"
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.25,
+                    "units": "1"
+                   },
+                   {
+                    "op": "sin",
+                    "args": [
+                     "lmm"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"earth_true_longitude": {
+   "description": "Earth true longitude lambda [rad] of Berger (1978) as implemented in shr_orb_decl (share/src/shr_orb_mod.F90:789-797): lambda = lambm + eccen*(2*sin(lmm) + eccen*(1.25*sin(2*lmm) + eccen*((13/12)*sin(3*lmm) - 0.25*sin(lmm)))) with lambm = lambm0 + (calday - 80.5)*2*pi/365 the mean longitude and lmm the mean anomaly of earth_mean_anomaly, bound once and passed to the equation-of-center series of earth_true_longitude_series, called by reference. calday is the calendar day of interest [day] (nextsw_cday, including the fraction), 80.5 [day] is the vernal equinox at calday 80.5 and 365 [day] the days per year (shr_orb_mod.F90:762-763); the 2*pi factor closes as rad per orbit, so the unit algebra of the template is rad = dimensionless*rad.",
+   "params": [
+    "calday",
+    "eccen",
+    "mvelpp",
+    "lambm0"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "earth_true_longitude_series",
+    "bindings": {
+     "lmm": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "earth_mean_anomaly",
+      "bindings": {
+       "calday": "calday",
+       "mvelpp": "mvelpp",
+       "lambm0": "lambm0"
+      }
+     },
+     "mvelpp": "mvelpp",
+     "eccen": "eccen"
+    }
+   }
+  },
+"solar_declination": {
+   "description": "Solar declination delta [rad] of shr_orb_decl (share/src/shr_orb_mod.F90:783-787): delta = asin(sin(obliqr)*sin(lambda)) with lambda the Berger (1978) true longitude of earth_true_longitude, called by reference. obliqr is the obliquity [rad] (the med_phases_ocnalb_orbital_update value for the traced configuration, 0.40910112257977893 rad).",
+   "params": [
+    "calday",
+    "eccen",
+    "mvelpp",
+    "lambm0",
+    "obliqr"
+   ],
+   "body": {
+    "op": "asin",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "sin",
+        "args": [
+         "obliqr"
+        ]
+       },
+       {
+        "op": "sin",
+        "args": [
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "earth_true_longitude",
+          "bindings": {
+           "calday": "calday",
+           "eccen": "eccen",
+           "mvelpp": "mvelpp",
+           "lambm0": "lambm0"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"earth_sun_distance_factor": {
+   "description": "Earth-sun distance factor eccf [-] of shr_orb_decl (share/src/shr_orb_mod.F90:775-781): invrho = (1 + eccen*cos(lambda - mvelpp))/(1 - eccen^2), eccf = invrho^2, with lambda the Berger (1978) true longitude of earth_true_longitude, called by reference.",
+   "params": [
+    "calday",
+    "eccen",
+    "mvelpp",
+    "lambm0"
+   ],
+   "body": {
+    "op": "^",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           "eccen",
+           {
+            "op": "cos",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "earth_true_longitude",
+                "bindings": {
+                 "calday": "calday",
+                 "eccen": "eccen",
+                 "mvelpp": "mvelpp",
+                 "lambm0": "lambm0"
+                }
+               },
+               "mvelpp"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "^",
+          "args": [
+           "eccen",
+           {
+            "op": "const",
+            "args": [],
+            "value": 2.0,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 2.0,
+      "units": "1"
+     }
+    ]
+   }
+  },
+"solar_zenith_cosine": {
+   "description": "Cosine of the solar zenith angle (shr_orb_cosz, share/src/shr_orb_mod.F90:110-159, the no-dt_avg branch used by med_phases_ocnalb_run): cosz = sin(lat)*sin(declin) - cos(lat)*cos(declin)*cos((calday - floor(calday))*2*pi + lon). calday is the calendar day [day] (including the fraction), lat/lon the point latitude/longitude [rad] and declin the solar declination [rad] of solar_declination. The 2*pi factor is declared rad/day so the fraction-of-day (a day quantity) closes the hour angle in rad; lon enters in the same rad units (the Fortran adds the raw radian longitude).",
+   "params": [
+    "calday",
+    "declin",
+    "lat",
+    "lon"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "sin",
+        "args": [
+         "lat"
+        ]
+       },
+       {
+        "op": "sin",
+        "args": [
+         "declin"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "cos",
+          "args": [
+           "lat"
+          ]
+         },
+         {
+          "op": "cos",
+          "args": [
+           "declin"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "cos",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "calday",
+               {
+                "op": "floor",
+                "args": [
+                 "calday"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "const",
+              "args": [],
+              "value": 6.283185307179586,
+              "units": "rad/day"
+             }
+            ]
+           },
+           "lon"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"briegleb_direct_albedo": {
+   "description": "Briegleb et al. (1986) direct visible ocean albedo (med_phases_ocnalb_mod.F90:500-502, ocean_albedo_scheme = 0): anidr = 0.026/(cosz^1.7 + 0.065) + 0.15*(cosz - 0.1)*(cosz - 0.5)*(cosz - 1.0). All coefficients are the _r8 literals of the Fortran.",
+   "params": [
+    "cosz"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.026,
+        "units": "1"
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "^",
+          "args": [
+           "cosz",
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.7,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.065,
+          "units": "1"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.15,
+        "units": "1"
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "cosz",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.1,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "cosz",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.5,
+              "units": "1"
+             }
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             "cosz",
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"taylor_direct_albedo": {
+   "description": "Taylor et al. (1996) direct visible ocean albedo (med_phases_ocnalb_mod.F90:505, ocean_albedo_scheme = 1): anidr = 0.037/(1.1*cosz^1.4 + 0.15), with the _r8 literals of the Fortran. NOT exercised by the traced run (ocean_albedo_scheme = 0); transcribed for completeness and left unpinned.",
+   "params": [
+    "cosz"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.037,
+      "units": "1"
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.1,
+          "units": "1"
+         },
+         {
+          "op": "^",
+          "args": [
+           "cosz",
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.4,
+            "units": "1"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.15,
+        "units": "1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+"ocean_albedo_scheme": {
+   "description": "Direct visible ocean albedo scheme selection (med_phases_ocnalb_mod.F90:498-506): ifelse(use_briegleb == 1, briegleb_direct_albedo(cosz), taylor_direct_albedo(cosz)), the two schemes called by reference. use_briegleb is the ocean_albedo_scheme = 0 flag of the traced run (all 288 dumped rows have use_briegleb = 1).",
+   "params": [
+    "cosz",
+    "use_briegleb"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "use_briegleb",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "briegleb_direct_albedo",
+      "bindings": {
+       "cosz": "cosz"
+      }
+     },
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "taylor_direct_albedo",
+      "bindings": {
+       "cosz": "cosz"
+      }
+     }
+    ]
+   }
+  },
+"ocean_albedo_visible": {
+   "description": "Direct visible ocean albedo anidr (med_phases_ocnalb_mod.F90:453-518), the full law: ifelse(flux_albav == 1, albdir, ifelse(cosz > 0, ifelse(use_min_albedo == 1, max(ocean_albedo_scheme(cosz, use_briegleb), min_albedo), ocean_albedo_scheme(cosz, use_briegleb)), 1.0)). The flux_albav = .true. branch (flat albdir) and the use_min_albedo clamp are NOT exercised by the traced run (flux_albav = .false., use_min_albedo = .false., min_albedo = 0 in all 288 dumped rows); the dark-side branch (cosz <= 0) is also unpinned (all 288 rows are day-side); all are transcribed for completeness.",
+   "params": [
+    "cosz",
+    "albdir",
+    "min_albedo",
+    "use_min_albedo",
+    "use_briegleb",
+    "flux_albav"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "flux_albav",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     "albdir",
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "cosz",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           "use_min_albedo",
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "max",
+          "args": [
+           {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "ocean_albedo_scheme",
+            "bindings": {
+             "cosz": "cosz",
+             "use_briegleb": "use_briegleb"
+            }
+           },
+           "min_albedo"
+          ]
+         },
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "ocean_albedo_scheme",
+          "bindings": {
+           "cosz": "cosz",
+           "use_briegleb": "use_briegleb"
+          }
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+"ocean_albedo_nearinfrared": {
+   "description": "Diffuse near-infrared ocean albedo anidf (med_phases_ocnalb_mod.F90:453-518): ifelse(flux_albav == 1, albdif, ifelse(cosz > 0, albdif, 1.0)) - the flat albdif on the day side in both schemes (there is no scheme-dependent near-IR law in med_phases_ocnalb), 1.0 on the dark side. The traced run pins the day-side albdif branch (albdif = 0.06); the other branches are unpinned.",
+   "params": [
+    "cosz",
+    "albdif",
+    "flux_albav"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "flux_albav",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     "albdif",
+     {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "cosz",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         }
+        ]
+       },
+       "albdif",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+"scaled_fraction": {
+   "description": "Fraction scaled by its sum (med_phases_prep_ocn_mod.F90:800-813): ifelse((x + y) == 0, x, x/(x + y)) with the EXACT float equality guard of the Fortran (frac_sum /= 0._R8). Used for ifrac_scaled/ofrac_scaled (from ifrac/ofrac) and ifracr_scaled/ofracr_scaled (from ifrad/ofrad) in the prep_ocn custom shortwave computation.",
+   "params": [
+    "x",
+    "y"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "x",
+         "y"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     },
+     "x",
+     {
+      "op": "/",
+      "args": [
+       "x",
+       {
+        "op": "+",
+        "args": [
+         "x",
+         "y"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"fraction_weighted_sum": {
+   "description": "Fraction-weighted sum of an ice-covered and an open-ocean value (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied to the ocn exports of med_phases_prep_ocn_accum): ice_value*ice_frac + open_value*open_frac, ice term first, matching the source order of esmFldsExchange_cesm_mod.F90. Used where the two sources carry DIFFERENT weights (the Foxx_taux/Foxx_tauy merges weight the ice and aoflux sources by ifrac and ofrac); the merges whose two sources share the same open-ocean weight ofrac (Faxa_rain/Faxa_snow/Foxx_lwnet) use open_ocean_weighted_sum instead.",
+   "params": [
+    "ice_value",
+    "open_value",
+    "ice_frac",
+    "open_frac"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "ice_value",
+       "ice_frac"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "open_value",
+       "open_frac"
+      ]
+     }
+    ]
+   }
+  },
+"shortwave_band": {
+   "description": "Shortwave band split of the net ocean shortwave (med_phases_prep_ocn_mod.F90:830-834, the import_swpen_by_bands = .false. branch of the traced run): Foxx_swnet_vdr/vdf/idr/idf = c*Foxx_swnet with the c1..c4 coefficients bound at the call site. The Fortran literals c1 = 0.285 and c3 = 0.215 carry NO _r8 kind suffix, so they are SINGLE-precision literals promoted to r8: 0.285f = 0.2849999964237213134765625 and 0.215f = 0.2150000035762786865234375 (pinned by the dump: every traced row has vdr/swnet = 0.28499999642372131). The import_swpen_by_bands = .true. per-band branch (F90:824-827) is not exercised by the traced run (the SICE data-ice component does not export Fioi_swpen_vdr/vdf/idr/idf).",
+   "params": [
+    "swnet",
+    "coefficient"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "coefficient",
+     "swnet"
+    ]
+   }
+  },
+"ocean_absorbed_shortwave": {
+   "description": "Shortwave absorbed by the open ocean in one band pair (med_phases_prep_ocn_mod.F90:795-796): fswabs = sw_dr*(1 - albedo_dr) + sw_df*(1 - albedo_df), the direct and diffuse downwelling shortwave of one band pair each attenuated by the matching surface albedo of that pair. Shared by the visible band (fswabsv with the all-sky avsdr/avsdf albedos) and the near-infrared band (fswabsi with the anidr/anidf albedos) of the med_phases_prep_ocn_custom computation. The law is the same as the CLM absorbed_shortwave of clm_templates.esm (SurfaceRadiationMod.F90:701-710) with ocean-band names; it is named distinctly because the two template libraries are imported together and the esm-spec deep-equality rule (esm-spec 9.7.4/9.7.5) would reject same-name non-deep-equal definitions.",
+   "params": [
+    "sw_dr",
+    "sw_df",
+    "albedo_dr",
+    "albedo_df"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "sw_dr",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "albedo_dr"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "sw_df",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "albedo_df"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"open_ocean_weighted_sum": {
+   "description": "Sum of two open-ocean source fields each weighted by the open-ocean fraction (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied to the ocn exports of med_phases_prep_ocn_accum): (a + b)*ofrac, the two-source merges of esmFldsExchange_cesm_mod.F90 where both sources carry mrg_frac = 'ofrac': Faxa_rain = Faxa_rainc*ofrac + Faxa_rainl*ofrac (L1940-1942), Faxa_snow = Faxa_snowc*ofrac + Faxa_snowl*ofrac (L1949-1951) and Foxx_lwnet = Faox_lwup*ofrac + Faxa_lwdn*ofrac (L1759-1762).",
+   "params": [
+    "a",
+    "b",
+    "ofrac"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "a",
+       "b"
+      ]
+     },
+     "ofrac"
     ]
    }
   }

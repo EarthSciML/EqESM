@@ -422,6 +422,37 @@ Format template:
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
 
+## 35. CMEPS ocnalb init: else branch sets the local use_min_ocnalb instead of the module use_min_albedo
+
+- **Location:** `components/cmeps/mediator/med_phases_ocnalb_mod.F90:220-229`
+  (`med_phases_ocnalb_init`, the `ocean_albedo_limit` attribute read).
+  Line numbers below refer to the pristine `stage1/cesm` tree; the
+  instrumented fork `stage1/EqESM-cesm-cmeps` is offset by +2 (and by +24
+  in the albedo loop).
+- **Description:** when the `ocean_albedo_limit` attribute is absent, the
+  else branch executes `min_albedo = 0.0_R8; use_min_ocnalb = .false.`
+  (F90:227-228). `use_min_ocnalb` is a LOCAL of the init subroutine
+  (declared F90:107) that is never read anywhere; the albedo loops
+  (F90:250 in the init pass and F90:483) gate the `max(anidr, min_albedo)` clamp on the MODULE
+  variable `use_min_albedo` (declared F90:64). The intent of the dead
+  assignment was clearly to switch the clamp off in this branch. The bug is
+  latent but undefined-behaviour: the module variable has no initializer,
+  so in this branch its value is formally undefined (zero, i.e. `.false.`,
+  in practice with the CESM compilers), and the else branch behaves as
+  intended only by accident; the `isPresent .and. isSet` branch sets
+  `use_min_albedo = .true.` correctly (F90:225).
+- **Impact on results:** none in the traced run (`ocean_albedo_limit` not
+  set, so `use_min_albedo` stays `.false.` either way; the min_albedo clamp
+  is inactive). Would matter on a compiler/flags combination that does not
+  zero-initialize module variables.
+- **Reproduced/corrected in .esm:** `stage2/cmeps_ocnalb.esm` transcribes
+  the clamp as `ifelse(use_min_albedo, max(anidr, min_albedo), anidr)`
+  driven by the dumped `use_min_albedo` flag, i.e. it pins the intended
+  semantics, not the dead assignment; the traced rows all have
+  `use_min_albedo = 0` so the clamp branch is unpinned.
+- **Status:** open (dead assignment; benign in all CESM configurations on
+  this branch).
+
 ## 36. DATM JRA55 datamode: unsuffixed real literals 0.608/0.069/0.011 silently round to single precision
 
 - **Location:** `components/cdeps/datm/datm_datamode_jra_mod.F90:292` (qcoef 0.608), `:324` (LY08 albedo 0.069, 0.011); every other literal in the datamode is `_R8`-suffixed.
