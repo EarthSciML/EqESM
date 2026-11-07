@@ -130,14 +130,6 @@ Format template:
 - **Reproduced/corrected in .esm:** n/a (tooling).
 - **Status:** open (recorded; workaround: keep buildnml's `groups` list in sync).
 
-## 10. CICE dEdd pond code subtracts the snowfall mass flux (kg/m2/s) from a snow depth (m)
-
-- **Location:** `components/cice/src/icepack/columnphysics/icepack_shortwave.F90:3587-3588` (`shortwave_dEdd_set_eff`).
-- **Description:** `fsnow` is documented "snowfall rate (kg/m^2 s)" (F90:3511) and is passed straight through from the coupler import (icedrv_flux `fsnow`, kg/m2/s). But the pond-lid snow-cover initialization computes `dhs = hsnlvl - fsnow*dt` (F90:3588) and tests `fsnow*dt > hs_min` (F90:3587), treating `fsnow*dt` as a snow **depth** (m). `hsnlvl` is a snow depth in m, so `fsnow*dt` has dimension kg/m2 — mixing units; the conversion `fsnow*dt/rhos` (as thickness_changes does at icepack_therm_vertical.F90:1632-1660) is missing. Numerically the code uses the kg/m2 value as if it were meters, overestimating the equivalent snowfall depth by the factor rhos (~330).
-- **Impact on results:** the branch fires when a refrozen pond lid exists (`ipn > puny`) with `dhs` (the dhsn tracer) below puny and `fsnow*dt > hs_min` — in the D-class run 92/1920 dumped (cell, category) rows meet the condition (fsnow ~ 0-1.05e-5 kg/m2/s, dt = 3600 s, so fsnow*dt up to ~0.038 against hs_min = 1e-4). Where it fires, `dhs` (and hence the snow-on-pond taper `asnow = min(spn/hs1, 1)` and the retained-meltwater remap) is computed from an over-large snowfall depth. The effect is usually masked because the trailing guard `if (ipn*spn < puny) dhs = c0` (F90:3590) zeroes `dhs` for small ponds, but for larger ponds the taper uses the inflated value.
-- **Reproduced/corrected in .esm:** the stage-2 dEdd template (`stage2/cice_templates.esm` `dEdd_effective_pond`, used by `stage2/cice_thermodynamics.esm` eq 55) reproduces the Fortran numerics exactly: the coupled mass flux is carried into the template through a dedicated `fsnow_dEdd` parameter declared in m/s, so `hsnlvl - fsnow*dt` types as length minus length and evaluates to the same number the Fortran produces (bugs.md #10 documented in the parameter description). The dEdd test pins (`thermo_dedd_apeffn_*`) pass to round-off against the dump.
-- **Status:** open (recorded; transcribed as-run in the .esm with the quirk documented).
-
 ## 9. CICE dump module: `trcr`/`trcrn` tracer reads swapped the j and tracer indices
 
 - **Location:** fork-only instrumentation `components/cice/src/cicecore/shared/ice_dump_mod.F90` (instrument/cice-dumps, `ced43eb`), `dump_thermo_state` (5 reads) and `dump_albedo` (5 reads, minus the corrected ones).
@@ -145,6 +137,14 @@ Format template:
 - **Impact on results:** none on the model (dump-only code); the affected CSV columns were unusable until the fix. The stage-2 coupling Si_t pin had to wait for the fix.
 - **Reproduced/corrected in .esm:** n/a (instrumentation). Fixed in the fork (`ced43eb` → wrapper `90dde50` → superproject `c8a3bef`); rerun job 11864874 verified solution-neutral and the columns now carry physical values (Tsfc ≈ −14.7 °C, qice_1 ≈ −3.03e8 J/m3). The Si_t export pin (`icecap_export_sit_step1_cell2_4`) validates the restored values to round-off.
 - **Status:** fixed (2026-10-27; lesson: validate that every dumped column is non-degenerate against known physics before writing tests).
+
+## 10. CICE dEdd pond code subtracts the snowfall mass flux (kg/m2/s) from a snow depth (m)
+
+- **Location:** `components/cice/src/icepack/columnphysics/icepack_shortwave.F90:3587-3588` (`shortwave_dEdd_set_eff`).
+- **Description:** `fsnow` is documented "snowfall rate (kg/m^2 s)" (F90:3511) and is passed straight through from the coupler import (icedrv_flux `fsnow`, kg/m2/s). But the pond-lid snow-cover initialization computes `dhs = hsnlvl - fsnow*dt` (F90:3588) and tests `fsnow*dt > hs_min` (F90:3587), treating `fsnow*dt` as a snow **depth** (m). `hsnlvl` is a snow depth in m, so `fsnow*dt` has dimension kg/m2 — mixing units; the conversion `fsnow*dt/rhos` (as thickness_changes does at icepack_therm_vertical.F90:1632-1660) is missing. Numerically the code uses the kg/m2 value as if it were meters, overestimating the equivalent snowfall depth by the factor rhos (~330).
+- **Impact on results:** the branch fires when a refrozen pond lid exists (`ipn > puny`) with `dhs` (the dhsn tracer) below puny and `fsnow*dt > hs_min` — in the D-class run 92/1920 dumped (cell, category) rows meet the condition (fsnow ~ 0-1.05e-5 kg/m2/s, dt = 3600 s, so fsnow*dt up to ~0.038 against hs_min = 1e-4). Where it fires, `dhs` (and hence the snow-on-pond taper `asnow = min(spn/hs1, 1)` and the retained-meltwater remap) is computed from an over-large snowfall depth. The effect is usually masked because the trailing guard `if (ipn*spn < puny) dhs = c0` (F90:3590) zeroes `dhs` for small ponds, but for larger ponds the taper uses the inflated value.
+- **Reproduced/corrected in .esm:** the stage-2 dEdd template (`stage2/cice_templates.esm` `dEdd_effective_pond`, used by `stage2/cice_thermodynamics.esm` eq 55) reproduces the Fortran numerics exactly: the coupled mass flux is carried into the template through a dedicated `fsnow_dEdd` parameter declared in m/s, so `hsnlvl - fsnow*dt` types as length minus length and evaluates to the same number the Fortran produces (bugs.md #10 documented in the parameter description). The dEdd test pins (`thermo_dedd_apeffn_*`) pass to round-off against the dump.
+- **Status:** open (recorded; transcribed as-run in the .esm with the quirk documented).
 
 ## 11. CESM nuopc cap silently overrides ~20 icepack thermophysical parameters at init
 
@@ -366,22 +366,6 @@ Format template:
   interception fields to be written at the flx stage).
 - **Status:** open (instrumentation coverage note; recorded).
 
-## 33. CLM Sturm1997 snow thermal conductivity is evaluated with single-precision literals (missing `_r8` suffix)
-
-- **Location:** `components/clm/src/biogeophys/SoilTemperatureMod.F90:774-778` (Sturm1997 branch of `SoilThermProp`, non-glacier land units; the identical glc branch at :754-758 and the same copy in `LakeFluxesMod.F90:497` / `LakeTemperatureMod.F90:1195` carry the same defect).
-- **Description:** the five Sturm et al. (1997) fit literals `0.023`, `0.234`, `0.138`, `1.01`, `3.233` have no kind suffix. Under default `real(4)` (gfortran, CESM default) they are stored as single precision and promoted to `real(8)` at evaluation, so the executed coefficients are the float32-rounded values — 0.1379999965429306, 1.0099999904632568, 3.2330000400543213, 0.023000000044703484, 0.23399999737739563 — not the paper's coefficients. Verified in the compiled object (`SoilTemperatureMod.o` `.rodata.cst8`: the constants are the float32 values; the branch threshold 156 is an exact integer double): a double-precision evaluation of the written formula disagrees with the executed snow interface conductivities at rel ~2.6e-8 (layer thk rel ~1.2e-7 at the traced densities ~340-460 kg/m3), while the float32-constant formula reproduces the dump to rel 1.6e-16 on all 144 traced snow interfaces (16 columns x 9). The neighbouring Jordan1991 branch uses suffixed literals (`7.75e-5_r8`, `1.105e-6_r8`) — the Sturm literals simply lost their suffix when the Jordan formula was replaced (commit ab94ab484, "Replace thermal conductivity of snow of Jordan with Sturm").
-- **Impact on results:** snow layer thermal conductivity is ~1e-7 relative above the intended fit everywhere, silently changing the effective Sturm coefficients; tiny for climate but a real precision defect, and it makes the "as-written" formula fail exact pins.
-- **Reproduced/corrected in .esm:** reproduced exactly — `stage2/clm_templates.esm` `snow_thermal_cond_sturm1997` carries the float32-rounded coefficients with this provenance, and the `clm_soiltemp.esm` snow interface-tk pins pass at rel 1e-12 to the dump's full double precision.
-- **Status:** open (upstream candidate; the fix is appending `_r8` to the five literals).
-
-## 34. CLM snow hydrology leaves the top snow layer's (z, dz) inconsistent with its zi interfaces
-
-- **Location:** SUSPECTED attribution — `components/clm/src/biogeophys/SnowHydrologyMod.F90` (`DivideSnowLayers` / `AddNewSnow`; called from `SnowWater` before `SoilTemperature`; clm_driver.F90:921/:971 order rules out in-step snowfall as the cause). Not traced to the specific call that leaves the state inconsistent; the observed defect is in the state arrays `col%z`, `col%dz`, `col%zi` (SoilStateType) at the SoilTemperature entry.
-- **Description:** after snow-layer division/addition the layer centers and thicknesses (z, dz) of the top snow layer are updated but the interface depths (zi) are not re-derived from them, so `z(c,snl) - 0.5*dz(c,snl) != zi(c,snl)`. In the W3 traced January columns the top-layer mismatch is ~3.02e-5 m (column 1: `zi(-9) = -22.13156338` vs `z(-8) - dz(-8)/2 = -22.13159361`; the layer thickness from dz is 0.01557835 m vs the interface spacing zi(-8) - zi(-9) = 0.01551790 m, i.e. a 6.05e-5 m discrepancy) and up to ~1.6e-4 m (columns 11-15); all other layers satisfy the identity to machine precision.
-- **Impact on results:** small but real: the top snow row's `fact` (ComputeHeatDiffFluxAndFactor, SoilTemperatureMod.F90:1896) uses `z(c,j) - zi(c,j-1)` directly, so the capr-weighted surface factor carries the inconsistency; it does not cancel elsewhere because the matrix/rhs rows use zi only through the top-row factor. The W3 dump now writes `zi_top`/`zi_bot` directly, so the harmonic-mean interface pins feed the true interface depths and reproduce the dump to round-off (rel 1e-12) despite the inconsistency.
-- **Reproduced/corrected in .esm:** the harmonic-mean pins in `stage2/clm_soiltemp.esm` (model `SoilTemperature`) use the dumped `zi_bot` (true interface below each layer), which absorbs the inconsistency exactly; the top-snow factor is transcribed verbatim for the PDE step (the local capr-weighted top-row rule `stage2/clm_soiltemp_discretization.esm`). The inconsistency itself is not corrected (out of scope; it reproduces the F90 state).
-- **Status:** open (upstream candidate; recorded).
-
 ## 31. CLM fork dump: derived-type NaN passed directly in a formatted write list crashes the instrumented run
 
 - **Location:** fork instrumentation `components/clm/src/main/clm_dump_mod.F90`
@@ -437,6 +421,22 @@ Format template:
   unpinned by the dump.
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
+
+## 33. CLM Sturm1997 snow thermal conductivity is evaluated with single-precision literals (missing `_r8` suffix)
+
+- **Location:** `components/clm/src/biogeophys/SoilTemperatureMod.F90:774-778` (Sturm1997 branch of `SoilThermProp`, non-glacier land units; the identical glc branch at :754-758 and the same copy in `LakeFluxesMod.F90:497` / `LakeTemperatureMod.F90:1195` carry the same defect).
+- **Description:** the five Sturm et al. (1997) fit literals `0.023`, `0.234`, `0.138`, `1.01`, `3.233` have no kind suffix. Under default `real(4)` (gfortran, CESM default) they are stored as single precision and promoted to `real(8)` at evaluation, so the executed coefficients are the float32-rounded values — 0.1379999965429306, 1.0099999904632568, 3.2330000400543213, 0.023000000044703484, 0.23399999737739563 — not the paper's coefficients. Verified in the compiled object (`SoilTemperatureMod.o` `.rodata.cst8`: the constants are the float32 values; the branch threshold 156 is an exact integer double): a double-precision evaluation of the written formula disagrees with the executed snow interface conductivities at rel ~2.6e-8 (layer thk rel ~1.2e-7 at the traced densities ~340-460 kg/m3), while the float32-constant formula reproduces the dump to rel 1.6e-16 on all 144 traced snow interfaces (16 columns x 9). The neighbouring Jordan1991 branch uses suffixed literals (`7.75e-5_r8`, `1.105e-6_r8`) — the Sturm literals simply lost their suffix when the Jordan formula was replaced (commit ab94ab484, "Replace thermal conductivity of snow of Jordan with Sturm").
+- **Impact on results:** snow layer thermal conductivity is ~1e-7 relative above the intended fit everywhere, silently changing the effective Sturm coefficients; tiny for climate but a real precision defect, and it makes the "as-written" formula fail exact pins.
+- **Reproduced/corrected in .esm:** reproduced exactly — `stage2/clm_templates.esm` `snow_thermal_cond_sturm1997` carries the float32-rounded coefficients with this provenance, and the `clm_soiltemp.esm` snow interface-tk pins pass at rel 1e-12 to the dump's full double precision.
+- **Status:** open (upstream candidate; the fix is appending `_r8` to the five literals).
+
+## 34. CLM snow hydrology leaves the top snow layer's (z, dz) inconsistent with its zi interfaces
+
+- **Location:** SUSPECTED attribution — `components/clm/src/biogeophys/SnowHydrologyMod.F90` (`DivideSnowLayers` / `AddNewSnow`; called from `SnowWater` before `SoilTemperature`; clm_driver.F90:921/:971 order rules out in-step snowfall as the cause). Not traced to the specific call that leaves the state inconsistent; the observed defect is in the state arrays `col%z`, `col%dz`, `col%zi` (SoilStateType) at the SoilTemperature entry.
+- **Description:** after snow-layer division/addition the layer centers and thicknesses (z, dz) of the top snow layer are updated but the interface depths (zi) are not re-derived from them, so `z(c,snl) - 0.5*dz(c,snl) != zi(c,snl)`. In the W3 traced January columns the top-layer mismatch is ~3.02e-5 m (column 1: `zi(-9) = -22.13156338` vs `z(-8) - dz(-8)/2 = -22.13159361`; the layer thickness from dz is 0.01557835 m vs the interface spacing zi(-8) - zi(-9) = 0.01551790 m, i.e. a 6.05e-5 m discrepancy) and up to ~1.6e-4 m (columns 11-15); all other layers satisfy the identity to machine precision.
+- **Impact on results:** small but real: the top snow row's `fact` (ComputeHeatDiffFluxAndFactor, SoilTemperatureMod.F90:1896) uses `z(c,j) - zi(c,j-1)` directly, so the capr-weighted surface factor carries the inconsistency; it does not cancel elsewhere because the matrix/rhs rows use zi only through the top-row factor. The W3 dump now writes `zi_top`/`zi_bot` directly, so the harmonic-mean interface pins feed the true interface depths and reproduce the dump to round-off (rel 1e-12) despite the inconsistency.
+- **Reproduced/corrected in .esm:** the harmonic-mean pins in `stage2/clm_soiltemp.esm` (model `SoilTemperature`) use the dumped `zi_bot` (true interface below each layer), which absorbs the inconsistency exactly; the top-snow factor is transcribed verbatim for the PDE step (the local capr-weighted top-row rule `stage2/clm_soiltemp_discretization.esm`). The inconsistency itself is not corrected (out of scope; it reproduces the F90 state).
+- **Status:** open (upstream candidate; recorded).
 
 ## 35. CMEPS ocnalb init: else branch sets the local use_min_ocnalb instead of the module use_min_albedo
 
