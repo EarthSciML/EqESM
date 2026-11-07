@@ -152,7 +152,7 @@ steps 3,4 ↔ cap_step 2; every row carries time = 0.5·step yr. All test
 inputs come from the dump entry phases (the pre-step state) and the
 cism_cap.csv import rows; all expected values come from the dump exit
 phases or from the source formulas (stated in the test descriptions).
-23 tests / 31 assertions.
+22 tests / 29 assertions.
 
 | Law | Pin | Tolerance | Residual |
 |---|---|---|---|
