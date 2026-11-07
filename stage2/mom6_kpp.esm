@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_kpp",
-  "description": "Stage-2 implementation of the MOM6 CVMix KPP planetary boundary layer parameterization (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps; run configuration C_JRA_t62_mom6_inst: RI_CRIT=0.3, VON_KARMAN=0.4, SURF_LAYER_EXTENT=0.1, MINIMUM_OBL_DEPTH=5.0, MINIMUM_VT2=1e-10, INTERP_TYPE=quadratic, INTERP_TYPE2=LMD94, MATCH_TECHNIQUE=MatchGradient, ENHANCE_DIFFUSION=False, NLT_SHAPE=CVMix, N_SMOOTH=3, COMPUTE_MONIN_OBUKHOV=True, COMPUTE_EKMAN=False, USE_KPP_LT_K/VT2=False, KPP_IS_ADDITIVE=False, KPP_SHORTWAVE_METHOD=MXL_SW, l_LMD_ws=false, lnoDGat1=true, all unit rescale factors 1.0). Two models: KPPBLD reproduces KPP_compute_BLD (MOM_CVMix_KPP.F90:1195-1575) down to the pre-smoothing OBL depth and kOBL — the surface-layer averages (F90:1342-1405), the per-assumed-OBL hydrostatic pressure for the Wright 1997 EOS (F90:1428-1440, the shared wright_rho composition of ./mom6_templates.esm, whose 15 coefficients are the wright_coeff_* constant fragments shared with mom6_eos.esm), deltaBuoy/N2/N (F90:1444-1457), w_s/Vt^2/BulkRi (F90:1509-1550 via the ./mom6_kpp_templates.esm laws), and OBL_depth_low/kOBL (cvmix_kpp.F90:1585-1814, 1821-1867) with the quadratic interpolation, the Monin-Obukhov limit, the minOBLdepth floor and the MOM6 top/bottom bounds. KPPCoefs reproduces cvmix_coeffs_kpp_low (cvmix_kpp.F90:701-1298, not lStokesMOST, MatchGradient, ENHANCE_DIFFUSION=False: the no-match shape G(sigma) = sigma*(1-sigma)^2, the diffusivity/viscosity overwrite at interfaces 2..floor(kOBL), the KPP_IS_ADDITIVE=False replacement of nonzero entries via the kpp_override_nonzero template (Kd_salt = Kd_heat), and the CVMix non-local term) driven by the SMOOTHED OBLdepth/kOBL, z_inter, uStar, surfBuoyFlux (MXL_SW) and the incoming Kt/Ks/Kv from mom6_kpp.csv. Pins: mom6_kpp_obl.csv rows for BulkRi/deltaU2/N2 at layers 1..kOBL+3, spot z_inter/z_cell plus the three deep layers, and OBLdepth/kOBL (rel 1e-12; the N_SMOOTH=3 Laplacian smoothing of KPP_smooth_BLD is inherently horizontal and is NOT reproduced — the pre-smoothing values are pinned and the smoothed values are consumed as inputs), and mom6_kpp.csv rows for Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces 2..kwup+1 and the deep interface 76. Unpinned (never exercised by the 156 traced columns; see README-mom6.md): the OBL_limit branch (no traced column has BulkRi <= 0.3 everywhere, kfirst = N_LAYER+1), the interpolated OBL depth for the kfirst = 2 two-point quadratic (always floored to MINIMUM_OBL_DEPTH in the traces), the unstable (surfBuoyFlux < 0) branches of the stability functions and of the non-local term, the Langmuir enhancement paths, and the MINIMUM_VT2 floor.\n\nKPPBLD: The boundary-layer depth computation of KPP_compute_BLD (MOM_CVMix_KPP.F90:1195-1575) with the CVMix OBL_depth_low interpolation and the kOBL fraction (cvmix_kpp.F90:1585-1867). Inputs are the per-column traced state: layer thicknesses h and heights dz (equal in the instrumented run: no thickness inflation, min_thickness=0), temperature/salinity/velocity T, S, U_H, V_H, the surface buoyancy flux profile buoyFlux(1..76) (from calculateBuoyancyFlux2d, buoyFlux(76) = 0), the surface friction velocity uStar and the surface pressure p_surf; outputs include the per-layer bulk Richardson numbers, the squared resolved shear and buoyancy frequency, the OBL depth and its fractional index. The EOS is applied as the wright_rho composition of ./mom6_templates.esm (one application per state: the surface-layer mean, the layer value and the layer-1 value, all at the layer-top pressure pRef), whose 15 Wright coefficients are the shared wright_coeff_* constant fragments (the same values mom6_eos.esm declares as parameters); the pointwise KPP laws come from ./mom6_kpp_templates.esm. The N_SMOOTH=3 horizontal Laplacian smoothing of KPP_smooth_BLD is not reproduced (single-column law); OBLdepth/kOBL here are the PRE-smoothing values (mom6_kpp_obl.csv).\n\nKPPCoefs: The KPP diffusivity/viscosity/non-local coefficient computation of cvmix_coeffs_kpp_low (cvmix_kpp.F90:701-1298, not lStokesMOST) with the MOM6 wrappers of KPP_calculate (MOM_CVMix_KPP.F90:740-1067): inputs are the SMOOTHED OBLdepth/kOBL (after the N_SMOOTH=3 Laplacian of KPP_smooth_BLD, which is not reproduced here), the interface heights z_inter, uStar, the MXL_SW surface buoyancy flux surfBuoyFlux = buoyFlux(1) - buoyFlux(floor(kOBL)+1) (F90:848-853) and the incoming diffusivities Kt_in/Ks_in/Kv_in. With MATCH_TECHNIQUE=MatchGradient and ENHANCE_DIFFUSION=False, MOM6 zeroes the interior diffusivities before the CVMix call (F90:903-906), so the shape function is the no-match cubic G(sigma) = sigma*(1-sigma)^2 (G(1) = G'(1) = 0), and the overwrite loop 2..floor(kOBL) with the kwup==ktup zero restoration gives nonzero coefficients exactly on interfaces 2..floor(kOBL). KPP_IS_ADDITIVE=False: an output interface keeps the incoming value unless the KPP value is nonzero (F90:1023-1038). The non-local term is the CVMix law Tnonlocal = nonlocal_coeff*G(sigma) on interfaces 2..kwup when surfBuoyFlux < 0 (NLT_SHAPE=CVMix: MOM6 does not override), with nonlocal_coeff = Cstar*kappa*(kappa*eps*c_s)^(1/3), Cstar = 10; all traced columns are stable (surfBuoyFlux >= 0), so NLT is pinned at zero and the unstable branch is unpinned.",
+  "description": "Stage-2 implementation of the MOM6 CVMix KPP planetary boundary layer parameterization (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps; run configuration C_JRA_t62_mom6_inst: RI_CRIT=0.3, VON_KARMAN=0.4, SURF_LAYER_EXTENT=0.1, MINIMUM_OBL_DEPTH=5.0, MINIMUM_VT2=1e-10, INTERP_TYPE=quadratic, INTERP_TYPE2=LMD94, MATCH_TECHNIQUE=MatchGradient, ENHANCE_DIFFUSION=False, NLT_SHAPE=CVMix, N_SMOOTH=3, COMPUTE_MONIN_OBUKHOV=True, COMPUTE_EKMAN=False, USE_KPP_LT_K/VT2=False, KPP_IS_ADDITIVE=False, KPP_SHORTWAVE_METHOD=MXL_SW, l_LMD_ws=false, lnoDGat1=true, all unit rescale factors 1.0). Two models: KPPBLD reproduces KPP_compute_BLD (MOM_CVMix_KPP.F90:1195-1575) down to the pre-smoothing OBL depth and kOBL — the surface-layer averages (F90:1342-1405), the per-assumed-OBL hydrostatic pressure for the Wright 1997 EOS (F90:1428-1440, the shared wright_rho composition of ./mom6_templates.esm, whose 15 coefficients are the wright_coeff_* constant fragments shared with mom6_eos.esm), deltaBuoy/N2/N (F90:1444-1457), w_s/Vt^2/BulkRi (F90:1509-1550 via the ./mom6_kpp_templates.esm laws), and OBL_depth_low/kOBL (cvmix_kpp.F90:1585-1814, 1821-1867) with the quadratic interpolation, the Monin-Obukhov limit, the minOBLdepth floor and the MOM6 top/bottom bounds. KPPCoefs reproduces cvmix_coeffs_kpp_low (cvmix_kpp.F90:701-1298, not lStokesMOST, MatchGradient, ENHANCE_DIFFUSION=False: the no-match shape G(sigma) = sigma*(1-sigma)^2, the diffusivity/viscosity overwrite at interfaces 2..floor(kOBL), the KPP_IS_ADDITIVE=False replacement of nonzero entries via the kpp_override_nonzero template (Kd_salt = Kd_heat), and the CVMix non-local term) driven by the SMOOTHED OBLdepth/kOBL, z_inter, uStar, surfBuoyFlux (MXL_SW) and the incoming Kt/Ks/Kv from mom6_kpp.csv. Pins: mom6_kpp_obl.csv rows for BulkRi/deltaU2/N2 at layers 2..kOBL+3 (layer 1 is 0 by construction), spot z_cell at layers 1..kOBL+3 and z_inter at ifaces 2..kOBL+3 (iface 1 is the surface) plus the deep z_cell/z_inter at layer/iface 75, and OBLdepth/kOBL (rel 1e-12; the N_SMOOTH=3 Laplacian smoothing of KPP_smooth_BLD is inherently horizontal and is NOT reproduced — the pre-smoothing values are pinned and the smoothed values are consumed as inputs), and mom6_kpp.csv rows for Kd_heat/Kv at interfaces 2..kwup plus one pass-through Kv_out at kwup+1 (the kpp_override_nonzero else-branch). Unpinned (never exercised by the 156 traced columns; see README-mom6.md): the OBL_limit branch (no traced column has BulkRi <= 0.3 everywhere, kfirst = N_LAYER+1), the interpolated OBL depth of the kfirst = 2 and 3 rows (always floored to MINIMUM_OBL_DEPTH in the traces), the unstable (surfBuoyFlux < 0) branches of the stability functions and of the non-local term, the Langmuir enhancement paths, and the MINIMUM_VT2 floor.\n\nKPPBLD: The boundary-layer depth computation of KPP_compute_BLD (MOM_CVMix_KPP.F90:1195-1575) with the CVMix OBL_depth_low interpolation and the kOBL fraction (cvmix_kpp.F90:1585-1867). Inputs are the per-column traced state: layer thicknesses h and heights dz (equal in the instrumented run: no thickness inflation, min_thickness=0), temperature/salinity/velocity T, S, U_H, V_H, the surface buoyancy flux profile buoyFlux(1..76) (from calculateBuoyancyFlux2d, buoyFlux(76) = 0), the surface friction velocity uStar and the surface pressure p_surf; outputs include the per-layer bulk Richardson numbers, the squared resolved shear and buoyancy frequency, the OBL depth and its fractional index. The EOS is applied as the wright_rho composition of ./mom6_templates.esm (one application per state: the surface-layer mean, the layer value and the layer-1 value, all at the layer-top pressure pRef), whose 15 Wright coefficients are the shared wright_coeff_* constant fragments (bound by reference, also in mom6_eos.esm's WrightEOS); the pointwise KPP laws come from ./mom6_kpp_templates.esm. The N_SMOOTH=3 horizontal Laplacian smoothing of KPP_smooth_BLD is not reproduced (single-column law); OBLdepth/kOBL here are the PRE-smoothing values (mom6_kpp_obl.csv).\n\nKPPCoefs: The KPP diffusivity/viscosity/non-local coefficient computation of cvmix_coeffs_kpp_low (cvmix_kpp.F90:701-1298, not lStokesMOST) with the MOM6 wrappers of KPP_calculate (MOM_CVMix_KPP.F90:740-1067): inputs are the SMOOTHED OBLdepth/kOBL (after the N_SMOOTH=3 Laplacian of KPP_smooth_BLD, which is not reproduced here), the interface heights z_inter, uStar, the MXL_SW surface buoyancy flux surfBuoyFlux = buoyFlux(1) - buoyFlux(floor(kOBL)+1) (F90:848-853) and the incoming diffusivities Kt_in/Ks_in/Kv_in. With MATCH_TECHNIQUE=MatchGradient and ENHANCE_DIFFUSION=False, MOM6 zeroes the interior diffusivities before the CVMix call (F90:903-906), so the shape function is the no-match cubic G(sigma) = sigma*(1-sigma)^2 (G(1) = G'(1) = 0), and the overwrite loop 2..floor(kOBL) with the kwup==ktup zero restoration gives nonzero coefficients exactly on interfaces 2..floor(kOBL). KPP_IS_ADDITIVE=False: an output interface keeps the incoming value unless the KPP value is nonzero (F90:1023-1038). The non-local term is the CVMix law Tnonlocal = nonlocal_coeff*G(sigma) on interfaces 2..kwup when surfBuoyFlux < 0 (NLT_SHAPE=CVMix: MOM6 does not override), with nonlocal_coeff = Cstar*kappa*(kappa*eps*c_s)^(1/3), Cstar = 10; all traced columns are stable (surfBuoyFlux >= 0), so NLT is pinned at zero and the unstable branch is unpinned.",
   "authors": [
    "EqESM stage 2 (wt/mom6-kpp)"
   ]
@@ -2604,7 +2604,7 @@
    "tests": [
     {
      "id": "cell782_step3600_quad_k3",
-     "description": "mom6_kpp_obl.csv row (i, j, tod) = (7, 82, 3600): the OBL quadratic through layers 1..3 (kfirst = 3, derived: not a dump column -- from the kpp_ref.py reference reimplementation, stage1/analysis/kpp_ref.py), interpolated OBL depth 6.613560999075406 m, kOBL = 3.75 (interface 4 lies below the OBL, so the kOBL fraction is .75). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3 = 1..6, spot z_inter/z_cell at layers/ifaces 1..6 plus the three deep layers 73..75, at rel 1e-12.",
+     "description": "mom6_kpp_obl.csv row (i, j, tod) = (7, 82, 3600): the slope-preserving OBL quadratic through cell centers 3..4 (kfirst = 4, 1-based, derived: not a dump column -- from the kpp_ref.py reference reimplementation, stage1/analysis/kpp_ref.py), interpolated OBL depth 6.613560999075406 m, kOBL = 3.75 (interface 4 lies below the OBL, so the kOBL fraction is .75). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..6 (layer 1 is 0 by construction), spot z_cell at layers 1..6 and z_inter at ifaces 2..6 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -3175,30 +3175,6 @@
       {
        "variable": "BulkRi",
        "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "deltaU2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "N2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "BulkRi",
-       "time": 0.0,
        "expected": 0.0793751887996905,
        "coords": {
         "layer": 2
@@ -3325,27 +3301,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 1
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -3.7568977431003363,
        "coords": {
         "layer": 2
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -2.505951254018008,
-       "coords": {
-        "iface": 2
        }
       },
       {
@@ -3357,14 +3317,6 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -5.007844232182665,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -8.760356177417803,
@@ -3373,27 +3325,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -7.509571486709462,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -11.51200412669495,
        "coords": {
         "layer": 5
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -10.011140868126144,
-       "coords": {
-        "iface": 5
        }
       },
       {
@@ -3407,41 +3343,41 @@
       {
        "variable": "z_inter",
        "time": 0.0,
+       "expected": -2.505951254018008,
+       "coords": {
+        "iface": 2
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -5.007844232182665,
+       "coords": {
+        "iface": 3
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -7.509571486709462,
+       "coords": {
+        "iface": 4
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -10.011140868126144,
+       "coords": {
+        "iface": 5
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
        "expected": -13.012867385263757,
        "coords": {
         "iface": 6
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -555.0446401400932,
-       "coords": {
-        "layer": 73
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -555.0441401579188,
-       "coords": {
-        "iface": 73
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -555.0456401065442,
-       "coords": {
-        "layer": 74
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -555.0451401222674,
-       "coords": {
-        "iface": 74
        }
       },
       {
@@ -3464,7 +3400,7 @@
     },
     {
      "id": "cell883_step3600_quad_k3",
-     "description": "mom6_kpp_obl.csv row (i, j, tod) = (8, 83, 3600): the OBL quadratic through layers 1..3 (kfirst = 3, derived: not a dump column -- from kpp_ref.py), interpolated OBL depth 5.974325344745279 m, kOBL = 3.25 (interface 3 is the first interface below the OBL, OBL depth above the layer-3 cell center). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3 = 1..6, spot z_inter/z_cell at layers/ifaces 1..6 plus the three deep layers 73..75, at rel 1e-12.",
+     "description": "mom6_kpp_obl.csv row (i, j, tod) = (8, 83, 3600): the slope-preserving OBL quadratic through cell centers 3..4 (kfirst = 4, 1-based, derived: not a dump column -- from kpp_ref.py), interpolated OBL depth 5.974325344745279 m, kOBL = 3.25 (interface 4 is the first interface below the OBL; the OBL sits above the layer-3 cell center). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..6 (layer 1 is 0 by construction), spot z_cell at layers 1..6 and z_inter at ifaces 2..6 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -4035,30 +3971,6 @@
       {
        "variable": "BulkRi",
        "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "deltaU2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "N2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "BulkRi",
-       "time": 0.0,
        "expected": -0.1951318385069328,
        "coords": {
         "layer": 2
@@ -4185,27 +4097,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 1
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -3.7503151968426685,
        "coords": {
         "layer": 2
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -2.5007670118695744,
-       "coords": {
-        "iface": 2
        }
       },
       {
@@ -4217,14 +4113,6 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -4.9998633818157625,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -8.748734915502606,
@@ -4233,27 +4121,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -7.499081274372623,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -11.49800057223659,
        "coords": {
         "layer": 5
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -9.998388556632587,
-       "coords": {
-        "iface": 5
        }
       },
       {
@@ -4267,41 +4139,41 @@
       {
        "variable": "z_inter",
        "time": 0.0,
+       "expected": -2.5007670118695744,
+       "coords": {
+        "iface": 2
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -4.9998633818157625,
+       "coords": {
+        "iface": 3
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -7.499081274372623,
+       "coords": {
+        "iface": 4
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -9.998388556632587,
+       "coords": {
+        "iface": 5
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
        "expected": -12.997612587840594,
        "coords": {
         "iface": 6
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -562.7718570624826,
-       "coords": {
-        "layer": 73
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -562.7713570430438,
-       "coords": {
-        "iface": 73
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -562.772857100021,
-       "coords": {
-        "layer": 74
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -562.7723570819213,
-       "coords": {
-        "iface": 74
        }
       },
       {
@@ -4324,7 +4196,7 @@
     },
     {
      "id": "cell784_step10800_two_point_k2",
-     "description": "mom6_kpp_obl.csv row (i, j, tod) = (7, 84, 10800): kfirst = 2 (derived: not a dump column -- from kpp_ref.py), the two-point quadratic with zero slope at x1 (cvmix_kpp.F90:1773-1776); the interpolated OBL depth is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0 and the interpolation itself is unpinned. Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3 = 1..5, spot z_inter/z_cell at layers/ifaces 1..5 plus the three deep layers 73..75, at rel 1e-12.",
+     "description": "mom6_kpp_obl.csv row (i, j, tod) = (7, 84, 10800): kfirst = 3 (1-based, derived: not a dump column -- from kpp_ref.py), the slope-preserving OBL quadratic through cell centers 2..3; the interpolated OBL depth is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0 and the interpolation itself is unpinned. Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..5 (layer 1 is 0 by construction), spot z_cell at layers 1..5 and z_inter at ifaces 2..5 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -4895,30 +4767,6 @@
       {
        "variable": "BulkRi",
        "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "deltaU2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "N2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "BulkRi",
-       "time": 0.0,
        "expected": -0.1278487836433136,
        "coords": {
         "layer": 2
@@ -5021,27 +4869,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 1
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -3.750678294932479,
        "coords": {
         "layer": 2
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -2.500788929870075,
-       "coords": {
-        "iface": 2
        }
       },
       {
@@ -5053,27 +4885,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -5.000567659994884,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -8.749075372033358,
        "coords": {
         "layer": 4
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -7.499416618324272,
-       "coords": {
-        "iface": 4
        }
       },
       {
@@ -5087,41 +4903,33 @@
       {
        "variable": "z_inter",
        "time": 0.0,
+       "expected": -2.500788929870075,
+       "coords": {
+        "iface": 2
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -5.000567659994884,
+       "coords": {
+        "iface": 3
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -7.499416618324272,
+       "coords": {
+        "iface": 4
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
        "expected": -9.998734125742445,
        "coords": {
         "iface": 5
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -763.5899603412545,
-       "coords": {
-        "layer": 73
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -763.5894602823313,
-       "coords": {
-        "iface": 73
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -763.590960463213,
-       "coords": {
-        "layer": 74
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -763.5904604001777,
-       "coords": {
-        "iface": 74
        }
       },
       {
@@ -5144,7 +4952,7 @@
     },
     {
      "id": "cell1184_step3600_kfirst1",
-     "description": "mom6_kpp_obl.csv row (i, j, tod) = (11, 84, 3600): kfirst = 1 (derived: not a dump column -- from kpp_ref.py; BulkRi(1) already exceeds RI_CRIT), so OBLdepth = -z_cell(1) = 1.2525 m, floored to 5.0; kOBL = 3.25. Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3 = 1..6, spot z_inter/z_cell at layers/ifaces 1..6 plus the three deep layers 73..75, at rel 1e-12.",
+     "description": "mom6_kpp_obl.csv row (i, j, tod) = (11, 84, 3600): kfirst = 2 (1-based, derived: not a dump column -- from kpp_ref.py), the two-point quadratic with zero slope at x1 (cvmix_kpp.F90:1773-1776) through cell centers 1..2 (the layer-2 BulkRi already exceeds RI_CRIT); the interpolated OBL depth 3.649 m is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0; kOBL = 3.25. Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..6 (layer 1 is 0 by construction), spot z_cell at layers 1..6 and z_inter at ifaces 2..6 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -5715,30 +5523,6 @@
       {
        "variable": "BulkRi",
        "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "deltaU2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "N2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "BulkRi",
-       "time": 0.0,
        "expected": 0.32212992515778704,
        "coords": {
         "layer": 2
@@ -5865,27 +5649,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 1
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -3.7363102457346455,
        "coords": {
         "layer": 2
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -2.4871035945487163,
-       "coords": {
-        "iface": 2
        }
       },
       {
@@ -5897,14 +5665,6 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -4.985516896920576,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -8.73322531653016,
@@ -5913,27 +5673,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -7.483980513255292,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -11.481539080697527,
        "coords": {
         "layer": 5
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -9.982470119805027,
-       "coords": {
-        "iface": 5
        }
       },
       {
@@ -5947,41 +5691,41 @@
       {
        "variable": "z_inter",
        "time": 0.0,
+       "expected": -2.4871035945487163,
+       "coords": {
+        "iface": 2
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -4.985516896920576,
+       "coords": {
+        "iface": 3
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -7.483980513255292,
+       "coords": {
+        "iface": 4
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -9.982470119805027,
+       "coords": {
+        "iface": 5
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
        "expected": -12.980608041590024,
        "coords": {
         "iface": 6
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -501.79514702222355,
-       "coords": {
-        "layer": 73
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -501.7946469814931,
-       "coords": {
-        "iface": 73
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -501.7961471036655,
-       "coords": {
-        "layer": 74
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -501.79564706295395,
-       "coords": {
-        "iface": 74
        }
       },
       {
@@ -6004,7 +5748,7 @@
     },
     {
      "id": "cell684_step10800_kfirst1_shallow",
-     "description": "mom6_kpp_obl.csv row (i, j, tod) = (6, 84, 10800): kfirst = 1 (derived: not a dump column -- from kpp_ref.py) with kOBL = 2.75 (the OBL sits between the layer-2 center and interface 3). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 1..kOBL+3 = 1..5, spot z_inter/z_cell at layers/ifaces 1..5 plus the three deep layers 73..75, at rel 1e-12.",
+     "description": "mom6_kpp_obl.csv row (i, j, tod) = (6, 84, 10800): kfirst = 2 (1-based, derived: not a dump column -- from kpp_ref.py), the two-point quadratic with zero slope at x1 through cell centers 1..2; the interpolated OBL depth 3.116 m is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0; kOBL = 2.75 (the OBL sits between the layer-2 center and interface 3). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..5 (layer 1 is 0 by construction), spot z_cell at layers 1..5 and z_inter at ifaces 2..5 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -6575,30 +6319,6 @@
       {
        "variable": "BulkRi",
        "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "deltaU2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "N2",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "layer": 1
-       }
-      },
-      {
-       "variable": "BulkRi",
-       "time": 0.0,
        "expected": 0.5410254394634735,
        "coords": {
         "layer": 2
@@ -6701,27 +6421,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 1
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -3.7558045607154424,
        "coords": {
         "layer": 2
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -2.5041168640077416,
-       "coords": {
-        "iface": 2
        }
       },
       {
@@ -6733,27 +6437,11 @@
        }
       },
       {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -5.007492257423143,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "z_cell",
        "time": 0.0,
        "expected": -8.76178414526092,
        "coords": {
         "layer": 4
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -7.510344496641718,
-       "coords": {
-        "iface": 4
        }
       },
       {
@@ -6767,41 +6455,33 @@
       {
        "variable": "z_inter",
        "time": 0.0,
+       "expected": -2.5041168640077416,
+       "coords": {
+        "iface": 2
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -5.007492257423143,
+       "coords": {
+        "iface": 3
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
+       "expected": -7.510344496641718,
+       "coords": {
+        "iface": 4
+       }
+      },
+      {
+       "variable": "z_inter",
+       "time": 0.0,
        "expected": -10.013223793880123,
        "coords": {
         "iface": 5
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -715.8073955261749,
-       "coords": {
-        "layer": 73
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -715.8068955427827,
-       "coords": {
-        "iface": 73
-       }
-      },
-      {
-       "variable": "z_cell",
-       "time": 0.0,
-       "expected": -715.8083954910621,
-       "coords": {
-        "layer": 74
-       }
-      },
-      {
-       "variable": "z_inter",
-       "time": 0.0,
-       "expected": -715.8078955095672,
-       "coords": {
-        "iface": 74
        }
       },
       {
@@ -7606,7 +7286,7 @@
    "tests": [
     {
      "id": "cell782_step3600_kOBL325",
-     "description": "mom6_kpp.csv row (i, j, tod) = (7, 82, 3600): smoothed OBLdepth = 6.1872106097070425 m, kOBL = 3.25 (ktup = nint(kOBL)-1 = 2 = kwup-1: the kw loop computes interfaces 2..3, no restoration). Pins Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces 2..kwup+1 = 2..4 (the KPP-active region plus the first restoration interface) and at the deep interface 76, at rel 1e-12; NLT pins zero (stable column).",
+     "description": "mom6_kpp.csv row (i, j, tod) = (7, 82, 3600): smoothed OBLdepth = 6.1872106097070425 m, kOBL = 3.25 (ktup = nint(kOBL)-1 = 2 = kwup-1: the kw loop computes interfaces 2..3, no restoration). Pins Kd_heat and Kv at interfaces 2..kwup = 2..3 (the KPP-active region; Kv pins the w_m momentum branch, numerically equal to Kd_heat in this stable column) and one pass-through pin Kv_out at the first restoration interface kwup+1 = 4 (Kv_out = Kv_in, the kpp_override_nonzero else-branch), at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -7942,47 +7622,7 @@
        }
       },
       {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.000918247342468442,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
        "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.000918247342468442,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.000918247342468442,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.000918247342468442,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kv_out",
        "time": 0.0,
        "expected": 0.000918247342468442,
        "coords": {
@@ -7998,99 +7638,11 @@
        }
       },
       {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.00018833998264060838,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "Kv",
        "time": 0.0,
        "expected": 0.00018833998264060838,
        "coords": {
         "iface": 3
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.00018833998264060838,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.00018833998264060838,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.00018833998264060838,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 1.857838163433473e-05,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 1.721826231278331e-05,
-       "coords": {
-        "iface": 4
        }
       },
       {
@@ -8100,68 +7652,12 @@
        "coords": {
         "iface": 4
        }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.000171,
-       "coords": {
-        "iface": 76
-       }
       }
      ]
     },
     {
      "id": "cell882_step3600_kOBL375",
-     "description": "mom6_kpp.csv row (i, j, tod) = (8, 82, 3600): smoothed OBLdepth = 6.309964392417778 m, kOBL = 3.75 (ktup = nint(kOBL)-1 = 3 = kwup: interface 4 is restored to the incoming value). Pins Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces 2..kwup+1 = 2..4 and at the deep interface 76, at rel 1e-12; NLT pins zero (stable column).",
+     "description": "mom6_kpp.csv row (i, j, tod) = (8, 82, 3600): smoothed OBLdepth = 6.309964392417778 m, kOBL = 3.75 (ktup = nint(kOBL)-1 = 3 = kwup: interface 4 is restored to the incoming value). Pins Kd_heat and Kv at interfaces 2..kwup = 2..3 (the KPP-active region; Kv pins the w_m momentum branch, numerically equal to Kd_heat in this stable column) and one pass-through pin Kv_out at the first restoration interface kwup+1 = 4 (Kv_out = Kv_in, the kpp_override_nonzero else-branch), at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -8497,47 +7993,7 @@
        }
       },
       {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0012123079218295501,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
        "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0012123079218295501,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.0012123079218295501,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.0012123079218295501,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kv_out",
        "time": 0.0,
        "expected": 0.0012123079218295501,
        "coords": {
@@ -8553,99 +8009,11 @@
        }
       },
       {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.00028972400103798013,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
        "variable": "Kv",
        "time": 0.0,
        "expected": 0.00028972400103798013,
        "coords": {
         "iface": 3
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.00028972400103798013,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.00028972400103798013,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.00028972400103798013,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 1.7089289753087235e-05,
-       "coords": {
-        "iface": 4
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 1.7089289753087235e-05,
-       "coords": {
-        "iface": 4
        }
       },
       {
@@ -8655,68 +8023,12 @@
        "coords": {
         "iface": 4
        }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.0026709885640536966,
-       "coords": {
-        "iface": 76
-       }
       }
      ]
     },
     {
      "id": "cell684_step10800_kOBL275",
-     "description": "mom6_kpp.csv row (i, j, tod) = (6, 84, 10800): smoothed OBLdepth = 5.001656526745087 m, kOBL = 2.75 (kwup = 2: the KPP coefficients are nonzero only on interface 2). Pins Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/Ks_out/Kv_out at interfaces 2..kwup+1 = 2..3 and at the deep interface 76, at rel 1e-12; NLT pins zero (stable column).",
+     "description": "mom6_kpp.csv row (i, j, tod) = (6, 84, 10800): smoothed OBLdepth = 5.001656526745087 m, kOBL = 2.75 (kwup = 2: the KPP coefficients are nonzero only on interface 2). Pins Kd_heat and Kv at interface 2 (the KPP-active region; Kv pins the w_m momentum branch, numerically equal to Kd_heat in this stable column) and one pass-through pin Kv_out at the first restoration interface kwup+1 = 3 (Kv_out = Kv_in, the kpp_override_nonzero else-branch), at rel 1e-12.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -9052,99 +8364,11 @@
        }
       },
       {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.00012179159960576173,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
        "variable": "Kv",
        "time": 0.0,
        "expected": 0.00012179159960576173,
        "coords": {
         "iface": 2
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.00012179159960576173,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.00012179159960576173,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.00012179159960576173,
-       "coords": {
-        "iface": 2
-       }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 2.1472515897521995e-05,
-       "coords": {
-        "iface": 3
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 2.1472515897521995e-05,
-       "coords": {
-        "iface": 3
        }
       },
       {
@@ -9153,62 +8377,6 @@
        "expected": 0.00017546744610281016,
        "coords": {
         "iface": 3
-       }
-      },
-      {
-       "variable": "Kd_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kd_salt",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "NLT_heat",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kt_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Ks_out",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "iface": 76
-       }
-      },
-      {
-       "variable": "Kv_out",
-       "time": 0.0,
-       "expected": 0.000171,
-       "coords": {
-        "iface": 76
        }
       }
      ]

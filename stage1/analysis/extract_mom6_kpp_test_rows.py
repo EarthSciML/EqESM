@@ -9,27 +9,38 @@ the .esm file; this script only fills in the numeric tuples at full dump
 precision, rel 1e-12).
 
 BLD pins (mom6_kpp_obl.csv rows, pre-smoothing OBLdepth/kOBL), keyed by the
-dump's (i, j, tod) columns:
-  (7,  82,  3600)  kfirst=3, OBL=6.613560999075406,  kOBL=3.75
-  (8,  83,  3600)  kfirst=3, OBL=5.974325344745279,  kOBL=3.25
-  (7,  84, 10800)  kfirst=2, OBL=5.0 (floored),      kOBL=2.75
-  (11, 84,  3600)  kfirst=1, OBL=5.0 (floored),      kOBL=3.25
-  (6,  84, 10800)  kfirst=1, OBL=5.0 (floored),      kOBL=2.75
+dump's (i, j, tod) columns (kfirst is the 1-BASED layer the esm asserts;
+it is derived from the kpp_ref.py reference, not a dump column):
+  (7,  82,  3600)  kfirst=4, OBL=6.613560999075406,  kOBL=3.75
+  (8,  83,  3600)  kfirst=4, OBL=5.974325344745279,  kOBL=3.25
+  (7,  84, 10800)  kfirst=3, OBL=5.0 (floored),      kOBL=2.75
+  (11, 84,  3600)  kfirst=2, OBL=5.0 (floored),      kOBL=3.25
+  (6,  84, 10800)  kfirst=2, OBL=5.0 (floored),      kOBL=2.75
 KPPCoefs pins (mom6_kpp.csv rows, smoothed OBLdepth/kOBL):
   (7, 82, 3600)  OBL=6.1872106097070425  kOBL=3.25  (ktup == kwup-1)
   (8, 82, 3600)  OBL=6.309964392417778   kOBL=3.75  (ktup == kwup)
   (6, 84, 10800) OBL=5.001656526745087   kOBL=2.75  (kwup = 2)
 
 Pin-selection rules (the informative core of each row; the 76-interface
-0-below-kwup / copy-of-K_in bulk is deliberately NOT emitted):
+0-below-kwup / copy-of-K_in / identity-of-Kd_heat bulk is deliberately NOT
+emitted):
 - BLD: OBLdepth/kOBL plus kfirst (derived, NOT a dump column: from the
   kpp_ref.py reference reimplementation, which reproduces every dump column
   to <= ~1e-12; the esm test descriptions label it "derived (not a dump
-  column)"); BulkRi/deltaU2/N2 at layers 1..kOBL+3; z_inter/z_cell spot
-  values at the same 1..kOBL+3 range plus the three deep layers 73..75.
-- KPPCoefs: all 7 asserted columns (Kd_heat/Kd_salt/Kv/NLT_heat/Kt_out/
-  Ks_out/Kv_out) at interfaces 2..kwup+1 (the KPP-active region plus the
-  first restoration interface) and at the deep interface 76.
+  column)"). BulkRi/deltaU2/N2 at layers 2..kOBL+3 (layer 1 is 0 by
+  construction: the surface-layer mean collapses onto layer 1 itself);
+  z_cell at layers 1..kOBL+3 and z_inter at ifaces 2..kOBL+3 (z_inter at
+  iface 1 is the surface, 0 by construction); the deep stretch is pinned at
+  the two deepest values only (z_cell/z_inter at layer/iface 75).
+- KPPCoefs: Kd_heat and Kv at interfaces 2..kwup (the KPP-active region;
+  Kv pins the w_m momentum branch, numerically equal to Kd_heat in these
+  stable columns), plus exactly ONE pass-through pin per row — Kv_out at
+  the first restoration interface kwup+1, a copy of the incoming Kv_in that
+  covers the kpp_override_nonzero else-branch. Not emitted: Kd_salt (the
+  identity Kd_salt = Kd_heat), Kt_out/Ks_out at ifaces <= kwup (the same
+  override value as Kd_heat), the *_out copies of *_in at the deep
+  interface 76, the identically-zero deep-interface values, and NLT_heat
+  (identically 0 in every traced column: all traced columns are stable).
 
 Usage:
   python3 extract_mom6_kpp_test_rows.py [dumps_dir] > tests_fragments.json
@@ -51,8 +62,6 @@ from kpp_ref import compute_column
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 MAIN = os.environ.get("EQESM_MAIN", ROOT)
 NLEV = 75
-DEEP_LAYERS = (73, 74, 75)   # the three deepest layers of the 75-layer grid
-DEEP_IFACE = 76              # the bottom interface
 
 # hand-picked rows: (i, j, tod) -> test id
 BLD_ROWS = [
@@ -91,14 +100,25 @@ def bld_test(r, idx, r2):
         {"variable": "OBLdepth", "time": 0.0, "expected": r["OBLdepth"]},
         {"variable": "kOBL", "time": 0.0, "expected": r["kOBL"]},
         # kfirst is NOT a dump column: it comes from the kpp_ref.py
-        # reimplementation of the OBL_depth_low branch selection.
+        # reimplementation of the OBL_depth_low branch selection. The esm
+        # asserts the 1-based layer (the reference's 0-based value + 1).
         {"variable": "kfirst", "time": 0.0, "expected": None},
     ]
     kmax = int(r["kOBL"]) + 3  # layers 1..kOBL+3
-    for k in range(1, kmax + 1):
+    # Layer 1 is skipped: BulkRi/deltaU2/N2 are 0 there by construction
+    # (the surface-layer mean collapses onto layer 1 itself, so the
+    # resolved shear and N2 vanish).
+    for k in range(2, kmax + 1):
         for col in ("BulkRi", "deltaU2", "N2"):
             asserts.append({"variable": col, "time": 0.0, "expected": r[f"{col}_{k:02d}"], "coords": {"layer": k}})
-    for k in list(range(1, kmax + 1)) + list(DEEP_LAYERS):
+    for k in range(1, kmax + 1):
+        asserts.append({"variable": "z_cell", "time": 0.0, "expected": r[f"z_cell_{k:02d}"], "coords": {"layer": k}})
+    # z_inter at iface 1 is the surface (0 by construction): skipped.
+    for k in range(2, kmax + 1):
+        asserts.append({"variable": "z_inter", "time": 0.0, "expected": r[f"z_inter_{k:02d}"], "coords": {"iface": k}})
+    # the deep stretch: the two deepest values only (DEEP_LAYERS is no
+    # longer pinned in full).
+    for k in (NLEV,):
         asserts.append({"variable": "z_cell", "time": 0.0, "expected": r[f"z_cell_{k:02d}"], "coords": {"layer": k}})
         asserts.append({"variable": "z_inter", "time": 0.0, "expected": r[f"z_inter_{k:02d}"], "coords": {"iface": k}})
     # the kfirst branch selection from the reference (0-based -> 1-based)
@@ -119,14 +139,24 @@ def coefs_test(r2, idx):
         "Ks_in": arr(r2, "Ks_in", 1, NLEV + 1),
         "Kv_in": arr(r2, "Kv_in", 1, NLEV + 1),
     }
-    cols = (("Kd_heat", "Kd_heat"), ("Kd_salt", "Kd_salt"), ("Kv", "Kv"),
-            ("NLT_heat", "NLT_heat"), ("Kt_out", "Kt_out"),
-            ("Ks_out", "Ks_out"), ("Kv_out", "Kv_out"))
     kwup = int(r2["kOBL"])  # floor(kOBL_s): the kw loop upper bound
     asserts = []
-    for k in list(range(2, kwup + 2)) + [DEEP_IFACE]:
-        for var, col in cols:
-            asserts.append({"variable": var, "time": 0.0, "expected": r2[f"{col}_{k:02d}"], "coords": {"iface": k}})
+    # Kd_heat at the KPP-active interfaces 2..kwup pins the computed
+    # diffusivity profile; Kv at the same interfaces pins the w_m momentum
+    # branch (numerically equal to Kd_heat in these stable columns, but a
+    # different code path). Not asserted: Kd_salt (the identity
+    # Kd_salt = Kd_heat), Kt_out/Ks_out at ifaces <= kwup (the same
+    # override value as Kd_heat), NLT_heat (identically 0 in every traced
+    # column), and everything at the deep interface 76 (zeros or copies of
+    # the incoming Kt/Ks/Kv).
+    for k in range(2, kwup + 1):
+        for var in ("Kd_heat", "Kv"):
+            asserts.append({"variable": var, "time": 0.0, "expected": r2[f"{var}_{k:02d}"], "coords": {"iface": k}})
+    # exactly one pass-through pin per row: Kv_out at the first
+    # restoration interface kwup+1 equals the incoming Kv_in (the
+    # kpp_override_nonzero else-branch).
+    asserts.append({"variable": "Kv_out", "time": 0.0,
+                    "expected": r2[f"Kv_out_{kwup + 1:02d}"], "coords": {"iface": kwup + 1}})
     return overrides, asserts
 
 
