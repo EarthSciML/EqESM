@@ -1413,14 +1413,14 @@ worktree `../EqESM-suite-ed25fde`): **2662P/0F/0E**, validate-failures=0, units-
   pushed): public NCAR URLs, live-data test dropped, fixture skipped (the
   spec cannot redirect a document's own test data URLs). `esm test`
   fetches every data-fed parameter at build, so upstream CI would need
-  network to the NCAR archive. Push awaits the user.
+  network to the NCAR archive. Pushed to ctessum-claude/EarthSciModels `cdeps-datm` (cd58a9c) on 2026-11-07 with user go-ahead; no PR opened yet (PR_DESCRIPTION.md is ready in the worktree).
 - **Commit-message rule:** AGENTS.md (user commit 376a785) forbids
   Co-Authored-By/LLM-authorship lines. This round's local manager commits
   were rewritten to drop them before anything was pushed (origin/main
   ancestry and trees unchanged). Leftover branches `wt/mom6-kpp3`,
   `wt/m9-datm-clm2`, `wt/cmeps-ocnalb2`, `wt/cism-transport2` hold the
-  pre-rewrite copies of the review commits (content is on main) and can be
-  deleted with `git branch -D`.
+  pre-rewrite copies of the review commits (content is on main); deleted
+  with `git branch -D` on user go-ahead.
 - **Prompt hygiene:** every worker tried once to open
   `.slurm-agents/prompts/…` inside its worktree (gitignored, absent). New
   prompts use absolute paths; old scratch dirs were copied into the
