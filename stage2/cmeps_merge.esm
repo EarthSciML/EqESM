@@ -329,95 +329,47 @@
      "units": "W/m^2",
      "default": 26.90789871258322,
      "description": "net shortwave, near-infrared diffuse band (F90:834): 0.215f*Foxx_swnet, [W/m2]"
+    },
+    "sw_band_visible_coefficient": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.2849999964237213,
+     "description": "the visible-band split coefficient c1 = c2 = 0.285 of med_phases_prep_ocn_mod.F90:830-834. The Fortran literal carries NO _r8 kind suffix, so it is a SINGLE-precision literal promoted to r8: 0.285f = 0.2849999964237213134765625, not 0.285 (pinned by the dump: every traced row has Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131), [-]"
+    },
+    "sw_band_nearir_coefficient": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.2150000035762787,
+     "description": "the near-infrared band split coefficient c3 = c4 = 0.215 of med_phases_prep_ocn_mod.F90:830-834. The Fortran literal carries NO _r8 kind suffix, so it is a SINGLE-precision literal promoted to r8: 0.215f = 0.2150000035762786865234375, not 0.215 (pinned by the dump: every traced row has Foxx_swnet_idr/Foxx_swnet = 0.21500000357627869), [-]"
     }
    },
    "equations": [
     {
      "lhs": "fswabsv",
      "rhs": {
-      "op": "+",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "Faxa_swvdr",
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.0,
-            "units": "1"
-           },
-           "So_avsdr"
-          ]
-         }
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         "Faxa_swvdf",
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.0,
-            "units": "1"
-           },
-           "So_avsdf"
-          ]
-         }
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_absorbed_shortwave",
+      "bindings": {
+       "sw_dr": "Faxa_swvdr",
+       "sw_df": "Faxa_swvdf",
+       "albedo_dr": "So_avsdr",
+       "albedo_df": "So_avsdf"
+      }
      }
     },
     {
      "lhs": "fswabsi",
      "rhs": {
-      "op": "+",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "Faxa_swndr",
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.0,
-            "units": "1"
-           },
-           "So_anidr"
-          ]
-         }
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         "Faxa_swndf",
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.0,
-            "units": "1"
-           },
-           "So_anidf"
-          ]
-         }
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "ocean_absorbed_shortwave",
+      "bindings": {
+       "sw_dr": "Faxa_swndr",
+       "sw_df": "Faxa_swndf",
+       "albedo_dr": "So_anidr",
+       "albedo_df": "So_anidf"
+      }
      }
     },
     {
@@ -473,12 +425,11 @@
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
-      "name": "fraction_weighted_sum",
+      "name": "open_ocean_weighted_sum",
       "bindings": {
-       "ice_value": "Faxa_rainc",
-       "open_value": "Faxa_rainl",
-       "ice_frac": "ofrac",
-       "open_frac": "ofrac"
+       "a": "Faxa_rainc",
+       "b": "Faxa_rainl",
+       "ofrac": "ofrac"
       }
      }
     },
@@ -487,12 +438,11 @@
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
-      "name": "fraction_weighted_sum",
+      "name": "open_ocean_weighted_sum",
       "bindings": {
-       "ice_value": "Faxa_snowc",
-       "open_value": "Faxa_snowl",
-       "ice_frac": "ofrac",
-       "open_frac": "ofrac"
+       "a": "Faxa_snowc",
+       "b": "Faxa_snowl",
+       "ofrac": "ofrac"
       }
      }
     },
@@ -501,12 +451,11 @@
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
-      "name": "fraction_weighted_sum",
+      "name": "open_ocean_weighted_sum",
       "bindings": {
-       "ice_value": "Faox_lwup",
-       "open_value": "Faxa_lwdn",
-       "ice_frac": "ofrac",
-       "open_frac": "ofrac"
+       "a": "Faox_lwup",
+       "b": "Faxa_lwdn",
+       "ofrac": "ofrac"
       }
      }
     },
@@ -632,12 +581,7 @@
       "name": "shortwave_band",
       "bindings": {
        "swnet": "Foxx_swnet",
-       "coefficient": {
-        "op": "const",
-        "args": [],
-        "value": 0.2849999964237213,
-        "units": "1"
-       }
+       "coefficient": "sw_band_visible_coefficient"
       }
      }
     },
@@ -649,12 +593,7 @@
       "name": "shortwave_band",
       "bindings": {
        "swnet": "Foxx_swnet",
-       "coefficient": {
-        "op": "const",
-        "args": [],
-        "value": 0.2849999964237213,
-        "units": "1"
-       }
+       "coefficient": "sw_band_visible_coefficient"
       }
      }
     },
@@ -666,12 +605,7 @@
       "name": "shortwave_band",
       "bindings": {
        "swnet": "Foxx_swnet",
-       "coefficient": {
-        "op": "const",
-        "args": [],
-        "value": 0.2150000035762787,
-        "units": "1"
-       }
+       "coefficient": "sw_band_nearir_coefficient"
       }
      }
     },
@@ -683,12 +617,7 @@
       "name": "shortwave_band",
       "bindings": {
        "swnet": "Foxx_swnet",
-       "coefficient": {
-        "op": "const",
-        "args": [],
-        "value": 0.2150000035762787,
-        "units": "1"
-       }
+       "coefficient": "sw_band_nearir_coefficient"
       }
      }
     }
@@ -696,7 +625,7 @@
    "tests": [
     {
      "id": "step1_first_cell",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced row: ifrac = 0.46473 (partial-ice), ofrac = 0.53527, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 125.1530 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced row: ifrac = 0.46473 (partial-ice), ofrac = 0.53527, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 125.1530 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -749,31 +678,6 @@
        "expected": 111.61157332151211
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.46472700362047464
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.5352729963795253
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.46472700362047464
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5352729963795253
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 1.3375036737683607e-06
@@ -814,21 +718,6 @@
        "expected": 0.0
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 125.1530151860519
@@ -857,7 +746,7 @@
     },
     {
      "id": "step1_last_cell",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced cell of step 1: ifrac = 0.47877 (partial-ice), ofrac = 0.52123, ifrad = 0.47877, ofrad = 0.52123, Foxx_swnet = 143.9111 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced cell of step 1: ifrac = 0.47877 (partial-ice), ofrac = 0.52123, ifrad = 0.47877, ofrad = 0.52123, Foxx_swnet = 143.9111 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -910,31 +799,6 @@
        "expected": 131.85357784769718
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.478768258097852
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.5212317419021479
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.478768258097852
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5212317419021479
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 9.918161396897226e-07
@@ -975,21 +839,6 @@
        "expected": 0.0
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 4.91923120603026e-06
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 5.579127990960267e-06
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 143.91111291387935
@@ -1018,7 +867,7 @@
     },
     {
      "id": "step2_first_cell",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 2, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). step 2 first cell (fraction-lag context: ifrad = ifrac of step 1, differing from the current ifrac): ifrac = 0.46925 (partial-ice), ofrac = 0.53075, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 165.9470 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 2, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). step 2 first cell (fraction-lag context: ifrad = ifrac of step 1, differing from the current ifrac): ifrac = 0.46925 (partial-ice), ofrac = 0.53075, ifrad = 0.46473, ofrad = 0.53527, Foxx_swnet = 165.9470 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1071,31 +920,6 @@
        "expected": 148.36192368317893
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.4692451250438887
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.5307548749561113
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.46472700362047464
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5352729963795253
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 1.3785821519840767e-06
@@ -1136,21 +960,6 @@
        "expected": 0.0
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 165.94702580123206
@@ -1179,7 +988,7 @@
     },
     {
      "id": "step24_first_cell",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced cell of the last step: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the first traced cell of the last step: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1232,31 +1041,6 @@
        "expected": 61.298297969852754
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.45300172164323294
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.5469982783567671
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.4589965161030703
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5410034838969298
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 7.254022613443656e-06
@@ -1297,21 +1081,6 @@
        "expected": 0.0004072535705513032
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 69.72935364157411
@@ -1340,7 +1109,7 @@
     },
     {
      "id": "step24_last_cell",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced row: ifrac = 0.46883 (partial-ice), ofrac = 0.53117, ifrad = 0.46922, ofrad = 0.53078, Foxx_swnet = 88.0867 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42667, ocean cell n = 7117, lat -69.032483 deg, lon -282.666667 deg). the last traced row: ifrac = 0.46883 (partial-ice), ofrac = 0.53117, ifrad = 0.46922, ofrad = 0.53078, Foxx_swnet = 88.0867 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1393,31 +1162,6 @@
        "expected": 78.96686710322336
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.46883382660912704
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.531166173390873
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.46921965552459144
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5307803444754086
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 8.317683363183724e-07
@@ -1458,21 +1202,6 @@
        "expected": 0.0004214868084589095
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 4.91923120603026e-06
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 5.579127990960267e-06
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 88.086689237438
@@ -1501,7 +1230,7 @@
     },
     {
      "id": "mid_step12_cell7024",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 12, gid 42124, ocean cell n = 7024, lat -69.269750 deg, lon -284.666667 deg). mid-run step 12, mid cell 7024: ifrac = 0.60688 (partial-ice), ofrac = 0.39312, ifrad = 0.60169, ofrad = 0.39831, Foxx_swnet = 171.5755 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 12, gid 42124, ocean cell n = 7024, lat -69.269750 deg, lon -284.666667 deg). mid-run step 12, mid cell 7024: ifrac = 0.60688 (partial-ice), ofrac = 0.39312, ifrad = 0.60169, ofrad = 0.39831, Foxx_swnet = 171.5755 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1554,31 +1283,6 @@
        "expected": 206.71638828618805
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.606880693302204
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.39311930669779604
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.6016887264073356
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.3983112735926644
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 2.060269144895743e-06
@@ -1619,21 +1323,6 @@
        "expected": 0.0005455924722525058
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 1.5551552973894885e-05
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 1.7637736399395588e-05
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 171.57550122237848
@@ -1662,7 +1351,7 @@
     },
     {
      "id": "min_ifrac",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42662, ocean cell n = 7112, lat -69.032483 deg, lon -286.000000 deg). the lowest ice fraction: ifrac = 0.06828 (partial-ice), ofrac = 0.93172, ifrad = 0.06884, ofrad = 0.93116, Foxx_swnet = 117.2556 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 42662, ocean cell n = 7112, lat -69.032483 deg, lon -286.000000 deg). the lowest ice fraction: ifrac = 0.06828 (partial-ice), ofrac = 0.93172, ifrad = 0.06884, ofrad = 0.93116, Foxx_swnet = 117.2556 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1715,31 +1404,6 @@
        "expected": 59.859260540582376
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.06828132564275592
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.9317186743572441
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.06883861674133648
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.9311613832586635
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 9.45587990946945e-06
@@ -1780,21 +1444,6 @@
        "expected": 6.13856688427533e-05
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 1.9426216904772914e-05
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 2.490540451776954e-05
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 117.25561278748471
@@ -1823,7 +1472,7 @@
     },
     {
      "id": "max_ifrac",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42126, ocean cell n = 7026, lat -69.269750 deg, lon -283.333333 deg). the highest ice fraction: ifrac = 0.62463 (partial-ice), ofrac = 0.37537, ifrad = 0.62463, ofrad = 0.37537, Foxx_swnet = 103.5541 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 1, gid 42126, ocean cell n = 7026, lat -69.269750 deg, lon -283.333333 deg). the highest ice fraction: ifrac = 0.62463 (partial-ice), ofrac = 0.37537, ifrad = 0.62463, ofrad = 0.37537, Foxx_swnet = 103.5541 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1876,31 +1525,6 @@
        "expected": 131.73530908278846
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.6246313702597078
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.37536862974029217
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.6246313702597078
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.37536862974029217
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 7.142632257026463e-07
@@ -1941,21 +1565,6 @@
        "expected": 0.0
       },
       {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 1.5557118785766237e-05
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 1.7644048966433233e-05
-      },
-      {
        "variable": "Foxx_swnet",
        "time": 0.0,
        "expected": 103.55408684301446
@@ -1984,7 +1593,7 @@
     },
     {
      "id": "median_ifrac",
-     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the median ice fraction: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output is asserted at dump precision. The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
+     "description": "Instantaneous pin of the med_phases_prep_ocn_accum merges and the med_phases_prep_ocn_custom shortwave computation (med_phases_prep_ocn_mod.F90:161-168 and 582-894, with the esmFldsExchange_cesm_mod.F90 merge weights of the C_JRA_t62_inst run) from stage1/dumps/cmeps/cmeps_merge.csv: row (step 24, gid 41583, ocean cell n = 6933, lat -69.504449 deg, lon -285.333333 deg). the median ice fraction: ifrac = 0.45300 (partial-ice), ofrac = 0.54700, ifrad = 0.45900, ofrad = 0.54100, Foxx_swnet = 69.7294 W/m2, Foxx_swnet_vdr/Foxx_swnet = 0.28499999642372131 (the single-precision 0.285 literal). time_span {0,0} evaluates the pointwise laws at the dumped inputs; the informative outputs are asserted at dump precision (the pins that are exact copies of inputs, identically zero in all rows, or duplicates of other outputs are dropped: the scaled fractions reproduce their inputs in every row, Faxa_rain and Fioi_salt are identically zero in all 288 rows, and Foxx_rofl/Foxx_rofi copy Forr_rofl/Forr_rofi). The replay of stage1/analysis/validate_cmeps_ocnalb_merge_dumps.py reproduces all 288 rows of the dump bit-identically (0.000e+00 relative error on all 23 columns).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -2037,31 +1646,6 @@
        "expected": 61.298297969852754
       },
       {
-       "variable": "ifrac_scaled",
-       "time": 0.0,
-       "expected": 0.45300172164323294
-      },
-      {
-       "variable": "ofrac_scaled",
-       "time": 0.0,
-       "expected": 0.5469982783567671
-      },
-      {
-       "variable": "ifracr_scaled",
-       "time": 0.0,
-       "expected": 0.4589965161030703
-      },
-      {
-       "variable": "ofracr_scaled",
-       "time": 0.0,
-       "expected": 0.5410034838969298
-      },
-      {
-       "variable": "Faxa_rain",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
        "variable": "Faxa_snow",
        "time": 0.0,
        "expected": 7.254022613443656e-06
@@ -2100,21 +1684,6 @@
        "variable": "Fioi_meltw",
        "time": 0.0,
        "expected": 0.0004072535705513032
-      },
-      {
-       "variable": "Fioi_salt",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofl",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Foxx_rofi",
-       "time": 0.0,
-       "expected": 0.0
       },
       {
        "variable": "Foxx_swnet",

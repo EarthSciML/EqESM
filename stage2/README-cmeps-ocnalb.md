@@ -10,11 +10,24 @@ pointwise components transcribed from the instrumented C_JRA_t62 run:
 
 Both import their shared math from `./cmeps_templates.esm` by reference (the
 library now carries, in addition to the aoflux templates, the Berger 1978
-solar-geometry templates `earth_true_longitude` / `solar_declination` /
-`earth_sun_distance_factor` / `solar_zenith_cosine`, the albedo templates
-`briegleb_direct_albedo` / `taylor_direct_albedo` / `ocean_albedo_scheme` /
-`ocean_albedo_visible` / `ocean_albedo_nearinfrared`, and the merge templates
-`scaled_fraction` / `fraction_weighted_sum` / `shortwave_band`).
+solar-geometry templates `earth_mean_anomaly` / `earth_true_longitude_series` /
+`earth_true_longitude` / `solar_declination` / `earth_sun_distance_factor` /
+`solar_zenith_cosine`, the albedo templates `briegleb_direct_albedo` /
+`taylor_direct_albedo` / `ocean_albedo_scheme` / `ocean_albedo_visible` /
+`ocean_albedo_nearinfrared`, and the merge templates `scaled_fraction` /
+`fraction_weighted_sum` / `open_ocean_weighted_sum` /
+`ocean_absorbed_shortwave` / `shortwave_band`). The mean anomaly
+`lambm0 + (calday−80.5)·2π/365 − mvelpp` is factored into `earth_mean_anomaly`
+and bound once by `earth_true_longitude` (which passes it to the
+equation-of-center series `earth_true_longitude_series`); `fswabsv` and
+`fswabsi` share the single `ocean_absorbed_shortwave` law
+`sw_dr·(1−α_dr) + sw_df·(1−α_df)` (the same law as the CLM `absorbed_shortwave`
+of clm_templates.esm, named distinctly because both template libraries are
+imported together and the esm-spec deep-equality rule rejects same-name
+non-deep-equal definitions); the two-source merges whose sources share the
+open-ocean weight (Faxa_rain/Faxa_snow/Foxx_lwnet) use
+`open_ocean_weighted_sum` = `(a + b)·ofrac` rather than `fraction_weighted_sum`
+(which is kept for the different-weight Foxx_taux/Foxx_tauy merges).
 
 ## The dumps
 
@@ -107,16 +120,25 @@ Two findings surfaced during validation, both pinned by the dumps:
 
 ## Tests
 
-9 tests × 7 assertions (ocnalb) and 9 tests × 23 assertions (merge), 18 tests
-total, all green under `./esm test stage2/` (whole suite 1685P/0F/0E) at
+9 tests × 4 assertions (ocnalb) and 9 tests × 15 assertions (merge), 18 tests
+total, all green under `./esm test stage2/` (whole suite 2297P/0F/0E) at
 `rel 1e-12`, `time_span {0,0}`. The rows are the four (step, cell) corners
 plus step 2 cell 6933 (fraction-lag context), mid-run step 12 cell 7024, and
-the min/max/median cosz (ocnalb) and ifrac (merge) rows; every dumped output
-is asserted per test. Full 288-row coverage is the validator's job (bit
--identical replay).
+the min/max/median cosz (ocnalb) and ifrac (merge) rows; the informative
+outputs are asserted per test. Pins that cannot fail are dropped: the ocnalb
+anidf/avsdf (copies of the overridden albdif) and avsdr (duplicate of anidr),
+the merge scaled fractions (equal to their inputs in every row), the
+Foxx_rofl/Foxx_rofi copies of Forr_rofl/Forr_rofi, and the identically-zero
+Faxa_rain and Fioi_salt (see Gaps). Full 288-row coverage is the validator's
+job (bit-identical replay).
 
 ## Gaps
 
 - Taylor scheme, flux_albav branch, use_min_albedo clamp, dark side (ocnalb);
   import_swpen_by_bands branch, enthalpy merges, prep_atm atmosphere merges
   (merge). All documented in the component descriptions.
+- Faxa_rain and Fioi_salt (merge): both are identically zero in all 288 traced
+  rows — the traced DATM forcing has no rain (Faxa_rainc/Faxa_rainl = 0) and
+  the SICE data-ice exports no salt (Fioi_salt_ice = 0) — so their merge laws
+  `(Faxa_rainc + Faxa_rainl)·ofrac` and `Fioi_salt_ice·ifrac` are transcribed
+  but unpinned; a rain-bearing or salt-exporting case would pin them.

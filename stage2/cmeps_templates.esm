@@ -959,16 +959,15 @@
     ]
    }
   },
-"earth_true_longitude": {
-   "description": "Earth true longitude lambda [rad] of Berger (1978) as implemented in shr_orb_decl (share/src/shr_orb_mod.F90:789-797): lambm = lambm0 + (calday - 80.5)*2*pi/365, lmm = lambm - mvelpp, lambda = lambm + eccen*(2*sin(lmm) + eccen*(1.25*sin(2*lmm) + eccen*((13/12)*sin(3*lmm) - 0.25*sin(lmm)))). calday is the calendar day of interest [day] (nextsw_cday, including the fraction), 80.5 [day] is the vernal equinox at calday 80.5 and 365 [day] the days per year (shr_orb_mod.F90:762-763); the 2*pi factor closes as rad per orbit, so the unit algebra of the template is rad = dimensionless*rad.",
+"earth_mean_anomaly": {
+   "description": "Earth mean anomaly lmm [rad] of Berger (1978) as implemented in shr_orb_decl (share/src/shr_orb_mod.F90:789-791): lmm = lambm0 + (calday - 80.5)*2*pi/365 - mvelpp, the mean longitude lambm minus the perihelion longitude mvelpp. calday is the calendar day of interest [day] (nextsw_cday, including the fraction), 80.5 [day] is the vernal equinox at calday 80.5 and 365 [day] the days per year (shr_orb_mod.F90:762-763); the 2*pi factor closes as rad per orbit, so the unit algebra of the template is rad = dimensionless*rad.",
    "params": [
     "calday",
-    "eccen",
     "mvelpp",
     "lambm0"
    ],
    "body": {
-    "op": "+",
+    "op": "-",
     "args": [
      {
       "op": "+",
@@ -1010,6 +1009,27 @@
        }
       ]
      },
+     "mvelpp"
+    ]
+   }
+  },
+"earth_true_longitude_series": {
+   "description": "The Berger (1978) equation-of-center series added to the mean longitude (shr_orb_decl, share/src/shr_orb_mod.F90:792-797): lambda = (lmm + mvelpp) + eccen*(2*sin(lmm) + eccen*(1.25*sin(2*lmm) + eccen*((13/12)*sin(3*lmm) - 0.25*sin(lmm)))), with lmm the mean anomaly of earth_mean_anomaly (bound once by earth_true_longitude) and lambm = lmm + mvelpp the mean longitude. eccen is the orbital eccentricity [-].",
+   "params": [
+    "lmm",
+    "mvelpp",
+    "eccen"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "lmm",
+       "mvelpp"
+      ]
+     },
      {
       "op": "*",
       "args": [
@@ -1029,52 +1049,7 @@
            {
             "op": "sin",
             "args": [
-             {
-              "op": "-",
-              "args": [
-               {
-                "op": "+",
-                "args": [
-                 "lambm0",
-                 {
-                  "op": "*",
-                  "args": [
-                   {
-                    "op": "-",
-                    "args": [
-                     "calday",
-                     {
-                      "op": "const",
-                      "args": [],
-                      "value": 80.5,
-                      "units": "day"
-                     }
-                    ]
-                   },
-                   {
-                    "op": "/",
-                    "args": [
-                     {
-                      "op": "const",
-                      "args": [],
-                      "value": 6.283185307179586,
-                      "units": "rad"
-                     },
-                     {
-                      "op": "const",
-                      "args": [],
-                      "value": 365.0,
-                      "units": "day"
-                     }
-                    ]
-                   }
-                  ]
-                 }
-                ]
-               },
-               "mvelpp"
-              ]
-             }
+             "lmm"
             ]
            }
           ]
@@ -1107,52 +1082,7 @@
                     "value": 2.0,
                     "units": "1"
                    },
-                   {
-                    "op": "-",
-                    "args": [
-                     {
-                      "op": "+",
-                      "args": [
-                       "lambm0",
-                       {
-                        "op": "*",
-                        "args": [
-                         {
-                          "op": "-",
-                          "args": [
-                           "calday",
-                           {
-                            "op": "const",
-                            "args": [],
-                            "value": 80.5,
-                            "units": "day"
-                           }
-                          ]
-                         },
-                         {
-                          "op": "/",
-                          "args": [
-                           {
-                            "op": "const",
-                            "args": [],
-                            "value": 6.283185307179586,
-                            "units": "rad"
-                           },
-                           {
-                            "op": "const",
-                            "args": [],
-                            "value": 365.0,
-                            "units": "day"
-                           }
-                          ]
-                         }
-                        ]
-                       }
-                      ]
-                     },
-                     "mvelpp"
-                    ]
-                   }
+                   "lmm"
                   ]
                  }
                 ]
@@ -1187,52 +1117,7 @@
                         "value": 3.0,
                         "units": "1"
                        },
-                       {
-                        "op": "-",
-                        "args": [
-                         {
-                          "op": "+",
-                          "args": [
-                           "lambm0",
-                           {
-                            "op": "*",
-                            "args": [
-                             {
-                              "op": "-",
-                              "args": [
-                               "calday",
-                               {
-                                "op": "const",
-                                "args": [],
-                                "value": 80.5,
-                                "units": "day"
-                               }
-                              ]
-                             },
-                             {
-                              "op": "/",
-                              "args": [
-                               {
-                                "op": "const",
-                                "args": [],
-                                "value": 6.283185307179586,
-                                "units": "rad"
-                               },
-                               {
-                                "op": "const",
-                                "args": [],
-                                "value": 365.0,
-                                "units": "day"
-                               }
-                              ]
-                             }
-                            ]
-                           }
-                          ]
-                         },
-                         "mvelpp"
-                        ]
-                       }
+                       "lmm"
                       ]
                      }
                     ]
@@ -1251,52 +1136,7 @@
                    {
                     "op": "sin",
                     "args": [
-                     {
-                      "op": "-",
-                      "args": [
-                       {
-                        "op": "+",
-                        "args": [
-                         "lambm0",
-                         {
-                          "op": "*",
-                          "args": [
-                           {
-                            "op": "-",
-                            "args": [
-                             "calday",
-                             {
-                              "op": "const",
-                              "args": [],
-                              "value": 80.5,
-                              "units": "day"
-                             }
-                            ]
-                           },
-                           {
-                            "op": "/",
-                            "args": [
-                             {
-                              "op": "const",
-                              "args": [],
-                              "value": 6.283185307179586,
-                              "units": "rad"
-                             },
-                             {
-                              "op": "const",
-                              "args": [],
-                              "value": 365.0,
-                              "units": "day"
-                             }
-                            ]
-                           }
-                          ]
-                         }
-                        ]
-                       },
-                       "mvelpp"
-                      ]
-                     }
+                     "lmm"
                     ]
                    }
                   ]
@@ -1314,6 +1154,34 @@
       ]
      }
     ]
+   }
+  },
+"earth_true_longitude": {
+   "description": "Earth true longitude lambda [rad] of Berger (1978) as implemented in shr_orb_decl (share/src/shr_orb_mod.F90:789-797): lambda = lambm + eccen*(2*sin(lmm) + eccen*(1.25*sin(2*lmm) + eccen*((13/12)*sin(3*lmm) - 0.25*sin(lmm)))) with lambm = lambm0 + (calday - 80.5)*2*pi/365 the mean longitude and lmm the mean anomaly of earth_mean_anomaly, bound once and passed to the equation-of-center series of earth_true_longitude_series, called by reference. calday is the calendar day of interest [day] (nextsw_cday, including the fraction), 80.5 [day] is the vernal equinox at calday 80.5 and 365 [day] the days per year (shr_orb_mod.F90:762-763); the 2*pi factor closes as rad per orbit, so the unit algebra of the template is rad = dimensionless*rad.",
+   "params": [
+    "calday",
+    "eccen",
+    "mvelpp",
+    "lambm0"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "earth_true_longitude_series",
+    "bindings": {
+     "lmm": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "earth_mean_anomaly",
+      "bindings": {
+       "calday": "calday",
+       "mvelpp": "mvelpp",
+       "lambm0": "lambm0"
+      }
+     },
+     "mvelpp": "mvelpp",
+     "eccen": "eccen"
+    }
    }
   },
 "solar_declination": {
@@ -1913,7 +1781,7 @@
    }
   },
 "fraction_weighted_sum": {
-   "description": "Fraction-weighted sum of an ice-covered and an open-ocean value (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied to the ocn exports of med_phases_prep_ocn_accum): ice_value*ice_frac + open_value*open_frac, ice term first, matching the source order of esmFldsExchange_cesm_mod.F90. Both weights may be the same fraction (the Faxa_rain/Faxa_snow/Foxx_lwnet merges weight both atm sources by ofrac) or differ (the Foxx_taux/Foxx_tauy merges weight the ice and aoflux sources by ifrac and ofrac).",
+   "description": "Fraction-weighted sum of an ice-covered and an open-ocean value (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied to the ocn exports of med_phases_prep_ocn_accum): ice_value*ice_frac + open_value*open_frac, ice term first, matching the source order of esmFldsExchange_cesm_mod.F90. Used where the two sources carry DIFFERENT weights (the Foxx_taux/Foxx_tauy merges weight the ice and aoflux sources by ifrac and ofrac); the merges whose two sources share the same open-ocean weight ofrac (Faxa_rain/Faxa_snow/Foxx_lwnet) use open_ocean_weighted_sum instead.",
    "params": [
     "ice_value",
     "open_value",
@@ -1951,6 +1819,77 @@
     "args": [
      "coefficient",
      "swnet"
+    ]
+   }
+  },
+"ocean_absorbed_shortwave": {
+   "description": "Shortwave absorbed by the open ocean in one band pair (med_phases_prep_ocn_mod.F90:795-796): fswabs = sw_dr*(1 - albedo_dr) + sw_df*(1 - albedo_df), the direct and diffuse downwelling shortwave of one band pair each attenuated by the matching surface albedo of that pair. Shared by the visible band (fswabsv with the all-sky avsdr/avsdf albedos) and the near-infrared band (fswabsi with the anidr/anidf albedos) of the med_phases_prep_ocn_custom computation. The law is the same as the CLM absorbed_shortwave of clm_templates.esm (SurfaceRadiationMod.F90:701-710) with ocean-band names; it is named distinctly because the two template libraries are imported together and the esm-spec deep-equality rule (esm-spec 9.7.4/9.7.5) would reject same-name non-deep-equal definitions.",
+   "params": [
+    "sw_dr",
+    "sw_df",
+    "albedo_dr",
+    "albedo_df"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "sw_dr",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "albedo_dr"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "sw_df",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "albedo_df"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+"open_ocean_weighted_sum": {
+   "description": "Sum of two open-ocean source fields each weighted by the open-ocean fraction (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied to the ocn exports of med_phases_prep_ocn_accum): (a + b)*ofrac, the two-source merges of esmFldsExchange_cesm_mod.F90 where both sources carry mrg_frac = 'ofrac': Faxa_rain = Faxa_rainc*ofrac + Faxa_rainl*ofrac (L1940-1942), Faxa_snow = Faxa_snowc*ofrac + Faxa_snowl*ofrac (L1949-1951) and Foxx_lwnet = Faox_lwup*ofrac + Faxa_lwdn*ofrac (L1759-1762).",
+   "params": [
+    "a",
+    "b",
+    "ofrac"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "a",
+       "b"
+      ]
+     },
+     "ofrac"
     ]
    }
   }
