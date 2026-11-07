@@ -2908,5 +2908,1660 @@
      ]
     }
    }
+,
+  "dEdd_scaled_tau":   {
+   "description": "Scaled extinction optical depth ts of the delta-Eddington solution (taus, icepack_shortwave.F90:4755-4761; applied at solution_dEdd F90:3294-3296): ts = (1 - w*f)*t, with w the layer single-scattering albedo, f = g^2 the forward-scattering fraction and t the layer extinction optical depth.",
+   "params": [
+    "w",
+    "f",
+    "t"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         "w",
+         "f"
+        ]
+       }
+      ]
+     },
+     "t"
+    ]
+   }
+  },
+  "dEdd_scaled_w0":   {
+   "description": "Scaled single-scattering albedo ws (omgs, icepack_shortwave.F90:4765-4771): ws = (1-f)*w/(1 - w*f).",
+   "params": [
+    "w",
+    "f"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "f"
+        ]
+       },
+       "w"
+      ]
+     },
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         "w",
+         "f"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_scaled_g":   {
+   "description": "Scaled asymmetry parameter gs (asys, icepack_shortwave.F90:4775-4781): gs = (g - f)/(1 - f).",
+   "params": [
+    "g",
+    "f"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       "g",
+       "f"
+      ]
+     },
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       "f"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_el":   {
+   "description": "Delta-Eddington coupling coefficient lm (el, icepack_shortwave.F90:4745-4751): lm = sqrt(3*(1-w)*(1 - w*g)).",
+   "params": [
+    "w",
+    "g"
+   ],
+   "body": {
+    "op": "sqrt",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         3.0,
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "w"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           "w",
+           "g"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_u":   {
+   "description": "Delta-Eddington diffusivity ue (u, icepack_shortwave.F90:4735-4741): ue = 1.5*(1 - w*g)/e.",
+   "params": [
+    "w",
+    "g",
+    "e"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       1.5,
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           "w",
+           "g"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "e"
+    ]
+   }
+  },
+  "dEdd_n":   {
+   "description": "Delta-Eddington denominator ne (n, icepack_shortwave.F90:4725-4731): ne = (u+1)^2/et - (u-1)^2*et, with et the clamped layer extinction exp(-min(exp_argmax, lm*ts)).",
+   "params": [
+    "u",
+    "et"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           "u",
+           1.0
+          ]
+         },
+         2
+        ]
+       },
+       "et"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "u",
+           1.0
+          ]
+         },
+         2
+        ]
+       },
+       "et"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_alpha":   {
+   "description": "Direct-beam alpha coefficient (alpha, icepack_shortwave.F90:4705-4711): alp = 0.75*w*mu*((1 + g*(1-w))/(1 - (e*e)*(mu*mu))). The denominator is written with the paired association (e*e)*(mu*mu) of the run's gfortran -O2 build; the near-pole snow band-3 layers (lm*gauspt(1) ~ 1) amplify a flat-vs-squared-pair difference to ~2e-10 relative (see scratch/dedd_reference.py).",
+   "params": [
+    "w",
+    "mu",
+    "g",
+    "e"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     0.75,
+     "w",
+     "mu",
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           "g",
+           {
+            "op": "-",
+            "args": [
+             1.0,
+             "w"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "e",
+             "e"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "mu",
+             "mu"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_agamm":   {
+   "description": "Direct-beam gamma coefficient (agamm, icepack_shortwave.F90:4715-4721): gam = 0.5*w*((1 + 3*g*(1-w)*mu*mu)/(1 - (e*e)*(mu*mu))); the same denominator association note applies as for dEdd_alpha.",
+   "params": [
+    "w",
+    "mu",
+    "g",
+    "e"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     0.5,
+     "w",
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           3.0,
+           "g",
+           {
+            "op": "-",
+            "args": [
+             1.0,
+             "w"
+            ]
+           },
+           "mu",
+           "mu"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "e",
+             "e"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "mu",
+             "mu"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_exp_clamp":   {
+   "description": "Layer extinction with the exponential clamp (solution_dEdd, icepack_shortwave.F90:3307-3308, 3318, 3338-3339): exp(-min(exp_argmax, x)) with exp_argmax = 10 (F90:123).",
+   "params": [
+    "x"
+   ],
+   "body": {
+    "op": "exp",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "min",
+        "args": [
+         10.0,
+         "x"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_direct_reflectivity":   {
+   "description": "Layer reflectivity to the direct beam (solution_dEdd, icepack_shortwave.F90:3323): rdir = (alp+gam)*rdif_a + (alp-gam)*(tdif_a*trnlay - 1), with alp/gam = alpha/agamm at the solar angle and trnlay the clamped direct-beam transmission.",
+   "params": [
+    "alp",
+    "gam",
+    "rdif_a",
+    "tdif_a",
+    "trnlay"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       "rdif_a"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "tdif_a",
+           "trnlay"
+          ]
+         },
+         1.0
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_direct_transmissivity":   {
+   "description": "Layer transmission to the direct beam (solution_dEdd, icepack_shortwave.F90:3324): tdir = (alp+gam)*tdif_a + ((alp-gam)*rdif_a - (alp+gam) + 1)*trnlay.",
+   "params": [
+    "alp",
+    "gam",
+    "rdif_a",
+    "tdif_a",
+    "trnlay"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       "tdif_a"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "alp",
+               "gam"
+              ]
+             },
+             "rdif_a"
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             "alp",
+             "gam"
+            ]
+           }
+          ]
+         },
+         1.0
+        ]
+       },
+       "trnlay"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_gauss_direct_reflectivity":   {
+   "description": "Gaussian-angle direct reflectivity (solution_dEdd, icepack_shortwave.F90:3345): rdr = (alp+gam)*R1 + (alp-gam)*(T1*trn - 1), with R1/T1 the first-calc diffuse reflectivity/transmissivity and trn the clamped transmission at the gauss angle.",
+   "params": [
+    "alp",
+    "gam",
+    "R1",
+    "T1",
+    "trn"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       "R1"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "T1",
+           "trn"
+          ]
+         },
+         1.0
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_gauss_direct_transmissivity":   {
+   "description": "Gaussian-angle direct transmissivity (solution_dEdd, icepack_shortwave.F90:3346): tdr = (alp+gam)*T1 + ((alp-gam)*R1 - (alp+gam) + 1)*trn.",
+   "params": [
+    "alp",
+    "gam",
+    "R1",
+    "T1",
+    "trn"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "alp",
+         "gam"
+        ]
+       },
+       "T1"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "alp",
+               "gam"
+              ]
+             },
+             "R1"
+            ]
+           },
+           {
+            "op": "+",
+            "args": [
+             "alp",
+             "gam"
+            ]
+           }
+          ]
+         },
+         1.0
+        ]
+       },
+       "trn"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_coszen_clamp":   {
+   "description": "Cosine solar zenith angle above the fresnel level mu0 (solution_dEdd, icepack_shortwave.F90:3251-3253): mu0 = max(coszen, 0.01), the sun-just-above-the-horizon floor for a stable radiation solution.",
+   "params": [
+    "coszen"
+   ],
+   "body": {
+    "op": "max",
+    "args": [
+     "coszen",
+     0.01
+    ]
+   }
+  },
+  "dEdd_mu0n":   {
+   "description": "Cosine solar zenith angle below the fresnel level mu0nij (solution_dEdd, icepack_shortwave.F90:3257-3258): mu0nij = sqrt(1 - (1 - mu0^2)/refindx^2) with refindx = 1.310 the refractive index of sea ice and water (F90:3177).",
+   "params": [
+    "mu0"
+   ],
+   "body": {
+    "op": "sqrt",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           {
+            "op": "^",
+            "args": [
+             "mu0",
+             2
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.31
+           },
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.31
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_R1":   {
+   "description": "Perpendicular-polarization fresnel reflection amplitude R1 (solution_dEdd, icepack_shortwave.F90:3365-3366): R1 = (mu0 - refindx*mu0n)/(mu0 + refindx*mu0n), evaluated at the fresnel level with mu0n = mu0nij.",
+   "params": [
+    "mu0",
+    "mu0n"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       "mu0",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0n"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "mu0",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0n"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_R2":   {
+   "description": "Parallel-polarization fresnel reflection amplitude R2 (solution_dEdd, icepack_shortwave.F90:3367-3368): R2 = (refindx*mu0 - mu0n)/(refindx*mu0 + mu0n).",
+   "params": [
+    "mu0",
+    "mu0n"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0"
+        ]
+       },
+       "mu0n"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0"
+        ]
+       },
+       "mu0n"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_T1":   {
+   "description": "Perpendicular-polarization fresnel transmission amplitude T1 (solution_dEdd, icepack_shortwave.F90:3369-3370): T1 = 2*mu0/(mu0 + refindx*mu0n).",
+   "params": [
+    "mu0",
+    "mu0n"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       2.0,
+       "mu0"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "mu0",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0n"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_T2":   {
+   "description": "Parallel-polarization fresnel transmission amplitude T2 (solution_dEdd, icepack_shortwave.F90:3371-3372): T2 = 2*mu0/(refindx*mu0 + mu0n).",
+   "params": [
+    "mu0",
+    "mu0n"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       2.0,
+       "mu0"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.31
+         },
+         "mu0"
+        ]
+       },
+       "mu0n"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_Rf_dir_a":   {
+   "description": "Fresnel reflectivity to direct radiation for unpolarized light Rf_dir_a (solution_dEdd, icepack_shortwave.F90:3374-3375): Rf_dir_a = 0.5*(R1^2 + R2^2).",
+   "params": [
+    "R1",
+    "R2"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     0.5,
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "^",
+        "args": [
+         "R1",
+         2
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         "R2",
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_Tf_dir_a":   {
+   "description": "Fresnel transmission to direct radiation Tf_dir_a (solution_dEdd, icepack_shortwave.F90:3376-3377): Tf_dir_a = 0.5*(T1^2 + T2^2)*refindx*mu0n/mu0.",
+   "params": [
+    "T1",
+    "T2",
+    "mu0n",
+    "mu0"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     0.5,
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "^",
+        "args": [
+         "T1",
+         2
+        ]
+       },
+       {
+        "op": "^",
+        "args": [
+         "T2",
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.31
+     },
+     {
+      "op": "/",
+      "args": [
+       "mu0n",
+       "mu0"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_rintfc":   {
+   "description": "Fresnel-layer multiple-scattering term rintfc (solution_dEdd, icepack_shortwave.F90:3395): rintfc = 1/(1 - Rf_dif_b*rdif_a), with Rf_dif_b = 0.455 the precomputed diffuse fresnel reflectivity from below (cp455, F90:3179).",
+   "params": [
+    "Rf_dif_b",
+    "rdif_a"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     1.0,
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         "Rf_dif_b",
+         "rdif_a"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_tdir":   {
+   "description": "Fresnel-combined layer transmission to the direct beam (solution_dEdd, icepack_shortwave.F90:3396-3397): tdir' = Tf_dir_a*tdir + Tf_dir_a*rdir*Rf_dif_b*rintfc*tdif_a.",
+   "params": [
+    "Tf_dir_a",
+    "tdir",
+    "rdir",
+    "Rf_dif_b",
+    "rintfc",
+    "tdif_a"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "Tf_dir_a",
+       "tdir"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "Tf_dir_a",
+       "rdir",
+       "Rf_dif_b",
+       "rintfc",
+       "tdif_a"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_rdir":   {
+   "description": "Fresnel-combined layer reflectivity to the direct beam (solution_dEdd, icepack_shortwave.F90:3398-3399): rdir' = Rf_dir_a + Tf_dir_a*rdir*rintfc*Tf_dif_b.",
+   "params": [
+    "Rf_dir_a",
+    "Tf_dir_a",
+    "rdir",
+    "rintfc",
+    "Tf_dif_b"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     "Rf_dir_a",
+     {
+      "op": "*",
+      "args": [
+       "Tf_dir_a",
+       "rdir",
+       "rintfc",
+       "Tf_dif_b"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_rdif_a":   {
+   "description": "Fresnel-combined layer diffuse reflectivity from above (solution_dEdd, icepack_shortwave.F90:3400-3401): rdif_a' = Rf_dif_a + Tf_dif_a*rdif_a*rintfc*Tf_dif_b, with Rf_dif_a = 0.063 the precomputed diffuse fresnel reflectivity from above (cp063, F90:3178).",
+   "params": [
+    "Rf_dif_a",
+    "Tf_dif_a",
+    "rdif_a",
+    "rintfc",
+    "Tf_dif_b"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     "Rf_dif_a",
+     {
+      "op": "*",
+      "args": [
+       "Tf_dif_a",
+       "rdif_a",
+       "rintfc",
+       "Tf_dif_b"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_rdif_b":   {
+   "description": "Fresnel-combined layer diffuse reflectivity from below (solution_dEdd, icepack_shortwave.F90:3402-3403): rdif_b' = rdif_b + tdif_b*Rf_dif_b*rintfc*tdif_a.",
+   "params": [
+    "rdif_b",
+    "tdif_b",
+    "Rf_dif_b",
+    "rintfc",
+    "tdif_a"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     "rdif_b",
+     {
+      "op": "*",
+      "args": [
+       "tdif_b",
+       "Rf_dif_b",
+       "rintfc",
+       "tdif_a"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_fresnel_tdif_a":   {
+   "description": "Fresnel-combined layer diffuse transmission from above (solution_dEdd, icepack_shortwave.F90:3404): tdif_a' = tdif_a*rintfc*Tf_dif_a.",
+   "params": [
+    "tdif_a",
+    "rintfc",
+    "Tf_dif_a"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "tdif_a",
+     "rintfc",
+     "Tf_dif_a"
+    ]
+   }
+  },
+  "dEdd_fresnel_tdif_b":   {
+   "description": "Fresnel-combined layer diffuse transmission from below (solution_dEdd, icepack_shortwave.F90:3405): tdif_b' = tdif_b*rintfc*Tf_dif_b.",
+   "params": [
+    "tdif_b",
+    "rintfc",
+    "Tf_dif_b"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "tdif_b",
+     "rintfc",
+     "Tf_dif_b"
+    ]
+   }
+  },
+  "dEdd_fresnel_trnlay":   {
+   "description": "Fresnel-combined direct-beam layer transmission (solution_dEdd, icepack_shortwave.F90:3406): trnlay' = Tf_dir_a*trnlay.",
+   "params": [
+    "Tf_dir_a",
+    "trnlay"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "Tf_dir_a",
+     "trnlay"
+    ]
+   }
+  },
+  "dEdd_snow_grain_adjust":   {
+   "description": "Adjusted snow grain radius frsnw (compute_dEdd_3bd, icepack_shortwave.F90:2122-2125): frsnw = (fr_max*fnidr + fr_min*(1-fnidr))*rsnw, the clear/overcast-sky adjustment of the snow grain radius (fr_max = 1.0, fr_min = 0.8; F90:2057-2058); rsnw and frsnw are in micrometres.",
+   "params": [
+    "fnidr",
+    "rsnw"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         1.0,
+         "fnidr"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         0.8,
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "fnidr"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "rsnw"
+    ]
+   }
+  },
+  "dEdd_snow_ks":   {
+   "description": "Snow mass extinction coefficient ks (compute_dEdd_3bd, icepack_shortwave.F90:2422-2425): ks = Qs*((rhosnw/rhoi)*3/(4*frsnw*1e-6)), with rhoi = 917 kg/m^3 (icepack_parameters.F90:94) and the grain radius frsnw in micrometres.",
+   "params": [
+    "Qs",
+    "rhosnw",
+    "frsnw"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "Qs",
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "rhosnw",
+           {
+            "op": "const",
+            "args": [],
+            "value": 917.0,
+            "units": "kg/m^3"
+           }
+          ]
+         },
+         3.0
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         4.0,
+         "frsnw",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1e-06,
+          "units": "m"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_aerosol_mix_g":   {
+   "description": "Aerosol-mixed asymmetry parameter (compute_dEdd_3bd, icepack_shortwave.F90:2484-2485): g' = (g*w0*tau + gaer)/(w0*tau + waer), with taer/waer/gaer the total aerosol extinction optical depth, single-scattering albedo and asymmetry parameter of the layer.",
+   "params": [
+    "g",
+    "w0",
+    "tau",
+    "gaer",
+    "waer"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "g",
+         "w0",
+         "tau"
+        ]
+       },
+       "gaer"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "w0",
+         "tau"
+        ]
+       },
+       "waer"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_aerosol_mix_w0":   {
+   "description": "Aerosol-mixed single-scattering albedo (compute_dEdd_3bd, icepack_shortwave.F90:2486-2487): w0' = (w0*tau + waer)/(tau + taer).",
+   "params": [
+    "w0",
+    "tau",
+    "waer",
+    "taer"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "w0",
+         "tau"
+        ]
+       },
+       "waer"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "tau",
+       "taer"
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_aerosol_mix_tau":   {
+   "description": "Aerosol-mixed extinction optical depth (compute_dEdd_3bd, icepack_shortwave.F90:2488): tau' = tau + taer.",
+   "params": [
+    "tau",
+    "taer"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     "tau",
+     "taer"
+    ]
+   }
+  },
+  "dEdd_nir_band_weight_2":   {
+   "description": "Near-IR band-2 spectral weight (compute_dEdd_3bd, icepack_shortwave.F90:2116-2118): wghtns(2) = cp67 + (cp78 - cp67)*(1 - fnidr) = 0.67 + 0.11*(1 - fnidr), with cp67 = 0.67 and cp78 = 0.78 (F90:1923-1924); the band-3 weight is wghtns(3) = 1 - wghtns(2) and wghtns(1) = 1.",
+   "params": [
+    "fnidr"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     0.67,
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         0.78,
+         0.67
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "fnidr"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_interface_refk":   {
+   "description": "Interface multiple-scattering term refk (compute_dEdd_3bd, icepack_shortwave.F90:2807): refk = 1/(1 - rdndif*rupdif).",
+   "params": [
+    "rdndif",
+    "rupdif"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     1.0,
+     {
+      "op": "-",
+      "args": [
+       1.0,
+       {
+        "op": "*",
+        "args": [
+         "rdndif",
+         "rupdif"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_dfdir":   {
+   "description": "Down-up direct-beam flux fraction at an interface dfdir (compute_dEdd_3bd, icepack_shortwave.F90:2824-2827): dfdir = trndir + (trntdr - trndir)*(1 - rupdif)*refk - trndir*rupdir*(1 - rdndif)*refk with refk the interface scattering term; set to 0 when below puny = 1e-11 (F90:2827).",
+   "params": [
+    "trndir",
+    "trntdr",
+    "rupdir",
+    "rupdif",
+    "rdndif"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "trndir",
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "trntdr",
+               "trndir"
+              ]
+             },
+             {
+              "op": "-",
+              "args": [
+               1.0,
+               "rupdif"
+              ]
+             },
+             {
+              "op": "/",
+              "args": [
+               1.0,
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 {
+                  "op": "*",
+                  "args": [
+                   "rdndif",
+                   "rupdif"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "trndir",
+             "rupdir",
+             {
+              "op": "-",
+              "args": [
+               1.0,
+               "rdndif"
+              ]
+             },
+             {
+              "op": "/",
+              "args": [
+               1.0,
+               {
+                "op": "-",
+                "args": [
+                 1.0,
+                 {
+                  "op": "*",
+                  "args": [
+                   "rdndif",
+                   "rupdif"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       1e-11
+      ]
+     },
+     0.0,
+     {
+      "op": "+",
+      "args": [
+       "trndir",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "trntdr",
+             "trndir"
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             1.0,
+             "rupdif"
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             1.0,
+             {
+              "op": "-",
+              "args": [
+               1.0,
+               {
+                "op": "*",
+                "args": [
+                 "rdndif",
+                 "rupdif"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "trndir",
+           "rupdir",
+           {
+            "op": "-",
+            "args": [
+             1.0,
+             "rdndif"
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             1.0,
+             {
+              "op": "-",
+              "args": [
+               1.0,
+               {
+                "op": "*",
+                "args": [
+                 "rdndif",
+                 "rupdif"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_dfdif":   {
+   "description": "Down-up diffuse flux fraction at an interface dfdif (compute_dEdd_3bd, icepack_shortwave.F90:2829-2830): dfdif = trndif*(1 - rupdif)*refk with refk the interface scattering term; set to 0 when below puny = 1e-11.",
+   "params": [
+    "trndif",
+    "rupdif",
+    "rdndif"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "trndif",
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           "rupdif"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           1.0,
+           {
+            "op": "-",
+            "args": [
+             1.0,
+             {
+              "op": "*",
+              "args": [
+               "rdndif",
+               "rupdif"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       1e-11
+      ]
+     },
+     0.0,
+     {
+      "op": "*",
+      "args": [
+       "trndif",
+       {
+        "op": "-",
+        "args": [
+         1.0,
+         "rupdif"
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         1.0,
+         {
+          "op": "-",
+          "args": [
+           1.0,
+           {
+            "op": "*",
+            "args": [
+             "rdndif",
+             "rupdif"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "dEdd_band_absorption":   {
+   "description": "Flux divergence absorbed in a radiation layer (the Sabs/Iabs band accumulations, compute_dEdd_3bd F90:2868-2870 and 2889-2891): abs = (dfdir_lo*swdr + dfdif_lo*swdf) - (dfdir_hi*swdr + dfdif_hi*swdf), the difference of the down-up fluxes at the layer's bottom and top interfaces (lo = lower interface, hi = upper interface).",
+   "params": [
+    "dfdir_lo",
+    "dfdif_lo",
+    "dfdir_hi",
+    "dfdif_hi",
+    "swdr",
+    "swdf"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "dfdir_lo",
+         "swdr"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "dfdif_lo",
+         "swdf"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "dfdir_hi",
+         "swdr"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "dfdif_hi",
+         "swdf"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
   }
  }
