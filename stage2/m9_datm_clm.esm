@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "m9_datm_clm",
-  "description": "M9 subassembly: datm -> CLM atmospheric forcing (stage 2 of the EqESM project; milestone M9 - subassemblies across components, PLAN.md section 10). Couples the data atmosphere (CDEPS datm, GSWP3v1 datamode, cdeps_datm_gswp3.esm:Clmncep) to the CLM atmospheric-forcing import and downscaling (clm_atm_forcing.esm:ImportFields + Downscale) exactly as the CESM mediator hands the datm exports to the land in the I2000Clm60Sp reference case: every Sa_*/Faxa_* field the datm exports is imported by CLM without mediator-side alteration (the mediator only maps the fields by name; the datm -> land conversions of stage1/boundaries.md section 2.6 are all inside the components). The variable_map couplings below therefore implement the state_getimport mapping of lnd_import_export.F90:542-577 (Sa_z -> forc_hgt, Sa_topo -> forc_topo, Sa_u/Sa_v -> forc_u/forc_v, Sa_shum -> forc_q, Sa_ptem -> forc_th, Sa_pbot -> forc_pbot, Sa_tbot -> forc_t, Faxa_rainc..Faxa_snowl -> forc_rainc..forc_snowl, Faxa_lwdn -> forc_lwrad, Faxa_swvdr/swndr/swvdf/swndf -> forc_solad_vis/nir/solai_vis/nir), and the ImportFields -> Downscale wiring repeats the internal coupling of clm_atm_forcing.esm (mounts import single models, so the assembly re-states it). The tests pin the coupled chain against the stage-1 dumps on the overlapping (cell, step) rows: CLM dump columns c = 1..5 at steps s = 1..12 (the South Pole row; the five traced cells are value-identical, so cell 1 pins all of them) are driven by the GSWP3v1 interpolated stream values of datm_gswp3_streams.csv at (step s - 1, cell 1) and asserted against the CLM column forcing of clm_bareground/clm_canopyflux (stage hyd)/clm_surfrad at (step s, cell 1). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the atmosphere of the previous interval (verified: every forc_* dump value equals its one-step-earlier datm export bit-exact). The traced columns are non-glacier soil columns (needs_downscaling = 0) and repartition_rain_snow is active but degenerate at the pole (forc_t ~ 249 K below the nonglc all-snow ramp start, so frac_rain = 0 and all precipitation stays snow). Reference: stage1/cesm/components/clm/src/cpl/nuopc/lnd_import_export.F90, cpl/utils/lnd_import_export_utils.F90, main/atm2lndMod.F90; stage1/cesm/cime/cases/I2000Clm60Sp_clm_inst/run/lnd_in; stage1/dumps/cdeps/datm_gswp3_streams.csv, datm_gswp3_exports.csv, stage1/dumps/clm/clm_bareground.csv, clm_canopyflux.csv, clm_surfrad.csv.",
+  "description": "M9 subassembly: datm -> CLM atmospheric forcing (stage 2 of the EqESM project; milestone M9 - subassemblies across components, PLAN.md section 10). Couples the data atmosphere (CDEPS datm, GSWP3v1 datamode, cdeps_datm_gswp3.esm:Clmncep) to the CLM atmospheric-forcing import and downscaling (clm_atm_forcing.esm:ImportFields + Downscale) exactly as the CESM mediator hands the datm exports to the land in the I2000Clm60Sp reference case: every Sa_*/Faxa_* field the datm exports is imported by CLM without mediator-side alteration (the mediator only maps the fields by name; the datm -> land conversions of stage1/boundaries.md section 2.6 are all inside the components). The variable_map couplings below therefore implement the state_getimport mapping of lnd_import_export.F90:542-577 (Sa_z -> forc_hgt, Sa_topo -> forc_topo, Sa_u/Sa_v -> forc_u/forc_v, Sa_shum -> forc_q, Sa_ptem -> forc_th, Sa_pbot -> forc_pbot, Sa_tbot -> forc_t, Faxa_rainc..Faxa_snowl -> forc_rainc..forc_snowl, Faxa_lwdn -> forc_lwrad, Faxa_swvdr/swndr/swvdf/swndf -> forc_solad_vis/nir/solai_vis/nir), and the ImportFields -> Downscale wiring repeats the internal coupling of clm_atm_forcing.esm, because the CLI cannot mount a file's internal couplings by reference: mounting clm_atm_forcing.esm as a single model fails validation with the exact error 'Schema validation error: [toplevel_model_ref_unresolved] top-level model ref '../stage2/clm_atm_forcing.esm' resolves to 2 models; add a \"model\" selector to choose one (available: Downscale, ImportFields)' (probed under scratch/, 2026-11-06). The tests pin the coupled chain against the stage-1 dumps on the overlapping (cell, step) rows: CLM dump columns c = 1..5 at steps s = 1..12 (the South Pole row; the five traced cells are value-identical, so cell 1 pins all of them) are driven by the GSWP3v1 interpolated stream values of datm_gswp3_streams.csv at (step s - 1, cell 1) and asserted against the CLM column forcing of clm_bareground/clm_canopyflux (stage=ent rows, which carry the forc_rain/forc_snow inputs)/clm_surfrad at (step s, cell 1). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the atmosphere of the previous interval (verified: every forc_* dump value equals its one-step-earlier datm export bit-exact). The traced columns are non-glacier soil columns (needs_downscaling = 0) and repartition_rain_snow is active but degenerate at the pole (forc_t ~ 249 K below the nonglc all-snow ramp start, so frac_rain = 0 and all precipitation stays snow). Reference: stage1/cesm/components/clm/src/cpl/nuopc/lnd_import_export.F90, cpl/utils/lnd_import_export_utils.F90, main/atm2lndMod.F90; stage1/cesm/cime/cases/I2000Clm60Sp_clm_inst/run/lnd_in; stage1/dumps/cdeps/datm_gswp3_streams.csv, datm_gswp3_exports.csv, stage1/dumps/clm/clm_bareground.csv, clm_canopyflux.csv, clm_surfrad.csv.",
   "license": "MIT"
  },
  "models": {
@@ -24,6 +24,7 @@
    "tests": [
      {
       "id": "step1_p1",
+      "description": "Subassembly trace row (step 1, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 0, cell n=1) in as the Clmncep strm_* overrides (tbotmax, strm_tbot/strm_pbot/strm_wind/strm_shum/strm_lwdn/strm_swdn/strm_precn/strm_topo; strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the rain/snow split with frac = clamp((tbot - TKFRZ)*0.5, 0, 1) - all traced steps are ~249 K, far below freezing, so all precipitation falls as snow - and the Faxa_sw* direct/diffuse ratios; then the ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 1, c=1; forc_t/forc_q/forc_pbot/forc_rho/forc_u/forc_v columns; forc_q pins the Sa_shum clamp law), clm_canopyflux.csv (step 1, stage=ent, c=1; forc_rain/forc_snow columns) and clm_surfrad.csv (step 1, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact). The forc_t and forc_pbot assertions are pass-throughs of the stream values on this traced column and the forc_rain assertion pins the rain channel that is identically 0 on every traced step (all precipitation falls as snow): each is kept once per file as a labelled coupling-wiring check. The forc_wind and forc_solar assertions are derived (not a dump column): forc_wind = sqrt(forc_u^2 + forc_v^2) and forc_solar = forc_solad_vis + forc_solad_nir + forc_solai_vis + forc_solai_nir (equal to the datm strm_wind/strm_swdn stream columns through the datamode laws), computed and re-verified by stage1/analysis/extract_m9_test_rows.py.",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -123,6 +124,7 @@
      },
      {
       "id": "step2_p1",
+      "description": "Subassembly trace row (step 2, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 1, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 2, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 2, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 2, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -149,19 +151,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.36076958974138
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006513651298453515
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68132.31866319476
        },
        {
         "variable": "Downscale.forc_rho",
@@ -177,16 +169,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 2.7204154149312934
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 3.847248375084666
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -212,16 +194,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.3485387710264
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.94470956805765
        }
       ]
      },
      {
       "id": "step3_p1",
+      "description": "Subassembly trace row (step 3, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 2, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 3, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 3, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 3, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -248,19 +226,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.41229604085228
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.000654712835078913
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68130.50122612894
        },
        {
         "variable": "Downscale.forc_rho",
@@ -276,16 +244,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.9886768563781079
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 2.812413781467412
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -311,16 +269,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34826926835014
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.91759266770555
        }
       ]
      },
      {
       "id": "step4_p1",
+      "description": "Subassembly trace row (step 4, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 3, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 4, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 4, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 4, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -347,19 +301,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.46382249196316
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006580763363032471
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68128.68378906311
        },
        {
         "variable": "Downscale.forc_rho",
@@ -375,16 +319,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -410,16 +344,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.3479993548351
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.89041662355584
        }
       ]
      },
      {
       "id": "step5_p1",
+      "description": "Subassembly trace row (step 5, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 4, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 5, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 5, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 5, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -446,19 +376,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.4691693517891
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006584296068543657
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68128.15022424827
        },
        {
         "variable": "Downscale.forc_rho",
@@ -474,16 +394,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -509,16 +419,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34772903164232
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.8631814393468
        }
       ]
      },
      {
       "id": "step6_p1",
+      "description": "Subassembly trace row (step 6, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 5, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 6, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 6, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 6, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -545,19 +451,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.47451621161508
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006587830519016376
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68127.61665943344
        },
        {
         "variable": "Downscale.forc_rho",
@@ -573,16 +469,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -608,16 +494,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34745829993504
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.83588711882646
        }
       ]
      },
      {
       "id": "step7_p1",
+      "description": "Subassembly trace row (step 7, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 6, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 7, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 7, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 7, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -644,19 +526,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.479863071441
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.000659136671523473
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68127.0830946186
        },
        {
         "variable": "Downscale.forc_rho",
@@ -672,16 +544,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -707,16 +569,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43768633232347
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.09568785808557
        }
       ]
      },
      {
       "id": "step8_p1",
+      "description": "Subassembly trace row (step 8, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 7, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 8, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 8, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 8, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -743,19 +601,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.48520993126698
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006594904657983285
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68126.54952980377
        },
        {
         "variable": "Downscale.forc_rho",
@@ -771,16 +619,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -806,16 +644,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43735255639377
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.0677467332204
        }
       ]
      },
      {
       "id": "step9_p1",
+      "description": "Subassembly trace row (step 9, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 8, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 9, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 9, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 9, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -842,19 +676,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.49055679109296
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006598444348046829
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68126.01596498894
        },
        {
         "variable": "Downscale.forc_rho",
@@ -870,16 +694,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -905,16 +719,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.437018258205605
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.039745343351
        }
       ]
      },
      {
       "id": "step10_p1",
+      "description": "Subassembly trace row (step 10, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 9, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 10, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 10, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 10, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -941,19 +751,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.49590365091888
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006601985786210476
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68125.48240017409
        },
        {
         "variable": "Downscale.forc_rho",
@@ -969,16 +769,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1004,16 +794,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.4366834390509
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.01168369233466
        }
       ]
      },
      {
       "id": "step11_p1",
+      "description": "Subassembly trace row (step 11, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 10, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 11, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 11, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 11, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1040,19 +826,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.42885932569146
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006558385515325504
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68125.11562319186
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1068,16 +844,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2612705292218627
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7837058882470493
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1103,16 +869,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.436348100223675
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 437.98356178403856
        }
       ]
      },
      {
       "id": "step12_p1",
+      "description": "Subassembly trace row (step 12, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm stream values of datm_gswp3_streams.csv row (step 11, cell n=1) in as the Clmncep strm_* overrides (strm_z = 1e30 spval, so the datamode falls back to Sa_z = 30 m), through the datm -> CLM chain (the Clmncep datamode laws of datm_datamode_clmncep_mod.F90: Sa_u = Sa_v = wind/sqrt(2), the Sa_shum clamp at qsat(tbotmax), the all-snow precip split, the Faxa_sw* direct/diffuse ratios; then ImportFields import_fields + derive_quantities of lnd_import_export.F90:542-577 / lnd_import_export_utils.F90:66-90; then the Downscale copy + partition_precip path of atm2lndMod.F90:180-195, 359-390), out the CLM forcing rows of clm_bareground.csv (step 12, c=1; forc_q/forc_rho/forc_u/forc_v columns asserted; forc_u/forc_v pin the datamode wind split, forc_q the Sa_shum clamp law), clm_canopyflux.csv (step 12, stage=ent, c=1; forc_snow column, pinning the all-snow precip split) and clm_surfrad.csv (step 12, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns, pinning the direct/diffuse ratios). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
          "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1139,19 +901,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.361815000464
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006515049554584835
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68124.74884620964
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1167,16 +919,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2656027606188025
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7898325886439401
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1202,11 +944,6 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43601224302044
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 437.95537962233925
        }
       ]
      }
