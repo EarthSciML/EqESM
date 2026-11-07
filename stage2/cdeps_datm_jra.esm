@@ -1,0 +1,2261 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cdeps_datm_jra",
+  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the JRA55 v1.5 forcing with the JRA datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:271-322), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub (0 at night for the coszen streams), the identical law to the CLMNCEP Streams model of cdeps_datm_gswp3.esm but applied here via the factored stream_interp template; (2) Jra - the JRA55 datamode: the exports are direct copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum - no qsat cap in this datamode, the humidity passes through), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v, Sa_dens = pbot/(rdair*tbot*(1+0.608*shum)) with the moisture coefficient 0.608 an UNSUFFIXED single-precision literal (the law uses r4(0.608) = 0.6079999804496765, see bugs.md), the precip split as a step at tbot = TKFRZ (or the prrn/prsn stream passthrough when the streams separate rain and snow), the LY08 albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) with the 0.069/0.011 coefficients likewise UNSUFFIXED single-precision literals (the law uses r4(0.069)/r4(0.011), see bugs.md) with Faxa_swnet = swdn*(1 - avg_alb), and the fixed swdn split 0.28/0.31/0.24/0.17; (3) JRAFiles - the netcdf reader path into the JRA55 v1.5 daily TL319 files (2920 records/yr, model year 1 aligned to data year 1958 as in the C_JRA_t62 case: taxmode = cycle, year_align = 1). The traced-row tests pin the stage-1 dumps of the C_JRA_t62_datm_inst run (datm_jra_streams.csv, datm_jra_exports.csv, cdeps_strdata_streams_jra.csv in stage1/dumps/cdeps/).",
+  "references": [
+   {
+    "citation": "JRA55 datamode of the CDEPS data-atmosphere component, ESCOMP/CDEPS cdeps1.0.112, datm/datm_datamode_jra_mod.F90 (the source of the pinned laws)."
+   }
+  ]
+ },
+ "metaparameters": {
+  "N_REC": {
+   "type": "integer",
+   "default": 0,
+   "description": "Number of time records the netcdf reader delivers for each JRA55 source (bound by the source's extent at test time; 0 so the document validates standalone). Each JRA.v1.5.*.TL319.1958.210504.nc file carries 2920 daily records."
+  }
+ },
+ "index_sets": {
+  "record": {
+   "kind": "interval",
+   "size": "N_REC"
+  }
+ },
+ "data_sources": {
+  "JRA_prec": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.prec.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "precipitation",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 total precipitation prec [kg m-2 s-1], daily mean, TL319 (640x320), 2920 records of 1958; the Faxa_prec stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_lwdn": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.lwdn.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "longwave",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 downward longwave radiation lwdn [W m-2], daily mean, TL319, 2920 records of 1958; the Faxa_lwdn stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_swdn": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.swdn.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "shortwave",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 downward shortwave radiation swdn [W m-2], daily mean, TL319, 2920 records of 1958; the Faxa_swdn stream of the C_JRA_t62 reference case (tintalgo coszen)."
+   }
+  },
+  "JRA_q10": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.q_10.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "humidity",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 10-m specific humidity q_10 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode), daily mean, TL319, 2920 records of 1958; the Sa_shum stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_slp": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.slp.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "pressure",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 sea-level pressure slp [Pa], daily mean, TL319, 2920 records of 1958; the Sa_pslv stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_t10": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.t_10.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "temperature",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 10-m air temperature t_10 [K], daily mean, TL319, 2920 records of 1958; the Sa_tbot stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_u10": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.u_10.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "wind",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 10-m zonal wind u_10 [m s-1], daily mean, TL319, 2920 records of 1958; the Sa_u stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  },
+  "JRA_v10": {
+   "kind": "grid",
+   "source": {
+    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.v_10.TL319.1958.210504.nc"
+   },
+   "select": {
+    "axes": [
+     "all",
+     {
+      "fixed": 0
+     },
+     {
+      "fixed": 0
+     }
+    ]
+   },
+   "extent": {
+    "metaparameter": "N_REC"
+   },
+   "metadata": {
+    "esio_format": "netcdf",
+    "tags": [
+     "jra55",
+     "datm",
+     "forcing",
+     "wind",
+     "daily",
+     "TL319"
+    ],
+    "description": "JRA55 v1.5 10-m meridional wind v_10 [m s-1], daily mean, TL319, 2920 records of 1958; the Sa_v stream of the C_JRA_t62 reference case (tintalgo linear)."
+   }
+  }
+ },
+ "models": {
+  "Streams": {
+   "expression_template_imports": [
+    {
+     "ref": "./cdeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "lb": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "stream value at the lower time bound on the model grid after the spatial map (fldbun_data(LB)), [field units] (the field's own units vary per stream; the law is unit-agnostic)"
+    },
+    "ub": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "stream value at the upper time bound (fldbun_data(UB)), [field units] (the field's own units vary per stream; the law is unit-agnostic)"
+    },
+    "flb": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "time-interpolation factor on lb (linear: (t_ub - t_q)/(t_ub - t_lb); nearest/lower: 1 or 0; coszen: cosz/tavCosz, unused at night)"
+    },
+    "fub": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "time-interpolation factor on ub (linear: 1 - flb; nearest/upper: 0 or 1; coszen: 0, unused)"
+    },
+    "day": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "coszen day/night flag: 1 when cosz > 0.001 (the traced rows; all polar day at the traced T62 points on Jan 1), 0 at night when the law zeroes the value"
+    },
+    "value": {
+     "type": "unknown",
+     "units": "1",
+     "description": "the interpolated stream value written into fldbun_model and consumed by the datamode, [field units] (the field's own units vary per stream; the law is unit-agnostic)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "value",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "stream_interp",
+      "bindings": {
+       "lb": "lb",
+       "ub": "ub",
+       "flb": "flb",
+       "fub": "fub",
+       "day": "day"
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "linear_day",
+     "description": "Synthetic linear-interpolation row: value = flb*lb + fub*ub = 0.25*10 + 0.75*20 = 17.5 (shr_strdata_advance, dshr_strdata_mod.F90:1292-1391; flb+fub = 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 10.0,
+      "ub": 20.0,
+      "flb": 0.25,
+      "fub": 0.75,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 17.5,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "coszen_day",
+     "description": "Synthetic coszen daytime row: value = lb*flb = 100*0.8 = 80 with fub = 0 (the flb factor IS cosz/tavCosz; cf. the traced swdn rows of cdeps_strdata_streams_jra.csv).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 100.0,
+      "ub": 200.0,
+      "flb": 0.8,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 80.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "night_zero",
+     "description": "Synthetic coszen night row: the law zeroes the value when the day flag is 0 (true cosz <= 0.001, dshr_strdata_mod.F90:1350-1365), regardless of the factors.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 100.0,
+      "ub": 200.0,
+      "flb": 0.8,
+      "fub": 0.0,
+      "day": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "nearest_ub",
+     "description": "Synthetic nearest-interpolation row: value = ub when flb = 0, fub = 1 (shr_strdata_advance nearest tintalgo).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 10.0,
+      "ub": 20.0,
+      "flb": 0.0,
+      "fub": 1.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 20.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "traced_coszen_swdn_step0_point1",
+     "description": "Traced coszen row (cdeps_strdata_streams_jra.csv step 0, ns 3 Faxa_swdn, n = 1): value = lb*flb with fub = 0 - the dumped flb IS cosz/tavCosz = 0.996590623955609711 (shr_strdata_advance + shr_tInterp_getCosz; the traced T62 points are polar-day on Jan 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 414.4862310585743,
+      "ub": 430.8879545374925,
+      "flb": 0.9965906239556097,
+      "fub": 0.0,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 413.07309163167355,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "traced_linear_t10_step11_point16",
+     "description": "Traced linear row (cdeps_strdata_streams_jra.csv step 11, ns 6 Sa_tbot, n = 16): value = flb*lb + fub*ub with flb = 1/3, fub = 2/3 (flb+fub = 1) - the t_10 stream of the JRA case (tintalgo linear).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lb": 253.96881437924108,
+      "ub": 253.97974865055187,
+      "flb": 0.3333333333333333,
+      "fub": 0.6666666666666667,
+      "day": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "value",
+       "time": 0.0,
+       "expected": 253.97610389344828,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "Jra": {
+   "expression_template_imports": [
+    {
+     "ref": "./cdeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "strm_tbot": {
+     "type": "parameter",
+     "units": "K",
+     "default": 280.0,
+     "description": "interpolated 10-m air temperature stream value (t_10 -> Sa_tbot), datm.streams.xml stream_variables of the C_JRA_t62 case"
+    },
+    "strm_pslv": {
+     "type": "parameter",
+     "units": "Pa",
+     "default": 100000.0,
+     "description": "interpolated sea-level pressure stream value (slp -> Sa_pslv)"
+    },
+    "strm_u": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 5.0,
+     "description": "interpolated 10-m zonal wind stream value (u_10 -> Sa_u)"
+    },
+    "strm_v": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": -3.0,
+     "description": "interpolated 10-m meridional wind stream value (v_10 -> Sa_v)"
+    },
+    "strm_shum": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.005,
+     "description": "interpolated 10-m specific humidity stream value (q_10 -> Sa_shum); passes through unchanged - the JRA datamode has no qsat cap"
+    },
+    "strm_prec": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0001,
+     "description": "interpolated combined precipitation flux (prec -> Faxa_prec), split by the tbot < TKFRZ step test when separates_rain_snow = 0"
+    },
+    "strm_prrn": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 1e+30,
+     "description": "interpolated separate rainfall flux (1e30 spval, SHR_CONST_SPVAL, when the prrn/prsn stream pair is absent, i.e. separates_rain_snow = 0)"
+    },
+    "strm_prsn": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 1e+30,
+     "description": "interpolated separate snowfall flux (1e30 spval when absent)"
+    },
+    "strm_lwdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 300.0,
+     "description": "interpolated downward longwave radiation (lwdn -> Faxa_lwdn)"
+    },
+    "strm_swdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 300.0,
+     "description": "interpolated downward shortwave radiation (swdn -> Faxa_swdn), coszen-tintalgo stream"
+    },
+    "separates_rain_snow": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "1 when the prrn/prsn stream pair is associated (the datamode then passes the two through to Faxa_rainl/Faxa_snowl), else 0 (the datamode splits strm_prec by the tbot < TKFRZ test); the C_JRA_t62 case has no separate streams (datm_jra_streams.csv separates_rain_snow = 0)"
+    },
+    "lat": {
+     "type": "parameter",
+     "units": "deg",
+     "default": -90.0,
+     "description": "model-mesh latitude yc (degrees) of the traced point (datm_jra_exports.csv lat column; the T62 Gaussian mesh of the C_JRA_t62 case)"
+    },
+    "rain_frac": {
+     "type": "unknown",
+     "units": "1",
+     "description": "rain fraction of the combined-precip split: 1 when tbot >= TKFRZ else 0 (the step function of datm_datamode_jra_advance, F90:301-307)"
+    },
+    "avg_alb": {
+     "type": "unknown",
+     "units": "1",
+     "description": "LY08 latitudinally-varying surface albedo avg_alb = r4(0.069) - r4(0.011)*cos(2*lat*degtorad) (F90:317 with the UNSUFFIXED single-precision literals 0.069/0.011, see bugs.md; datm_jra_exports.csv avg_alb column)"
+    },
+    "Sa_z": {
+     "type": "unknown",
+     "units": "m",
+     "description": "reference height of the surface state, constant 10 m (F90:285)"
+    },
+    "Sa_u": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "10-m zonal wind export (F90:278)"
+    },
+    "Sa_v": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "10-m meridional wind export (F90:279)"
+    },
+    "Sa_u10m": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "zonal wind at 10 m, a copy of Sa_u (F90:288)"
+    },
+    "Sa_v10m": {
+     "type": "unknown",
+     "units": "m/s",
+     "description": "meridional wind at 10 m, a copy of Sa_v (F90:289)"
+    },
+    "Sa_tbot": {
+     "type": "unknown",
+     "units": "K",
+     "description": "surface air temperature export (F90:276)"
+    },
+    "Sa_ptem": {
+     "type": "unknown",
+     "units": "K",
+     "description": "potential temperature export, a copy of Sa_tbot (F90:277)"
+    },
+    "Sa_shum": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "description": "surface specific humidity export, a copy of the stream value (F90:280)"
+    },
+    "Sa_dens": {
+     "type": "unknown",
+     "units": "kg/m^3",
+     "description": "surface air density pbot/(rdair*tbot*(1 + qcoef*shum)) with qcoef = r4(0.608) = 0.6079999804496765 (F90:292, the UNSUFFIXED single-precision literal 0.608, see bugs.md)"
+    },
+    "Sa_pbot": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "surface pressure export, a copy of strm_pslv (F90:275)"
+    },
+    "Sa_pslv": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "sea-level pressure export, a copy of strm_pslv (F90:274)"
+    },
+    "Faxa_rainc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "convective rain flux, identically 0 in this datamode (F90:295)"
+    },
+    "Faxa_rainl": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "large-scale rain flux: the prrn passthrough (separated streams) or prec*rain_frac (F90:297-307)"
+    },
+    "Faxa_snowc": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "convective snow flux, identically 0 in this datamode (F90:296)"
+    },
+    "Faxa_snowl": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "description": "large-scale snow flux: the prsn passthrough (separated streams) or prec*(1 - rain_frac) (F90:297-307)"
+    },
+    "Faxa_swndr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "direct near-infrared shortwave, 0.31*swdn (F90:311)"
+    },
+    "Faxa_swndf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "diffuse near-infrared shortwave, 0.17*swdn (F90:314)"
+    },
+    "Faxa_swvdr": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "direct visible shortwave, 0.28*swdn (F90:310)"
+    },
+    "Faxa_swvdf": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "diffuse visible shortwave, 0.24*swdn (F90:313)"
+    },
+    "Faxa_swnet": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "net surface shortwave swdn*(1 - avg_alb) (F90:318)"
+    },
+    "Faxa_swdn": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward shortwave export, a copy of the stream value (F90:281)"
+    },
+    "Faxa_lwdn": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "description": "downward longwave export, a copy of the stream value (F90:282)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "Sa_pslv",
+     "rhs": "strm_pslv"
+    },
+    {
+     "lhs": "Sa_pbot",
+     "rhs": "strm_pslv"
+    },
+    {
+     "lhs": "Sa_tbot",
+     "rhs": "strm_tbot"
+    },
+    {
+     "lhs": "Sa_ptem",
+     "rhs": "strm_tbot"
+    },
+    {
+     "lhs": "Sa_u",
+     "rhs": "strm_u"
+    },
+    {
+     "lhs": "Sa_v",
+     "rhs": "strm_v"
+    },
+    {
+     "lhs": "Sa_shum",
+     "rhs": "strm_shum"
+    },
+    {
+     "lhs": "Faxa_swdn",
+     "rhs": "strm_swdn"
+    },
+    {
+     "lhs": "Faxa_lwdn",
+     "rhs": "strm_lwdn"
+    },
+    {
+     "lhs": "Sa_z",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 10.0,
+      "units": "m"
+     }
+    },
+    {
+     "lhs": "Sa_u10m",
+     "rhs": "Sa_u"
+    },
+    {
+     "lhs": "Sa_v10m",
+     "rhs": "Sa_v"
+    },
+    {
+     "lhs": "rain_frac",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "rain_frac_jra",
+      "bindings": {
+       "tbot": "Sa_tbot"
+      }
+     }
+    },
+    {
+     "lhs": "Sa_dens",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "density_jra",
+      "bindings": {
+       "pbot": "Sa_pbot",
+       "tbot": "Sa_tbot",
+       "shum": "Sa_shum"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_rainc",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "kg/m^2/s"
+     }
+    },
+    {
+     "lhs": "Faxa_snowc",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "kg/m^2/s"
+     }
+    },
+    {
+     "lhs": "Faxa_rainl",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "separates_rain_snow",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       "strm_prrn",
+       {
+        "op": "*",
+        "args": [
+         "strm_prec",
+         "rain_frac"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_snowl",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "separates_rain_snow",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       "strm_prsn",
+       {
+        "op": "*",
+        "args": [
+         "strm_prec",
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
+           "rain_frac"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swvdr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.28,
+        "units": "1"
+       },
+       "strm_swdn"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swndr",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.31,
+        "units": "1"
+       },
+       "strm_swdn"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swvdf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.24,
+        "units": "1"
+       },
+       "strm_swdn"
+      ]
+     }
+    },
+    {
+     "lhs": "Faxa_swndf",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.17,
+        "units": "1"
+       },
+       "strm_swdn"
+      ]
+     }
+    },
+    {
+     "lhs": "avg_alb",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "jra_albedo",
+      "bindings": {
+       "lat": "lat"
+      }
+     }
+    },
+    {
+     "lhs": "Faxa_swnet",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "strm_swdn",
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "avg_alb"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "all_snow_step",
+     "description": "Synthetic combined-precip row below freezing: tbot = 253.15 K < TKFRZ = 273.15 K -> rain_frac = 0, Faxa_rainl = 0, Faxa_snowl = prec = 1e-4 kg/m2/s, rainc = snowc = 0 (datm_datamode_jra_mod.F90:301-307; the step split, distinct from the CLMNCEP smooth ramp).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 253.15,
+      "strm_prec": 0.0001,
+      "separates_rain_snow": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "rain_frac",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 0.0001,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "all_rain_step",
+     "description": "Synthetic combined-precip row at/above freezing: tbot = 283.15 K >= TKFRZ -> rain_frac = 1, Faxa_rainl = prec, Faxa_snowl = 0 (datm_datamode_jra_mod.F90:301-307).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 283.15,
+      "strm_prec": 0.0001,
+      "separates_rain_snow": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "rain_frac",
+       "time": 0.0,
+       "expected": 1.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0001,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "separated_streams_passthrough",
+     "description": "Synthetic separated-streams row (separates_rain_snow = 1): Faxa_rainl = prrn = 2e-5, Faxa_snowl = prsn = 1e-5 kg/m2/s, the combined prec ignored (datm_datamode_jra_mod.F90:297-299; the branch is inactive in the C_JRA_t62 case, whose datm_jra_streams.csv carries separates_rain_snow = 0 with prrn = prsn = 1e30 spval).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 283.15,
+      "strm_prec": 0.0001,
+      "strm_prrn": 2e-05,
+      "strm_prsn": 1e-05,
+      "separates_rain_snow": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 2e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 1e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "density_round",
+     "description": "Synthetic density row: Sa_dens = pbot/(rdair*tbot*(1 + qcoef*shum)) = 100000/(287.0423113650487*280*(1 + 0.6079999804496765*0.005)) with rdair = SHR_CONST_RDAIR and qcoef = r4(0.608) = 0.6079999804496765 - the JRA55 moisture coefficient is an UNSUFFIXED single-precision literal in the Fortran (datm_datamode_jra_mod.F90:292; see bugs.md), and even the exact r8 0.608 would differ in the 8th decimal, so this law differs in the 8th decimal from the CLMNCEP density template.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_pslv": 100000.0,
+      "strm_tbot": 280.0,
+      "strm_shum": 0.005
+     },
+     "assertions": [
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 1.2404458136038392,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 100000.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 100000.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "albedo_pole_sw_split",
+     "description": "Synthetic polar row (lat = 90 deg, the T62 traced points sit at the pole row): avg_alb = r4(0.069) - r4(0.011)*cos(2*90*degtorad) = 0.07999999821186066, Faxa_swnet = swdn*(1 - avg_alb) = 300*0.9200000017881393 = 276.0000005364418 W/m2 - the 0.069/0.011 coefficients are UNSUFFIXED single-precision literals in the Fortran (datm_datamode_jra_mod.F90:317; see bugs.md) - and the fixed split Faxa_swvdr/ndr/vdf/ndf = swdn*0.28/0.31/0.24/0.17 (datm_datamode_jra_mod.F90:310-313, exact _R8 literals).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lat": 90.0,
+      "strm_swdn": 300.0
+     },
+     "assertions": [
+      {
+       "variable": "avg_alb",
+       "time": 0.0,
+       "expected": 0.07999999821186066,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 276.0000005364418,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 84.00000000000001,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 93.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 72.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 51.00000000000001,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "albedo_equator",
+     "description": "Synthetic equatorial row: avg_alb = r4(0.069) - r4(0.011)*cos(0) = 0.057999998331069946, Faxa_swnet = 300*(1 - avg_alb) = 282.600000500679 (datm_datamode_jra_mod.F90:317-318 with the UNSUFFIXED single-precision literals 0.069/0.011, see bugs.md; the LY08 albedo ranges 0.058 at the equator to 0.08 at the poles for the exact r8 coefficients).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lat": 0.0,
+      "strm_swdn": 300.0
+     },
+     "assertions": [
+      {
+       "variable": "avg_alb",
+       "time": 0.0,
+       "expected": 0.057999998331069946,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 282.600000500679,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "copies_and_constants",
+     "description": "Synthetic pass-through row with the default parameters: the exports are exact copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum, Faxa_swdn/lwdn = strm_swdn/lwdn), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v (datm_datamode_jra_mod.F90:274-289); the humidity passes through uncapped - the JRA datamode has no qsat law.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "strm_tbot": 280.0,
+      "strm_pslv": 100000.0,
+      "strm_u": 5.0,
+      "strm_v": -3.0,
+      "strm_shum": 0.005,
+      "strm_lwdn": 300.0,
+      "strm_swdn": 300.0
+     },
+     "assertions": [
+      {
+       "variable": "Sa_z",
+       "time": 0.0,
+       "expected": 10.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 280.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_ptem",
+       "time": 0.0,
+       "expected": 280.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": 5.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": -3.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u10m",
+       "time": 0.0,
+       "expected": 5.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v10m",
+       "time": 0.0,
+       "expected": -3.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.005,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swdn",
+       "time": 0.0,
+       "expected": 300.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_lwdn",
+       "time": 0.0,
+       "expected": 300.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "traced_step0_point1",
+     "description": "Traced (step 0, point 1) full stream->export chain of the C_JRA_t62_datm_inst run: all 23 export values reproduced from the 8 interpolated stream values + mesh latitude; tbot = 253.9356 K < TKFRZ pins the all-snow branch (Faxa_rainl = 0, Faxa_snowl = strm_prec), the rainc/snowc zeros, the swdn 0.28/0.31/0.24/0.17 split, the r4-literal albedo/density laws and the copy laws (inputs from datm_jra_streams.csv step 0, n = 1; expected values from datm_jra_exports.csv step 0, n = 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lat": -88.5419498460687,
+      "separates_rain_snow": 0.0,
+      "strm_tbot": 253.9355513779238,
+      "strm_pslv": 101237.82211636663,
+      "strm_u": -3.2719393544603363,
+      "strm_v": -1.9688693384134908,
+      "strm_shum": 0.0008284746343894518,
+      "strm_prec": 2.5508566698607774e-07,
+      "strm_prrn": 1e+30,
+      "strm_prsn": 1e+30,
+      "strm_lwdn": 142.0705058273832,
+      "strm_swdn": 413.07309163167355
+     },
+     "assertions": [
+      {
+       "variable": "avg_alb",
+       "time": 0.0,
+       "expected": 0.0799857543225658,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_z",
+       "time": 0.0,
+       "expected": 10.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": -3.2719393544603363,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": -1.9688693384134908,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u10m",
+       "time": 0.0,
+       "expected": -3.2719393544603363,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v10m",
+       "time": 0.0,
+       "expected": -1.9688693384134908,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 253.9355513779238,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_ptem",
+       "time": 0.0,
+       "expected": 253.9355513779238,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.0008284746343894518,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 1.3882083866060406,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 101237.82211636663,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 101237.82211636663,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 2.5508566698607774e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 128.0526584058188,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 70.22242557738451,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 115.66046565686861,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 99.13754199160165,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 380.0331288071598,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swdn",
+       "time": 0.0,
+       "expected": 413.07309163167355,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_lwdn",
+       "time": 0.0,
+       "expected": 142.0705058273832,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "traced_step11_point1",
+     "description": "Traced (step 11, point 1): the zero-precip row - strm_prec = 0, so the tbot < TKFRZ split gives Faxa_rainl = Faxa_snowl = 0 (the traced rows exercise both branches of the step) (inputs from datm_jra_streams.csv step 11, n = 1; expected values from datm_jra_exports.csv step 11, n = 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lat": -88.5419498460687,
+      "separates_rain_snow": 0.0,
+      "strm_tbot": 253.97610389344828,
+      "strm_pslv": 101202.92515014489,
+      "strm_u": -3.903693319219413,
+      "strm_v": -1.2827911137950139,
+      "strm_shum": 0.0007843029019916237,
+      "strm_prec": 0.0,
+      "strm_prrn": 1e+30,
+      "strm_prsn": 1e+30,
+      "strm_lwdn": 137.32516854732674,
+      "strm_swdn": 474.8231018097863
+     },
+     "assertions": [
+      {
+       "variable": "avg_alb",
+       "time": 0.0,
+       "expected": 0.0799857543225658,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_z",
+       "time": 0.0,
+       "expected": 10.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": -3.903693319219413,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": -1.2827911137950139,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u10m",
+       "time": 0.0,
+       "expected": -3.903693319219413,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v10m",
+       "time": 0.0,
+       "expected": -1.2827911137950139,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 253.97610389344828,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_ptem",
+       "time": 0.0,
+       "expected": 253.97610389344828,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.0007843029019916237,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 1.387545533294074,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 101202.92515014489,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 101202.92515014489,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 147.19516156103376,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 80.71992730766368,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 132.95046850674018,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 113.9575444343487,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 436.8440178417501,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swdn",
+       "time": 0.0,
+       "expected": 474.8231018097863,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_lwdn",
+       "time": 0.0,
+       "expected": 137.32516854732674,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "traced_step0_point16",
+     "description": "Traced (step 0, point 16): the per-point variation row - same latitude row (identical avg_alb), different stream values, pinning the point dependence of density/swnet/precip at the 8th significant digit (inputs from datm_jra_streams.csv step 0, n = 16; expected values from datm_jra_exports.csv step 0, n = 16).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lat": -88.5419498460687,
+      "separates_rain_snow": 0.0,
+      "strm_tbot": 253.9355513779238,
+      "strm_pslv": 101263.51397907571,
+      "strm_u": -2.0091053164324233,
+      "strm_v": -3.005264157720667,
+      "strm_shum": 0.000809538422192081,
+      "strm_prec": 1.832197475858943e-07,
+      "strm_prrn": 1e+30,
+      "strm_prsn": 1e+30,
+      "strm_lwdn": 136.97710297891717,
+      "strm_swdn": 419.5855729989874
+     },
+     "assertions": [
+      {
+       "variable": "avg_alb",
+       "time": 0.0,
+       "expected": 0.0799857543225658,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_z",
+       "time": 0.0,
+       "expected": 10.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u",
+       "time": 0.0,
+       "expected": -2.0091053164324233,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v",
+       "time": 0.0,
+       "expected": -3.005264157720667,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_u10m",
+       "time": 0.0,
+       "expected": -2.0091053164324233,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_v10m",
+       "time": 0.0,
+       "expected": -3.005264157720667,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_tbot",
+       "time": 0.0,
+       "expected": 253.9355513779238,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_ptem",
+       "time": 0.0,
+       "expected": 253.9355513779238,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_shum",
+       "time": 0.0,
+       "expected": 0.000809538422192081,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_dens",
+       "time": 0.0,
+       "expected": 1.3885766613386876,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pbot",
+       "time": 0.0,
+       "expected": 101263.51397907571,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Sa_pslv",
+       "time": 0.0,
+       "expected": 101263.51397907571,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_rainl",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowc",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_snowl",
+       "time": 0.0,
+       "expected": 1.832197475858943e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndr",
+       "time": 0.0,
+       "expected": 130.0715276296861,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swndf",
+       "time": 0.0,
+       "expected": 71.32954740982787,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdr",
+       "time": 0.0,
+       "expected": 117.48396043971648,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swvdf",
+       "time": 0.0,
+       "expected": 100.70053751975698,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swnet",
+       "time": 0.0,
+       "expected": 386.0247044397974,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_swdn",
+       "time": 0.0,
+       "expected": 419.5855729989874,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "Faxa_lwdn",
+       "time": 0.0,
+       "expected": 136.97710297891717,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "JRAFiles": {
+   "variables": {
+    "prec": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_prec",
+      "from": {
+       "file_variable": "prec"
+      }
+     },
+     "description": "JRA55 v1.5 daily total precipitation at the fixed cell (lat index 0 = -89.57 deg, lon index 0 = 0 deg), all 2920 records of 1958, [kg/m2/s]"
+    },
+    "lwdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_lwdn",
+      "from": {
+       "file_variable": "lwdn"
+      }
+     },
+     "description": "JRA55 v1.5 daily downward longwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
+    },
+    "swdn": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_swdn",
+      "from": {
+       "file_variable": "swdn"
+      }
+     },
+     "description": "JRA55 v1.5 daily downward shortwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
+    },
+    "q_10": {
+     "type": "parameter",
+     "units": "1",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_q10",
+      "from": {
+       "file_variable": "q_10"
+      }
+     },
+     "description": "JRA55 v1.5 daily 10-m specific humidity at the fixed cell, all 2920 records of 1958 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode)"
+    },
+    "slp": {
+     "type": "parameter",
+     "units": "Pa",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_slp",
+      "from": {
+       "file_variable": "slp"
+      }
+     },
+     "description": "JRA55 v1.5 daily sea-level pressure at the fixed cell, all 2920 records of 1958, [Pa]"
+    },
+    "t_10": {
+     "type": "parameter",
+     "units": "K",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_t10",
+      "from": {
+       "file_variable": "t_10"
+      }
+     },
+     "description": "JRA55 v1.5 daily 10-m air temperature at the fixed cell, all 2920 records of 1958, [K]"
+    },
+    "u_10": {
+     "type": "parameter",
+     "units": "m/s",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_u10",
+      "from": {
+       "file_variable": "u_10"
+      }
+     },
+     "description": "JRA55 v1.5 daily 10-m zonal wind at the fixed cell, all 2920 records of 1958, [m/s]"
+    },
+    "v_10": {
+     "type": "parameter",
+     "units": "m/s",
+     "shape": [
+      "record"
+     ],
+     "update": {
+      "kind": "data",
+      "source": "JRA_v10",
+      "from": {
+       "file_variable": "v_10"
+      }
+     },
+     "description": "JRA55 v1.5 daily 10-m meridional wind at the fixed cell, all 2920 records of 1958, [m/s]"
+    }
+   },
+   "equations": [],
+   "tests": [
+    {
+     "id": "first_record_cell_00",
+     "description": "Reader path: record 1 (1958-01-01) of every JRA55 source at the fixed cell (lat index 0 = -89.57 deg, lon index 0 = 0 deg), i.e. the raw netcdf values the streams layer interpolates from (JRA.v1.5.*.TL319.1958.210504.nc, file record 1 = time 1.5 h = daily mean of Jan 1).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "prec",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "lwdn",
+       "time": 0.0,
+       "expected": 142.08123779296875,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "swdn",
+       "time": 0.0,
+       "expected": 429.0180969238281,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "q_10",
+       "time": 0.0,
+       "expected": 0.0007607339648529887,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "slp",
+       "time": 0.0,
+       "expected": 101335.5703125,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "t_10",
+       "time": 0.0,
+       "expected": 253.23672485351562,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "u_10",
+       "time": 0.0,
+       "expected": -3.1722843647003174,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "v_10",
+       "time": 0.0,
+       "expected": -1.6584659814834595,
+       "coords": {
+        "record": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "last_record_cell_00",
+     "description": "Reader path: record 2920 (1958-12-31, the last daily mean of the year) of every JRA55 source at the fixed cell, pinning the extent metaparameter N_REC = 2920 and the record-count handling of the reader.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "prec",
+       "time": 0.0,
+       "expected": 9.268851499655284e-06,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "lwdn",
+       "time": 0.0,
+       "expected": 145.56158447265625,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "swdn",
+       "time": 0.0,
+       "expected": 417.2540283203125,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "q_10",
+       "time": 0.0,
+       "expected": 0.0008505410514771938,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "slp",
+       "time": 0.0,
+       "expected": 100677.953125,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "t_10",
+       "time": 0.0,
+       "expected": 253.22518920898438,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "u_10",
+       "time": 0.0,
+       "expected": -0.7936095595359802,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "v_10",
+       "time": 0.0,
+       "expected": -4.310102462768555,
+       "coords": {
+        "record": 2920
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

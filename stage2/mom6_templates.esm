@@ -512,6 +512,289 @@
      }
     ]
    }
+  },
+  "wright_coeff_a0": {
+   "description": "The Wright EOS fit parameter a0 = 0.0007133718 m3 kg-1 (MOM_EOS_Wright_full.F90:23), the zero-pressure specific-volume offset of the wright_alpha0 polynomial. Zero-parameter constant fragment so the coefficient is declared once and shared by reference: the WrightEOS model (mom6_eos.esm) and the wright_rho composition both use it; no consumer redeclares the coefficient.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 0.0007133718,
+    "units": "m^3/kg"
+   }
+  },
+  "wright_coeff_a1": {
+   "description": "The Wright EOS fit parameter a1 = 2.72467e-7 m3 kg-1 degC-1 (MOM_EOS_Wright_full.F90:24). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 2.72467e-07,
+    "units": "m^3/kg/degC"
+   }
+  },
+  "wright_coeff_a2": {
+   "description": "The Wright EOS fit parameter a2 = -1.646582e-7 m3 kg-1 PSU-1 (MOM_EOS_Wright_full.F90:25). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -1.646582e-07,
+    "units": "m^3/kg/ppt"
+   }
+  },
+  "wright_coeff_b0": {
+   "description": "The Wright EOS fit parameter b0 = 5.61377e8 Pa (MOM_EOS_Wright_full.F90:26), the zero-pressure offset of the wright_p0 polynomial. Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 561377000.0,
+    "units": "Pa"
+   }
+  },
+  "wright_coeff_b1": {
+   "description": "The Wright EOS fit parameter b1 = 3.600337e6 Pa degC-1 (MOM_EOS_Wright_full.F90:27). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 3600337.0,
+    "units": "Pa/degC"
+   }
+  },
+  "wright_coeff_b2": {
+   "description": "The Wright EOS fit parameter b2 = -3.727194e4 Pa degC-2 (MOM_EOS_Wright_full.F90:28). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -37271.94,
+    "units": "Pa/degC^2"
+   }
+  },
+  "wright_coeff_b3": {
+   "description": "The Wright EOS fit parameter b3 = 1.660557e2 Pa degC-3 (MOM_EOS_Wright_full.F90:29). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 166.0557,
+    "units": "Pa/degC^3"
+   }
+  },
+  "wright_coeff_b4": {
+   "description": "The Wright EOS fit parameter b4 = 6.844158e5 Pa PSU-1 (MOM_EOS_Wright_full.F90:30). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 684415.8,
+    "units": "Pa/ppt"
+   }
+  },
+  "wright_coeff_b5": {
+   "description": "The Wright EOS fit parameter b5 = -8.389457e3 Pa degC-1 PSU-1 (MOM_EOS_Wright_full.F90:31). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -8389.457,
+    "units": "Pa/degC/ppt"
+   }
+  },
+  "wright_coeff_c0": {
+   "description": "The Wright EOS fit parameter c0 = 1.609893e5 m2 s-2 (MOM_EOS_Wright_full.F90:32), the zero-pressure offset of the wright_lambda polynomial. Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 160989.3,
+    "units": "m^2/s^2"
+   }
+  },
+  "wright_coeff_c1": {
+   "description": "The Wright EOS fit parameter c1 = 8.427815e2 m2 s-2 degC-1 (MOM_EOS_Wright_full.F90:33). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 842.7815,
+    "units": "m^2/s^2/degC"
+   }
+  },
+  "wright_coeff_c2": {
+   "description": "The Wright EOS fit parameter c2 = -6.931554 m2 s-2 degC-2 (MOM_EOS_Wright_full.F90:34). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -6.931554,
+    "units": "m^2/s^2/degC^2"
+   }
+  },
+  "wright_coeff_c3": {
+   "description": "The Wright EOS fit parameter c3 = 3.869318e-2 m2 s-2 degC-3 (MOM_EOS_Wright_full.F90:35). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 0.03869318,
+    "units": "m^2/s^2/degC^3"
+   }
+  },
+  "wright_coeff_c4": {
+   "description": "The Wright EOS fit parameter c4 = -1.664201e2 m2 s-2 PSU-1 (MOM_EOS_Wright_full.F90:36). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -166.4201,
+    "units": "m^2/s^2/ppt"
+   }
+  },
+  "wright_coeff_c5": {
+   "description": "The Wright EOS fit parameter c5 = -2.765195 m2 s-2 degC-1 PSU-1 (MOM_EOS_Wright_full.F90:37). Shared by reference with mom6_eos.esm's WrightEOS (see wright_coeff_a0).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": -2.765195,
+    "units": "m^2/s^2/degC/ppt"
+   }
+  },
+  "wright_rho": {
+   "description": "The Wright 1997 full-range in-situ density rho(T, S, p) in ONE application: composes the four wright_alpha0/wright_p0/wright_lambda/wright_density templates exactly as density_elem_Wright_full does (MOM_EOS_Wright_full.F90:86-89) — al0/p0/lambda are the three polynomials evaluated at the same (T, S), then rho = (p + p0)/(lambda + al0*(p + p0)) with the Fortran's operation order. The 15 fit coefficients a0..c5 are bound internally from the wright_coeff_a0..c5 constant fragments (F90:23-37), so a consuming component applies wright_rho with only its (T, S, p) triple and never redeclares the coefficients (the WrightEOS model of mom6_eos.esm declares the same values as parameters; the fragments are the single source shared by reference). Applied once per state by the KPPBLD model (surface-layer mean, layer value, and layer-1 value, all at the layer-top pressure pRef) and usable by any other in-situ-density consumer.",
+   "params": [
+    "T",
+    "S",
+    "p"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "wright_density",
+    "bindings": {
+     "p": "p",
+     "p0": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "wright_p0",
+      "bindings": {
+       "b0": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b0",
+        "bindings": {}
+       },
+       "b1": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b1",
+        "bindings": {}
+       },
+       "b2": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b2",
+        "bindings": {}
+       },
+       "b3": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b3",
+        "bindings": {}
+       },
+       "b4": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b4",
+        "bindings": {}
+       },
+       "b5": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_b5",
+        "bindings": {}
+       },
+       "T": "T",
+       "S": "S"
+      }
+     },
+     "al0": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "wright_alpha0",
+      "bindings": {
+       "a0": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_a0",
+        "bindings": {}
+       },
+       "a1": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_a1",
+        "bindings": {}
+       },
+       "a2": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_a2",
+        "bindings": {}
+       },
+       "T": "T",
+       "S": "S"
+      }
+     },
+     "lambda": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "wright_lambda",
+      "bindings": {
+       "c0": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c0",
+        "bindings": {}
+       },
+       "c1": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c1",
+        "bindings": {}
+       },
+       "c2": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c2",
+        "bindings": {}
+       },
+       "c3": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c3",
+        "bindings": {}
+       },
+       "c4": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c4",
+        "bindings": {}
+       },
+       "c5": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "wright_coeff_c5",
+        "bindings": {}
+       },
+       "T": "T",
+       "S": "S"
+      }
+     }
+    }
+   }
   }
  }
 }

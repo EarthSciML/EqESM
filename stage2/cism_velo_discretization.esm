@@ -1,0 +1,93 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_velo_discretization",
+  "description": "Local EarthSciDiscretizations-format discretization rules for the CISM DIVA velocity-solve vertical integrals (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 as built in CESM cesm3.0-alphabranch, glissade_velo_higher.F90 compute_integrals_diva, F90:5570-5696, which_ho_approx = HO_APPROX_DIVA = 4 for the reference run). The Goldberg (2011) DIVA vertical integrals of the sigma column: (a) the single integral omega_k(k) = int from interface k to the bed of (sigma - sigma(k))/... - the CISM form omega_k(k) = sum_{k'=k..nz-1} sig_mid(k')/efvs_qp(k',p) * dsigma(k') * thck averaged over the nquad quadrature points (F90:5627-5653; the (s - z)/H depth factor of the DIVA derivation is the sigma-coordinate depth 0.5*(sigma(k)+sigma(k+1)) of each layer, so the integrand is sig_mid*thck/efvs at each quad point) - is the ESD column_nonuniform_1d rule integral_lev_nodes_cumulative_to_top (the suffix-inclusive scan G[kn] = sum_{j>=kn} f[j] dz[j] with G[NLEV+1] = 0, the integral from each INTERFACE to the model top), and (b) the double integral omega = int over the column of the layer-averaged single integral, the trapezoid sum over the sigma layers omega = sum_k 0.5*(omega_k(k)+omega_k(k+1)) * dsigma(k) (F90:5655-5661; omega here is Goldberg's omega/H, the sigma integral without the thck factor) - is the ESD rule integral_lev_whole (the composite midpoint sum sum_j g[j] dz[j]) applied to the layer-average g[l] = 0.5*(omega_k[l]+omega_k[l+1]). CISM's velocity levels ARE this grid's lev_nodes: the 11 sigma interfaces (sigma_001 = 0 at the surface .. sigma_011 = 1 at the bed) with the 10 layers in between (index set lev); the two ESD rules are imported with NLEV = NLAYERS and NO axis renames. Free-name contract (resolved in the consuming model): the rule measure dz (here the dimensionless sigma layer widths dsigma[l] = sigma[l+1] - sigma[l], cism_sigma_measure) and the bounds z_sfc = 0 / z_top = 1 (the sigma surface and bed; note the DIVA omega_k integral runs from each interface to the BED, so its upper bound is z_top = 1 while the lower bound is the lev_nodes axis name). CISM-specific: the sigma geometry templates (cism_sigma_measure, cism_sigma_midpoint) and the fact that the integrals are computed at each of the nquad quadrature points of the effective viscosity and then averaged (the Fortran's 'more accurate to compute the integral at each quadrature point and then average, rather than average efvs to the cell center and then integrate', F90:5578-5583) - the model writes the quad-point mean of the reciprocals INSIDE the integrand (integral linearity: the mean over the quad points commutes with the integral, so one integral of f[l] = sig_mid[l]*thck*(1/4)*sum_p 1/efvs_qp(p)[l] reproduces the four-integral construction bit-for-bit).",
+  "license": "MIT",
+  "tags": [
+   "esd:rule",
+   "family:finite_volume",
+   "grid:cism_sigma_column",
+   "op:integral",
+   "axes:lev_nodes",
+   "order:2",
+   "stencil_width:1",
+   "bc:none",
+   "spec:9.6.8"
+  ],
+  "references": [
+   {
+    "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002, libglissade/glissade_velo_higher.F90 compute_integrals_diva (F90:5570-5696) and compute_3d_velocity_diva (F90:5700-5821)."
+   },
+   {
+    "citation": "Goldberg, D. N. (2011). A variationally derived, depth-integrated approximation for a full-Stokes ice sheet model. Journal of Glaciology, 57(204), 717-728. Eqs. 32 and 35 (the single and double integrals)."
+   },
+   {
+    "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+   }
+  ]
+ },
+ "metaparameters": {
+  "NLAYERS": {
+   "type": "integer",
+   "default": 10,
+   "description": "Number of CISM sigma layers (upn - 1 = 10 for the reference run); the DIVA velocity levels number NLAYERS + 1 (k = 1 surface .. k = NLAYERS+1 bed: the CISM sigma interfaces, the dump's sigma_001..011)."
+  }
+ },
+ "index_sets": {
+  "lev_nodes": { "kind": "interval", "size": { "op": "+", "args": ["NLAYERS", 1] } },
+  "lev": { "kind": "interval", "size": "NLAYERS" }
+ },
+ "expression_template_imports": [
+  {
+   "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_whole.esm",
+   "bindings": { "NLEV": "NLAYERS" }
+  },
+  {
+   "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_to_top.esm",
+   "bindings": { "NLEV": "NLAYERS" }
+  }
+ ],
+ "expression_templates": {
+  "cism_sigma_measure": {
+   "description": "Sigma layer widths: dz[l] = sigma[l+1] - sigma[l] for l in lev, the dimensionless layer measure of the imported integral rules (the Fortran's dz/dsigma = sigma(k+1) - sigma(k), F90:5636, 5658; the layer widths sum to 1). The physical layer thickness is thck*dsigma[l], so the physical-column integrals carry the thck factor inside the DIVA integrands, not in the measure.",
+   "params": ["sigma"],
+   "body": {
+    "op": "faq",
+    "output_idx": ["l"],
+    "args": ["sigma"],
+    "ranges": { "l": { "from": "lev" } },
+    "expr": {
+     "op": "-",
+     "args": [
+      { "op": "index", "args": ["sigma", { "op": "+", "args": ["l", 1] }] },
+      { "op": "index", "args": ["sigma", "l"] }
+     ]
+    }
+   }
+  },
+  "cism_sigma_midpoint": {
+   "description": "Sigma layer midpoint: sig_mid[l] = 0.5*(sigma[l] + sigma[l+1]) for l in lev, the dimensionless depth/thck of the layer center (the Fortran's depth = 0.5d0*(sigma(k)+sigma(k+1)), F90:5634 - the (s - z)/H factor of the Goldberg (2011) single integral evaluated at the layer center).",
+   "params": ["sigma"],
+   "body": {
+    "op": "faq",
+    "output_idx": ["l"],
+    "args": ["sigma"],
+    "ranges": { "l": { "from": "lev" } },
+    "expr": {
+     "op": "*",
+     "args": [
+      0.5,
+      {
+       "op": "+",
+       "args": [
+        { "op": "index", "args": ["sigma", "l"] },
+        { "op": "index", "args": ["sigma", { "op": "+", "args": ["l", 1] }] }
+       ]
+      }
+     ]
+    }
+   }
+  }
+ }
+}
