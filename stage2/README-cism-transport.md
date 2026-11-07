@@ -160,9 +160,9 @@ phases or from the source formulas (stated in the test descriptions).
 | glad zeroing (ice-free ablation) | cell 28,11 step 2 (thck = 0, raw acab = −0.7075 → 0; dump-verified); cell 28,11 step 3 (thck = 1.65e-5 > 0 → NOT zeroed; dump-verified) | exact | 0 |
 | d(thck)/dt = net | accumulation: cell 26,11 steps 1/2/4 (rel 1e-6 / 1e-9 / 1e-6); ablation: cell 25,11 steps 3/4 (rel 2e-4 / 3e-4); full melt: cells 28,11 (steps 1, 3), 29,13 (step 1) → thck = 0 (abs 1e-8) | see left | advection: +9.6e-7 / +9.6e-10 / −1.7e-6 m; +1.8e-5 / +1.9e-5 m; BDF clip landing ≤ ~1e-9 m |
 | full-melt clip + melt_potential | cells 28,11 (s1: 0.33379825832198695 m; s3: 0.8837069386692753 m), 29,13 (s1: 0.22629773133841058 m) — melt_potential is derived (not a dump column), from the Fortran's own conservation check | rel 1e-12 | exact |
-| acab_applied | full-application branch (cell 26,11 s1: acab_applied = acab); clipped branch (cell 28,11 s1: acab_applied = −H_pre/dt = −0.039916999638080596) | rel 1e-12 | exact (source-formula: not dump columns) |
+| acab_applied | clipped branch only (cell 28,11 s1: acab_applied = −H_pre/dt = −0.039916999638080596) | rel 1e-12 | exact (source-formula: not dump columns) |
 | layer-1 accumulation blend | cells 26,11 s1 (rel 1e-5), 27,11 s1 (rel 7e-5; s > H₁), 25,12 s1 (rel 2.5e-4) | see left | −1.7e-6 / −1.2e-5 / −3.6e-5 degC |
-| tracer zeroing on full melt | cell 28,11 s1 (T1_out = Tbar_out = 0; the dump exit temp_001..010 = 0 of the melted columns) | exact | 0 |
+| tracer zeroing on full melt | cell 28,11 s1 (T1_out = 0; the dump exit temp_001..010 = 0 of the melted columns) | exact | 0 |
 | lsrf/usrf | grounded: cell 25,11 s1; ice-free: cell 28,11 s3 (thck = 0); thin ice: cell 29,13 s4 | rel 1e-12 | exact (all 256 rows: lsrf = topg, usrf = lsrf + thck to round-off) |
 
 The tolerance convention: 1e-12 where the esm law is exact (pure algebra

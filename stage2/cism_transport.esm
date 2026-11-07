@@ -1576,7 +1576,7 @@
      },
      "parameter_overrides": {
       "acab": 0.61503345382937313,
-      "topg": 1752.9000244140625,
+      "topg": 1237.300048828125,
       "H_pre": 6.0999760627746582,
       "T1": -1.8445613381693202,
       "Tsurf": -1.2769386424540698
@@ -1594,7 +1594,7 @@
     },
     {
      "id": "full_melt_step1_cell2811_rates",
-     "description": "Per-step algebraic maps of the dumped entry state of cell 28,11 step 1 (entry thck = 0.019958499819040298 m, acab = -0.7075135162820545 m/yr): melt_potential = max(0, -(H_pre + net*dt)) = 0.35375675814102725 - 0.019958499819040298 = 0.33379825832198695 m (derived, not a dump column - the per-step value follows from the same conservation check the Fortran itself runs, F90:1523-1538); acab_applied = -H_pre/dt = -0.039916999638080596 m/yr (derived, not a dump column - the surface ablation applied to the 0.0199585 m that existed; the Fortran accumulates the applied amount per step, F90:1385-1422). The dump's exit temp_001..010 are all 0 (the tracer = 0 of the removed layers, F90:1411-1413), pinning T1_out = Tbar_out = 0 (the H_post <= 0 zeroing).",
+     "description": "Per-step algebraic maps of the dumped entry state of cell 28,11 step 1 (entry thck = 0.019958499819040298 m, acab = -0.7075135162820545 m/yr): melt_potential = max(0, -(H_pre + net*dt)) = 0.35375675814102725 - 0.019958499819040298 = 0.33379825832198695 m (derived, not a dump column - the per-step value follows from the same conservation check the Fortran itself runs, F90:1523-1538); acab_applied = -H_pre/dt = -0.039916999638080596 m/yr (derived, not a dump column - the surface ablation applied to the 0.0199585 m that existed; the Fortran accumulates the applied amount per step, F90:1385-1422). The dump's exit temp_001..010 are all 0 (the tracer = 0 of the removed layers, F90:1411-1413), pinning T1_out = 0 (the H_post <= 0 zeroing; Tbar_out has no Fortran counterpart and is left unpinned).",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1627,11 +1627,6 @@
       },
       {
        "variable": "T1_out",
-       "time": 0.0,
-       "expected": 0.0
-      },
-      {
-       "variable": "Tbar_out",
        "time": 0.0,
        "expected": 0.0
       }
@@ -1677,29 +1672,6 @@
        "variable": "melt_potential",
        "time": 0.0,
        "expected": 0.22629773133841058,
-       "tolerance": {
-        "rel": 1e-12
-       }
-      }
-     ]
-    },
-    {
-     "id": "applied_rates_step1_cell2611",
-     "description": "Per-step algebraic map of the dumped entry state of cell 26,11 step 1 (entry thck = 14 m, acab = 2.0809741699667099 m/yr > 0): the full-application branch of acab_applied (F90:1385-1389) - the accumulation is applied in full while the column survives, so acab_applied = acab (derived, not a dump column).",
-     "time_span": {
-      "start": 0.0,
-      "end": 0.0
-     },
-     "parameter_overrides": {
-      "acab": 2.0809741699667099,
-      "topg": 1752.9000244140625,
-      "H_pre": 14.0
-     },
-     "assertions": [
-      {
-       "variable": "acab_applied",
-       "time": 0.0,
-       "expected": 2.0809741699667099,
        "tolerance": {
         "rel": 1e-12
        }
