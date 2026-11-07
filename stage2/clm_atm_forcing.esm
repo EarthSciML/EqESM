@@ -30,6 +30,8 @@
     "Faxa_swvdf": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "visible diffuse shortwave flux export (Faxa_swvdf), [W/m2]"},
     "Faxa_swndf": {"type": "parameter", "units": "W/m^2", "default": 0.0, "description": "near-infrared diffuse shortwave flux export (Faxa_swndf), [W/m2]"},
     "o2_molar_const": {"type": "parameter", "units": "1", "default": 1.1047089691362286, "description": "o2 molar constant o2_molar_const = SHR_CONST_MWO2/SHR_CONST_MWDAIR = 31.999/28.966 (clm_varcon.F90), [-]"},
+    "TKFRZ": {"type": "parameter", "units": "K", "default": 273.15, "description": "freezing point of water TKFRZ = SHR_CONST_TKFRZ (clm_varcon.F90:76), passed to the QSat law of forc_rh (lnd_import_export_utils.F90:88-90), [K]"},
+    "percent": {"type": "parameter", "units": "%", "default": 100.0, "description": "percent conversion factor of forc_rh = 100*q/qsat (lnd_import_export_utils.F90:90), [%]"},
     "forc_hgt": {"type": "unknown", "units": "m", "description": "atmospheric reference height forc_hgt = Sa_z (lnd_import_export.F90:542), [m]"},
     "forc_topo": {"type": "unknown", "units": "m", "description": "atmospheric surface elevation forc_topo = Sa_topo (lnd_import_export.F90:544), [m]"},
     "forc_u": {"type": "unknown", "units": "m/s", "description": "zonal wind forc_u = Sa_u (lnd_import_export.F90:546), [m/s]"},
@@ -82,7 +84,7 @@
     {"lhs": "forc_snowl", "rhs": "Faxa_snowl"},
     {"lhs": "forc_rain", "rhs": {"op": "+", "args": ["forc_rainc", "forc_rainl"]}},
     {"lhs": "forc_snow", "rhs": {"op": "+", "args": ["forc_snowc", "forc_snowl"]}},
-    {"lhs": "forc_rh", "rhs": {"op": "*", "args": [100.0, {"op": "/", "args": ["forc_q", {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t", "p": "forc_pbot", "TKFRZ": 273.15}}]}]}},
+    {"lhs": "forc_rh", "rhs": {"op": "*", "args": ["percent", {"op": "/", "args": ["forc_q", {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t", "p": "forc_pbot", "TKFRZ": "TKFRZ"}}]}]}},
     {"lhs": "forc_lwrad", "rhs": "Faxa_lwdn"},
     {"lhs": "forc_solad_vis", "rhs": "Faxa_swvdr"},
     {"lhs": "forc_solad_nir", "rhs": "Faxa_swndr"},
@@ -120,6 +122,15 @@
     "precip_repartition_nonglc_frac_rain_slope": {"type": "parameter", "units": "1/K", "default": 0.5, "description": "rain fraction ramp slope on non-glacier landunits, 1/(2 - 0) (atm2lndType.F90:278), [1/K]"},
     "lapse_rate_longwave": {"type": "parameter", "units": "W/m^2/m", "default": 0.032, "description": "longwave lapse rate (namelist_defaults_ctsm.xml lapse_rate_longwave = 0.032; Van Tricht et al. 2016), [W/m2/m]"},
     "longwave_downscaling_limit": {"type": "parameter", "units": "1", "default": 0.5, "description": "relative limit on the longwave downscaling departure from the gridcell value (longwave_downscaling_limit = 0.5), [-]"},
+    "rair": {"type": "parameter", "units": "J/(kg*K)", "default": 287.0423113650487, "description": "gas constant for dry air rair = SHR_CONST_RDAIR = SHR_CONST_RGAS/SHR_CONST_MWDAIR (clm_varcon.F90:55, shr_const_mod.F90:29), [J/kg/K]"},
+    "grav": {"type": "parameter", "units": "m/s^2", "default": 9.80616, "description": "acceleration of gravity grav = SHR_CONST_G (clm_varcon.F90:51, shr_const_mod.F90:21), [m/s2]"},
+    "cpair": {"type": "parameter", "units": "J/(kg*K)", "default": 1004.64, "description": "specific heat of dry air cpair = SHR_CONST_CPDAIR (clm_varcon.F90:59, shr_const_mod.F90:46), [J/kg/K]"},
+    "TKFRZ": {"type": "parameter", "units": "K", "default": 273.15, "description": "freezing point of water tfrz = SHR_CONST_TKFRZ (clm_varcon.F90:76, shr_const_mod.F90:37), passed to the QSat laws of qs_g/qs_c, [K]"},
+    "hfus": {"type": "parameter", "units": "J/kg", "default": 333700.0, "description": "latent heat of fusion for ice hfus = SHR_CONST_LATICE (clm_varcon.F90:63, shr_const_mod.F90:52), [J/kg]"},
+    "denh2o": {"type": "parameter", "units": "kg/m^3", "default": 1000.0, "description": "density of liquid water denh2o = SHR_CONST_RHOFW (clm_varcon.F90:64, shr_const_mod.F90:43), [kg/m3]"},
+    "mm_to_m": {"type": "parameter", "units": "m/mm", "default": 0.001, "description": "millimeters-to-meters conversion mm_to_m = 1.e-3 (atm2lndMod.F90 sens_heat_from_precip_conversion), [m/mm]"},
+    "wv_to_dair_weight_ratio": {"type": "parameter", "units": "1", "default": 0.6219705862045155, "description": "ratio of the molecular weight of water vapor to that of dry air wv_to_dair_weight_ratio = SHR_CONST_MWWV/SHR_CONST_MWDAIR = 18.016/28.966 (clm_varcon.F90:71, shr_const_mod.F90:27-28), [-]"},
+    "hsurf_diff": {"type": "unknown", "units": "m", "description": "column minus gridcell surface elevation hsurf_c - hsurf_g (atm2lndMod.F90:216-220, 236), the shared elevation difference of the topo downscaling and the longwave lapse, [m]"},
     "tbot_c": {"type": "unknown", "units": "K", "description": "column surface temperature tbot_c = tbot_g - lapse_rate*(hsurf_c - hsurf_g) (atm2lndMod.F90:218), [K]"},
     "Hbot": {"type": "unknown", "units": "m", "description": "pressure scale height at the average temperature Hbot = rair*0.5*(tbot_g + tbot_c)/grav (atm2lndMod.F90:219), [m]"},
     "pbot_c": {"type": "unknown", "units": "Pa", "description": "column surface pressure pbot_c = pbot_g*exp(-(hsurf_c - hsurf_g)/Hbot) (atm2lndMod.F90:220), [Pa]"},
@@ -151,15 +162,16 @@
     "forc_lwrad": {"type": "unknown", "units": "W/m^2", "description": "column downward longwave (copy unless glcmec_downscale_longwave; atm2lndMod.F90:506), [W/m2]"}
    },
    "equations": [
-    {"lhs": "tbot_c", "rhs": {"op": "-", "args": ["forc_t_grc", {"op": "*", "args": ["lapse_rate", {"op": "-", "args": ["topo_col", "forc_topo_grc"]}]}]}},
-    {"lhs": "Hbot", "rhs": {"op": "/", "args": [{"op": "*", "args": [287.0423113650487, 0.5, {"op": "+", "args": ["forc_t_grc", "tbot_c"]}]}, 9.80616]}},
-    {"lhs": "pbot_c", "rhs": {"op": "*", "args": ["forc_pbot_grc", {"op": "exp", "args": [{"op": "-", "args": [{"op": "/", "args": [{"op": "-", "args": ["topo_col", "forc_topo_grc"]}, "Hbot"]}]}]}]}},
-    {"lhs": "thbot_c", "rhs": {"op": "+", "args": ["forc_th_grc", {"op": "*", "args": [{"op": "-", "args": ["tbot_c", "forc_t_grc"]}, {"op": "exp", "args": [{"op": "*", "args": [{"op": "/", "args": ["forc_hgt_grc", "Hbot"]}, {"op": "/", "args": [287.0423113650487, 1004.64]}]}]}]}]}},
-    {"lhs": "qs_g", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t_grc", "p": "forc_pbot_grc", "TKFRZ": 273.15}}},
-    {"lhs": "qs_c", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "tbot_c", "p": "pbot_c", "TKFRZ": 273.15}}},
+    {"lhs": "hsurf_diff", "rhs": {"op": "-", "args": ["topo_col", "forc_topo_grc"]}},
+    {"lhs": "tbot_c", "rhs": {"op": "-", "args": ["forc_t_grc", {"op": "*", "args": ["lapse_rate", "hsurf_diff"]}]}},
+    {"lhs": "Hbot", "rhs": {"op": "/", "args": [{"op": "*", "args": ["rair", 0.5, {"op": "+", "args": ["forc_t_grc", "tbot_c"]}]}, "grav"]}},
+    {"lhs": "pbot_c", "rhs": {"op": "*", "args": ["forc_pbot_grc", {"op": "exp", "args": [{"op": "-", "args": [{"op": "/", "args": ["hsurf_diff", "Hbot"]}]}]}]}},
+    {"lhs": "thbot_c", "rhs": {"op": "+", "args": ["forc_th_grc", {"op": "*", "args": [{"op": "-", "args": ["tbot_c", "forc_t_grc"]}, {"op": "exp", "args": [{"op": "*", "args": [{"op": "/", "args": ["forc_hgt_grc", "Hbot"]}, {"op": "/", "args": ["rair", "cpair"]}]}]}]}]}},
+    {"lhs": "qs_g", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "forc_t_grc", "p": "forc_pbot_grc", "TKFRZ": "TKFRZ"}}},
+    {"lhs": "qs_c", "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {"T": "tbot_c", "p": "pbot_c", "TKFRZ": "TKFRZ"}}},
     {"lhs": "qbot_c", "rhs": {"op": "*", "args": ["forc_q_grc", {"op": "/", "args": ["qs_c", "qs_g"]}]}},
-    {"lhs": "rhos_c_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "qbot_c", "pbot": "pbot_c", "tbot": "tbot_c"}}},
-    {"lhs": "rhos_g_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "forc_q_grc", "pbot": "forc_pbot_grc", "tbot": "forc_t_grc"}}},
+    {"lhs": "rhos_c_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "qbot_c", "pbot": "pbot_c", "tbot": "tbot_c", "wv": "wv_to_dair_weight_ratio", "rair": "rair"}}},
+    {"lhs": "rhos_g_estimate", "rhs": {"op": "apply_expression_template", "args": [], "name": "rhos", "bindings": {"q": "forc_q_grc", "pbot": "forc_pbot_grc", "tbot": "forc_t_grc", "wv": "wv_to_dair_weight_ratio", "rair": "rair"}}},
     {"lhs": "rhos_c", "rhs": {"op": "*", "args": ["forc_rho_grc", {"op": "/", "args": ["rhos_c_estimate", "rhos_g_estimate"]}]}},
     {"lhs": "forc_t", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "tbot_c", "forc_t_grc"]}},
     {"lhs": "forc_th", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["needs_downscaling", 0.5]}, "thbot_c", "forc_th_grc"]}},
@@ -177,10 +189,10 @@
     {"lhs": "forc_snow", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": "-", "args": ["total_precip", "forc_rain"]}, "forc_snow_grc"]}},
     {"lhs": "rain_to_snow_conversion", "rhs": {"op": "ifelse", "args": [{"op": "and", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": ">", "args": ["forc_snow", "forc_snow_grc"]}]}, {"op": "-", "args": ["forc_rain_grc", "forc_rain"]}, 0.0]}},
     {"lhs": "snow_to_rain_conversion", "rhs": {"op": "ifelse", "args": [{"op": "and", "args": [{"op": ">", "args": ["repartition_rain_snow", 0.5]}, {"op": ">", "args": ["forc_rain", "forc_rain_grc"]}]}, {"op": "-", "args": ["forc_snow_grc", "forc_snow"]}, 0.0]}},
-    {"lhs": "eflx_sh_precip_conversion", "rhs": {"op": "*", "args": [{"op": "-", "args": ["rain_to_snow_conversion", "snow_to_rain_conversion"]}, 0.001, 1000.0, 3.337e5]}},
+    {"lhs": "eflx_sh_precip_conversion", "rhs": {"op": "*", "args": [{"op": "-", "args": ["rain_to_snow_conversion", "snow_to_rain_conversion"]}, "mm_to_m", "denh2o", "hfus"]}},
     {"lhs": "lwrad_down", "rhs": {"op": "min", "args": [
      {"op": "max", "args": [
-      {"op": "-", "args": ["forc_lwrad_grc", {"op": "*", "args": ["lapse_rate_longwave", {"op": "-", "args": ["topo_col", "forc_topo_grc"]}]}]},
+      {"op": "-", "args": ["forc_lwrad_grc", {"op": "*", "args": ["lapse_rate_longwave", "hsurf_diff"]}]},
       {"op": "*", "args": ["forc_lwrad_grc", {"op": "-", "args": [1.0, "longwave_downscaling_limit"]}]}]},
      {"op": "*", "args": ["forc_lwrad_grc", {"op": "+", "args": [1.0, "longwave_downscaling_limit"]}]}]}},
     {"lhs": "forc_lwrad", "rhs": {"op": "ifelse", "args": [{"op": ">", "args": ["glcmec_downscale_longwave", 0.5]}, "lwrad_down", "forc_lwrad_grc"]}}
@@ -188,7 +200,7 @@
    "tests": [
      {
       "id": "step1_p1",
-      "description": "Import-law trace row (step 1, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 0, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 1, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 1, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 0, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 1, c=1; forc_t/forc_q/forc_pbot/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 1, stage=ent, c=1; forc_rain/forc_snow columns) and clm_surfrad.csv (step 1, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact). The forc_t and forc_pbot assertions are gridcell-value pass-throughs on this traced column and the forc_rain assertion pins the rain channel that is identically 0 on every traced step (all precipitation falls as snow below the all-snow temperature): each is kept once per file as a labelled coupling-wiring check. The forc_wind and forc_solar assertions are derived (not a dump column): forc_wind = sqrt(forc_u^2 + forc_v^2) and forc_solar = forc_solad_vis + forc_solad_nir + forc_solai_vis + forc_solai_nir, computed and re-verified by stage1/analysis/extract_m9_test_rows.py.",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -295,7 +307,7 @@
      },
      {
       "id": "step2_p1",
-      "description": "Import-law trace row (step 2, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 1, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 2, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 2, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 1, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 2, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 2, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 2, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -329,19 +341,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.36076958974138
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006513651298453515
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68132.31866319476
        },
        {
         "variable": "Downscale.forc_rho",
@@ -357,16 +359,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 2.7204154149312934
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 3.847248375084666
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -392,17 +384,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.3485387710264
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.94470956805765
        }
       ]
      },
      {
       "id": "step3_p1",
-      "description": "Import-law trace row (step 3, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 2, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 3, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 3, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 2, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 3, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 3, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 3, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -436,19 +423,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.41229604085228
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.000654712835078913
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68130.50122612894
        },
        {
         "variable": "Downscale.forc_rho",
@@ -464,16 +441,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.9886768563781079
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 2.812413781467412
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -499,17 +466,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34826926835014
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.91759266770555
        }
       ]
      },
      {
       "id": "step4_p1",
-      "description": "Import-law trace row (step 4, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 3, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 4, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 4, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 3, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 4, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 4, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 4, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -543,19 +505,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.46382249196316
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006580763363032471
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68128.68378906311
        },
        {
         "variable": "Downscale.forc_rho",
@@ -571,16 +523,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -606,17 +548,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.3479993548351
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.89041662355584
        }
       ]
      },
      {
       "id": "step5_p1",
-      "description": "Import-law trace row (step 5, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 4, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 5, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 5, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 4, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 5, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 5, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 5, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -650,19 +587,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.4691693517891
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006584296068543657
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68128.15022424827
        },
        {
         "variable": "Downscale.forc_rho",
@@ -678,16 +605,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -713,17 +630,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34772903164232
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.8631814393468
        }
       ]
      },
      {
       "id": "step6_p1",
-      "description": "Import-law trace row (step 6, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 5, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 6, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 6, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 5, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 6, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 6, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 6, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -757,19 +669,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.47451621161508
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006587830519016376
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68127.61665943344
        },
        {
         "variable": "Downscale.forc_rho",
@@ -785,16 +687,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -820,17 +712,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.34745829993504
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 429.83588711882646
        }
       ]
      },
      {
       "id": "step7_p1",
-      "description": "Import-law trace row (step 7, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 6, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 7, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 7, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 6, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 7, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 7, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 7, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -864,19 +751,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.479863071441
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.000659136671523473
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68127.0830946186
        },
        {
         "variable": "Downscale.forc_rho",
@@ -892,16 +769,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -927,17 +794,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43768633232347
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.09568785808557
        }
       ]
      },
      {
       "id": "step8_p1",
-      "description": "Import-law trace row (step 8, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 7, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 8, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 8, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 7, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 8, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 8, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 8, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -971,19 +833,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.48520993126698
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006594904657983285
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68126.54952980377
        },
        {
         "variable": "Downscale.forc_rho",
@@ -999,16 +851,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1034,17 +876,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43735255639377
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.0677467332204
        }
       ]
      },
      {
       "id": "step9_p1",
-      "description": "Import-law trace row (step 9, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 8, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 9, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 9, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 8, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 9, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 9, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 9, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1078,19 +915,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.49055679109296
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006598444348046829
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68126.01596498894
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1106,16 +933,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1141,17 +958,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.437018258205605
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.039745343351
        }
       ]
      },
      {
       "id": "step10_p1",
-      "description": "Import-law trace row (step 10, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 9, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 10, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 10, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 9, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 10, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 10, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 10, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1185,19 +997,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.49590365091888
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006601985786210476
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68125.48240017409
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1213,16 +1015,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2569382978249226
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7775791878501581
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1248,17 +1040,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.4366834390509
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 438.01168369233466
        }
       ]
      },
      {
       "id": "step11_p1",
-      "description": "Import-law trace row (step 11, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 10, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 11, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 11, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 10, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 11, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 11, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 11, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1292,19 +1079,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.42885932569146
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006558385515325504
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68125.11562319186
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1320,16 +1097,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2612705292218627
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7837058882470493
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1355,17 +1122,12 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.436348100223675
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 437.98356178403856
        }
       ]
      },
      {
       "id": "step12_p1",
-      "description": "Import-law trace row (step 12, cell 1) of the overlapping set: the datm exports of datm_gswp3_exports.csv row (step 11, cell 1) in, the CLM column forcing of clm_bareground/clm_canopyflux(clm_surfrad) rows (step 12, cell 1) out, through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive).",
+      "description": "Import-law trace row (step 12, column c=1; the five traced cells are value-identical, so cell 1 pins all of them): the datm exports of datm_gswp3_exports.csv row (step 11, cell n=1) in as the Sa_*/Faxa_* overrides, out the CLM forcing rows of clm_bareground.csv (step 12, c=1; forc_q/forc_rho/forc_u/forc_v columns), clm_canopyflux.csv (step 12, stage=ent, c=1; forc_snow column) and clm_surfrad.csv (step 12, c=1; forc_solad_vis/forc_solad_nir/forc_solai_vis/forc_solai_nir columns), through import_fields + derive_quantities (lnd_import_export.F90:542-577, lnd_import_export_utils.F90:66-90) and the downscale_forcings copy + partition_precip path (atm2lndMod.F90:180-195, 359-390; the traced column is a non-glacier soil column with needs_downscaling = 0, so the topo-downscaling branch is inactive). The one-step offset is the CESM coupling sequence itself: the data atmosphere runs after the land within each coupling interval, so the land is forced by the previous interval's atmosphere (every forc_* dump value equals its one-step-earlier datm export bit-exact).",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -1399,19 +1161,9 @@
       },
       "assertions": [
        {
-        "variable": "Downscale.forc_t",
-        "time": 0.0,
-        "expected": 249.361815000464
-       },
-       {
         "variable": "Downscale.forc_q",
         "time": 0.0,
         "expected": 0.0006515049554584835
-       },
-       {
-        "variable": "Downscale.forc_pbot",
-        "time": 0.0,
-        "expected": 68124.74884620964
        },
        {
         "variable": "Downscale.forc_rho",
@@ -1427,16 +1179,6 @@
         "variable": "ImportFields.forc_v",
         "time": 0.0,
         "expected": 1.2656027606188025
-       },
-       {
-        "variable": "ImportFields.forc_wind",
-        "time": 0.0,
-        "expected": 1.7898325886439401
-       },
-       {
-        "variable": "Downscale.forc_rain",
-        "time": 0.0,
-        "expected": 0.0
        },
        {
         "variable": "Downscale.forc_snow",
@@ -1462,11 +1204,6 @@
         "variable": "ImportFields.forc_solai_nir",
         "time": 0.0,
         "expected": 35.43601224302044
-       },
-       {
-        "variable": "Downscale.forc_solar",
-        "time": 0.0,
-        "expected": 437.95537962233925
        }
       ]
      }
