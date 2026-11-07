@@ -4951,7 +4951,7 @@
      ]
     },
     {
-     "id": "cell1184_step3600_kfirst1",
+     "id": "cell1184_step3600_kfirst2",
      "description": "mom6_kpp_obl.csv row (i, j, tod) = (11, 84, 3600): kfirst = 2 (1-based, derived: not a dump column -- from kpp_ref.py), the two-point quadratic with zero slope at x1 (cvmix_kpp.F90:1773-1776) through cell centers 1..2 (the layer-2 BulkRi already exceeds RI_CRIT); the interpolated OBL depth 3.649 m is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0; kOBL = 3.25. Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..6 (layer 1 is 0 by construction), spot z_cell at layers 1..6 and z_inter at ifaces 2..6 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,
@@ -5747,7 +5747,7 @@
      ]
     },
     {
-     "id": "cell684_step10800_kfirst1_shallow",
+     "id": "cell684_step10800_kfirst2_shallow",
      "description": "mom6_kpp_obl.csv row (i, j, tod) = (6, 84, 10800): kfirst = 2 (1-based, derived: not a dump column -- from kpp_ref.py), the two-point quadratic with zero slope at x1 through cell centers 1..2; the interpolated OBL depth 3.116 m is below the MINIMUM_OBL_DEPTH = 5 m floor, so OBLdepth pins the floored value 5.0; kOBL = 2.75 (the OBL sits between the layer-2 center and interface 3). Pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3 = 2..5 (layer 1 is 0 by construction), spot z_cell at layers 1..5 and z_inter at ifaces 2..5 (iface 1 is the surface), plus the deep z_cell/z_inter at layer/iface 75, at rel 1e-12.",
      "time_span": {
       "start": 0.0,

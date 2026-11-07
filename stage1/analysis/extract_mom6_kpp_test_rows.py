@@ -68,8 +68,8 @@ BLD_ROWS = [
     ((7, 82, 3600), "cell782_step3600_quad_k3"),
     ((8, 83, 3600), "cell883_step3600_quad_k3"),
     ((7, 84, 10800), "cell784_step10800_two_point_k2"),
-    ((11, 84, 3600), "cell1184_step3600_kfirst1"),
-    ((6, 84, 10800), "cell684_step10800_kfirst1_shallow"),
+    ((11, 84, 3600), "cell1184_step3600_kfirst2"),
+    ((6, 84, 10800), "cell684_step10800_kfirst2_shallow"),
 ]
 COEFS_ROWS = [
     ((7, 82, 3600), "cell782_step3600_kOBL325"),

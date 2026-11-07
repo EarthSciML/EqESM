@@ -211,8 +211,8 @@ model.
 | `cell782_step3600_quad_k3` | (7, 82, 3600) | 4 | 6.613560999075406 | 3.75 |
 | `cell883_step3600_quad_k3` | (8, 83, 3600) | 4 | 5.974325344745279 | 3.25 |
 | `cell784_step10800_two_point_k2` | (7, 84, 10800) | 3 | 5.0 (floored) | 2.75 |
-| `cell1184_step3600_kfirst1` | (11, 84, 3600) | 2 | 5.0 (floored) | 3.25 |
-| `cell684_step10800_kfirst1_shallow` | (6, 84, 10800) | 2 | 5.0 (floored) | 2.75 |
+| `cell1184_step3600_kfirst2` | (11, 84, 3600) | 2 | 5.0 (floored) | 3.25 |
+| `cell684_step10800_kfirst2_shallow` | (6, 84, 10800) | 2 | 5.0 (floored) | 2.75 |
 
 Each BLD test pins OBLdepth/kOBL, BulkRi/deltaU2/N2 at layers 2..kOBL+3
 (5 or 4 layers; layer 1 is 0 by construction), spot z_cell values at layers
