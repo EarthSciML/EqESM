@@ -1,0 +1,3492 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_velo",
+  "description": "Stage-2 implementation of the pointwise laws of the CISM DIVA velocity solve (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20, which_ho_approx = HO_APPROX_DIVA = 4, which_ho_gradient = 0, margin = 1, assemble_taud = 1, diva_slope_correction = .true., which_ho_babc = 3, max_slope = 0.5, thck_gradient_ramp = 50 m, thklim = 1 m, upn = 11, nquad = 4): three pointwise components covering the DIVA column laws of glissade_velo_higher_solve, leaving the 2-D finite-element matrix solve, the vertex staggers, and the Picard iteration itself to the stage-3 assembly (stage2/README-cism-velo.md): (a) DivaGeometry - the vertex geometry of the driving stress and the slope correction: the hybrid-margin surface gradient dusrf_dx/dy of the NE-corner vertex from the four-cell stencil (glissade_grid_operators.F90 surface_elevation_gradient, HO_GRADIENT_MARGIN_HYBRID, F90:999-1079, with the max_slope clamp F90:1234-1252), the 4-cell mean staggered thickness stagthck, the driving stress taudx = -rhoi*grav*stagthck*dusrf_dx (load_vector_gravity, HO_ASSEMBLE_TAUD_LOCAL, F90:4353-4384), the slope angle of the DIVA correction theta_x = atan(|dz_dx|) from the PLAIN vertex gradient of z_mean = usrf - thck/2 (glissade_slope_angle_staggered, F90:1510, with slope_mask = 1 everywhere) and the slope factor F = cos^2(theta) + 4 sin^2(theta) (F90:2189-2193), plus the bwat = 0 effective-pressure identity effecpress_stag = rhoi*g*stagthck pinned at the same stencil; (b) DivaIntegrals - the Goldberg (2011) vertical integrals of the sigma column (compute_integrals_diva, F90:5570-5696): omega_k as the interface-to-bed cumulative integral of sig_mid*thck*(mean over the nquad quadrature points of 1/efvs_qp) and omega as the trapezoid sigma integral of omega_k (no thck factor), both written as ESD integral operators lowered by the local EarthSciDiscretizations-format rules of ./cism_velo_discretization.esm (the imported column_nonuniform_1d rules integral_lev_nodes_cumulative_to_top and integral_lev_whole, the exact stencil of the Fortran loops), with the cell-centered efvs (the arithmetic mean of the quad-point viscosities, F90:5266-5272; the Fortran computes the integral at each quad point and averages, NOT the integral of the averaged viscosity, F90:5578-5583), the staggered stag_omega (the 4-cell mean of omega with stagger_margin = 1; the other three cells' omega enter as inputs because only the traced cell's efvs_q is dumped), and the active-cell guard (the whole block sits inside the active_cell test of the element loop, F90:5091: ice-free cells keep efvs = omega_k = omega = 0 even when the dumped efvs_q inputs are stale nonzero values from a previous step); (c) DivaVelocity - the basal friction, traction and 3-D recovery chain: the pseudo-plastic beta of the mounted BasalTraction (./cism_basal.esm, which_ho_babc = 3) evaluated at the basal velocity, beta_internal = f_ground*beta (the calcbeta f_ground weighting, glissade_basal_traction.F90:595-630; f_ground = 1 on every traced row), the effective basal friction beta_eff = F*beta/(F + beta*omega*cos(theta)) (F90:2589-2601, Goldberg 2011 eq. 40-41 with the May 2025 slope correction), the basal traction btractx = beta_internal*uvel_basal (= beta_eff*uvel_2d, F90:3874, 5780), the basal-velocity recovery uvel_basal = uvel_2d*beta_eff/beta_internal (Goldberg eq. 34, F90:5800-5801) and the 3-D velocity profile uvel[k] = uvel_basal + btractx*stag_omega_k[k]*cos(theta)/F (Goldberg eq. 32 with the slope correction, F90:5935-5936). Deferred to stage 3 (documented in stage2/README-cism-velo.md): the 2-D finite-element assembly and the Picard iteration of the solve itself, the per-level stagger of omega_k to the vertex (stag_omega_k enters as a dumped input), the effective-pressure cell-to-vertex stagger (N_stag enters as a dumped input; the effecpress_stag = rhoi*g*stagthck identity of the bwat = 0 run is pinned in the DivaGeometry tests), and the accel_picard accepted-pass restore: the dumped beta_internal is the last ACCEPTED calcbeta pass, whose velocity iterate differs from the exit basal velocity by the final Picard correction, so the beta chain (BasalTraction at the exit basal velocity) is pinned at rel 1e-5 - worst 6.04e-7 over the 128 exit rows, a stated numerical reason for the tolerance; every other law is pinned at rel 1e-12 (worst verified 6.6e-13, the dusrf_dx dump round-trip). Tests pin the laws against the cism_velo.csv / cism_velo_nbr.csv exit rows (4 steps x 32 traced cells, solver-internal m/yr and Pa yr units; scale_output has not yet run).",
+  "license": "MIT",
+  "tags": [
+   "eqesm:stage2",
+   "model:velocity",
+   "grid:cism_sigma_column"
+  ],
+  "references": [
+   {
+    "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002, libglissade/glissade_velo_higher.F90 (glissade_velo_higher_solve, compute_integrals_diva, compute_3d_velocity_diva, load_vector_gravity) and libglissade/glissade_grid_operators.F90 (surface_elevation_gradient, glissade_slope_angle_staggered)."
+   },
+   {
+    "citation": "Goldberg, D. N. (2011). A variationally derived, depth-integrated approximation for a full-Stokes ice sheet model. Journal of Glaciology, 57(204), 717-728."
+   }
+  ]
+ },
+ "models": {
+  "DivaGeometry": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    }
+   ],
+   "variables": {
+    "usrf_sw": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "surface elevation of the SW stencil cell (the traced cell; cism_velo_nbr.csv usrf_sw), m"
+    },
+    "usrf_se": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "surface elevation of the SE stencil cell (cism_velo_nbr.csv usrf_se), m"
+    },
+    "usrf_nw": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "surface elevation of the NW stencil cell (cism_velo_nbr.csv usrf_nw), m"
+    },
+    "usrf_ne": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "surface elevation of the NE stencil cell (cism_velo_nbr.csv usrf_ne), m"
+    },
+    "thck_sw": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness of the SW stencil cell (cism_velo_nbr.csv thck_sw), m"
+    },
+    "thck_se": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness of the SE stencil cell (cism_velo_nbr.csv thck_se), m"
+    },
+    "thck_nw": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness of the NW stencil cell (cism_velo_nbr.csv thck_nw), m"
+    },
+    "thck_ne": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness of the NE stencil cell (cism_velo_nbr.csv thck_ne), m"
+    },
+    "ice_mask_sw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice mask of the SW stencil cell (cism_velo_nbr.csv ice_mask_sw): 1 where thck > thklim"
+    },
+    "ice_mask_se": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice mask of the SE stencil cell (cism_velo_nbr.csv ice_mask_se)"
+    },
+    "ice_mask_nw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice mask of the NW stencil cell (cism_velo_nbr.csv ice_mask_nw)"
+    },
+    "ice_mask_ne": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice mask of the NE stencil cell (cism_velo_nbr.csv ice_mask_ne)"
+    },
+    "land_mask_sw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "land mask of the SW stencil cell (cism_velo_nbr.csv land_mask_sw): 1 on land, 0 on ocean"
+    },
+    "land_mask_se": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "land mask of the SE stencil cell (cism_velo_nbr.csv land_mask_se)"
+    },
+    "land_mask_nw": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "land mask of the NW stencil cell (cism_velo_nbr.csv land_mask_nw)"
+    },
+    "land_mask_ne": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "land mask of the NE stencil cell (cism_velo_nbr.csv land_mask_ne)"
+    },
+    "thklim": {
+     "type": "parameter",
+     "units": "m",
+     "default": 1.0,
+     "description": "ice thickness limit ice_limit (glide_types.F90 default 1.0 m): cells with thck <= thklim are ice-free; the hybrid-margin ramp starts at this thickness"
+    },
+    "ramp": {
+     "type": "parameter",
+     "units": "m",
+     "default": 50.0,
+     "description": "thck_gradient_ramp (glide_types.F90:2395 default 50.0 m): the distance over which the hybrid-margin edge factor ramps from 0 to 1"
+    },
+    "max_slope": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.5,
+     "description": "max_slope (glide_types.F90 default 0.5): the clamp of the driving-stress surface gradient (grid_operators.F90:1234-1252)"
+    },
+    "dx": {
+     "type": "parameter",
+     "units": "m",
+     "default": 20000.0,
+     "description": "grid spacing (gris20 dx = dy = 20 km; the reference run is square, dx = dy)"
+    },
+    "rhoi": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 917.0,
+     "description": "ice density (glide_types default 917.0 kg/m3)"
+    },
+    "g": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration (glide_types default 9.80616 m/s2)"
+    },
+    "z_mean_sw": {
+     "type": "unknown",
+     "units": "m",
+     "description": "z_mean = usrf - thck/2 = 0.5*(usrf + lsrf) of the SW stencil cell, the mid-ice elevation whose gradient feeds the DIVA slope angle (glissade_velo_higher.F90:2160; lsrf = topg - eus and usrf = lsrf + thck, so z_mean = usrf - thck/2)"
+    },
+    "z_mean_se": {
+     "type": "unknown",
+     "units": "m",
+     "description": "z_mean of the SE stencil cell"
+    },
+    "z_mean_nw": {
+     "type": "unknown",
+     "units": "m",
+     "description": "z_mean of the NW stencil cell"
+    },
+    "z_mean_ne": {
+     "type": "unknown",
+     "units": "m",
+     "description": "z_mean of the NE stencil cell"
+    },
+    "edge_s": {
+     "type": "unknown",
+     "units": "1",
+     "description": "hybrid-margin surface gradient d(usrf)/dx on the SOUTH edge of the vertex (between the SW and SE cells; cism_hybrid_edge_gradient, grid_operators.F90:999-1079)"
+    },
+    "edge_n": {
+     "type": "unknown",
+     "units": "1",
+     "description": "hybrid-margin surface gradient d(usrf)/dx on the NORTH edge of the vertex (between the NW and NE cells)"
+    },
+    "edge_w": {
+     "type": "unknown",
+     "units": "1",
+     "description": "hybrid-margin surface gradient d(usrf)/dy on the WEST edge of the vertex (between the SW and NW cells)"
+    },
+    "edge_e": {
+     "type": "unknown",
+     "units": "1",
+     "description": "hybrid-margin surface gradient d(usrf)/dy on the EAST edge of the vertex (between the SE and NE cells)"
+    },
+    "dusrf_dx": {
+     "type": "unknown",
+     "units": "1",
+     "description": "surface elevation gradient at the vertex used for the driving stress: the centered average of the south/north hybrid edge gradients, clamped to +/-max_slope (the dumped dusrf_dx column)"
+    },
+    "dusrf_dy": {
+     "type": "unknown",
+     "units": "1",
+     "description": "surface elevation gradient at the vertex in y: the centered average of the west/east hybrid edge gradients, clamped to +/-max_slope (the dumped dusrf_dy column)"
+    },
+    "dz_dx": {
+     "type": "unknown",
+     "units": "1",
+     "description": "x-gradient of z_mean at the vertex from the PLAIN centered vertex gradient (no hybrid masking, no clamp: the glissade_gradient construction used by the slope angle, F90:1510, with slope_mask = 1 everywhere)"
+    },
+    "dz_dy": {
+     "type": "unknown",
+     "units": "1",
+     "description": "y-gradient of z_mean at the vertex (plain centered vertex gradient)"
+    },
+    "theta_x": {
+     "type": "unknown",
+     "units": "rad",
+     "description": "x-direction surface slope angle of the DIVA slope correction: theta_x = atan(|dz_dx|) (cism_theta_slope_x, grid_operators.F90:1510; the dumped stag_theta_slope_x column)"
+    },
+    "theta_y": {
+     "type": "unknown",
+     "units": "rad",
+     "description": "y-direction surface slope angle of the DIVA slope correction: theta_y = atan(|dz_dy|) (the dumped stag_theta_slope_y column)"
+    },
+    "F_x": {
+     "type": "unknown",
+     "units": "1",
+     "description": "DIVA slope correction factor in x: F_x = cos^2(theta_x) + 4 sin^2(theta_x) (cism_diva_slope_factor, F90:2189-2193; the dumped stag_diva_slope_factor_x column)"
+    },
+    "F_y": {
+     "type": "unknown",
+     "units": "1",
+     "description": "DIVA slope correction factor in y: F_y = cos^2(theta_y) + 4 sin^2(theta_y) (the dumped stag_diva_slope_factor_y column)"
+    },
+    "stagthck": {
+     "type": "unknown",
+     "units": "m",
+     "description": "staggered ice thickness at the vertex: the plain 4-cell mean of thck (glissade_stagger, stagger_margin = 0, grid_operators.F90:125-133; the dumped stagthck column)"
+    },
+    "taudx": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "x driving stress at the vertex: taudx = -rhoi*grav*stagthck*dusrf_dx (cism_driving_stress, load_vector_gravity, HO_ASSEMBLE_TAUD_LOCAL, F90:4353-4384; the dumped taudx column)"
+    },
+    "taudy": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "y driving stress at the vertex: taudy = -rhoi*grav*stagthck*dusrf_dy (the dumped taudy column)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "z_mean_sw",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "usrf_sw",
+       {
+        "op": "*",
+        "args": [
+         0.5,
+         "thck_sw"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "z_mean_se",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "usrf_se",
+       {
+        "op": "*",
+        "args": [
+         0.5,
+         "thck_se"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "z_mean_nw",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "usrf_nw",
+       {
+        "op": "*",
+        "args": [
+         0.5,
+         "thck_nw"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "z_mean_ne",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "usrf_ne",
+       {
+        "op": "*",
+        "args": [
+         0.5,
+         "thck_ne"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "edge_s",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_hybrid_edge_gradient",
+      "bindings": {
+       "usrf_w": "usrf_sw",
+       "usrf_e": "usrf_se",
+       "thck_w": "thck_sw",
+       "thck_e": "thck_se",
+       "ice_w": "ice_mask_sw",
+       "ice_e": "ice_mask_se",
+       "land_w": "land_mask_sw",
+       "land_e": "land_mask_se",
+       "thklim": "thklim",
+       "ramp": "ramp",
+       "dx": "dx"
+      }
+     }
+    },
+    {
+     "lhs": "edge_n",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_hybrid_edge_gradient",
+      "bindings": {
+       "usrf_w": "usrf_nw",
+       "usrf_e": "usrf_ne",
+       "thck_w": "thck_nw",
+       "thck_e": "thck_ne",
+       "ice_w": "ice_mask_nw",
+       "ice_e": "ice_mask_ne",
+       "land_w": "land_mask_nw",
+       "land_e": "land_mask_ne",
+       "thklim": "thklim",
+       "ramp": "ramp",
+       "dx": "dx"
+      }
+     }
+    },
+    {
+     "lhs": "edge_w",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_hybrid_edge_gradient",
+      "bindings": {
+       "usrf_w": "usrf_sw",
+       "usrf_e": "usrf_nw",
+       "thck_w": "thck_sw",
+       "thck_e": "thck_nw",
+       "ice_w": "ice_mask_sw",
+       "ice_e": "ice_mask_nw",
+       "land_w": "land_mask_sw",
+       "land_e": "land_mask_nw",
+       "thklim": "thklim",
+       "ramp": "ramp",
+       "dx": "dx"
+      }
+     }
+    },
+    {
+     "lhs": "edge_e",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_hybrid_edge_gradient",
+      "bindings": {
+       "usrf_w": "usrf_se",
+       "usrf_e": "usrf_ne",
+       "thck_w": "thck_se",
+       "thck_e": "thck_ne",
+       "ice_w": "ice_mask_se",
+       "ice_e": "ice_mask_ne",
+       "land_w": "land_mask_se",
+       "land_e": "land_mask_ne",
+       "thklim": "thklim",
+       "ramp": "ramp",
+       "dx": "dx"
+      }
+     }
+    },
+    {
+     "lhs": "dusrf_dx",
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           0.5,
+           {
+            "op": "+",
+            "args": [
+             "edge_s",
+             "edge_n"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           "max_slope"
+          ]
+         }
+        ]
+       },
+       "max_slope"
+      ]
+     }
+    },
+    {
+     "lhs": "dusrf_dy",
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           0.5,
+           {
+            "op": "+",
+            "args": [
+             "edge_w",
+             "edge_e"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           "max_slope"
+          ]
+         }
+        ]
+       },
+       "max_slope"
+      ]
+     }
+    },
+    {
+     "lhs": "dz_dx",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.5,
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "z_mean_ne",
+             "z_mean_nw"
+            ]
+           },
+           "dx"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "z_mean_se",
+             "z_mean_sw"
+            ]
+           },
+           "dx"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "dz_dy",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.5,
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "z_mean_ne",
+             "z_mean_se"
+            ]
+           },
+           "dx"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "z_mean_nw",
+             "z_mean_sw"
+            ]
+           },
+           "dx"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "theta_x",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_theta_slope_x",
+      "bindings": {
+       "dz_dx": "dz_dx"
+      }
+     }
+    },
+    {
+     "lhs": "theta_y",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_theta_slope_x",
+      "bindings": {
+       "dz_dx": "dz_dy"
+      }
+     }
+    },
+    {
+     "lhs": "F_x",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_diva_slope_factor",
+      "bindings": {
+       "theta": "theta_x"
+      }
+     }
+    },
+    {
+     "lhs": "F_y",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_diva_slope_factor",
+      "bindings": {
+       "theta": "theta_y"
+      }
+     }
+    },
+    {
+     "lhs": "stagthck",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.25,
+       {
+        "op": "+",
+        "args": [
+         "thck_sw",
+         {
+          "op": "+",
+          "args": [
+           "thck_se",
+           {
+            "op": "+",
+            "args": [
+             "thck_nw",
+             "thck_ne"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "taudx",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_driving_stress",
+      "bindings": {
+       "rhoi": "rhoi",
+       "g": "g",
+       "stagthck": "stagthck",
+       "dusrf_dx": "dusrf_dx"
+      }
+     }
+    },
+    {
+     "lhs": "taudy",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_driving_stress",
+      "bindings": {
+       "rhoi": "rhoi",
+       "g": "g",
+       "stagthck": "stagthck",
+       "dusrf_dx": "dusrf_dy"
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "geom_step1_cell2511",
+     "description": "Dump pin, cism_velo_nbr.csv step 1, cell (25,11) (the NE-corner vertex stencil; SW = the traced cell): thin ice (thck_sw = 1.37 m) on the steepest slope of the traced window (theta_x = 0.0316 rad), all four stencil cells ice-covered land. The hybrid-margin edges are undamped (the upper cell of every edge has thck > thklim + ramp), so dusrf_dx = 0.5*(edge_s + edge_n) = 0.02045 (below the max_slope clamp) and the driving stress taudx = -rhoi*g*stagthck*dusrf_dx = -4890.4 Pa; the slope angle theta_x = atan(|dz_dx|) comes from the PLAIN z_mean gradient (dz_dx = 0.03163, no hybrid masking) and F_x = cos^2 + 4 sin^2 = 1.002997. All assertions at rel 1e-12 except the edge-gradient-derived dusrf_dx/dy/taudx/taudy at 1e-11 (the es26.17 dump round-trip of the ~1800 m surface-elevation differences; worst verified over the 128 exit rows 6.6e-13).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "usrf_sw": 1083.3697560650244,
+      "thck_sw": 1.3697560650243181,
+      "ice_mask_sw": 1.0,
+      "land_mask_sw": 1.0,
+      "usrf_se": 1767.9405124627754,
+      "thck_se": 15.04048804871283,
+      "ice_mask_se": 1.0,
+      "land_mask_se": 1.0,
+      "usrf_nw": 1243.7076327746151,
+      "thck_nw": 6.407583946490077,
+      "ice_mask_nw": 1.0,
+      "land_mask_nw": 1.0,
+      "usrf_ne": 1869.4596555369824,
+      "thck_ne": 83.55963112291998,
+      "ice_mask_ne": 1.0,
+      "land_mask_ne": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "dusrf_dx",
+       "time": 0.0,
+       "expected": 0.020449654330913065,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "dusrf_dy",
+       "time": 0.0,
+       "expected": 0.0029714988409105213,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "stagthck",
+       "time": 0.0,
+       "expected": 26.594364795786802,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "taudx",
+       "time": 0.0,
+       "expected": -4890.394605748079,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "taudy",
+       "time": 0.0,
+       "expected": -710.6135716244473,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "theta_x",
+       "time": 0.0,
+       "expected": 0.03161225012587919,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "theta_y",
+       "time": 0.0,
+       "expected": 0.005626903970461825,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_x",
+       "time": 0.0,
+       "expected": 1.002997004537962,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_y",
+       "time": 0.0,
+       "expected": 1.0000949851423973,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "geom_step1_cell2713",
+     "description": "Dump pin, step 1, cell (27,13): thick ice (thck_sw = 434.5 m) with a negative surface gradient (dusrf_dx = -0.0177, taudx > 0); the y gradient is small and positive. stagthck = 431.9 m (the 4-cell mean), and the bwat = 0 effective-pressure identity effecpress_stag = rhoi*g*stagthck = 3.885e6 Pa is pinned here and on every other row by the same law (the staged N_stag of the basal chain).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "usrf_sw": 2126.804262847162,
+      "thck_sw": 434.50421401903714,
+      "ice_mask_sw": 1.0,
+      "land_mask_sw": 1.0,
+      "usrf_se": 1678.37154926737,
+      "thck_se": 141.97152485330747,
+      "ice_mask_se": 1.0,
+      "land_mask_se": 1.0,
+      "usrf_nw": 2225.051047853225,
+      "thck_nw": 700.35109668135,
+      "ice_mask_nw": 1.0,
+      "land_mask_nw": 1.0,
+      "usrf_ne": 1965.580504027392,
+      "thck_ne": 305.2804551992669,
+      "ice_mask_ne": 1.0,
+      "land_mask_ne": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "dusrf_dx",
+       "time": 0.0,
+       "expected": -0.017697581435140632,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "dusrf_dy",
+       "time": 0.0,
+       "expected": 0.009636393494152122,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "stagthck",
+       "time": 0.0,
+       "expected": 395.5268226882404,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "taudx",
+       "time": 0.0,
+       "expected": 62944.55545074094,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "taudy",
+       "time": 0.0,
+       "expected": -34273.52527579979,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "theta_x",
+       "time": 0.0,
+       "expected": 0.009102288413827259,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "theta_y",
+       "time": 0.0,
+       "expected": 0.004271919844844606,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_x",
+       "time": 0.0,
+       "expected": 1.0002485480987848,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_y",
+       "time": 0.0,
+       "expected": 1.0000547475644461,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "geom_step3_cell2414",
+     "description": "Dump pin, step 3, cell (24,14): the fastest traced column (uvel_2d = 5.02 m/yr) with a strong positive slope (theta_x = 0.0154 rad); the largest |taudx| of the pinned rows (-3.66e5 Pa at stagthck = 224.3 m).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "usrf_sw": 1289.0543401092405,
+      "thck_sw": 118.65431569517798,
+      "ice_mask_sw": 1.0,
+      "land_mask_sw": 1.0,
+      "usrf_se": 1693.4477218315672,
+      "thck_se": 190.84774624562968,
+      "ice_mask_se": 1.0,
+      "land_mask_se": 1.0,
+      "usrf_nw": 1729.9481148939894,
+      "thck_nw": 600.4481148939893,
+      "ice_mask_nw": 1.0,
+      "land_mask_nw": 1.0,
+      "usrf_ne": 2005.3884265448567,
+      "thck_ne": 656.6884753729817,
+      "ice_mask_ne": 1.0,
+      "land_mask_ne": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "dusrf_dx",
+       "time": 0.0,
+       "expected": 0.01699584233432985,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "dusrf_dy",
+       "time": 0.0,
+       "expected": 0.018820861987450963,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "stagthck",
+       "time": 0.0,
+       "expected": 391.6596630519446,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "taudx",
+       "time": 0.0,
+       "expected": -59857.67587651341,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "taudy",
+       "time": 0.0,
+       "expected": -66285.21460721428,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "theta_x",
+       "time": 0.0,
+       "expected": 0.015389204968387698,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "theta_y",
+       "time": 0.0,
+       "expected": 0.0069753172530337935,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_x",
+       "time": 0.0,
+       "expected": 1.000710426803122,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_y",
+       "time": 0.0,
+       "expected": 1.0001459627850429,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "geom_step3_cell2813",
+     "description": "Dump pin, step 3, cell (28,13): the steepest slope of the pinned rows (theta_x = 0.0305 rad, dusrf_dx = -0.0358, taudx = +3.47e5 Pa at stagthck = 253.2 m), a mid-thickness column (143.7 m) on the inland side of the ice sheet; F_y = 1.00218 carries the non-negligible y slope (theta_y = 0.0234 rad).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "usrf_sw": 1680.0585708552715,
+      "thck_sw": 143.65854644120898,
+      "ice_mask_sw": 1.0,
+      "land_mask_sw": 1.0,
+      "usrf_se": 980.010009765625,
+      "thck_se": 0.0,
+      "ice_mask_se": 0.0,
+      "land_mask_se": 1.0,
+      "usrf_nw": 1967.6980499264253,
+      "thck_nw": 307.3980010983003,
+      "ice_mask_nw": 1.0,
+      "land_mask_nw": 1.0,
+      "usrf_ne": 1236.7292065804522,
+      "thck_ne": 26.72920658045218,
+      "ice_mask_ne": 1.0,
+      "land_mask_ne": 1.0
+     },
+     "assertions": [
+      {
+       "variable": "dusrf_dx",
+       "time": 0.0,
+       "expected": -0.035775435110890486,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "dusrf_dy",
+       "time": 0.0,
+       "expected": 0.010493577600788354,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "stagthck",
+       "time": 0.0,
+       "expected": 119.44643852999036,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "taudx",
+       "time": 0.0,
+       "expected": 38426.11165354277,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "taudy",
+       "time": 0.0,
+       "expected": -11271.068633635188,
+       "tolerance": {
+        "rel": 1e-11
+       }
+      },
+      {
+       "variable": "theta_x",
+       "time": 0.0,
+       "expected": 0.030461917690539395,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "theta_y",
+       "time": 0.0,
+       "expected": 0.011227636823231812,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_x",
+       "time": 0.0,
+       "expected": 1.002782924343511,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "F_y",
+       "time": 0.0,
+       "expected": 1.00037816359509,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "DivaIntegrals": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_velo_discretization.esm"
+    }
+   ],
+   "variables": {
+    "sigma": {
+     "type": "parameter",
+     "units": "1",
+     "shape": [
+      "lev_nodes"
+     ],
+     "default": 0.0,
+     "description": "sigma coordinates of the 11 velocity levels (sigma_001 = 0 at the surface .. sigma_011 = 1 at the bed; the dump's sigma_001..011 of cism_velo_nbr.csv)"
+    },
+    "efvs_q1": {
+     "type": "parameter",
+     "units": "Pa yr",
+     "shape": [
+      "lev"
+     ],
+     "default": 0.0,
+     "description": "effective viscosity at quadrature point 1 of each layer (Pa yr; the dump's efvs_q1_001..010, solver units)"
+    },
+    "efvs_q2": {
+     "type": "parameter",
+     "units": "Pa yr",
+     "shape": [
+      "lev"
+     ],
+     "default": 0.0,
+     "description": "effective viscosity at quadrature point 2 of each layer (the dump's efvs_q2_001..010)"
+    },
+    "efvs_q3": {
+     "type": "parameter",
+     "units": "Pa yr",
+     "shape": [
+      "lev"
+     ],
+     "default": 0.0,
+     "description": "effective viscosity at quadrature point 3 of each layer (the dump's efvs_q3_001..010)"
+    },
+    "efvs_q4": {
+     "type": "parameter",
+     "units": "Pa yr",
+     "shape": [
+      "lev"
+     ],
+     "default": 0.0,
+     "description": "effective viscosity at quadrature point 4 of each layer (the dump's efvs_q4_001..010)"
+    },
+    "thck": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "ice thickness of the traced cell (m; cism_velo.csv thck)"
+    },
+    "ice_mask": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice mask of the traced cell (cism_velo.csv ice_mask): 1 where thck > thklim; the active_cell guard of the element loop (F90:5091) skips the whole DIVA block on ice-free cells"
+    },
+    "omega_se": {
+     "type": "parameter",
+     "units": "m/(Pa yr)",
+     "default": 0.0,
+     "description": "cell-centered omega of the SE stencil cell (cism_velo_nbr.csv omega_se): the stagger input alongside the model's own omega for the SW cell"
+    },
+    "omega_nw": {
+     "type": "parameter",
+     "units": "m/(Pa yr)",
+     "default": 0.0,
+     "description": "cell-centered omega of the NW stencil cell (cism_velo_nbr.csv omega_nw)"
+    },
+    "omega_ne": {
+     "type": "parameter",
+     "units": "m/(Pa yr)",
+     "default": 0.0,
+     "description": "cell-centered omega of the NE stencil cell (cism_velo_nbr.csv omega_ne)"
+    },
+    "dz": {
+     "type": "unknown",
+     "units": "1",
+     "shape": [
+      "lev"
+     ],
+     "description": "sigma layer widths dz[l] = sigma[l+1] - sigma[l] (cism_sigma_measure): the dimensionless measure of the imported integral rules (the Fortran dsigma = sigma(k+1) - sigma(k), F90:5636, 5658)"
+    },
+    "sig_mid": {
+     "type": "unknown",
+     "units": "1",
+     "shape": [
+      "lev"
+     ],
+     "description": "sigma layer midpoints sig_mid[l] = 0.5*(sigma[l] + sigma[l+1]) (cism_sigma_midpoint; the Fortran depth = 0.5*(sigma(k)+sigma(k+1)), F90:5634)"
+    },
+    "z_sfc": {
+     "type": "unknown",
+     "units": "1",
+     "description": "surface bound of the integral rules: the sigma surface sigma(1) = 0"
+    },
+    "z_top": {
+     "type": "unknown",
+     "units": "1",
+     "description": "bed bound of the integral rules: the sigma bed sigma(11) = 1 (the DIVA integrals run from the surface / each interface to the BED)"
+    },
+    "efvs": {
+     "type": "unknown",
+     "units": "Pa yr",
+     "shape": [
+      "lev"
+     ],
+     "description": "cell-centered effective viscosity of the traced cell: the arithmetic mean of the four quad-point viscosities (F90:5266-5272), zeroed on ice-free cells by the active_cell guard (the dumped efvs_001..010 column)"
+    },
+    "efvs_qp_mean_recip": {
+     "type": "unknown",
+     "units": "1/(Pa yr)",
+     "shape": [
+      "lev"
+     ],
+     "description": "quad-point mean of the reciprocal viscosities (1/4)*sum_p 1/efvs_qp(p)[l] (the Fortran computes the integral at each quad point and averages, F90:5627-5653; the mean of the reciprocals, NOT the reciprocal of the mean - the harmonic construction, distinct from the arithmetic-mean efvs above)"
+    },
+    "omega_integrand": {
+     "type": "unknown",
+     "units": "m/(Pa yr)",
+     "shape": [
+      "lev"
+     ],
+     "description": "DIVA single-integral integrand f[l] = sig_mid[l]*thck*efvs_qp_mean_recip[l]: the layer depth factor (s - z)/H times thck/efvs of Goldberg (2011) eq. 32, with the mean over the quadrature points taken inside the integrand (integral linearity: the four-integral construction of the Fortran averages bit-for-bit)"
+    },
+    "omega_k": {
+     "type": "unknown",
+     "units": "m/(Pa yr)",
+     "shape": [
+      "lev_nodes"
+     ],
+     "description": "Goldberg (2011) single integral at each velocity level: the interface-to-bed cumulative integral of omega_integrand (the imported integral_lev_nodes_cumulative_to_top rule, the exact suffix scan of F90:5631-5637), zeroed on ice-free cells by the active_cell guard (the dumped omega_k_001..011 column)"
+    },
+    "omega_layer_avg": {
+     "type": "unknown",
+     "units": "m/(Pa yr)",
+     "shape": [
+      "lev"
+     ],
+     "description": "layer-averaged single integral g[l] = 0.5*(omega_k[l] + omega_k[l+1]): the trapezoid mean of the interface values, the integrand of the double integral (the Fortran layer_avg, F90:5656)"
+    },
+    "omega": {
+     "type": "unknown",
+     "units": "m/(Pa yr)",
+     "description": "Goldberg (2011) double integral: the whole-column integral of omega_layer_avg over the sigma measure (the imported integral_lev_whole rule, the exact trapezoid sum of F90:5655-5661, no thck factor - omega here is Goldberg's omega/H; the dumped omega column)"
+    },
+    "stag_omega": {
+     "type": "unknown",
+     "units": "m/(Pa yr)",
+     "description": "staggered omega at the vertex: the plain 4-cell mean of the cell-centered omegas, 0.25*(omega + omega_se + omega_nw + omega_ne) (glissade_stagger with ice_plus_land_mask and stagger_margin = 1, F90:5790-5798; the dumped stag_omega column)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "dz",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_sigma_measure",
+      "bindings": {
+       "sigma": "sigma"
+      }
+     }
+    },
+    {
+     "lhs": "sig_mid",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_sigma_midpoint",
+      "bindings": {
+       "sigma": "sigma"
+      }
+     }
+    },
+    {
+     "lhs": "z_sfc",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    },
+    {
+     "lhs": "z_top",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     }
+    },
+    {
+     "lhs": "efvs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "l"
+      ],
+      "args": [
+       "efvs_q1",
+       "efvs_q2",
+       "efvs_q3",
+       "efvs_q4",
+       "ice_mask"
+      ],
+      "ranges": {
+       "l": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": "==",
+         "args": [
+          "ice_mask",
+          1.0
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          0.25,
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "efvs_q1",
+              "l"
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "efvs_q2",
+                "l"
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "efvs_q3",
+                  "l"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "efvs_q4",
+                  "l"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        0.0
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "efvs_qp_mean_recip",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "l"
+      ],
+      "args": [
+       "efvs_q1",
+       "efvs_q2",
+       "efvs_q3",
+       "efvs_q4"
+      ],
+      "ranges": {
+       "l": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        0.25,
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            1.0,
+            {
+             "op": "index",
+             "args": [
+              "efvs_q1",
+              "l"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              1.0,
+              {
+               "op": "index",
+               "args": [
+                "efvs_q2",
+                "l"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                1.0,
+                {
+                 "op": "index",
+                 "args": [
+                  "efvs_q3",
+                  "l"
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "/",
+               "args": [
+                1.0,
+                {
+                 "op": "index",
+                 "args": [
+                  "efvs_q4",
+                  "l"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "omega_integrand",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "l"
+      ],
+      "args": [
+       "sig_mid",
+       "efvs_qp_mean_recip",
+       "thck"
+      ],
+      "ranges": {
+       "l": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "sig_mid",
+          "l"
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "thck",
+          {
+           "op": "index",
+           "args": [
+            "efvs_qp_mean_recip",
+            "l"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "omega_k",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         1.0
+        ]
+       },
+       {
+        "op": "integral",
+        "args": [
+         "omega_integrand"
+        ],
+        "var": "lev",
+        "lower": "lev_nodes",
+        "upper": "z_top"
+       },
+       0.0
+      ]
+     }
+    },
+    {
+     "lhs": "omega_layer_avg",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "l"
+      ],
+      "args": [
+       "omega_k"
+      ],
+      "ranges": {
+       "l": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        0.5,
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "omega_k",
+            "l"
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "omega_k",
+            {
+             "op": "+",
+             "args": [
+              "l",
+              1
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "omega",
+     "rhs": {
+      "op": "integral",
+      "args": [
+       "omega_layer_avg"
+      ],
+      "var": "lev",
+      "lower": "z_sfc",
+      "upper": "z_top"
+     }
+    },
+    {
+     "lhs": "stag_omega",
+     "rhs": {
+      "op": "*",
+      "args": [
+       0.25,
+       {
+        "op": "+",
+        "args": [
+         "omega",
+         {
+          "op": "+",
+          "args": [
+           "omega_se",
+           {
+            "op": "+",
+            "args": [
+             "omega_nw",
+             "omega_ne"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "int_step1_cell2511",
+     "description": "Dump pin, cism_velo_nbr.csv step 1, cell (25,11): the thin-ice column (thck = 1.37 m) on the steepest slope; the efvs_q quad-point viscosities (1.1e9, 8.2e8, 5.4e8, 6.0e8 Pa yr at the surface layer) give the arithmetic-mean cell viscosity efvs and the omega_k single integral from the surface (2.63e-6 m/(Pa yr)) to the bed (0 at level 11 - the suffix-scan top), the omega double integral (2.62e-6) and the staggered stag_omega = 0.25*(omega + omega_se + omega_nw + omega_ne) with the model's own omega as the SW cell. The omega_k law is pinned at levels 1, 6, 11; the integral lowering is the exact suffix scan / trapezoid stencil of the Fortran (worst verified 3.9e-16).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sigma": [
+       0.0,
+       0.23140495867768607,
+       0.4074074074074073,
+       0.5443786982248522,
+       0.6530612244897959,
+       0.7407407407407408,
+       0.8125,
+       0.8719723183391004,
+       0.9218106995884773,
+       0.96398891966759,
+       1.0
+      ],
+      "efvs_q1": [
+       1108636349.955666,
+       1111811478.7223725,
+       1114106210.3268867,
+       1115114768.0464818,
+       1115485090.131957,
+       1115501667.4248939,
+       1115324638.016571,
+       1115045936.3715098,
+       1114718966.9368856,
+       1114374844.8687665
+      ],
+      "efvs_q2": [
+       815791790.8115213,
+       815178610.6327991,
+       812742655.3981028,
+       809118941.1479666,
+       805188301.4629989,
+       801321015.9404694,
+       797683334.0481234,
+       794339748.5576909,
+       791304105.1001412,
+       788565737.627963
+      ],
+      "efvs_q3": [
+       543213426.5808085,
+       528795621.1490218,
+       507648401.7377518,
+       484743044.94889224,
+       462678027.5376662,
+       442499337.1030386,
+       424529700.50131905,
+       408746824.0989182,
+       394976261.7971264,
+       382989568.72511727
+      ],
+      "efvs_q4": [
+       598387126.3014317,
+       598881817.3986205,
+       598415650.3881472,
+       597155378.8896582,
+       595617656.049436,
+       594022533.8663735,
+       592476475.7142807,
+       591027838.3691171,
+       589694973.551225,
+       588480848.2114793
+      ],
+      "thck": 1.3697560650243181,
+      "ice_mask": 1.0,
+      "omega_se": 5.8532707895434575e-09,
+      "omega_nw": 7.336229984236539e-09,
+      "omega_ne": 1.6398141089809047e-07
+     },
+     "assertions": [
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 766507173.4123569,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 738336138.5836939,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 1.030044712009776e-09,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 4.841814271806598e-10,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega",
+       "time": 0.0,
+       "expected": 6.928852082599512e-10,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "stag_omega",
+       "time": 0.0,
+       "expected": 4.446594922003261e-08,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "int_step1_cell2612",
+     "description": "Dump pin, step 1, cell (26,12): a mid-thickness column (83.6 m) with a small slope; the layer-to-layer efvs variation (q1 falls from 1.07e9 to 1.05e9 Pa yr) exercises the nonuniform-layer integral over the CISM sigma spacing (dsigma from 0.231 to 0.036).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sigma": [
+       0.0,
+       0.23140495867768607,
+       0.4074074074074073,
+       0.5443786982248522,
+       0.6530612244897959,
+       0.7407407407407408,
+       0.8125,
+       0.8719723183391004,
+       0.9218106995884773,
+       0.96398891966759,
+       1.0
+      ],
+      "efvs_q1": [
+       603453023.9652967,
+       577710561.7790526,
+       523526069.8630726,
+       466997604.14131796,
+       416284860.1873542,
+       373820332.0396423,
+       339471921.67971426,
+       312043461.5011166,
+       290129618.1981252,
+       272479037.89138865
+      ],
+      "efvs_q2": [
+       624080168.6541365,
+       598197092.8523568,
+       543153016.9782492,
+       485609122.43128073,
+       433837779.63095164,
+       390330096.65138865,
+       355006451.0494356,
+       326703842.11796296,
+       304027413.6843384,
+       285720643.3871719
+      ],
+      "efvs_q3": [
+       620347297.4459308,
+       415033741.46122414,
+       235336454.48025545,
+       153498765.53286517,
+       114094768.33803779,
+       92085211.62390961,
+       78370685.8751709,
+       69139225.64572169,
+       62563892.3468418,
+       57672884.74782247
+      ],
+      "efvs_q4": [
+       627172002.0190711,
+       486922925.29940367,
+       320902547.4379656,
+       219871260.18163225,
+       165702321.55133536,
+       134389306.1186992,
+       114616703.20251141,
+       101224784.36219819,
+       91654380.58254947,
+       84521494.66318987
+      ],
+      "thck": 83.55963112291998,
+      "ice_mask": 1.0,
+      "omega_se": 1.2634299867709617e-06,
+      "omega_nw": 1.8453356764998729e-06,
+      "omega_ne": 1.0513968683576465e-05
+     },
+     "assertions": [
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 618763123.0211089,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 247656236.60840994,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 2.1291725624533777e-07,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 1.392788467430872e-07,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega",
+       "time": 0.0,
+       "expected": 1.6398141089809047e-07,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "stag_omega",
+       "time": 0.0,
+       "expected": 3.4466789394363477e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "int_step1_cell2713",
+     "description": "Dump pin, step 1, cell (27,13): the thickest pinned column (434.5 m); its omega (5.9e-5 m/(Pa yr)) is the largest of the pinned rows and the trapezoid double integral runs over the full sigma column with the strongest layer weighting.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sigma": [
+       0.0,
+       0.23140495867768607,
+       0.4074074074074073,
+       0.5443786982248522,
+       0.6530612244897959,
+       0.7407407407407408,
+       0.8125,
+       0.8719723183391004,
+       0.9218106995884773,
+       0.96398891966759,
+       1.0
+      ],
+      "efvs_q1": [
+       127575475.80982167,
+       116550358.03507909,
+       102087709.8930134,
+       87826528.568235,
+       75687599.0223082,
+       66127517.950745285,
+       58833838.04207159,
+       53289177.8759403,
+       49029549.26545312,
+       45696741.959086746
+      ],
+      "efvs_q2": [
+       126136129.13561843,
+       54879782.718396455,
+       26123655.905649934,
+       16584598.876416741,
+       12252982.631154658,
+       9869760.720818885,
+       8392978.268310219,
+       7401745.194067882,
+       6697234.482130702,
+       6173440.79552777
+      ],
+      "efvs_q3": [
+       76629442.04398118,
+       42831867.74060151,
+       22034029.88012886,
+       14122082.256920334,
+       10454862.494814748,
+       8426953.306219777,
+       7168060.149007513,
+       6322382.219974159,
+       5721062.845489742,
+       5273876.127396688
+      ],
+      "efvs_q4": [
+       76858020.60995768,
+       59757186.23873286,
+       40760818.660430565,
+       28438383.340502568,
+       21564984.044689834,
+       17530699.959140975,
+       14967383.467839181,
+       13226617.707026154,
+       11981609.296751522,
+       11052512.315654451
+      ],
+      "thck": 434.50421401903714,
+      "ice_mask": 1.0,
+      "omega_se": 5.508893261498528e-06,
+      "omega_nw": 2.4254396193143267e-05,
+      "omega_ne": 2.0727382899639804e-05
+     },
+     "assertions": [
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 101799766.89984475,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 25488732.984231226,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 1.333855241426739e-05,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 9.145208889711902e-06,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega",
+       "time": 0.0,
+       "expected": 1.0513968683576465e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "stag_omega",
+       "time": 0.0,
+       "expected": 1.5251160259464516e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "int_step3_cell2414",
+     "description": "Dump pin, step 3, cell (24,14): the fastest traced column (uvel_2d = 5.02 m/yr, thck = 118.7 m); the efvs values are an order of magnitude below the slow columns (2.1e8 Pa yr at the surface layer), the regime where the DIVA depth-integrated approximation matters most.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sigma": [
+       0.0,
+       0.23140495867768607,
+       0.4074074074074073,
+       0.5443786982248522,
+       0.6530612244897959,
+       0.7407407407407408,
+       0.8125,
+       0.8719723183391004,
+       0.9218106995884773,
+       0.96398891966759,
+       1.0
+      ],
+      "efvs_q1": [
+       27204222.270195074,
+       26429966.505905874,
+       24349254.17409404,
+       22154135.88088036,
+       20138101.920219637,
+       18398657.435496002,
+       16945807.336416315,
+       15749630.525729988,
+       14767440.48609012,
+       13957656.410028402
+      ],
+      "efvs_q2": [
+       28280730.924030997,
+       26952469.815480452,
+       24085014.035801973,
+       21151513.414980415,
+       18573584.758513164,
+       16469599.817743286,
+       14810439.8045167,
+       13513989.96485717,
+       12495523.040432045,
+       11685602.673093408
+      ],
+      "efvs_q3": [
+       23595949.964201137,
+       16035436.616285693,
+       9164824.376810016,
+       5990288.461791572,
+       4454668.806634897,
+       3595787.652441714,
+       3060245.22279873,
+       2699479.9441044047,
+       2442193.6700120657,
+       2250538.4118048
+      ],
+      "efvs_q4": [
+       22856764.51486827,
+       16447401.641958266,
+       9896517.141890028,
+       6558504.591362735,
+       4894503.08994623,
+       3955595.3416777197,
+       3368215.007761929,
+       2971926.204156804,
+       2689076.206916499,
+       2478277.0163590824
+      ],
+      "thck": 118.65431569517798,
+      "ice_mask": 1.0,
+      "omega_se": 1.0113188674798673e-05,
+      "omega_nw": 0.0001684390033841888,
+      "omega_ne": 0.00014847784194165091
+     },
+     "assertions": [
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 25484416.91832387,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 10604910.06183968,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 8.234385852859944e-06,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 5.452576499909037e-06,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega",
+       "time": 0.0,
+       "expected": 6.378907868769574e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "stag_omega",
+       "time": 0.0,
+       "expected": 8.335223546735198e-05,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "int_step3_cell1714_inactive",
+     "description": "Inactive-cell guard, step 3, cell (17,14): the traced cell lost its ice between steps 2 and 3 (thck 97.3 -> 0.986 m < thklim, ice_mask = 0), so the dumped efvs_q inputs are the STALE previous-step values (5.38e8 Pa yr at every quad point) while the dumped efvs, omega_k and omega are 0 - the active_cell guard of the element loop (F90:5091) skipped the whole DIVA block, and the model reproduces the zeroing with the ice_mask guard on the efvs mean and the omega_k integral (the integral branch is not evaluated, so the reciprocal of the stale viscosities never materializes). The stagger still runs: stag_omega = 0.25*(0 + omega_se + omega_nw + omega_ne) = 1.32e-6 m/(Pa yr) from the three ice-covered stencil neighbors.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sigma": [
+       0.0,
+       0.23140495867768607,
+       0.4074074074074073,
+       0.5443786982248522,
+       0.6530612244897959,
+       0.7407407407407408,
+       0.8125,
+       0.8719723183391004,
+       0.9218106995884773,
+       0.96398891966759,
+       1.0
+      ],
+      "efvs_q1": [
+       538425319.6082127,
+       481496266.18696284,
+       427910911.5146932,
+       391133127.2028214,
+       363460925.42411184,
+       341836147.94317526,
+       324750661.65663254,
+       311125260.7124422,
+       300136394.9079443,
+       291165542.1718296
+      ],
+      "efvs_q2": [
+       538425319.6082127,
+       481496266.18696284,
+       427910911.5146932,
+       391133127.2028214,
+       363460925.42411184,
+       341836147.94317526,
+       324750661.65663254,
+       311125260.7124422,
+       300136394.9079443,
+       291165542.1718296
+      ],
+      "efvs_q3": [
+       538425319.6082127,
+       481496266.18696284,
+       427910911.5146932,
+       391133127.2028214,
+       363460925.42411184,
+       341836147.94317526,
+       324750661.65663254,
+       311125260.7124422,
+       300136394.9079443,
+       291165542.1718296
+      ],
+      "efvs_q4": [
+       538425319.6082127,
+       481496266.18696284,
+       427910911.5146932,
+       391133127.2028214,
+       363460925.42411184,
+       341836147.94317526,
+       324750661.65663254,
+       311125260.7124422,
+       300136394.9079443,
+       291165542.1718296
+      ],
+      "thck": 0.98647418260486,
+      "ice_mask": 0.0,
+      "omega_se": 4.369886445331456e-07,
+      "omega_nw": 2.8216470233675297e-07,
+      "omega_ne": 4.5703364189461865e-06
+     },
+     "assertions": [
+      {
+       "variable": "efvs",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega_k",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "omega",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "stag_omega",
+       "time": 0.0,
+       "expected": 1.3223724414540212e-06,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "DivaVelocity": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    }
+   ],
+   "variables": {
+    "uvel_2d": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "depth-integrated (DIVA) x velocity at the vertex, the solution of the 2-D solve (cism_velo.csv uvel_2d, solver units; the recovery law uvel_basal = uvel_2d*beta_eff/beta_internal is pinned against it)"
+    },
+    "vvel_2d": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "depth-integrated (DIVA) y velocity at the vertex (cism_velo.csv vvel_2d)"
+    },
+    "uvel_basal": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal x velocity at the vertex, uvel(11) (cism_velo.csv uvel_011, the last accepted solve result; the input to the mounted BasalTraction - the Fortran's calcbeta argument ubas/vbas, F90:844, and the anchor of the 3-D profile)"
+    },
+    "vvel_basal": {
+     "type": "parameter",
+     "units": "m/yr",
+     "default": 0.0,
+     "description": "basal y velocity at the vertex, vvel(11) (cism_velo.csv vvel_011)"
+    },
+    "f_ground": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "grounded ice fraction at the vertex (cism_velo.csv f_ground; 1 on every traced row of the reference run): beta_internal = f_ground*beta, the calcbeta weighting of glissade_basal_traction.F90:595-630"
+    },
+    "beta_raw": {
+     "type": "parameter",
+     "units": "Pa yr/m",
+     "default": 0.0,
+     "description": "basal friction coefficient of the mounted BasalTraction (the pseudo-plastic beta of glissade_calcbeta, which_ho_babc = 3), driven by the coupling edge from BasalTraction.beta (param_to_var); evaluated at the basal velocity uvel_basal/vvel_basal and the bed/N_stag of the vertex"
+    },
+    "omega": {
+     "type": "parameter",
+     "units": "m/(Pa yr)",
+     "default": 0.0,
+     "description": "staggered double integral at the vertex (cism_velo_nbr.csv stag_omega, the dumped stag_omega column): the omega of the beta_eff law"
+    },
+    "stag_omega_k": {
+     "type": "parameter",
+     "units": "m/(Pa yr)",
+     "shape": [
+      "lev_nodes"
+     ],
+     "default": 0.0,
+     "description": "single integral staggered to the vertex at each velocity level (cism_velo_nbr.csv stag_omega_k_001..011): the per-level stagger of omega_k is a grid operation deferred to stage 3, so the staggered field enters as a dumped input; level 11 (the bed) is 0 on every traced row, which makes the profile formula reduce to uvel(11) = uvel_basal at the bed"
+    },
+    "theta_x": {
+     "type": "parameter",
+     "units": "rad",
+     "default": 0.0,
+     "description": "x-direction slope angle at the vertex (cism_velo_nbr.csv stag_theta_slope_x; produced by DivaGeometry, fed from the dump in the stage-2 tests)"
+    },
+    "theta_y": {
+     "type": "parameter",
+     "units": "rad",
+     "default": 0.0,
+     "description": "y-direction slope angle at the vertex (cism_velo_nbr.csv stag_theta_slope_y)"
+    },
+    "F_x": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "DIVA slope correction factor in x at the vertex (cism_velo_nbr.csv stag_diva_slope_factor_x; produced by DivaGeometry)"
+    },
+    "F_y": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "DIVA slope correction factor in y at the vertex (cism_velo_nbr.csv stag_diva_slope_factor_y)"
+    },
+    "beta_internal": {
+     "type": "unknown",
+     "units": "Pa yr/m",
+     "description": "basal friction coefficient as consumed by the solve: beta_internal = f_ground*beta_raw (the calcbeta f_ground weighting, F90:595-630; the dumped beta_internal column holds the last ACCEPTED calcbeta pass of the Picard loop, so the chain is pinned at rel 1e-5)"
+    },
+    "beta_eff_x": {
+     "type": "unknown",
+     "units": "Pa yr/m",
+     "description": "effective basal friction in x: beta_eff_x = F_x*beta_internal/(F_x + beta_internal*omega*cos(theta_x)) (cism_beta_eff, F90:2589-2601, Goldberg 2011 eq. 40-41 with the May 2025 slope correction; the dumped beta_eff_x column)"
+    },
+    "beta_eff_y": {
+     "type": "unknown",
+     "units": "Pa yr/m",
+     "description": "effective basal friction in y: beta_eff_y = F_y*beta_internal/(F_y + beta_internal*omega*cos(theta_y)) (the dumped beta_eff_y column)"
+    },
+    "uvel_basal_recovered": {
+     "type": "unknown",
+     "units": "m/yr",
+     "description": "the 3-D recovery law of Goldberg (2011) eq. 34: uvel(nz) = uvel_2d*beta_eff_x/beta_internal (F90:5800-5801); equals the input uvel_basal to within the Picard chain error"
+    },
+    "vvel_basal_recovered": {
+     "type": "unknown",
+     "units": "m/yr",
+     "description": "the y recovery law: vvel(nz) = vvel_2d*beta_eff_y/beta_internal (F90:5801)"
+    },
+    "btractx": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "basal traction in x: btractx = beta_internal*uvel_basal = beta_eff_x*uvel_2d (F90:3874 and F90:5780, Goldberg 2011 eq. 38-39; the dumped btractx column)"
+    },
+    "btracty": {
+     "type": "unknown",
+     "units": "Pa",
+     "description": "basal traction in y: btracty = beta_internal*vvel_basal = beta_eff_y*vvel_2d (the dumped btracty column)"
+    },
+    "slope_corr_x": {
+     "type": "unknown",
+     "units": "1",
+     "description": "x slope correction of the vertical shear: cos(theta_x)/F_x (the Fortran slope_correction_x, F90:5935)"
+    },
+    "slope_corr_y": {
+     "type": "unknown",
+     "units": "1",
+     "description": "y slope correction of the vertical shear: cos(theta_y)/F_y (F90:5936)"
+    },
+    "uvel": {
+     "type": "unknown",
+     "units": "m/yr",
+     "shape": [
+      "lev_nodes"
+     ],
+     "description": "3-D x velocity profile: uvel[k] = uvel_basal + btractx*stag_omega_k[k]*slope_corr_x (Goldberg 2011 eq. 32 with the slope correction, F90:5804-5815; the dumped uvel_001..011 columns; at the bed level 11 the formula reduces to uvel_basal since stag_omega_k(11) = 0)"
+    },
+    "vvel": {
+     "type": "unknown",
+     "units": "m/yr",
+     "shape": [
+      "lev_nodes"
+     ],
+     "description": "3-D y velocity profile: vvel[k] = vvel_basal + btracty*stag_omega_k[k]*slope_corr_y (the dumped vvel_001..011 columns)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "beta_internal",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "f_ground",
+       "beta_raw"
+      ]
+     }
+    },
+    {
+     "lhs": "beta_eff_x",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_beta_eff",
+      "bindings": {
+       "F": "F_x",
+       "beta": "beta_internal",
+       "omega": "omega",
+       "theta": "theta_x"
+      }
+     }
+    },
+    {
+     "lhs": "beta_eff_y",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_beta_eff",
+      "bindings": {
+       "F": "F_y",
+       "beta": "beta_internal",
+       "omega": "omega",
+       "theta": "theta_y"
+      }
+     }
+    },
+    {
+     "lhs": "uvel_basal_recovered",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "uvel_2d",
+         "beta_eff_x"
+        ]
+       },
+       "beta_internal"
+      ]
+     }
+    },
+    {
+     "lhs": "vvel_basal_recovered",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "vvel_2d",
+         "beta_eff_y"
+        ]
+       },
+       "beta_internal"
+      ]
+     }
+    },
+    {
+     "lhs": "btractx",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "beta_internal",
+       "uvel_basal"
+      ]
+     }
+    },
+    {
+     "lhs": "btracty",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "beta_internal",
+       "vvel_basal"
+      ]
+     }
+    },
+    {
+     "lhs": "slope_corr_x",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "cos",
+        "args": [
+         "theta_x"
+        ]
+       },
+       "F_x"
+      ]
+     }
+    },
+    {
+     "lhs": "slope_corr_y",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "cos",
+        "args": [
+         "theta_y"
+        ]
+       },
+       "F_y"
+      ]
+     }
+    },
+    {
+     "lhs": "uvel",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "args": [
+       "stag_omega_k"
+      ],
+      "ranges": {
+       "k": {
+        "from": "lev_nodes"
+       }
+      },
+      "expr": {
+       "op": "+",
+       "args": [
+        "uvel_basal",
+        {
+         "op": "*",
+         "args": [
+          "btractx",
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "stag_omega_k",
+              "k"
+             ]
+            },
+            "slope_corr_x"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "vvel",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "args": [
+       "stag_omega_k"
+      ],
+      "ranges": {
+       "k": {
+        "from": "lev_nodes"
+       }
+      },
+      "expr": {
+       "op": "+",
+       "args": [
+        "vvel_basal",
+        {
+         "op": "*",
+         "args": [
+          "btracty",
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "stag_omega_k",
+              "k"
+             ]
+            },
+            "slope_corr_y"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "velo_step1_cell2511",
+     "description": "Dump pin, cism_velo.csv / cism_velo_nbr.csv step 1, cell (25,11): the thin-ice vertex (thck_sw = 1.37 m) on the steepest slope (theta_x = 0.0316 rad, F_x = 1.003). The chain: the mounted BasalTraction at the exit basal velocity (u = 0.06066, v = -0.00893 m/yr, bed = 538.05 m, N_stag = 2.39e5 Pa) gives beta_internal = 8.07e4 Pa yr/m; beta_eff_x = F*beta/(F + beta*omega*cos(theta)) = 7.72e4; the recovery uvel_basal = uvel_2d*beta_eff/beta_internal returns the input basal velocity; btractx = beta_internal*uvel_basal = 4.89e3 Pa; and the 3-D profile uvel[k] = uvel_basal + btractx*stag_omega_k[k]*cos(theta)/F spans 0.0610 (surface) down to the basal value. All assertions at rel 1e-5: the dumped beta_internal is the last ACCEPTED calcbeta pass of the Picard loop, whose velocity iterate differs from the exit basal velocity by the final Picard correction - the law at the exit velocity is exact to worst 6.04e-7 over the 128 exit rows (the stated numerical reason; every other law in the chain is exact given the dumped beta_internal, verified at 1e-12 in the extractor).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "BasalTraction.u": -0.06043830497199017,
+      "BasalTraction.v": -0.008820742899733815,
+      "BasalTraction.bed": 1082.0,
+      "BasalTraction.N_stag": 239143.1427941269,
+      "uvel_2d": -0.060654317079365465,
+      "vvel_2d": -0.008852375837850536,
+      "uvel_basal": -0.06043830497199017,
+      "vvel_basal": -0.008820742899733815,
+      "f_ground": 1.0,
+      "omega": 4.446594922003261e-08,
+      "stag_omega_k": [
+       5.8270828530954825e-08,
+       5.7127232539136405e-08,
+       5.432671227446857e-08,
+       4.9967281887473814e-08,
+       4.4179756011921444e-08,
+       3.7358798456499055e-08,
+       2.99333418649453e-08,
+       2.2261153082391896e-08,
+       1.4606307132171862e-08,
+       7.148310613815e-09,
+       0.0
+      ],
+      "theta_x": 0.03161225012587919,
+      "theta_y": 0.005626903970461825,
+      "F_x": 1.002997004537962,
+      "F_y": 1.0000949851423973
+     },
+     "assertions": [
+      {
+       "variable": "beta_internal",
+       "time": 0.0,
+       "expected": 80659.3885029248,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_x",
+       "time": 0.0,
+       "expected": 80372.1310523575,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_y",
+       "time": 0.0,
+       "expected": 80371.161535184,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btractx",
+       "time": 0.0,
+       "expected": -4874.916721194007,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btracty",
+       "time": 0.0,
+       "expected": -711.4757284340452,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.06043830497199017,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.008820742899733815,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -0.06072138010454138,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.008862196586099725,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -0.0606197910962077,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.008847319832879707,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -0.06043830497199017,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.008820742899733815,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      }
+     ]
+    },
+    {
+     "id": "velo_step1_cell2213",
+     "description": "Dump pin, step 1, cell (22,13): the traced cell is ice-FREE (thck = 0, ice_mask = 0) but its NE-corner vertex is an active solve vertex (ice in the stencil neighbors: stagthck = 50.3 m), so the full basal chain runs: the mounted BasalTraction at the exit basal velocity (u = 0.03659, v = -0.19523 m/yr, bed = 538.05 m, N_stag = 4.52e5 Pa) gives beta_internal = 6.93e4 Pa yr/m and the largest btracty of the pinned rows (-1.35e4 Pa, the strong y flow along the margin); the FULL 3-D profile is pinned at all 11 levels (the shear spans 0.0445 m/yr at the surface down to 0.0366 at the bed in x; stag_omega_k(11) = 0 makes uvel(11) = uvel_basal exactly). All at rel 1e-5 (Picard chain reason, as above).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "BasalTraction.u": 0.03659068435187166,
+      "BasalTraction.v": -0.19522714548482892,
+      "BasalTraction.bed": 538.0499877929688,
+      "BasalTraction.N_stag": 452193.46653451095,
+      "uvel_2d": 0.04275089681717399,
+      "vvel_2d": -0.228011086639162,
+      "uvel_basal": 0.03659068435187166,
+      "vvel_basal": -0.19522714548482892,
+      "f_ground": 1.0,
+      "omega": 2.4310740851238568e-06,
+      "stag_omega_k": [
+       3.1203179409455686e-06,
+       3.079309909904813e-06,
+       2.9639591118498056e-06,
+       2.7552249093447923e-06,
+       2.456087095553185e-06,
+       2.0896789761511984e-06,
+       1.682067479639936e-06,
+       1.2553207253946026e-06,
+       8.258869318468102e-07,
+       4.050525560115598e-07,
+       0.0
+      ],
+      "theta_x": 0.0013766203668455384,
+      "theta_y": 0.027002786167490772,
+      "F_x": 1.0000056852473118,
+      "F_y": 1.0021869197737125
+     },
+     "assertions": [
+      {
+       "variable": "beta_internal",
+       "time": 0.0,
+       "expected": 69251.60541507347,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_x",
+       "time": 0.0,
+       "expected": 59272.759714022424,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_y",
+       "time": 0.0,
+       "expected": 59294.45556663745,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btractx",
+       "time": 0.0,
+       "expected": 2533.96363460332,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btracty",
+       "time": 0.0,
+       "expected": -13519.793245426514,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel_basal_recovered",
+       "time": 0.0,
+       "expected": 0.03659068435187166,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.19522714548482892,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.04449740409897475,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.2373057972152461,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.04439349192881894,
+       "coords": {
+        "lev_nodes": 2
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.23675278861517018,
+       "coords": {
+        "lev_nodes": 2
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.044101199140043304,
+       "coords": {
+        "lev_nodes": 3
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.2351972400620918,
+       "coords": {
+        "lev_nodes": 3
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.043572277769824835,
+       "coords": {
+        "lev_nodes": 4
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.23238238145548035,
+       "coords": {
+        "lev_nodes": 4
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.042814278455596426,
+       "coords": {
+        "lev_nodes": 5
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.22834839641800656,
+       "coords": {
+        "lev_nodes": 5
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.041885819763884814,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.2234072462085375,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.04085295390546681,
+       "coords": {
+        "lev_nodes": 7
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.21791045308436824,
+       "coords": {
+        "lev_nodes": 7
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.03977160032142107,
+       "coords": {
+        "lev_nodes": 8
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.21215561386963944,
+       "coords": {
+        "lev_nodes": 8
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.038683437922659616,
+       "coords": {
+        "lev_nodes": 9
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.20636453892729123,
+       "coords": {
+        "lev_nodes": 9
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.0376170659911288,
+       "coords": {
+        "lev_nodes": 10
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.20068943034153194,
+       "coords": {
+        "lev_nodes": 10
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.03659068435187166,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.19522714548482892,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      }
+     ]
+    },
+    {
+     "id": "velo_step1_cell2713",
+     "description": "Dump pin, step 1, cell (27,13): the thickest pinned column (thck = 434.5 m, omega = 5.9e-5 m/(Pa yr)) with a high-friction bed (beta_internal = 1.23e6 Pa yr/m): the beta_eff correction is the strongest of the pinned rows (beta_eff_x/beta_internal = 0.955), and the deep column shows the smallest surface-to-bed shear (uvel spans 1.0085 down to 1.0064 m/yr). All at rel 1e-5 (Picard chain reason).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "BasalTraction.u": 0.05094956654534079,
+      "BasalTraction.v": -0.027760463359866833,
+      "BasalTraction.bed": 1692.300048828125,
+      "BasalTraction.N_stag": 3556675.565043996,
+      "uvel_2d": 1.0063872203321913,
+      "vvel_2d": -0.5484594737080144,
+      "uvel_basal": 0.05094956654534079,
+      "vvel_basal": -0.027760463359866833,
+      "f_ground": 1.0,
+      "omega": 1.5251160259464516e-05,
+      "stag_omega_k": [
+       1.935659415081507e-05,
+       1.917708925219355e-05,
+       1.8572097210396567e-05,
+       1.7358297711550093e-05,
+       1.5541806746729573e-05,
+       1.326622942177941e-05,
+       1.0703475119343088e-05,
+       8.001354727679207e-06,
+       5.2705304140746365e-06,
+       2.5872265383444984e-06,
+       0.0
+      ],
+      "theta_x": 0.009102288413827259,
+      "theta_y": 0.004271919844844606,
+      "F_x": 1.0002485480987848,
+      "F_y": 1.0000547475644461
+     },
+     "assertions": [
+      {
+       "variable": "beta_internal",
+       "time": 0.0,
+       "expected": 1229942.7460914883,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_x",
+       "time": 0.0,
+       "expected": 62267.33460333767,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_y",
+       "time": 0.0,
+       "expected": 62253.971668623264,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btractx",
+       "time": 0.0,
+       "expected": 62665.04978894747,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btracty",
+       "time": 0.0,
+       "expected": -34143.780537606755,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel_basal_recovered",
+       "time": 0.0,
+       "expected": 0.05094956654534079,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.027760463359866833,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 1.26357985736417,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.6886255547082697,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.8820374901987009,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.4806907593801484,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": 0.05094956654534079,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.027760463359866833,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      }
+     ]
+    },
+    {
+     "id": "velo_step3_cell2414",
+     "description": "Dump pin, step 3, cell (24,14): the fastest traced column (uvel_2d = 5.02 m/yr) on a moderate slope (theta_x = 0.0154 rad): beta_internal = 9.70e5 Pa yr/m with the largest basal traction of the pinned rows (btractx = 3.72e4 Pa) and the strongest profile shear (uvel spans 5.13 down to 4.92 m/yr). All at rel 1e-5 (Picard chain reason).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "BasalTraction.u": -0.06135326057407625,
+      "BasalTraction.v": -0.06876025989913012,
+      "BasalTraction.bed": 1170.4000244140625,
+      "BasalTraction.N_stag": 3521901.1037544804,
+      "uvel_2d": -5.0211015462978335,
+      "vvel_2d": -5.630944873896263,
+      "uvel_basal": -0.06135326057407625,
+      "vvel_basal": -0.06876025989913012,
+      "f_ground": 1.0,
+      "omega": 8.335223546735198e-05,
+      "stag_omega_k": [
+       0.00010524493778508243,
+       0.00010442671212494788,
+       0.00010149015569547658,
+       9.511220081867287e-05,
+       8.52891885811026e-05,
+       7.286943692579915e-05,
+       5.883080203839071e-05,
+       4.400107905950562e-05,
+       2.8996437908290804e-05,
+       1.4240455240665219e-05,
+       0.0
+      ],
+      "theta_x": 0.015389204968387698,
+      "theta_y": 0.0069753172530337935,
+      "F_x": 1.000710426803122,
+      "F_y": 1.0001459627850429
+     },
+     "assertions": [
+      {
+       "variable": "beta_internal",
+       "time": 0.0,
+       "expected": 970654.3150698128,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_x",
+       "time": 0.0,
+       "expected": 11860.5064189031,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "beta_eff_y",
+       "time": 0.0,
+       "expected": 11852.796372739278,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btractx",
+       "time": 0.0,
+       "expected": -59552.80711982973,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "btracty",
+       "time": 0.0,
+       "expected": -66742.44297641247,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.06135326057407625,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel_basal_recovered",
+       "time": 0.0,
+       "expected": -0.06876025989913012,
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -6.323793575868588,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -7.09186852288701,
+       "coords": {
+        "lev_nodes": 1
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -4.397338526571521,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -4.931416415750771,
+       "coords": {
+        "lev_nodes": 6
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "uvel",
+       "time": 0.0,
+       "expected": -0.06135326057407625,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      },
+      {
+       "variable": "vvel",
+       "time": 0.0,
+       "expected": -0.06876025989913012,
+       "coords": {
+        "lev_nodes": 11
+       },
+       "tolerance": {
+        "rel": 1e-05
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "BasalTraction": {
+   "ref": "./cism_basal.esm",
+   "model": "BasalTraction"
+  }
+ },
+ "coupling": [
+  {
+   "type": "variable_map",
+   "from": "BasalTraction.beta",
+   "to": "DivaVelocity.beta_raw",
+   "transform": "param_to_var",
+   "description": "the pseudo-plastic basal friction of the mounted BasalTraction (glissade_calcbeta, which_ho_babc = 3, evaluated at the basal velocity uvel_basal/vvel_basal with the cell-center bed and the staggered effective pressure) into the DIVA beta chain"
+  }
+ ]
+}

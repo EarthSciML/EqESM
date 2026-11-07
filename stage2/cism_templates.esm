@@ -2,8 +2,15 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cism_templates",
-  "description": "Expression-template library for the CISM-specific pointwise laws of the stage-2 CISM components (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch). Carries the pieces of the CISM basal traction, flow-factor, cap-coupling and vertical-grid physics that have no PISM/EqIce counterpart and are therefore not in the EqIce template libraries: (a) the bed-elevation friction-angle ramp of the PSEUDO_PLASTIC_OLD basal law (glissade_basal_traction.F90:256-277): phi = phimin below bedmin, phi = phimax above bedmax, and a linear ramp phi = phimin + (bed - bedmin)/(bedmax - bedmin) * (phimax - phimin) in between (the glide_types defaults are pseudo_plastic_phimin = 5 deg, pseudo_plastic_phimax = 40 deg, pseudo_plastic_bedmin = -300 m, pseudo_plastic_bedmax = 700 m, glide_types.F90:2380-2383), (b) the pressure-corrected temperature construction of the Paterson-Budd flow law (glissade_therm.F90:2596-2598): tempcor = clamp(temp - pmptemp, -50, 0) degC, where temp is the ice temperature and pmptemp the pressure melting point temperature in the same column (pmptemp = -rhoi*grav*pmlt*thck*stagsigma, glissade_therm.F90:2170), (c) the GLC cap import temperature transformation (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_raw - tkfrz < -250, 0, tsfc_raw - tkfrz) with the -250 degC sentinel clamp, and (d) the glide stretched-sigma vertical coordinate of glide_calc_sigma (libglide/glide_setup.F90:380-387): sigma(x, n) = (1 - (x+1)^(-n))/(1 - 2^(-n)) at the normalized level x = (up-1)/(upn-1) with the SIGMA_COMPUTE_GLIDE stretch exponent n = 2 (F90:303-308). The rest of the CISM basal and rheology physics is the same law as PISM's and is imported by reference from the EqIce libraries (../../eqice/stage2/basal_templates.esm: the Bueler & van Pelt / Tulaczyk effective pressure and the pseudo-plastic drag; ../../eqice/stage2/ice_rheology_templates.esm: the Paterson-Budd softness) with the CISM constants bound at the call sites. All templates here are match-less and invoked by name via apply_expression_template."
- },
+  "description": "Expression-template library for the CISM-specific pointwise laws of the stage-2 CISM components (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch). Carries the pieces of the CISM basal traction, flow-factor, cap-coupling, temperature-step and velocity-solve physics that have no PISM/EqIce counterpart and are therefore not in the EqIce template libraries: (a) the bed-elevation friction-angle ramp of the PSEUDO_PLASTIC_OLD basal law (glissade_basal_traction.F90:256-277): phi = phimin below bedmin, phi = phimax above bedmax, and a linear ramp phi = phimin + (bed - bedmin)/(bedmax - bedmin) * (phimax - phimin) in between (the glide_types defaults are pseudo_plastic_phimin = 5 deg, pseudo_plastic_phimax = 40 deg, pseudo_plastic_bedmin = -300 m, pseudo_plastic_bedmax = 700 m, glide_types.F90:2380-2383), (b) the pressure-corrected temperature construction of the Paterson-Budd flow law (glissade_therm.F90:2596-2598): tempcor = clamp(temp - pmptemp, -50, 0) degC, where temp is the ice temperature and pmptemp the pressure melting point temperature in the same column (pmptemp = -rhoi*grav*pmlt*thck*stagsigma, glissade_therm.F90:2170), (c) the GLC cap import temperature clamp (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_c < -250, 0, tsfc_c) - the '-250 degC sentinel clamp' of the cap import, applied by GlcCapImport to the converted temperature tsfc_c = tsfc_raw - tkfrz (the subtraction is the model's named intermediate, not part of the template), (d) the pointwise laws of the temperature step (M4, lane row 5): the layer melt-energy density of the TEMP_PROGNOSTIC internal melt cap (cism_internal_melt_rate, glissade_therm.F90:2127-2155, with the temperature reset documented, not transcribed), and the grounded basal melt trio of glissade_basal_melting_ground (F90:1930-2012): the flux-balance melt rate with the eps11 rounding guard (cism_basal_melt_rate, applied to the named flux-balance intermediate bflx_mlt), the freeze-on predicate (cism_basal_freeze_on, F90:2007, evaluated once per column by the consuming model) and the post-melt basal temperature cap with the freeze-on reset (cism_basal_melt_cap, F90:1979, 2010-2011), and (e) the surface-geometry and driving-stress stencil laws of the DIVA velocity solve (glissade_velo_higher.F90; the reference run uses whichgradient = 0 HO_GRADIENT_CENTERED, whichgradient_margin = 1 HO_GRADIENT_MARGIN_HYBRID, whichassemble_taud = 1 HO_ASSEMBLE_TAUD_LOCAL and diva_slope_correction = T): the hybrid-margin edge gradient of the surface elevation cism_hybrid_edge_gradient (glissade_grid_operators.F90 surface_elevation_gradient, F90:999-1079), the centered vertex average cism_vertex_gradient (F90:1085-1094), the local driving stress cism_driving_stress (load_vector_gravity, F90:4353-4384), the x-direction slope angle cism_theta_slope_x (glissade_slope_angle_staggered, F90:1510), the DIVA slope correction factor cism_diva_slope_factor (F90:2192-2193) and the effective basal friction cism_beta_eff (F90:2597-2598, Goldberg 2011 eq. 40-41). (f) the glide stretched-sigma vertical coordinate of glide_calc_sigma (libglide/glide_setup.F90:380-387): sigma(x, n) = (1 - (x+1)^(-n))/(1 - 2^(-n)) at the normalized level x = (up-1)/(upn-1) with the SIGMA_COMPUTE_GLIDE stretch exponent n = 2 (F90:303-308). The pressure melting point is NOT here: it is the standard Clapeyron law, imported by reference from the EqIce libraries (pressure_melting_temperature of ../../eqice/stage2/ice_rheology_templates.esm applied to overburden_pressure of ../../eqice/stage2/basal_templates.esm with the CISM constants T_melting = 0 degC and beta_Clausius_Clapeyron = pmlt bound at the call sites). The rest of the CISM basal and rheology physics is the same law as PISM's and is imported by reference from the EqIce libraries (../../eqice/stage2/basal_templates.esm: the Bueler & van Pelt / Tulaczyk effective pressure and the pseudo-plastic drag; ../../eqice/stage2/ice_rheology_templates.esm: the Paterson-Budd softness) with the CISM constants bound at the call sites. All templates here are match-less and invoked by name via apply_expression_template.",
+   "license": "MIT",
+   "tags": ["eqesm:stage2", "model:temperature", "model:basal"],
+   "references": [
+    {
+     "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002: libglissade/glissade_basal_traction.F90, libglissade/glissade_therm.F90, and drivers/cpl/nuopc/glc_import_export.F90."
+    }
+   ]
+  },
  "expression_templates": {
   "cism_phi_ramp": {
    "description": "Friction angle phi(bed) of the HO_BABC_PSEUDO_PLASTIC_OLD basal law (glissade_basal_traction.F90:256-277): phi = phimin where bed <= bedmin, phi = phimax where bed >= bedmax, and the linear ramp phi = phimin + (bed - bedmin)/(bedmax - bedmin) * (phimax - phimin) in between. bed is the bed elevation topg - eus [m] (with the CELL-CENTER topg, not stagtopg - the known quirk of this deprecated law, glissade_basal_traction.F90:261-263 and bugs.md #23, reproduced here); phimin/phimax are in degrees and bedmin/bedmax in m. CISM-specific: EqIce derives phi from data or inversion rather than from a bed-elevation ramp (CISM_LANE.md row 8).",
@@ -115,10 +122,9 @@
    }
   },
   "cism_tsfc_import": {
-   "description": "Cap import temperature transformation of the GLC NUOPC cap (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_raw - tkfrz < -250, 0, tsfc_raw - tkfrz), with tsfc_raw the mediator field Sl_tsrf [K] and tkfrz = SHR_CONST_TKFRZ = 273.15 K (glc_constants.F90:22-23, shr_const_mod.F90:37). The -250 threshold is applied to the CONVERTED value in degC (F90:333); the degC/K offset cancels in the comparison, so the condition is algebraically identical in K. The clamp is the 'Jer hack' sentinel (F90:328-332): land points where CLM sees ocean send a raw value of 0 K, which the -tkfrz conversion would drop to -273.15 degC; the clamp resets those to 0 degC. The subtraction is written twice because the template body has no let-binding (the Fortran converts and clamps in place on the same array). The mediator-to-model halo conversion (vector_to_spatial / parallel_convert_nonhaloed_to_haloed) is a grid operation and lives in the stage-3 assembly. CISM-specific: no PISM/EqIce counterpart (CISM_LANE.md row 15).",
+   "description": "The -250 degC sentinel clamp of the GLC NUOPC cap import temperature transformation (drivers/cpl/nuopc/glc_import_export.F90:326-333): tsfc = ifelse(tsfc_c < -250, 0, tsfc_c), with tsfc_c the converted surface temperature in degC (the consumer's named intermediate tsfc_c = tsfc_raw - tkfrz, tkfrz = SHR_CONST_TKFRZ = 273.15 K, glc_constants.F90:22-23, shr_const_mod.F90:37). The clamp is the 'Jer hack' sentinel (F90:328-332): land points where CLM sees ocean send a raw value of 0 K, which the -tkfrz conversion would drop to -273.15 degC; the clamp resets those to 0 degC. The -250 threshold is applied to the CONVERTED value in degC (F90:333); the degC/K offset cancels in the comparison, so the condition is algebraically identical in K. One-parameter template: the conversion itself is the consumer's named intermediate, so the subtraction is written once (the Fortran converts and clamps in place on the same array; the esm template has no let-binding). The mediator-to-model halo conversion (vector_to_spatial / parallel_convert_nonhaloed_to_haloed) is a grid operation and lives in the stage-3 assembly. CISM-specific: no PISM/EqIce counterpart (CISM_LANE.md row 15).",
    "params": [
-    "tsfc_raw",
-    "tkfrz"
+    "tsfc_c"
    ],
    "body": {
     "op": "ifelse",
@@ -126,13 +132,7 @@
      {
       "op": "<",
       "args": [
-       {
-        "op": "-",
-        "args": [
-         "tsfc_raw",
-         "tkfrz"
-        ]
-       },
+       "tsfc_c",
        {
         "op": "const",
         "args": [],
@@ -147,11 +147,594 @@
       "value": 0.0,
       "units": "degC"
      },
+     "tsfc_c"
+    ]
+   }
+  },
+  "cism_internal_melt_rate": {
+   "description": "Layer melt-energy density of the TEMP_PROGNOSTIC branch of glissade_basal_melting_internal (glissade_therm.F90:2127-2155): f = rhoi*shci*max(0, temp - pmptemp) (J/m3) - the Fortran's melt_energy per unit layer thickness (melt_energy = rhoi*shci*(temp - pmptemp)*layer_thck, F90:2141-2143). The max(0, ...) guard reproduces the Fortran branch exactly (which fires only where temp > pmptemp). The layer melt rate is melt_energy/(rhoi*lhci*dt) (m/s, F90:2144) and the column melt rate is the sum of the layer rates (added into bmlt_ground, F90:1298): the consuming model writes it as the whole-column integral melt_internal = integral(f, ...)/(rhoi*lhci*dt) over the layer thickness measure (see cism_thermo_discretization.esm). The paired temperature reset temp -> pmptemp (F90:2148) is a post-solve state mutation (it runs after the solve, in the same dynamics step); it is documented in README-cism.md and NOT transcribed - the layer temperature is not capped in this model.",
+   "params": [
+    "temp",
+    "pmptemp",
+    "rhoi",
+    "shci"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "rhoi",
      {
-      "op": "-",
+      "op": "*",
       "args": [
-       "tsfc_raw",
-       "tkfrz"
+       "shci",
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "degC"
+         },
+         {
+          "op": "-",
+          "args": [
+           "temp",
+           "pmptemp"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_basal_melt_rate": {
+   "description": "Basal melt rate for grounded ice from the basal heat-flux balance (glissade_basal_melting_ground, glissade_therm.F90:1924-1937, TEMP_PROGNOSTIC branch): bmlt = ifelse(abs(bflx_mlt) < eps11, 0, bflx_mlt/(lhci*rhoi)) (m/s) - the flux balance bflx_mlt = bfricflx + bhydroflx + lcondflx_ground - bheatflx (W/m2, > 0 for melting, < 0 for freeze-on; lcondflx_ground positive down) is the consuming model's named intermediate, and the eps11 rounding-error guard zeroes the FLUX before the division (F90:1927-1929: where (abs(bflx_mlt) < eps11) bflx_mlt = 0; since the rate is the linear image of the flux, zeroing either is equivalent). The freeze-on branch (bmlt < 0 with no basal water, F90:2007-2012) is carried by cism_basal_freeze_on / cism_basal_melt_cap.",
+   "params": [
+    "bflx_mlt",
+    "rhoi",
+    "lhci",
+    "eps11"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       {
+        "op": "abs",
+        "args": [
+         "bflx_mlt"
+        ]
+       },
+       "eps11"
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "m/s"
+     },
+     {
+      "op": "/",
+      "args": [
+       "bflx_mlt",
+       {
+        "op": "*",
+        "args": [
+         "lhci",
+         "rhoi"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_basal_freeze_on": {
+   "description": "The freeze-on predicate of glissade_basal_melting_ground (glissade_therm.F90:2007-2012): 1 when bmlt < 0 (the flux balance demands freeze-on), bwat == 0 (no local water supply to refreeze), and the pre-cap basal temperature btemp_in >= bpmp - eps08 (the bed sits at the melting point; since the F90:1979 cap only lowers the temperature, checking the pre-cap value is equivalent to the Fortran's check on the capped value). Evaluated ONCE per column by the consuming model as the named intermediate freeze_on, and consumed both by the bmlt zeroing (F90:2012) and by cism_basal_melt_cap (the F90:2010-2011 temperature drop).",
+   "params": [
+    "bmlt",
+    "bwat",
+    "btemp_in",
+    "bpmp",
+    "eps08"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "and",
+      "args": [
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "<",
+          "args": [
+           "bmlt",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m/s"
+           }
+          ]
+         },
+         {
+          "op": "==",
+          "args": [
+           "bwat",
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.0,
+            "units": "m"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": ">=",
+        "args": [
+         "btemp_in",
+         {
+          "op": "-",
+          "args": [
+           "bpmp",
+           "eps08"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    ]
+   }
+  },
+  "cism_basal_melt_cap": {
+   "description": "Post-melt basal temperature of glissade_basal_melting_ground (glissade_therm.F90:1979, 2007-2012): btemp_ground = ifelse(freeze_on == 1, min(bpmp - 2*pmp_threshold, bpmp - eps08), min(btemp_in, bpmp)) - the pressure-melting-point cap, and under the freeze-on branch (the consumer's named intermediate freeze_on = cism_basal_freeze_on: bmlt < 0, bwat == 0, btemp_in >= bpmp - eps08) the temperature is dropped to min(bpmp - 2*pmp_threshold, bpmp - eps08) so the bed is diagnosed as frozen during the next step (F90:1990-1991: dropping two pmp_thresholds below bpmp avoids thawed-bed oscillations as bpmp evolves, while not going so far that the ice is mis-diagnosed as cold; the min(., bpmp - eps08) guards the pmp_threshold ~ 0 case). The paired bmlt zeroing (F90:2012) is applied at the consuming call site on the same freeze_on value.",
+   "params": [
+    "btemp_in",
+    "bpmp",
+    "pmp_threshold",
+    "eps08",
+    "freeze_on"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "freeze_on",
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "min",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         "bpmp",
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 2.0,
+            "units": "1"
+           },
+           "pmp_threshold"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         "bpmp",
+         "eps08"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "min",
+      "args": [
+       "btemp_in",
+       "bpmp"
+      ]
+     }
+    ]
+   }
+  },
+  "cism_hybrid_edge_gradient": {
+   "description": "Hybrid-margin surface elevation gradient on one cell edge (glissade_grid_operators.F90 surface_elevation_gradient, HO_GRADIENT_MARGIN_HYBRID = 1, F90:999-1079): with the higher-elevation cell of the edge as the 'upper' cell u and the lower as l, the edge gradient is edge_factor * (usrf_e - usrf_w)/dx (the Fortran's sign_factor * (usrf_iu - usrf_il) equals usrf_e - usrf_w for both orderings), where the ramp factor edge_factor = clamp((thck_u - thklim)/thck_gradient_ramp, 0, 1) damps the gradient when the upper cell is land-based (land_mask_u = 1) and its ice is thin (thck_gradient_ramp > 0 in the reference run; glide_types thklim = ice_limit = 1.0 m and thck_gradient_ramp = 50.0 m), and the edge is active - and the gradient nonzero - only when both cells have ice, or the upper cell has ice and the lower is ice-free land (the land-terminating margin; edges with an ice cell over ice-free OCEAN and nunatak edges are zeroed). CISM-specific: PISM/EqIce have no hybrid-margin surface gradient (CISM_LANE.md row 13; the DIVA solve of the reference run uses this hybrid gradient for the driving stress and a separate mask-free gradient for the slope angle).",
+   "params": [
+    "usrf_w",
+    "usrf_e",
+    "thck_w",
+    "thck_e",
+    "ice_w",
+    "ice_e",
+    "land_w",
+    "land_e",
+    "thklim",
+    "ramp",
+    "dx"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "or",
+      "args": [
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": ">=",
+              "args": [
+               "usrf_e",
+               "usrf_w"
+              ]
+             },
+             "ice_e",
+             "ice_w"
+            ]
+           },
+           1.0
+          ]
+         },
+         {
+          "op": "==",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": ">=",
+              "args": [
+               "usrf_e",
+               "usrf_w"
+              ]
+             },
+             "ice_w",
+             "ice_e"
+            ]
+           },
+           1.0
+          ]
+         }
+        ]
+       },
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "==",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": ">=",
+              "args": [
+               "usrf_e",
+               "usrf_w"
+              ]
+             },
+             "ice_e",
+             "ice_w"
+            ]
+           },
+           1.0
+          ]
+         },
+         {
+          "op": "==",
+          "args": [
+           {
+            "op": "ifelse",
+            "args": [
+             {
+              "op": ">=",
+              "args": [
+               "usrf_e",
+               "usrf_w"
+              ]
+             },
+             "land_w",
+             "land_e"
+            ]
+           },
+           1.0
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "==",
+            "args": [
+             {
+              "op": "ifelse",
+              "args": [
+               {
+                "op": ">=",
+                "args": [
+                 "usrf_e",
+                 "usrf_w"
+                ]
+               },
+               "land_e",
+               "land_w"
+              ]
+             },
+             1.0
+            ]
+           },
+           {
+            "op": ">",
+            "args": [
+             "ramp",
+             0.0
+            ]
+           }
+          ]
+         },
+         {
+          "op": "min",
+          "args": [
+           {
+            "op": "max",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "ifelse",
+                  "args": [
+                   {
+                    "op": ">=",
+                    "args": [
+                     "usrf_e",
+                     "usrf_w"
+                    ]
+                   },
+                   "thck_e",
+                   "thck_w"
+                  ]
+                 },
+                 "thklim"
+                ]
+               },
+               "ramp"
+              ]
+             },
+             0.0
+            ]
+           },
+           1.0
+          ]
+         },
+         1.0
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "usrf_e",
+           "usrf_w"
+          ]
+         },
+         "dx"
+        ]
+       }
+      ]
+     },
+     0.0
+    ]
+   }
+  },
+  "cism_vertex_gradient": {
+   "description": "Centered vertex gradient from the two adjacent edge gradients (glissade_grid_operators.F90 surface_elevation_gradient, HO_GRADIENT_CENTERED = 0, F90:1085-1094): d(f)/dx at a vertex is the plain average 0.5*(edge_s + edge_n) of the south and north edge gradients, with NO edge fallback - the hybrid edge law already zeroes the inactive edges, so the vertex value is the average of whatever the edges hold. CISM-specific variant: glissade_gradient (used for the DIVA slope angle, F90:434-463) falls back to the single active edge when only one edge is masked, but with the reference run's slope_mask = 1 everywhere both edges are always active and the two vertex constructions coincide (CISM_LANE.md row 13).",
+   "params": [
+    "edge_s",
+    "edge_n"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     0.5,
+     {
+      "op": "+",
+      "args": [
+       "edge_s",
+       "edge_n"
+      ]
+     }
+    ]
+   }
+  },
+  "cism_driving_stress": {
+   "description": "Local driving stress component at a vertex (glissade_velo_higher.F90 load_vector_gravity, HO_ASSEMBLE_TAUD_LOCAL = 1, F90:4353-4384): taudx = -rhoi*grav*stagthck*dusrf_dx, the nodal load -rhoi*grav*dx*dy*dz/vol0*dusrf_dx with dz = stagthck*d(sigma) and vol0 = dx*dy per unit column height; the driving stress is the depth-integrated gravity load per unit horizontal area. The reference run assembles it from the local vertex value only (whichassemble_taud = 1).",
+   "params": [
+    "rhoi",
+    "g",
+    "stagthck",
+    "dusrf_dx"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "rhoi",
+       {
+        "op": "*",
+        "args": [
+         "g",
+         {
+          "op": "*",
+          "args": [
+           "stagthck",
+           "dusrf_dx"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_theta_slope_x": {
+   "description": "X-direction surface slope angle of the DIVA slope correction (glissade_grid_operators.F90 glissade_slope_angle_staggered, F90:1510): theta_slope_x = atan(|dz_dx|) radians, with dz_dx the x-gradient of z_mean = 0.5*(usrf + lsrf) = usrf - thck/2 at the vertex (glissade_velo_higher.F90:2160). The y-direction angle is the same law on dz_dy; the DIVA beta_eff and velocity-profile corrections use only the x and y components, never the total slope angle.",
+   "params": [
+    "dz_dx"
+   ],
+   "body": {
+    "op": "atan",
+    "args": [
+     {
+      "op": "abs",
+      "args": [
+       "dz_dx"
+      ]
+     }
+    ]
+   }
+  },
+  "cism_diva_slope_factor": {
+   "description": "DIVA slope correction factor of the effective basal friction and the vertical shear (glissade_velo_higher.F90:2189-2193): F = cos(theta)^2 + 4*sin(theta)^2 for a slope angle theta in radians (theta_slope_x at vertices for the x direction; initialized to 1.0 and used as-is when diva_slope_correction = F). The factor enters beta_eff = F*beta/(F + beta*omega*cos(theta)) (F90:2597-2598) and the 3-D velocity profile slope correction cos(theta)/F (F90:5935-5936); the +4*sin^2 term is the CISM-specific slope correction for the vertical derivative (du/dz, dv/dz), which has no PISM/EqIce counterpart (CISM_LANE.md row 13).",
+   "params": [
+    "theta"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "^",
+      "args": [
+       {
+        "op": "cos",
+        "args": [
+         "theta"
+        ]
+       },
+       2.0
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       4.0,
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "sin",
+          "args": [
+           "theta"
+          ]
+         },
+         2.0
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "cism_beta_eff": {
+   "description": "Effective basal friction coefficient of the DIVA 2-D solve (glissade_velo_higher.F90:2589-2601, Goldberg 2011 eq. 40-41 with the May 2025 slope correction): beta_eff = F*beta/(F + beta*omega*cos(theta)), where beta is the basal friction coefficient of the PSEUDO_PLASTIC_OLD law at the vertex (weighted by f_ground, = 1 everywhere in the reference run), omega the double integral of the DIVA column at the vertex (Goldberg eq. 35, m/(Pa yr)), theta the x-direction slope angle at the vertex and F the DIVA slope factor cos^2(theta) + 4*sin^2(theta). beta_eff relates the depth-integrated (DIVA) velocity to the basal traction, beta_eff*u_2d = beta*u_basal (F90:5904-5905, 5926). The no-slip branch beta_eff = F/(omega*cos(theta)) and the no-slope-correction branch beta_eff = beta/(1 + beta*omega) (F90:2591-2612) are not exercised by the reference run (whichbabc = 3, diva_slope_correction = T).",
+   "params": [
+    "F",
+    "beta",
+    "omega",
+    "theta"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "F",
+       "beta"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       "F",
+       {
+        "op": "*",
+        "args": [
+         "beta",
+         {
+          "op": "*",
+          "args": [
+           "omega",
+           {
+            "op": "cos",
+            "args": [
+             "theta"
+            ]
+           }
+          ]
+         }
+        ]
+       }
       ]
      }
     ]
