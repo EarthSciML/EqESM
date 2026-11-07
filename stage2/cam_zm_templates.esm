@@ -1,0 +1,1675 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_zm_templates",
+  "description": "Expression-template library for the CAM6 ZM deep-convection chain (stage 2 of the EqESM project): the shared pointwise laws of buoyan_dilute, parcel_dilute, entropy and closure (components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by cam_zm_parcel.esm and cam_zm_closure.esm. The library carries (a) the saturation specific humidity of the ZM qsat_hPa wrapper (zm_convr.F90:2634-2649) and its qsat_water core (wv_sat_methods.F90:227-250): zm_qsat_hPa = svp_to_qsat(min(goff_gratch_water(t), p*100), p*100) with p in hPa and the x100 hPa-to-Pa factor declared 100 Pa/hPa (the qsat_hPa es output in hPa is dropped: no consumer reads it); (b) the moist static energies hmn = cp t + grav z + rl q and hsat = cp t + grav z + rl qst of cldprp (zm_convr.F90:1829-1830; the same law is the hmn_lev profile of the buoyan_dilute parcel_pbl branch, F90:979,1018); (c) the environmental and parcel virtual temperatures tv = t (1+1.608 q)/(1+q) (F90:1005-1006, 1088) and tpv = (tp + tpert) (1+1.608 qstp)/(1+qtot) with qtot the parcel total water new_q at the ascent levels (F90:1476) and qstp at the launch level (F90:1415); (d) the Raymond-Blyth moist entropy of entropy (F90:1489-1513) with pref = 1000 hPa and the vapor pressure e = qv p/(eps1 + qv); and (e) the closure per-level laws (F90:2318-2506): the virtual potential temperatures thetavp/thetavm above and below the LCL (F90:2457, 2462, 2474, 2480), d(qs)/dT of the parcel dqsdtp (F90:2458), the parcel temperature response dtpdt (F90:2460-2462), the heating/drying terms at the jt interface dtmdt/dqmdt (F90:2423-2428; beta = 0, F90:2433, collapses the ql weights to ql(k+1)) and in the interior (F90:2432-2446), and the CAPE-change integrands dboydt above and below the LCL (F90:2464-2468, 2482-2485). Constants are SHR_CONST_* values as passed at the zm_convr_run call site (cpres = 1004.64 J/(kg K), rl = 2.501e6 J/kg, rgas = 287.0423113650487 J/(kg K), eps1 = 0.6219705862045155, tfreez = 273.15 K, grav = 9.80616 m/s^2, cpliq = 4188 J/(kg K), cpwv = 1810 J/(kg K), rh2o = 461.5046398201599 J/(kg K)), bound at the application sites rather than hard-coded here. All thermodynamic inputs are in the ZM working units: pressures hPa, temperatures K, humidities kg/kg.",
+  "license": "MIT",
+  "tags": [
+   "eqesm:stage2",
+   "model:atmosphere",
+   "physics:deep-convection"
+  ],
+  "references": [
+   {
+    "citation": "Zhang, G. J. and McFarlane, N. A. (1995). Sensitivity of climate simulations to the parameterization of cumulus convection in the Canadian Climate Centre general circulation model. Atmosphere-Ocean 33(3), 407-446."
+   },
+   {
+    "citation": "Raymond, D. J. and Blyth, A. M. (1992). Extension of the stochastic mixing model to cumulonimbus clouds. J. Atmos. Sci. 49, 1968-1983."
+   }
+  ]
+ },
+ "expression_template_imports": [
+  {
+   "ref": "./cam_templates.esm"
+  }
+ ],
+ "expression_templates": {
+  "zm_qsat_hPa": {
+   "description": "Saturation specific humidity of the ZM qsat_hPa wrapper (zm_convr.F90:2634-2649): qs = qsat_water(t, p*100) (wv_sat_methods.F90:227-250) = svp_to_qsat(min(goff_gratch_water(t), p_pa), p_pa) with p_pa = p x (100 Pa/hPa), p in hPa. Reuses goff_gratch_water and svp_to_qsat of cam_templates.esm by reference, so the ZM saturation law is bit-identical to the qsat of cam_wv_saturation.esm (which pins the same Goff-Gratch/svp_to_qsat pair to cam_qsat.csv). The qsat_hPa es output (hPa) is dropped: no consumer of this template reads it.",
+   "params": [
+    "t",
+    "p"
+   ],
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "svp_to_qsat",
+    "bindings": {
+     "es": {
+      "op": "min",
+      "args": [
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "goff_gratch_water",
+        "bindings": {
+         "t": "t"
+        }
+       },
+       {
+        "op": "*",
+        "args": [
+         "p",
+         {
+          "op": "const",
+          "args": [],
+          "value": 100.0,
+          "units": "Pa/hPa"
+         }
+        ]
+       }
+      ]
+     },
+     "p": {
+      "op": "*",
+      "args": [
+       "p",
+       {
+        "op": "const",
+        "args": [],
+        "value": 100.0,
+        "units": "Pa/hPa"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "zm_moist_static_energy": {
+   "description": "Moist static energy hmn = cpres t + grav z + rl q of cldprp (zm_convr.F90:1829; the same law is hmn_lev of the buoyan_dilute parcel_pbl branch, F90:979, and the hmax search hmn of the default branch, F90:1018).",
+   "params": [
+    "t",
+    "z",
+    "q",
+    "cpres",
+    "grav",
+    "rl"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "cpres",
+       "t"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "grav",
+         "z"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "rl",
+         "q"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_sat_moist_static_energy": {
+   "description": "Saturated moist static energy hsat = cpres t + grav z + rl qst of cldprp (zm_convr.F90:1830) with qst = zm_qsat_hPa(t, p) the environment saturation specific humidity at the level.",
+   "params": [
+    "t",
+    "z",
+    "p",
+    "cpres",
+    "grav",
+    "rl"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "cpres",
+       "t"
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "grav",
+         "z"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "rl",
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "zm_qsat_hPa",
+          "bindings": {
+           "t": "t",
+           "p": "p"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_env_virtual_temperature": {
+   "description": "Environmental virtual temperature tv = t (1 + 1.608 q)/(1 + q) of buoyan_dilute (zm_convr.F90:1005-1006, the tv initialization, and 1088, the tv of the buoyancy loop).",
+   "params": [
+    "t",
+    "q"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "t",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.608,
+            "units": "1"
+           },
+           "q"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "q"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_parcel_virtual_temperature": {
+   "description": "Parcel virtual temperature tpv = (tp + tpert) (1 + 1.608 qstp)/(1 + qtot) of parcel_dilute (zm_convr.F90:1476, the ascent levels, where qtot = new_q, the parcel total water after rain-out; and 1415, the launch level, where qstp = q and qtot = qstp = q). qtot is a free parameter because new_q is an output of the ientropy solve that is not dumped (see the cam_zm_parcel.esm gap list); at the launch level the law collapses to qtot = qstp.",
+   "params": [
+    "tp",
+    "tpert",
+    "qstp",
+    "qtot"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "tp",
+         "tpert"
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.608,
+            "units": "1"
+           },
+           "qstp"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "qtot"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_rb_entropy": {
+   "description": "The Raymond-Blyth moist entropy of the ZM entropy function (zm_convr.F90:1489-1513): ent = (cpres + qtot cpliq) log(TK/tfreez) - rgas log((p - e)/pref) + L qv/TK - qv rh2o log(qv/qst), with L = rl - (cpliq - cpwv) (TK - tfreez), qst = zm_qsat_hPa(TK, p), qv = min(qtot, qst), e = qv p/(eps1 + qv) and pref = 1000 hPa (the function's parameter pref, F90:1499). The logarithms are taken of dimensionless ratios (TK/tfreez, (p - e)/pref, qv/qst) as required by the dimensional checker; the Fortran takes them of the dimensioned values.",
+   "params": [
+    "TK",
+    "p",
+    "qtot",
+    "cpres",
+    "rl",
+    "rgas",
+    "eps1",
+    "tfreez",
+    "cpliq",
+    "cpwv",
+    "rh2o"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "cpres",
+         {
+          "op": "*",
+          "args": [
+           "qtot",
+           "cpliq"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "log",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "TK",
+           "tfreez"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "J/(kg*K)"
+         },
+         {
+          "op": "*",
+          "args": [
+           "rgas",
+           {
+            "op": "log",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 "p",
+                 {
+                  "op": "/",
+                  "args": [
+                   {
+                    "op": "*",
+                    "args": [
+                     {
+                      "op": "min",
+                      "args": [
+                       "qtot",
+                       {
+                        "op": "apply_expression_template",
+                        "args": [],
+                        "name": "zm_qsat_hPa",
+                        "bindings": {
+                         "t": "TK",
+                         "p": "p"
+                        }
+                       }
+                      ]
+                     },
+                     "p"
+                    ]
+                   },
+                   {
+                    "op": "+",
+                    "args": [
+                     "eps1",
+                     {
+                      "op": "min",
+                      "args": [
+                       "qtot",
+                       {
+                        "op": "apply_expression_template",
+                        "args": [],
+                        "name": "zm_qsat_hPa",
+                        "bindings": {
+                         "t": "TK",
+                         "p": "p"
+                        }
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "const",
+                "args": [],
+                "value": 1000.0,
+                "units": "hPa"
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "-",
+              "args": [
+               "rl",
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "cpliq",
+                   "cpwv"
+                  ]
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   "TK",
+                   "tfreez"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "min",
+              "args": [
+               "qtot",
+               {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "zm_qsat_hPa",
+                "bindings": {
+                 "t": "TK",
+                 "p": "p"
+                }
+               }
+              ]
+             }
+            ]
+           },
+           "TK"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "min",
+              "args": [
+               "qtot",
+               {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "zm_qsat_hPa",
+                "bindings": {
+                 "t": "TK",
+                 "p": "p"
+                }
+               }
+              ]
+             },
+             "rh2o"
+            ]
+           },
+           {
+            "op": "log",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "min",
+                "args": [
+                 "qtot",
+                 {
+                  "op": "apply_expression_template",
+                  "args": [],
+                  "name": "zm_qsat_hPa",
+                  "bindings": {
+                   "t": "TK",
+                   "p": "p"
+                  }
+                 }
+                ]
+               },
+               {
+                "op": "apply_expression_template",
+                "args": [],
+                "name": "zm_qsat_hPa",
+                "bindings": {
+                 "t": "TK",
+                 "p": "p"
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_theta_v_env": {
+   "description": "Environmental virtual potential temperature thetavm = t (1000/p)^(rd/cp) (1 + 0.608 q) of closure (zm_convr.F90:2462 above the LCL and 2480 below), with 1000 the pref = 1000 hPa reference pressure and rd/cp the dimensionless R/cp ratio.",
+   "params": [
+    "t",
+    "p",
+    "rd",
+    "cp",
+    "q"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "t",
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1000.0,
+            "units": "hPa"
+           },
+           "p"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           "rd",
+           "cp"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.608,
+          "units": "1"
+         },
+         "q"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_theta_v_parcel_above_lcl": {
+   "description": "Parcel virtual potential temperature thetavp = tp (1000/p)^(rd/cp) (1 + 1.608 qstp - q_mx) of the closure above-LCL branch (zm_convr.F90:2457): the parcel water-vapor term is qstp (the saturated parcel value) minus the launch-level q(mx), with 1000 the pref = 1000 hPa reference pressure. q_mx is the launch-level environmental specific humidity q(i, mx(i)).",
+   "params": [
+    "tp",
+    "p",
+    "rd",
+    "cp",
+    "qstp",
+    "q_mx"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "tp",
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1000.0,
+            "units": "hPa"
+           },
+           "p"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           "rd",
+           "cp"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.608,
+            "units": "1"
+           },
+           "qstp"
+          ]
+         },
+         "q_mx"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_theta_v_parcel_below_lcl": {
+   "description": "Parcel virtual potential temperature thetavp = tp (1000/p)^(rd/cp) (1 + 0.608 q_mx) of the closure below-LCL branch (zm_convr.F90:2474): below the LCL the parcel holds only the launch-level water q_mx (no condensate). 1000 is the pref = 1000 hPa reference pressure.",
+   "params": [
+    "tp",
+    "p",
+    "rd",
+    "cp",
+    "q_mx"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "tp",
+       {
+        "op": "^",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1000.0,
+            "units": "hPa"
+           },
+           "p"
+          ]
+         },
+         {
+          "op": "/",
+          "args": [
+           "rd",
+           "cp"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.608,
+          "units": "1"
+         },
+         "q_mx"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dqsdtp": {
+   "description": "d(qs)/dT of the parcel at the level, dqsdtp = qstp (1 + qstp/eps1) eps1 rl / (rd tp^2) (closure, zm_convr.F90:2458), in 1/K.",
+   "params": [
+    "qstp",
+    "eps1",
+    "rl",
+    "rd",
+    "tp"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "qstp",
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
+           {
+            "op": "/",
+            "args": [
+             "qstp",
+             "eps1"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "eps1",
+         "rl"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "rd",
+       {
+        "op": "^",
+        "args": [
+         "tp",
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dtpdt": {
+   "description": "Parcel temperature response to the subcloud-layer property changes, dtpdt = tp/(1 + rl/cp (dqsdtp - qstp/tp)) (dtbdt/t_mx + rl/cp (dqbdt/tl - q_mx/tl^2 dtldt)) (closure, zm_convr.F90:2460-2462), in K per unit cloud-base mass flux (K/hPa): t_mx and q_mx are the launch-level temperature and specific humidity t(i,mx(i)), q(i,mx(i)), tl the LCL temperature, dtbdt/dqbdt/dtldt the subcloud-layer property rates of the closure.",
+   "params": [
+    "tp",
+    "qstp",
+    "dqsdtp",
+    "dtbdt",
+    "t_mx",
+    "dqbdt",
+    "tl",
+    "q_mx",
+    "dtldt",
+    "rl",
+    "cp"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       "tp",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "rl",
+             "cp"
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             "dqsdtp",
+             {
+              "op": "/",
+              "args": [
+               "qstp",
+               "tp"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         "dtbdt",
+         "t_mx"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "rl",
+           "cp"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             "dqbdt",
+             "tl"
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               "q_mx",
+               {
+                "op": "^",
+                "args": [
+                 "tl",
+                 2
+                ]
+               }
+              ]
+             },
+             "dtldt"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dtmdt_jt": {
+   "description": "Cumulus heating at the updraft-top level k = jt, dtmdt = (mu(k+1) (su(k+1) - shat(k+1) - rl/cp ql(k+1)) + md(k+1) (sd(k+1) - shat(k+1)))/dp(k) (closure, zm_convr.F90:2423-2425): the jt interface fluxes in, minus the (evaporated) condensate term rl/cp ql(k+1). K per unit cloud-base mass flux (K/hPa).",
+   "params": [
+    "mu_kp1",
+    "su_kp1",
+    "shat_kp1",
+    "rl",
+    "cp",
+    "ql_kp1",
+    "md_kp1",
+    "sd_kp1",
+    "dp_k"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "mu_kp1",
+         {
+          "op": "-",
+          "args": [
+           "su_kp1",
+           {
+            "op": "+",
+            "args": [
+             "shat_kp1",
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "/",
+                "args": [
+                 "rl",
+                 "cp"
+                ]
+               },
+               "ql_kp1"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "md_kp1",
+         {
+          "op": "-",
+          "args": [
+           "sd_kp1",
+           "shat_kp1"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dp_k"
+    ]
+   }
+  },
+  "zm_dqmdt_jt": {
+   "description": "Cumulus drying at the updraft-top level k = jt, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + ql(k+1)) + md(k+1) (qd(k+1) - qhat(k+1)))/dp(k) (closure, zm_convr.F90:2426-2428): the updraft's condensate ql(k+1) is re-evaporated into the environment at the top. 1/hPa (kg/kg per unit cloud-base mass flux).",
+   "params": [
+    "mu_kp1",
+    "qu_kp1",
+    "qhat_kp1",
+    "ql_kp1",
+    "md_kp1",
+    "qd_kp1",
+    "dp_k"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "mu_kp1",
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             "qu_kp1",
+             "qhat_kp1"
+            ]
+           },
+           "ql_kp1"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "md_kp1",
+         {
+          "op": "-",
+          "args": [
+           "qd_kp1",
+           "qhat_kp1"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dp_k"
+    ]
+   }
+  },
+  "zm_dtmdt_mid": {
+   "description": "Cumulus heating in the updraft interior, dtmdt = (mc(k) (shat(k) - s(k)) + mc(k+1) (s(k) - shat(k+1)))/dp(k) - rl/cp du(k) ql(k+1) (closure, zm_convr.F90:2432-2435): the net convective mass flux convergence of dry static energy minus the evaporative cooling of the detrained condensate. beta = 0 (F90:2433) collapses the condensate weight (beta ql(k) + (1-beta) ql(k+1)) to ql(k+1). K/hPa.",
+   "params": [
+    "mc_k",
+    "shat_k",
+    "sg_k",
+    "mc_kp1",
+    "shat_kp1",
+    "dp_k",
+    "rl",
+    "cp",
+    "du_k",
+    "ql_kp1"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "mc_k",
+           {
+            "op": "-",
+            "args": [
+             "shat_k",
+             "sg_k"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "mc_kp1",
+           {
+            "op": "-",
+            "args": [
+             "sg_k",
+             "shat_kp1"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "dp_k"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "rl",
+           "cp"
+          ]
+         },
+         "du_k"
+        ]
+       },
+       "ql_kp1"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dqmdt_mid": {
+   "description": "Cumulus drying in the updraft interior, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + cp/rl (su(k+1) - s(k))) - mu(k) (qu(k) - qhat(k) + cp/rl (su(k) - s(k))) + md(k+1) (qd(k+1) - qhat(k+1) + cp/rl (sd(k+1) - s(k))) - md(k) (qd(k) - qhat(k) + cp/rl (sd(k) - s(k))))/dp(k) + du(k) ql(k+1) (closure, zm_convr.F90:2436-2446): the flux convergence of specific humidity with the s-flux detrainment terms cp/rl (sx(k+1) - s(k)) and the re-evaporation of the detrained condensate (beta = 0, F90:2433). 1/hPa.",
+   "params": [
+    "mu_kp1",
+    "qu_kp1",
+    "qhat_kp1",
+    "cp",
+    "rl",
+    "su_kp1",
+    "sg_k",
+    "mu_k",
+    "qu_k",
+    "qhat_k",
+    "su_k",
+    "md_kp1",
+    "qd_kp1",
+    "sd_kp1",
+    "md_k",
+    "qd_k",
+    "sd_k",
+    "dp_k",
+    "du_k",
+    "ql_kp1"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "mu_kp1",
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 "qu_kp1",
+                 "qhat_kp1"
+                ]
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   "cp",
+                   "rl"
+                  ]
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   "su_kp1",
+                   "sg_k"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             "mu_k",
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "-",
+                "args": [
+                 "qu_k",
+                 "qhat_k"
+                ]
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "/",
+                  "args": [
+                   "cp",
+                   "rl"
+                  ]
+                 },
+                 {
+                  "op": "-",
+                  "args": [
+                   "su_k",
+                   "sg_k"
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               "md_kp1",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "qd_kp1",
+                   "qhat_kp1"
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "/",
+                    "args": [
+                     "cp",
+                     "rl"
+                    ]
+                   },
+                   {
+                    "op": "-",
+                    "args": [
+                     "sd_kp1",
+                     "sg_k"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "op": "*",
+              "args": [
+               "md_k",
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "-",
+                  "args": [
+                   "qd_k",
+                   "qhat_k"
+                  ]
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "/",
+                    "args": [
+                     "cp",
+                     "rl"
+                    ]
+                   },
+                   {
+                    "op": "-",
+                    "args": [
+                     "sd_k",
+                     "sg_k"
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "dp_k"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "du_k",
+       "ql_kp1"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dboydt_above_lcl": {
+   "description": "The CAPE-change integrand above the LCL, dboydt = ((dtpdt/tp + 1/(1 + 1.608 qstp - q_mx) (1.608 dqsdtp dtpdt - dqbdt)) - (dtmdt/t + 0.608/(1 + 0.608 q) dqmdt)) grav thetavp/thetavm (closure, zm_convr.F90:2464-2468): the parcel side uses the full water-vapor term 1.608 qstp - q_mx, the environment side the 0.608 q term; thetavp/thetavm are the branch's virtual potential temperatures. m/(s^2 hPa) per unit cloud-base mass flux.",
+   "params": [
+    "tp",
+    "qstp",
+    "q_mx",
+    "dqsdtp",
+    "dtpdt",
+    "dqbdt",
+    "dtmdt",
+    "t",
+    "q",
+    "dqmdt",
+    "grav",
+    "thetavp",
+    "thetavm"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "-",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "dtpdt",
+           "tp"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "-",
+                "args": [
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 1.608,
+                    "units": "1"
+                   },
+                   "qstp"
+                  ]
+                 },
+                 "q_mx"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.608,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 "dqsdtp",
+                 "dtpdt"
+                ]
+               }
+              ]
+             },
+             "dqbdt"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "/",
+          "args": [
+           "dtmdt",
+           "t"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.608,
+              "units": "1"
+             },
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.608,
+                  "units": "1"
+                 },
+                 "q"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "dqmdt"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "grav",
+       {
+        "op": "/",
+        "args": [
+         "thetavp",
+         "thetavm"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "zm_dboydt_below_lcl": {
+   "description": "The CAPE-change integrand below the LCL, dboydt = (dtbdt/t_mx + 0.608/(1 + 0.608 q_mx) dqbdt - dtmdt/t - 0.608/(1 + 0.608 q) dqmdt) grav thetavp/thetavm (closure, zm_convr.F90:2482-2485): the parcel is sub-saturated below the LCL, so the parcel side carries only the launch-level water q_mx (0.608 q_mx) and the subcloud-layer rates dtbdt/dqbdt; thetavp/thetavm are the branch's virtual potential temperatures. m/(s^2 hPa) per unit cloud-base mass flux.",
+   "params": [
+    "dtbdt",
+    "t_mx",
+    "q_mx",
+    "dqbdt",
+    "dtmdt",
+    "t",
+    "q",
+    "dqmdt",
+    "grav",
+    "thetavp",
+    "thetavm"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         "dtbdt",
+         "t_mx"
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.608,
+              "units": "1"
+             },
+             {
+              "op": "+",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               {
+                "op": "*",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 0.608,
+                  "units": "1"
+                 },
+                 "q_mx"
+                ]
+               }
+              ]
+             }
+            ]
+           },
+           "dqbdt"
+          ]
+         },
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "-",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.0,
+              "units": "1/hPa"
+             },
+             {
+              "op": "/",
+              "args": [
+               "dtmdt",
+               "t"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "*",
+            "args": [
+             {
+              "op": "/",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 0.608,
+                "units": "1"
+               },
+               {
+                "op": "+",
+                "args": [
+                 {
+                  "op": "const",
+                  "args": [],
+                  "value": 1.0,
+                  "units": "1"
+                 },
+                 {
+                  "op": "*",
+                  "args": [
+                   {
+                    "op": "const",
+                    "args": [],
+                    "value": 0.608,
+                    "units": "1"
+                   },
+                   "q"
+                  ]
+                 }
+                ]
+               }
+              ]
+             },
+             "dqmdt"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "grav",
+       {
+        "op": "/",
+        "args": [
+         "thetavp",
+         "thetavm"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}
