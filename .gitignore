@@ -27,3 +27,7 @@ scratch/
 # slurm subagent run dirs (tools/slurm-agent/dispatch.py)
 .slurm-agents/
 /.ast/
+
+# Compiled reference-driver binaries (rebuild with build.sh)
+stage1/analysis/cam_vdiff_driver/vdiff_driver
+stage1/analysis/cam_vdiff_driver/*.mod
