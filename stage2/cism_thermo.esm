@@ -1,0 +1,2256 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cism_thermo",
+  "description": "Stage-2 implementation of the CISM prognostic ice temperature step (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20, whichtemp = TEMP_PROGNOSTIC): the vertical heat equation rhoi*shci*dT/dt = d/dz(coni*dT/dz) + rhoi*shci*Phi on CISM's sigma grid, lowered by the local EarthSciDiscretizations-format rule cism_sigma_diffusion (./cism_thermo_discretization.esm, the exact dups stencil of glissade_temperature_matrix_elements, glissade_therm.F90:1324-1507). State: temp on the UPN-1 INTERIOR temperature nodes (index set lev = the CISM layer midpoints, the dump's temp_001..010 columns) with d(temp)/dt = dTdt. The surface and bed nodes are ALGEBRAIC in CISM, not diffusion rows: the matrix rows 1 and upn+1 are the surface Dirichlet pin temp(0) = min(0, artm) (F90:843, 1405-1408) and the basal flux-balance / pressure-melting-point row (frozen: temp(upn) - temp(upn-1) = (bfricflx + bhydroflx - bheatflx)*dsigbot*thck/coni, F90:1473-1476; thawed: temp(upn) = bpmp, F90:1497-1504). They are carried as the algebraic unknowns temp_sfc and temp_bed, and enter the interior stencil as the boundary values through the rule's free-name contract - so the boundary laws FEED BACK into the interior operator (the stencil at the nodes adjacent to the boundaries reads temp_sfc/temp_bed, not state rows). The pointwise laws of the step: temp_sfc = min(0, artm) (F90:843); the pressure melting point bpmp/pmptemp = -rhoi*grav*pmlt*depth (the standard Clapeyron law, imported by reference from EqIce as pressure_melting_temperature applied to overburden_pressure with the CISM constants T_melting = 0 degC and beta_Clausius_Clapeyron = pmlt bound at the call sites, F90:2163-2174, 2178-2192); the basal temperature and melt of the frozen/thawed bed rows and of glissade_basal_melting_ground (cism_basal_melt_rate / cism_basal_freeze_on / cism_basal_melt_cap, F90:1930-2012), with the flux balance bflx_mlt and the source flux bflx_src named once and shared between the melt rate and the frozen-row law; and the internal melt cap of glissade_basal_melting_internal (melt_internal = the whole-column integral of the layer melt-energy density rhoi*shci*max(0, temp - pmptemp) over the CISM layer thickness measure, divided by rhoi*lhci*dttem, F90:2127-2155; the paired temperature reset temp -> pmptemp is a post-solve state mutation, documented in README-cism.md, not transcribed). The thin-ice bypass (ice_mask = 0 where thck <= thklim_temp = 1 m; the dump's ice_mask column): the column skips the solve and is set to min(0, artm) on all nodes, and the basal outputs are not computed (F90:1205) - the pmp and the basal laws are gated by ice_mask == 1. The operator is pinned INSTANTANEOUSLY at the exit state: since the CISM step is one backward-Euler solve of the tridiagonal system, the exact identity (T_exit - T_entry)/dttem = L*T_exit + Phi holds for the interior rows (the dump round-trips at 1e-13..6e-9 relative; the harness integrators cannot reproduce one exact backward-Euler step of this stiff relaxation, so the entry->exit map itself is documented in README-cism.md, not integrated), and dTdt at the exit state is asserted against (T_exit - T_entry)/dttem with the ICs set to the exit profile and the dumped dissip.",
+  "license": "MIT",
+  "tags": [
+   "eqesm:stage2",
+   "model:temperature",
+   "grid:cism_sigma_column"
+  ],
+  "references": [
+   {
+    "citation": "CISM (Community Ice Sheet Model) cism_main_3.00.002, libglissade/glissade_therm.F90 (glissade_therm_driver, glissade_temperature_matrix_elements, glissade_basal_melting_ground, glissade_basal_melting_internal, glissade_pressure_melting_point)."
+   }
+  ]
+ },
+ "models": {
+  "IceTemperatureColumn": {
+   "expression_template_imports": [
+    {
+     "ref": "./cism_templates.esm"
+    },
+    {
+     "ref": "./cism_thermo_discretization.esm"
+    },
+    {
+     "ref": "../../eqice/stage2/basal_templates.esm"
+    },
+    {
+     "ref": "../../eqice/stage2/ice_rheology_templates.esm"
+    }
+   ],
+   "variables": {
+    "temp": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "degC",
+     "default": 0.0,
+     "description": "Ice temperature on the INTERIOR sigma nodes (lev = the CISM layer midpoints stagsigma(1..10), the dump's temp_001..010 columns), degC; the ODE state of the heat equation d(temp)/dt = dTdt. The surface and bed nodes are algebraic in CISM (the matrix rows 1 and upn+1, F90:1405-1408 and 1473-1504) and are carried as temp_sfc/temp_bed, entering the interior stencil as boundary values through the cism_sigma_diffusion free-name contract"
+    },
+    "dTdt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "degC/s",
+     "default": 0.0,
+     "description": "Interior temperature rate dT/dt = L*temp + dissip, with L the cism_sigma_diffusion operator (the dups stencil of glissade_temperature_matrix_elements, F90:151-163, 1410-1418, with the boundary faces built from the algebraic temp_sfc/temp_bed) and dissip the strain heating on the interior nodes (the dumped dissip_001..010 columns; the Fortran RHS temp + dissip*dttem, F90:1418)"
+    },
+    "pmptemp": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "degC",
+     "default": 0.0,
+     "description": "Pressure melting point at each interior sigma node: pmptemp[l] = -rhoi*grav*pmlt*thck*sigma_node[l+1] (glissade_pressure_melting_point_column, F90:2178-2192), 0 where the column bypasses the solve (ice_mask = 0, F90:1205)"
+    },
+    "bpmp": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Basal pressure melting point = -rhoi*grav*pmlt*thck (glissade_pressure_melting_point with depth = thck, F90:2163-2174); the thawed-bed row holds temp(upn) at this value (F90:1497-1504). 0 for ice_mask = 0 cells (the basal outputs are not computed, F90:1205)"
+    },
+    "temp_sfc": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Surface temperature Dirichlet value min(0, artm) (F90:843); the surface matrix row holds temp(0) there (F90:1405-1408) and the cism_sigma_diffusion stencil reads it at the surface face - the law is pinned on all 128 exit rows of cism_thermo.csv (temp_000 = min(0, artm); the entry rows of steps 1 and 3 carry the previous value - the initial 0 and the previous year's artm - because the re-pin happens inside the solve, after the entry trace)"
+    },
+    "temp_bed": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Bed temperature from the basal matrix row (F90:1473-1476 frozen: temp(upn) - temp(upn-1) = (bfricflx + bhydroflx - bheatflx)*dsigbot*thck/coni, the backward-Euler flux boundary condition; F90:1497-1504 thawed: temp(upn) = bpmp), selected by the pre-solve bed state btemp_ground_entry (the entry-diagnosed temp(upn), F90:1095: the bed row is thawed where btemp_ground >= bpmp - pmp_threshold or bwat > 0, F90:1461); the cism_sigma_diffusion stencil reads it at the bed face. For ice_mask = 0 cells the column bypasses the solve and temp(upn) = min(0, artm) (F90:1205)"
+    },
+    "dsigbot": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "Bottom layer width in sigma units between the basal boundary and the temperature point above: dsigbot = sigma_node(upn+1) - sigma_node(upn) = 1 - stagsigma(upn-1) (F90:1471, 1827; from the dumped stagsigma_010 = 0.9819944598337951)"
+    },
+    "bflx_src": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Basal source flux (W/m2) = bfricflx + bhydroflx - bheatflx: the non-conductive part of the basal heat balance (F90:1924), named once and shared by the flux-balance melt rate (bflx_mlt = bflx_src + lcondflx_ground) and the frozen-bed matrix row (temp(upn) - temp(upn-1) = bflx_src*dsigbot*thck/coni, F90:1473-1476)"
+    },
+    "lcondflx_ground": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Conductive heat flux from the ice interior to the bed, positive down: -G[UPN+1], the cism_interface_flux at the bed face (F90:1070 with dTbot = btemp_ground - temp(upn-1) and 1 - stagsigma(upn-1) = dsigbot)"
+    },
+    "bflx_mlt": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Heat flux available for basal melting (W/m2) = bflx_src + lcondflx_ground (F90:1924), > 0 for melting, < 0 for freeze-on; the eps11 zeroing (F90:1927-1929) is applied inside cism_basal_melt_rate. 0 for ice_mask = 0 cells (no basal outputs, F90:1205)"
+    },
+    "bmlt_raw": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Basal melt rate of the flux balance before the freeze-on zeroing (cism_basal_melt_rate, F90:1924-1937): bflx_mlt/(lhci*rhoi), zeroed where |bflx_mlt| < eps11"
+    },
+    "freeze_on": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.0,
+     "description": "The freeze-on predicate of glissade_basal_melting_ground (cism_basal_freeze_on, F90:2007-2012): 1 where bmlt < 0, bwat = 0 and the bed sits at the melting point; evaluated once per column and consumed by both the bmlt zeroing and the basal temperature drop (cism_basal_melt_cap)"
+    },
+    "bmlt_ground": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Basal melt rate for grounded ice, m/s (the dump's bmlt_ground column is in m/yr = bmlt_ground*scyr): bmlt_raw, zeroed under the freeze-on branch (F90:2012); internal melt is added to it in the Fortran (F90:1298, melt_internal = 0 in the window)"
+    },
+    "btemp_ground": {
+     "type": "unknown",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Basal temperature for grounded ice after the pressure-melting-point cap and the freeze-on reset (cism_basal_melt_cap, F90:1979, 2007-2012): min(temp_bed, bpmp), dropped to min(bpmp - 2*pmp_threshold, bpmp - eps08) when freeze-on fires with no basal water. 0 for ice_mask = 0 cells (F90:1205)"
+    },
+    "f_melt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "J/m^3",
+     "default": 0.0,
+     "description": "Layer melt-energy density of the TEMP_PROGNOSTIC internal melt cap (cism_internal_melt_rate, F90:2141-2143): rhoi*shci*max(0, temp - pmptemp) (J/m3), the integrand of the melt_internal column integral"
+    },
+    "melt_internal": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Column internal melt rate of the TEMP_PROGNOSTIC cap (F90:2127-2155): the whole-column integral of the layer melt-energy density f_melt over the CISM layer thickness measure dz = thck*dsigma_cv[l+1], divided by rhoi*lhci*dttem (the composite midpoint sum over the layers of the Fortran's layer_melt_rate = rhoi*shci*max(0, temp-pmptemp)*layer_thck/(rhoi*lhci*dt), F90:2144); the paired temperature reset (temp -> pmptemp, F90:2148) is a post-solve state mutation, documented in README-cism.md, not transcribed (0 in the reference window: every dumped temperature lies below its pmptemp)"
+    },
+    "dz": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "CISM layer thickness in metres: dz[l] = thck*dsigma_cv[l+1] (cism_layer_thickness; the layer [sigma(l), sigma(l+1)] width), the integral measure of the melt_internal column integral"
+    },
+    "z_sfc": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "Surface coordinate of the integral bounds (the sigma surface sigma(1) = 0; the ground bound z_sfc of the imported whole-column integral rule)"
+    },
+    "z_top": {
+     "type": "unknown",
+     "units": "m",
+     "default": 0.0,
+     "description": "Bed coordinate of the integral bounds (the sigma bed sigma(upn) = 1; the ground bound z_top of the imported whole-column integral rule)"
+    },
+    "waterfrac": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Internal water fraction (TEMP_PROGNOSTIC: identically 0, the dump's waterfrac_001..010 columns are all 0); waterfrac > 0 is the enthalpy scheme, deferred"
+    },
+    "thck": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "Ice thickness (m), the sigma-coordinate scale of the column"
+    },
+    "artm": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Surface air temperature (degC); constant within a CISM year (the dump changes artm only at the step 2->3 year boundary)"
+    },
+    "bwat": {
+     "type": "parameter",
+     "units": "m",
+     "default": 0.0,
+     "description": "Basal water depth (m); 0 on every traced row (the cold base of the reference run melts nothing)"
+    },
+    "bheatflx": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Geothermal heat flux, positive down (W/m2); 0 on every traced row"
+    },
+    "bfricflx": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Basal friction heat flux (W/m2, >= 0); 2.2e-6..1.9e-4 over the traced window"
+    },
+    "bhydroflx": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "Basal heat flux from refreezing meltwater (W/m2); 0 on every traced row (no basal water in the reference run)"
+    },
+    "btemp_ground_entry": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Pre-solve basal temperature (the entry-diagnosed temp(upn), F90:1095, = the entry temp_011 column): selects the frozen vs thawed basal matrix row (thawed where btemp_ground >= bpmp - pmp_threshold or bwat > 0, F90:1461); every traced row is frozen (entry temp_011 < bpmp - 1e-3, worst margin -1.425 degC)"
+    },
+    "dttem": {
+     "type": "parameter",
+     "units": "s",
+     "default": 15768000.0,
+     "description": "Temperature-solve time step (s) = the glissade step = 0.5 yr * scyr with the 365-day scyr = 31536000 s (the dumped dttem column is 1.5768e7 on every row)"
+    },
+    "sigma_node": {
+     "type": "parameter",
+     "shape": [
+      "lev_nodes"
+     ],
+     "units": "1",
+     "default": [
+      0.0,
+      0.11570247933884303,
+      0.31940618304254664,
+      0.4758930528161297,
+      0.598719961357324,
+      0.6969009826152683,
+      0.7766203703703705,
+      0.8422361591695502,
+      0.8968915089637888,
+      0.9428998096280337,
+      0.9819944598337951,
+      1.0
+     ],
+     "description": "Sigma coordinate of the temperature nodes: [sigma(1), stagsigma(1..10), sigma(11)] = [0, layer midpoints, 1] (the dumped sigma_001..011 / stagsigma_001..010 columns; glide_calc_sigma SIGMA_COMPUTE_GLIDE, glide_setup.F90:300-372)"
+    },
+    "dsigma_cv": {
+     "type": "parameter",
+     "shape": [
+      "lev_nodes"
+     ],
+     "units": "1",
+     "default": [
+      0.0,
+      0.23140495867768607,
+      0.1760024487297212,
+      0.1369712908174449,
+      0.10868252626494368,
+      0.08767951625094494,
+      0.07175925925925919,
+      0.05947231833910038,
+      0.049838381249376895,
+      0.04217822007911276,
+      0.03601108033240996,
+      0.0
+     ],
+     "description": "Control-volume width in sigma units of each temperature node: dsigma_cv[n] = sigma(n) - sigma(n-1), the CISM layer widths (the physical width is thck*dsigma_cv[n]; the CISM layer l = [sigma(l), sigma(l+1)] is the control volume of temperature node l+1, so the interior node l+1 has width dsigma_cv[l+1] and the integral measure is dz[l] = thck*dsigma_cv[l+1]); entries 1 and 12 are unused. The layer widths sum to 1"
+    },
+    "dissip": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "degC/s",
+     "default": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "description": "Interior strain heating on the temperature nodes, deg/s (the dumped dissip_001..010 columns at nodes 2..11): the dissipative heating divided by rhoi*shci, added to the RHS of the implicit step (F90:1418). The dump extension is required: a dissip = 0 reproduction fails the operator identity at 3-5% of the step-1 temperature change (see README-cism.md)"
+    },
+    "rhoi": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 917.0,
+     "description": "Ice density (CCSMCOUPLED glimmer_physcon rhoi = SHR_CONST_RHOICE = 917 kg/m3)"
+    },
+    "grav": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "Gravitational acceleration (CCSMCOUPLED glimmer_physcon grav = SHR_CONST_G = 9.80616 m/s2)"
+    },
+    "pmlt": {
+     "type": "parameter",
+     "units": "K/Pa",
+     "default": 9.7456e-08,
+     "description": "Clapeyron slope of the pressure melting point (glide_types pmlt = 9.7456e-8 K/Pa); bound as the beta_Clausius_Clapeyron of the imported EqIce pressure_melting_temperature law"
+    },
+    "beta_Clausius_Clapeyron": {
+     "type": "unknown",
+     "units": "K/Pa",
+     "default": 0.0,
+     "description": "Clausius-Clapeyron gradient of the imported EqIce pressure_melting_temperature law, bound to the CISM Clapeyron slope: beta_Clausius_Clapeyron = pmlt (glide_types pmlt = 9.7456e-8 K/Pa). EqIce's free-name contract is resolved by this equation, so the pmlt constant stays the single source of truth."
+    },
+    "T_melting": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.0,
+     "description": "Fresh-water melting point offset of the imported EqIce pressure_melting_temperature law (PISM EnthalpyConverter T_melting; CISM's pressure melting point is 0 degC at the surface, glissade_therm.F90:2163-2174, so T_melting = 0 degC)"
+    },
+    "coni": {
+     "type": "parameter",
+     "units": "W/(m K)",
+     "default": 2.1,
+     "description": "Ice thermal conductivity (glide_types coni = 2.1 W/m/K)"
+    },
+    "shci": {
+     "type": "parameter",
+     "units": "J/(kg K)",
+     "default": 2117.27,
+     "description": "Specific heat of ice (CCSMCOUPLED glimmer_physcon shci = SHR_CONST_CPICE = 2117.27 J/kg/K)"
+    },
+    "lhci": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 333700.0,
+     "description": "Latent heat of fusion of ice (CCSMCOUPLED glimmer_physcon lhci = SHR_CONST_LATICE = 333700 J/kg)"
+    },
+    "scyr": {
+     "type": "parameter",
+     "units": "s/yr",
+     "default": 31536000.0,
+     "description": "Seconds per year (the CCSMCOUPLED 365-day scyr = 31536000 s; the dump's m/yr melt conversions use it)"
+    },
+    "ice_mask": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "Ice mask of the temperature solve (the dump's ice_mask column): 1 where thck > thklim_temp = 1 m (the column is solved), 0 for thin cells that bypass the solve (F90:1205: temp = min(0, artm) on all nodes, basal outputs not computed); 21 of 128 traced rows are ice_mask = 0"
+    },
+    "pmp_threshold": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 0.001,
+     "description": "Thawed-bed threshold pmp_threshold = 1.0d-3 degC (glide_types.F90:1822): the bed row is thawed where btemp_ground >= bpmp - pmp_threshold (F90:1461, 1497)"
+    },
+    "eps08": {
+     "type": "parameter",
+     "units": "degC",
+     "default": 1e-08,
+     "description": "Small number eps08 = 1.0d-8 (glimmer_paramets): the freeze-on branch fires only where btemp_ground >= bpmp - eps08 (F90:2008); a pure number in the Fortran, but it is added to a temperature there, so it is declared here as a temperature offset (degC)"
+    },
+    "eps11": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 1e-11,
+     "description": "Small number eps11 = 1.0d-11 (glimmer_paramets): bflx_mlt is zeroed where |bflx_mlt| < eps11 (F90:1927-1929); a pure number in the Fortran, but it is compared against the flux bflx_mlt there, so it is declared here as a flux magnitude threshold (W/m2)"
+    }
+   },
+   "equations": [
+    {
+     "lhs": {
+      "op": "D",
+      "args": [
+       "temp"
+      ],
+      "wrt": "t"
+     },
+     "rhs": "dTdt"
+    },
+    {
+     "lhs": "dTdt",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "D",
+          "args": [
+           {
+            "op": "*",
+            "args": [
+             "coni",
+             {
+              "op": "D",
+              "args": [
+               "temp"
+              ],
+              "wrt": "lev"
+             }
+            ]
+           }
+          ],
+          "wrt": "lev"
+         },
+         {
+          "op": "*",
+          "args": [
+           "rhoi",
+           "shci"
+          ]
+         }
+        ]
+       },
+       "dissip"
+      ]
+     }
+    },
+    {
+     "lhs": "beta_Clausius_Clapeyron",
+     "rhs": "pmlt",
+     "_comment": "Bind the EqIce pressure_melting_temperature free name to the CISM Clapeyron slope constant (glide_types pmlt = 9.7456e-8 K/Pa, F90:2163-2174, 2178-2192)"
+    },
+    {
+     "lhs": "pmptemp",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "faq",
+        "output_idx": [
+         "l"
+        ],
+        "args": [
+         "sigma_node",
+         "thck",
+         "rhoi",
+         "grav",
+         "T_melting",
+         "beta_Clausius_Clapeyron"
+        ],
+        "ranges": {
+         "l": {
+          "from": "lev"
+         }
+        },
+        "expr": {
+         "op": "pressure_melting_temperature",
+         "args": [
+          {
+           "op": "overburden_pressure",
+           "args": [
+            "rhoi",
+            "grav",
+            {
+             "op": "*",
+             "args": [
+              "thck",
+              {
+               "op": "index",
+               "args": [
+                "sigma_node",
+                {
+                 "op": "+",
+                 "args": [
+                  "l",
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "bpmp",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "pressure_melting_temperature",
+        "args": [
+         {
+          "op": "overburden_pressure",
+          "args": [
+           "rhoi",
+           "grav",
+           "thck"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "temp_sfc",
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       },
+       "artm"
+      ]
+     }
+    },
+    {
+     "lhs": "dsigbot",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "index",
+        "args": [
+         "sigma_node",
+         {
+          "op": "+",
+          "args": [
+           "UPN",
+           1
+          ]
+         }
+        ]
+       },
+       {
+        "op": "index",
+        "args": [
+         "sigma_node",
+         "UPN"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "bflx_src",
+     "rhs": {
+      "op": "+",
+      "args": [
+       "bfricflx",
+       "bhydroflx",
+       {
+        "op": "-",
+        "args": [
+         "bheatflx"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "temp_bed",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "ifelse",
+        "args": [
+         {
+          "op": "or",
+          "args": [
+           {
+            "op": ">=",
+            "args": [
+             "btemp_ground_entry",
+             {
+              "op": "-",
+              "args": [
+               "bpmp",
+               "pmp_threshold"
+              ]
+             }
+            ]
+           },
+           {
+            "op": ">",
+            "args": [
+             "bwat",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.0,
+              "units": "m"
+             }
+            ]
+           }
+          ]
+         },
+         "bpmp",
+         {
+          "op": "+",
+          "args": [
+           {
+            "op": "index",
+            "args": [
+             "temp",
+             {
+              "op": "-",
+              "args": [
+               "UPN",
+               1
+              ]
+             }
+            ]
+           },
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "*",
+              "args": [
+               "bflx_src",
+               "dsigbot",
+               "thck"
+              ]
+             },
+             "coni"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "temp_sfc"
+      ]
+     }
+    },
+    {
+     "lhs": "lcondflx_ground",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "cism_interface_flux",
+        "bindings": {
+         "K": "coni",
+         "uL": {
+          "op": "index",
+          "args": [
+           "temp",
+           {
+            "op": "-",
+            "args": [
+             "UPN",
+             1
+            ]
+           }
+          ]
+         },
+         "uR": "temp_bed",
+         "zL": {
+          "op": "index",
+          "args": [
+           "sigma_node",
+           "UPN"
+          ]
+         },
+         "zR": {
+          "op": "index",
+          "args": [
+           "sigma_node",
+           {
+            "op": "+",
+            "args": [
+             "UPN",
+             1
+            ]
+           }
+          ]
+         },
+         "thck": "thck"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "bflx_mlt",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "+",
+        "args": [
+         "bflx_src",
+         "lcondflx_ground"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "W/m^2"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "bmlt_raw",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_basal_melt_rate",
+      "bindings": {
+       "bflx_mlt": "bflx_mlt",
+       "rhoi": "rhoi",
+       "lhci": "lhci",
+       "eps11": "eps11"
+      }
+     }
+    },
+    {
+     "lhs": "freeze_on",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_basal_freeze_on",
+      "bindings": {
+       "bmlt": "bmlt_raw",
+       "bwat": "bwat",
+       "btemp_in": "temp_bed",
+       "bpmp": "bpmp",
+       "eps08": "eps08"
+      }
+     }
+    },
+    {
+     "lhs": "bmlt_ground",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "freeze_on",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "m/s"
+       },
+       "bmlt_raw"
+      ]
+     }
+    },
+    {
+     "lhs": "btemp_ground",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": "==",
+        "args": [
+         "ice_mask",
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         }
+        ]
+       },
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "cism_basal_melt_cap",
+        "bindings": {
+         "btemp_in": "temp_bed",
+         "bpmp": "bpmp",
+         "pmp_threshold": "pmp_threshold",
+         "eps08": "eps08",
+         "freeze_on": "freeze_on"
+        }
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "degC"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "f_melt",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_internal_melt_rate",
+      "bindings": {
+       "temp": "temp",
+       "pmptemp": "pmptemp",
+       "rhoi": "rhoi",
+       "shci": "shci"
+      }
+     }
+    },
+    {
+     "lhs": "dz",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_layer_thickness",
+      "bindings": {
+       "thck": "thck",
+       "dsigma_cv": "dsigma_cv"
+      }
+     }
+    },
+    {
+     "lhs": "z_sfc",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "m"
+     }
+    },
+    {
+     "lhs": "z_top",
+     "rhs": "thck"
+    },
+    {
+     "lhs": "melt_internal",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "integral",
+        "args": [
+         "f_melt"
+        ],
+        "var": "lev",
+        "lower": "z_sfc",
+        "upper": "z_top"
+       },
+       {
+        "op": "*",
+        "args": [
+         "rhoi",
+         {
+          "op": "*",
+          "args": [
+           "lhci",
+           "dttem"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "waterfrac",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "operator_pin_step1_cell2714",
+     "description": "The operator identity at the exit state, pinned from cism_thermo.csv step 1, cell (27,14) (the thickest traced cell, thck = 699.2999877929688 m; artm = -9.678254083449986 degC; the step-1 relaxation is the strongest in the window, bed warming by 0.0122 K). Since the CISM step is one backward-Euler solve, (T_exit - T_entry)/dttem = L*T_exit + Phi exactly for the interior rows; dTdt is evaluated at the exit profile (initial_conditions temp = the exit temp_001..010 columns on the interior nodes) with the dumped dissip and asserted against (T_exit - T_entry)/dttem with dttem = 1.5768e7 s on the 10 interior nodes (CISM layers 1..10; the surface and bed nodes are algebraic - the Dirichlet and the basal-BC rows - pinned separately below as temp_sfc/temp_bed, and the interior stencil reads them at the boundary faces). The surface law temp_sfc = min(0, artm) = -9.678254083449986 degC (the exit temp_000), the pmp law bpmp = -0.61283055916793 degC (exit bpmp), the basal matrix row temp_bed = -5.600667536641113 degC (exit temp_011) with btemp_ground_entry = -5.61283055916793 (the entry temp_011; frozen row: the flux-balance condition holds to 6.2e-17 W/m2, far below eps11), the conductive flux lcondflx_ground = -bfricflx = -8.298816394880562e-05 W/m2 and the resulting bmlt_ground = 0 (the dump's bmlt_ground column is 0 on every row; the m/yr dump value is bmlt_ground*scyr) are asserted in the same run. The per-node residuals of the identity are <= 5.1e-10 relative (the dump's 17-digit round-trip and the tridiagonal solve round-off), hence the per-assertion rel 1e-8.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.076985888683244,
+       -5.195746203384872,
+       -5.2916396014274305,
+       -5.3669098466379666,
+       -5.427075397530869,
+       -5.4759264669239265,
+       -5.516134064363087,
+       -5.549624444871309,
+       -5.577803684353117,
+       -5.601165120789954
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 699.2999877929688,
+      "artm": -9.678254083449986,
+      "bfricflx": 8.298816394880562e-05,
+      "btemp_ground_entry": -5.61283055916793,
+      "dissip": [
+       9.905044924997001e-14,
+       9.945037871042372e-14,
+       1.4022463061956587e-13,
+       2.560745411693158e-13,
+       4.322417143943946e-13,
+       6.482631131514204e-13,
+       8.867187449447209e-13,
+       1.1344657788099825e-12,
+       1.3822814534824848e-12,
+       1.6240618398409976e-12
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -3.855830525688288e-10,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -2.74836961858977e-13,
+       "coords": {
+        "lev": 2
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.3979160396473715e-13,
+       "coords": {
+        "lev": 3
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.5634612151015584e-13,
+       "coords": {
+        "lev": 4
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.3260590599943503e-13,
+       "coords": {
+        "lev": 5
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 6.487133024229774e-13,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 8.873675949853537e-13,
+       "coords": {
+        "lev": 7
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.146631147773185e-12,
+       "coords": {
+        "lev": 8
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.1647146477395717e-12,
+       "coords": {
+        "lev": 9
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.00236637366909e-11,
+       "coords": {
+        "lev": 10
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_sfc",
+       "time": 0.0,
+       "expected": -9.678254083449986,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": -0.61283055916793,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -5.600667536641113,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "lcondflx_ground",
+       "time": 0.0,
+       "expected": -8.298816394880562e-05,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "btemp_ground",
+       "time": 0.0,
+       "expected": -5.600667536641113,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "operator_pin_step4_cell2714",
+     "description": "The operator identity at the exit state, step 4, cell (27,14) (thck = 702.2826282602563 m, artm = -9.41413761466157 degC - the second year's artm; a quasi-equilibrated step with changes ~1e-2 K; the worst per-node residual in the window, 6.0e-9 relative at node 4 where the rate nearly cancels, still far below the 1e-8 tolerance). bpmp = -0.6154443919396614, temp_bed = -5.598750297431368 (exit temp_011), lcondflx_ground = -bfricflx = -8.360314641151767e-05.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.180740638405908,
+       -5.194919792476877,
+       -5.289796815722691,
+       -5.365499218132552,
+       -5.426004804726897,
+       -5.475120480169731,
+       -5.5155367549798076,
+       -5.549190755709518,
+       -5.577405251099954,
+       -5.5992537069328225
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 702.2826282602563,
+      "artm": -9.41413761466157,
+      "bfricflx": 8.360314641151767e-05,
+      "btemp_ground_entry": -5.599371750457059,
+      "dissip": [
+       1.0325555027850652e-13,
+       1.029837328241052e-13,
+       1.4495628264801013e-13,
+       2.6445585049549547e-13,
+       4.4624919073935093e-13,
+       6.692048790754834e-13,
+       9.153410996688576e-13,
+       1.1710961721712436e-12,
+       1.4269929855422712e-12,
+       1.6773474894876729e-12
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -3.4731205630059295e-10,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -6.584339056674604e-12,
+       "coords": {
+        "lev": 2
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -1.5797938750621872e-14,
+       "coords": {
+        "lev": 3
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.6583635715524136e-13,
+       "coords": {
+        "lev": 4
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.502154628022015e-13,
+       "coords": {
+        "lev": 5
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 6.738970200969301e-13,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 9.22866090047128e-13,
+       "coords": {
+        "lev": 7
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.2811705661638172e-12,
+       "coords": {
+        "lev": 8
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.254867801513834e-12,
+       "coords": {
+        "lev": 9
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 3.741433558492422e-11,
+       "coords": {
+        "lev": 10
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -5.598750297431368,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "lcondflx_ground",
+       "time": 0.0,
+       "expected": -8.360314641151767e-05,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": -0.6154443919396614,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "operator_pin_step1_cell2713",
+     "description": "The operator identity at the exit state, step 1, cell (27,13) (thck = 433.39990234375 m, artm = -8.149297277841129 degC; a mid-thickness relaxation column; per-node residuals <= 6.9e-10 relative). bpmp = -0.37980939386957197, temp_bed = -5.3715497809137736, lcondflx_ground = -bfricflx = -1.2133658457198669e-04.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.054568177639493,
+       -5.121339847140518,
+       -5.180747988303802,
+       -5.227397989073163,
+       -5.264687136001447,
+       -5.2949642236279075,
+       -5.319884492563165,
+       -5.3406401598384905,
+       -5.358066968346388,
+       -5.372000667624468
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 433.39990234375,
+      "artm": -8.149297277841129,
+      "bfricflx": 0.00012133658457198669,
+      "btemp_ground_entry": -5.379809393869572,
+      "dissip": [
+       1.698883412551542e-14,
+       2.3434425952891716e-14,
+       4.9073953729982695e-14,
+       9.349231015914933e-14,
+       1.521741701587977e-13,
+       2.2083473280459413e-13,
+       2.954514427836288e-13,
+       3.7258316024307993e-13,
+       4.496154183262397e-13,
+       5.247404455724353e-13
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -6.737245746195048e-10,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": -1.6729046762217538e-12,
+       "coords": {
+        "lev": 2
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.208733085814521e-14,
+       "coords": {
+        "lev": 3
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 9.364203296313835e-14,
+       "coords": {
+        "lev": 4
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.52447537259162e-13,
+       "coords": {
+        "lev": 5
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.2123980374752938e-13,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.988677103871007e-13,
+       "coords": {
+        "lev": 7
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 4.858287552063616e-13,
+       "coords": {
+        "lev": 8
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 3.503096662233772e-12,
+       "coords": {
+        "lev": 9
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 6.152035440662562e-11,
+       "coords": {
+        "lev": 10
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -5.3715497809137736,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "lcondflx_ground",
+       "time": 0.0,
+       "expected": -0.00012133658457198669,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": -0.37980939386957197,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_sfc",
+       "time": 0.0,
+       "expected": -8.149297277841129,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "operator_pin_step4_cell1913",
+     "description": "The operator identity at the exit state, step 4, cell (19,13) (thck = 8.021186956165007 m - a thin solved column just above thklim_temp = 1 m; artm = -1.2203347369404582 degC; the whole column relaxes strongly, rates ~2.7e-8 degC/s; per-node residuals <= 1.9e-13 relative). bpmp = -0.007029355889238773, temp_bed = -1.8645063204301333, lcondflx_ground = -bfricflx = -1.1325741957610504e-05. This column shows the frozen-row structure: entry temp_011 = -2.283083597048193, far below bpmp - 1e-3.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -1.3391849410247016,
+       -1.5338085140458229,
+       -1.6615114491647986,
+       -1.7431757482805923,
+       -1.794602379610684,
+       -1.8264451531078452,
+       -1.8456294976924437,
+       -1.8566164994232135,
+       -1.8622855467596282,
+       -1.864507099348889
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 8.021186956165007,
+      "artm": -1.2203347369404582,
+      "bfricflx": 1.1325741957610504e-05,
+      "btemp_ground_entry": -2.283083597048193,
+      "dissip": [
+       5.533668583030774e-16,
+       1.781691779746029e-15,
+       4.242027846453149e-15,
+       7.52672417642194e-15,
+       1.1200929247070581e-14,
+       1.502157640110947e-14,
+       1.884368133141287e-14,
+       2.257604421002143e-14,
+       2.616325184177743e-14,
+       2.957904174600465e-14
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 5.214713300529193e-09,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.3311461506396133e-08,
+       "coords": {
+        "lev": 2
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.855607506972717e-08,
+       "coords": {
+        "lev": 3
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.1822237977090268e-08,
+       "coords": {
+        "lev": 4
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.3843672512767974e-08,
+       "coords": {
+        "lev": 5
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.508149765807527e-08,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.582218987585869e-08,
+       "coords": {
+        "lev": 7
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.6244770848590794e-08,
+       "coords": {
+        "lev": 8
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.6462481771182646e-08,
+       "coords": {
+        "lev": 9
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.654792201468627e-08,
+       "coords": {
+        "lev": 10
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -1.8645063204301333,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": -0.007029355889238773,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "waterfrac",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "operator_pin_step1_cell2511",
+     "description": "The operator identity at the exit state, step 1, cell (25,11) (thck = 1.3000489473342896 m - the thinnest solved column of the window, just above thklim_temp = 1 m; artm = -1.7167278948400053 degC; the column relaxes from the -5 degC initial state toward the surface value, rates ~2e-7 degC/s; per-node residuals <= 4.3e-13 relative). The step-1 entry temp_011 = -5.001139296063561 (the initial bed state) drives the frozen-row condition; bpmp = -0.0011392960635606664, temp_bed = -1.8729999558722863 (exit temp_011), lcondflx_ground = -bfricflx = -2.2106383533321997e-06. The lcondflx_ground assertion carries rel 1e-8 instead of 1e-12: on this thin column the conductive flux is the ratio of two tiny differences (temp_bed - temp[10] = 2.5e-8 K from temperatures ~1.87 degC, ~8 lost digits of cancellation; the ratio is then re-expanded by (coni/thck)/dsigbot ~ 90), so the decimal round-trip of the dump reproduces the flux to 1.5e-9 relative only.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -1.7531696200534803,
+       -1.8021606298119108,
+       -1.8310667826511908,
+       -1.8484710858153413,
+       -1.859049842117209,
+       -1.8654631882092836,
+       -1.8692788900887534,
+       -1.8714484439202625,
+       -1.8725636128548142,
+       -1.872999980513623
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 1.3000489473342896,
+      "artm": -1.7167278948400053,
+      "bfricflx": 2.2106383533321997e-06,
+      "btemp_ground_entry": -5.001139296063561,
+      "dissip": [
+       1.7482524088765614e-16,
+       1.8890458032779203e-16,
+       2.2931144186775694e-16,
+       2.9466438336572765e-16,
+       3.6930663887537055e-16,
+       4.4353236793415325e-16,
+       5.134224709930281e-16,
+       5.7762092793007655e-16,
+       6.3587083301294395e-16,
+       6.883997754219055e-16
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.0592099183953414e-07,
+       "coords": {
+        "lev": 1
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.028287207252097e-07,
+       "coords": {
+        "lev": 2
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 2.0100681129062394e-07,
+       "coords": {
+        "lev": 3
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.9991191232114457e-07,
+       "coords": {
+        "lev": 4
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.992481059379107e-07,
+       "coords": {
+        "lev": 5
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.9884713421623292e-07,
+       "coords": {
+        "lev": 6
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.9860988497285499e-07,
+       "coords": {
+        "lev": 7
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.9847624182174916e-07,
+       "coords": {
+        "lev": 8
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.984088425410088e-07,
+       "coords": {
+        "lev": 9
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 1.9838399301806847e-07,
+       "coords": {
+        "lev": 10
+       },
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -1.8729999558722863,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "lcondflx_ground",
+       "time": 0.0,
+       "expected": -2.2106383533321997e-06,
+       "tolerance": {
+        "rel": 1e-08,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "temp_sfc",
+       "time": 0.0,
+       "expected": -1.7167278948400053,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "surface_law_thin_cell2811",
+     "description": "The surface Dirichlet law and the thin-ice bypass on an ice-free traced column, pinned from cism_thermo.csv step 1, cell (28,11) (thck = 0.0199584998190403 m <= thklim_temp = 1 m, ice_mask = 0, artm = -2.389185071557904 degC): the column bypasses the temperature solve entirely and is set to min(0, artm) on all 12 nodes (F90:1205; the exit temp_000..011 columns are all -2.389185071557904), so temp_sfc = min(0, artm) holds there as everywhere and the bed temperature (the last node of the bypassed column) is min(0, artm) as well; the pmp and the basal outputs are not computed for ice_mask = 0 cells (the exit bpmp and btemp_ground columns are 0, hence bpmp = 0 and btemp_ground = 0), and the basal melt chain is zero (bmlt_ground = 0; melt_internal = 0: temp = min(0, artm) <= 0 while pmptemp = 0). The dTdt = 0 rows (the interior stencil sees a constant column, dissip = 0) assert the bypassed profile. The dissip of the unsolved column is 0 (the dumped dissip_001..010 columns).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904,
+       -2.389185071557904
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 0.0199584998190403,
+      "artm": -2.389185071557904,
+      "bfricflx": 4.78126699283215e-06,
+      "btemp_ground_entry": -5.0000174906032,
+      "ice_mask": 0.0,
+      "dissip": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "temp_sfc",
+       "time": 0.0,
+       "expected": -2.389185071557904,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 1
+       }
+      },
+      {
+       "variable": "dTdt",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 10
+       }
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "btemp_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "melt_internal",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "thawed_bed_branch",
+     "description": "The thawed basal matrix row (F90:1497-1504) pinned from the SOURCE FORMULA (no traced row has a thawed bed: every entry btemp_ground < bpmp - pmp_threshold with the worst margin -1.425 degC): with btemp_ground_entry = bpmp - 0.5*pmp_threshold (>= bpmp - pmp_threshold, so the bed row is thawed) and bwat = 0, the basal temperature is held at the pressure melting point, temp_bed = bpmp = -rhoi*grav*pmlt*thck = -0.61283055916793 degC at thck = 699.2999877929688 m (the step-1 cell (27,14) geometry), and the interior stencil at the bottom node reads that value at the bed face (the boundary values feed the interior operator). The frozen-row value at the same state (temp_bed = temp[10] + (bfric+bhydro-bheat)*dsigbot*thck/coni) is documented in the operator pins; the bmlt_ground chain is not asserted here (the bmlt = 0 balance is exercised at the frozen state in the operator pins).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.076985888683244,
+       -5.195746203384872,
+       -5.2916396014274305,
+       -5.3669098466379666,
+       -5.427075397530869,
+       -5.4759264669239265,
+       -5.516134064363087,
+       -5.549624444871309,
+       -5.577803684353117,
+       -5.601165120789954
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 699.2999877929688,
+      "artm": -9.678254083449986,
+      "bfricflx": 8.298816394880562e-05,
+      "btemp_ground_entry": -0.61333055916793,
+      "dissip": [
+       9.905044924997001e-14,
+       9.945037871042372e-14,
+       1.4022463061956587e-13,
+       2.560745411693158e-13,
+       4.322417143943946e-13,
+       6.482631131514204e-13,
+       8.867187449447209e-13,
+       1.1344657788099825e-12,
+       1.3822814534824848e-12,
+       1.6240618398409976e-12
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "temp_bed",
+       "time": 0.0,
+       "expected": -0.61283055916793,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bpmp",
+       "time": 0.0,
+       "expected": -0.61283055916793,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "internal_melt_rate",
+     "description": "The TEMP_PROGNOSTIC internal melt cap (glissade_basal_melting_internal, F90:2127-2155) pinned from the SOURCE FORMULA (no traced layer exceeds its pmptemp: the window temperatures lie 1.3..9.7 degC below the local pmp): with the state raised 1 degC above the local pressure melting point in the bottom layer (temp[10] = pmptemp[10] + 1 = 0.3982037860802461 degC, pmptemp[10] = -rhoi*grav*pmlt*thck*sigma_node[11] = -0.6017962139197539 degC at thck = 699.2999877929688 m) and all other layers exactly at their pmptemp (the initial conditions are the exact pmptemp profile -rhoi*grav*pmlt*thck*sigma_node[l+1] on the interior nodes), the melt-energy density f_melt[10] = rhoi*shci*1 (J/m3) integrates over the bottom layer dz[10] = thck*dsigma_cv[11] = thck*(sigma(11) - sigma(10)) = 25.182548036865903 m (the bottom CISM layer width, F90:2142-2143) to melt_internal = integral(f_melt, z_sfc..z_top)/(rhoi*lhci*dttem) = rhoi*shci*1*dz[10]/(rhoi*lhci*dttem) = 1.013311793138945e-08 m/s (all other layers contribute 0). The temperature reset (temp -> pmptemp, F90:2148) is a post-solve state mutation, documented in README-cism.md, not transcribed.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -0.07090601511033903,
+       -0.19574186975565802,
+       -0.291641805661442,
+       -0.3669138887036103,
+       -0.42708221886079467,
+       -0.4759366958352789,
+       -0.516148056375325,
+       -0.5496425249512471,
+       -0.5778378175736825,
+       0.3982037860802461
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 699.2999877929688,
+      "artm": -9.678254083449986,
+      "bfricflx": 8.298816394880562e-05,
+      "btemp_ground_entry": -5.61283055916793,
+      "dissip": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "melt_internal",
+       "time": 0.0,
+       "expected": 1.013311793138945e-08,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "id": "freeze_on_branch",
+     "description": "The freeze-on branch of glissade_basal_melting_ground (F90:2007-2012) pinned from the SOURCE FORMULA (the traced window is frozen and melting-free: bmlt_ground = 0 and btemp_ground < bpmp - eps08 on every row): with the bed at the melting point (temp_bed = bpmp = -0.61283055916793 degC at thck = 699.2999877929688 m) and a negative flux balance (bfricflx = bhydroflx = bheatflx = 0, and the model's conductive flux lcondflx_ground = -(coni/thck)*(temp_bed - temp[10])/dsigbot = -0.8319652613445396 W/m2, so bflx_mlt = -0.8319652613445396 W/m2 and bmlt_raw = -0.8319652613445396/(lhci*rhoi) = -2.7188149568011927e-09 m/s < 0), bwat = 0, the freeze_on predicate fires: bmlt_ground is zeroed and btemp_ground is dropped to min(bpmp - 2*pmp_threshold, bpmp - eps08) = min(-0.61483055916793, -0.61283056916793) = -0.61483055916793 degC (pmp_threshold = 1e-3 dominates eps08 = 1e-8). The paired eps11 guard (F90:1927-1929) is exercised in the eps11_zeroing test.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.076985888683244,
+       -5.195746203384872,
+       -5.2916396014274305,
+       -5.3669098466379666,
+       -5.427075397530869,
+       -5.4759264669239265,
+       -5.516134064363087,
+       -5.549624444871309,
+       -5.577803684353117,
+       -5.601165120789954
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 699.2999877929688,
+      "artm": -9.678254083449986,
+      "bfricflx": 0.0,
+      "btemp_ground_entry": -0.61333055916793,
+      "dissip": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "btemp_ground",
+       "time": 0.0,
+       "expected": -0.61483055916793,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      }
+     ]
+    },
+    {
+     "id": "eps11_zeroing",
+     "description": "The eps11 rounding-error guard of glissade_basal_melting_ground (F90:1927-1929) pinned from the SOURCE FORMULA: a flux imbalance below eps11 = 1e-11 W/m2 is zeroed before the division: with bfricflx = 5e-12 and bhydroflx = bheatflx = 0, the frozen-row law gives temp_bed = temp[10] + bfricflx*dsigbot*thck/coni = -5.601165120759974 degC and hence lcondflx_ground = -(coni/thck)*(temp_bed - temp[10])/dsigbot = -bfricflx = -5e-12 by construction, so bflx_mlt = bflx_src + lcondflx_ground = 0 up to rounding, far below eps11, and bmlt_raw = 0 exactly (without the guard it would be at most ~1.6e-20 m/s); with the bed frozen (temp_bed far below bpmp) and bmlt_raw = 0, the freeze_on predicate stays 0 and btemp_ground = min(temp_bed, bpmp) = temp_bed = -5.601165120759974. The traced window exercises the same guard: the closed basal balances of the operator pins have |bfricflx + lcondflx_ground| <= 1.5e-15 W/m2, zeroed to bmlt = 0.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "initial_conditions": {
+      "temp": [
+       -5.076985888683244,
+       -5.195746203384872,
+       -5.2916396014274305,
+       -5.3669098466379666,
+       -5.427075397530869,
+       -5.4759264669239265,
+       -5.516134064363087,
+       -5.549624444871309,
+       -5.577803684353117,
+       -5.601165120789954
+      ]
+     },
+     "parameter_overrides": {
+      "thck": 699.2999877929688,
+      "artm": -9.678254083449986,
+      "bfricflx": 5e-12,
+      "btemp_ground_entry": -5.61283055916793,
+      "dissip": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "assertions": [
+      {
+       "variable": "bmlt_raw",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "bmlt_ground",
+       "time": 0.0,
+       "expected": 0.0
+      },
+      {
+       "variable": "btemp_ground",
+       "time": 0.0,
+       "expected": -5.601165120759974,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

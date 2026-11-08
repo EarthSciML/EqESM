@@ -1,0 +1,2112 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_bareground",
+  "description": "CLM bare-ground turbulent-flux component (stage 2 of the EqESM project): the pointwise laws of BareGroundFluxes in stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 (cts5.4.063, cesm3.0-alphabranch checkout) transcribed exactly, with the expression templates of ./clm_templates.esm and ./cmeps_templates.esm imported by reference. The traced configuration (the I2000Clm60Sp_clm_inst case, lnd_in of stage1/cime/cases/I2000Clm60Sp_clm_inst/run): z0param_method = 'Meier2022', use_z0m_snowmelt = .true. (so z0mg comes from the snowmelt-dependent branch of SetRoughnessLengthsAndForcHeightsNonLake, FrictionVelocityMod.F90:620-623), zetamaxstable = 2.0, soil_resis_method = 1 (the Swenson & Lawrence 2014 soil-resistance branch, inactive on the pinned rows because they are all dew rows with dqh > 0), do_soilevap_beta inactive, GSWP3 forcing heights 30 m, wind_min = 1.0 m/s and the Meier2022 constants of the ctsm60_params.c260518.nc parameter file. Structure, in the order of the Fortran: (a) the raw inputs (forc_t/forc_q/forc_u/forc_v/forc_pbot/forc_rho, thm, t_grnd, qg, the ground-layer temperatures t_soisno_top = t_soisno(c,snl+1)/t_soisno_soil = t_soisno(c,1)/t_h2osfc, the surface-humidity fields qg_snow/qg_soil/qg_h2osfc and dqgdT, thv, and the constants); (b) the derived inputs of F90:325-329 (ur = max(wind_min, |forc_u,forc_v|), dth, dqh, dthv, zldis = forc_hgt_u + z0mg) with forc_th = thv/(1 + 0.61*forc_q) recovered from the dumped virtual potential temperature (dthv = dth*(1 + 0.61*forc_q) + 0.61*forc_th*dqh of F90:328 then inverts to forc_th = thv/(1 + 0.61*forc_q)); (c) z0mg from the Meier2022 snowmelt template (the traced rows are all in the frac_sno_albedo > 0, snomelt_accum < 1e-5 branch, pinning z0mg = exp(-b1*pi/2 + b4)*1e-3 = 8.13402050576016129e-05; the bare-soil zlnd branch of the select case is included for completeness); (d) the MoninObukIni initialization of F90:331 (um_ini, rib, zeta_ini clamped to [0.01, 2.0], obu_ini = zldis/zeta_ini); (e) the stability iteration of F90:342-388. The esm has no loop construct, so the iteration is represented compositionally: the 17-equation update law is authored ONCE in the one-step model BareGroundStep of ./clm_bareground_step.esm (a single pass of the do-while: the FrictionVelocity profiles and friction velocity, the Meier2022 z0hg update, the stability-parameter clamp and the um/wc/obu update) and mounted three times by reference as top-level models step1..step3 (esm-spec section 4.7; top-level mounts are required because the pinned CLI silently drops couplings in the single-top-level-model build path, see README-cmeps.md), with the chained inputs coupled by variable_map: um_ini/obu_ini/z0mg seed step1, each step's state feeds the next (um/obu/z0h), and the update-invariant pointwise fields (forc_hgt_u, forc_hgt_t, z0m = z0mg, ur, dth, dqh, forc_q, forc_th, thv, zii, beta, zetamaxstable and the constants vkc/grav/zetam/zetat/meier_param3/nu_param/beta_param) feed every step; the parent's zldis equals the step's own profile height zldis_u (z0mg is iteration-constant) and the Fortran's stale wc local is only read by the unstable um branch, so the zldis and wc couplings are dropped as dead. The parent keeps the external names of the Fortran locals: ustar/temp1/temp2/temp12m/temp22m/z0h/um = the step3 outputs (the exit state of the 3-iteration loop, which matches the traced run's niters = 3). The 2-m humidity profiles are the equality branches temp2 = temp1 and temp22m = temp12m (F90:997-998, 1051-1052) because forc_hgt_q_patch == forc_hgt_t_patch and z0qg == z0hg in the traced run. (f) the flux laws of F90:396-470: ram/rah/raw, raih = forc_rho*cpair/rah, the vapor pressure forc_e = max(forc_q*forc_pbot/(forc_q + 0.622), 0.01*forc_esat) with forc_esat from the QSat polynomial, the Magnus dewpoint forc_dewpoint of F90:548-578 (ice coefficients on all traced rows: t_grnd ~ 234-250 K < tfrz selects the ice branch), the raiw selection of F90:423-438 (the dqh > 0 dew branch with the t_grnd > forc_dewpoint no-dew gate, the sl14/beta branches of the dqh <= 0 side transcribed for completeness), ram1, cgrnds/cgrndl/cgrnd (cgrnd needs the htvp latent heat of vaporization), taux/tauy (the wind_stress_component law), the sensible heat partition eflx_sh_grnd/soil/snow/h2osfc (the sensible_heat_flux law), the evaporation qflx_evap_soi and qflx_ev_snow/soil/h2osfc (the evaporation_flux law; qg_h2osfc is not dumped, so qflx_ev_h2osfc is transcribed but unpinned), and the 2-m diagnostics t_ref2m/q_ref2m/rh_ref2m (the ref2m_profile law, with qsat_ref2m from the shared qsat_qs) and kbm1 = log(z0mg/z0h) (F90:471-499). The tests pin the stage-1 instrumentation dump stage1/dumps/clm/clm_bareground.csv (192 rows; five representative rows across the run, all stable with zeta clamped at 2.0 and all in the dew branch, see README-clm-bareground.md for the branch census) plus the run-import and soil-temperature dumps that feed them; every asserted output is a dumped column, and z0mg is asserted from the template output. Not transcribed (dead or undumped in this configuration): the human-stress indices, the www soil-wetness variable, the rssun/rssha photosynthesis resistances, the u10 diagnostics of FrictionVelocityMod, and the ZengWang2007 z0hg branch (the traced run is Meier2022). Reference: stage1/cesm/components/clm/src/biogeophys/BareGroundFluxesMod.F90 and FrictionVelocityMod.F90."
+ },
+ "index_sets": {
+  "patch": {
+   "kind": "interval",
+   "size": "N_PATCH"
+  }
+ },
+ "metaparameters": {
+  "N_PATCH": {
+   "type": "integer",
+   "default": 1
+  }
+ },
+ "models": {
+  "BareGroundFluxes": {
+   "expression_template_imports": [
+    { "ref": "./clm_templates.esm" },
+    { "ref": "./cmeps_templates.esm" }
+   ],
+   "variables": {
+    "forc_t": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 293.0,
+     "description": "atmospheric temperature at the forcing height (downscaled column value), [K]"
+    },
+    "forc_q": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "default": 3.0e-3,
+     "description": "atmospheric specific humidity at the forcing height, [kg/kg]"
+    },
+    "forc_u": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m/s",
+     "default": 1.0,
+     "description": "zonal wind at the forcing height (gridcell value), [m/s]"
+    },
+    "forc_v": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m/s",
+     "default": 1.0,
+     "description": "meridional wind at the forcing height (gridcell value), [m/s]"
+    },
+    "forc_pbot": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "Pa",
+     "default": 100000.0,
+     "description": "atmospheric pressure at the forcing height, [Pa]"
+    },
+    "forc_rho": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/m^3",
+     "default": 1.2,
+     "description": "atmospheric density at the forcing height, [kg/m^3]"
+    },
+    "forc_th": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 293.0,
+     "description": "atmospheric potential temperature at the forcing height (F90:328; not dumped by the instrumentation, recovered as forc_th = thv/(1 + 0.61*forc_q) from the dumped virtual potential temperature thv), [K]"
+    },
+    "thm": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 293.0,
+     "description": "atmospheric potential temperature at the ground level (F90:325), [K]"
+    },
+    "t_grnd": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 290.0,
+     "description": "ground surface temperature, [K]"
+    },
+    "qg": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "default": 2.0e-3,
+     "description": "ground surface specific humidity, [kg/kg]"
+    },
+    "thv": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 295.0,
+     "description": "virtual potential temperature at the forcing height (BiogeophysPreFluxCalcsMod, dumped in clm_run_imports preflux), [K]"
+    },
+    "qg_snow": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "default": 2.0e-3,
+     "description": "specific humidity at the snow surface (F90:465), [kg/kg]"
+    },
+    "qg_soil": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "default": 2.0e-3,
+     "description": "specific humidity at the soil surface (F90:466), [kg/kg]"
+    },
+    "qg_h2osfc": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "default": 2.0e-3,
+     "description": "specific humidity at the h2osfc surface (F90:467; not dumped by the instrumentation, so qflx_ev_h2osfc is unpinned; the traced columns have no h2osfc ponding), [kg/kg]"
+    },
+    "dqgdT": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1/K",
+     "default": 1.0e-4,
+     "description": "derivative of ground specific humidity with respect to ground temperature (F90:441), [1/K]"
+    },
+    "t_soisno_top": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 290.0,
+     "description": "temperature of the top snow layer t_soisno(c, snl+1) (F90:452; the dumped j = -8 entry), [K]"
+    },
+    "t_soisno_soil": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 290.0,
+     "description": "temperature of the top soil layer t_soisno(c, 1) (F90:453; the dumped j = 1 entry), [K]"
+    },
+    "t_h2osfc": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 290.0,
+     "description": "temperature of the h2osfc surface (F90:454; not dumped; equals t_soisno(c, 1) on every traced row, so the tests bind it to t_soisno_soil), [K]"
+    },
+    "htvp": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "J/kg",
+     "default": 2.501e6,
+     "description": "latent heat of vaporization/sublimation for the cgrnd derivative (F90:444, htvp = hvap = 2.501e6 J/kg for the liquid-water ground of the traced rows; not dumped, so cgrnd is unpinned), [J/kg]"
+    },
+    "soilresis": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "s/m",
+     "default": 0.0,
+     "description": "Swenson & Lawrence 2014 soil resistance (F90:435; soil_resis_method = 1 in the traced run but the sl14 branch is inactive on the pinned rows because they are all dew rows with dqh > 0), [s/m]"
+    },
+    "soilbeta": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.0,
+     "description": "Lee & Pielke 1992 wetness coefficient (F90:432; dumped column, inactive on the pinned rows because do_soilevap_beta is false in the traced run), [-]"
+    },
+    "frac_sno_albedo": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.0,
+     "description": "fraction of ground covered by snow for albedo calculations (FrictionVelocityMod.F90:613; the traced rows are all snow-covered so the Meier2022 snow branch fires), [-]"
+    },
+    "snomelt_accum": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m",
+     "default": 0.0,
+     "description": "accumulated snow melt for the z0m calculation (FrictionVelocityMod.F90:616, m H2O; the traced rows are all in the snomelt_accum < 1e-5 branch), [m]"
+    },
+    "zlnd": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m",
+     "default": 8.5e-4,
+     "description": "momentum roughness length of bare ground (FrictionVelocityMod.F90:628, zlnd = 8.5e-4 m from the parameter file; the else branch of the Meier2022 select case, not exercised by the traced rows), [m]"
+    },
+    "wind_min": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m/s",
+     "default": 1.0,
+     "description": "minimum wind speed (F90:325, wind_min = 1.0 m/s from the parameter file), [m/s]"
+    },
+    "grav": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "gravitational acceleration (clm_varcon.F90:51), [m/s^2]"
+    },
+    "cpair": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "J/kg/K",
+     "default": 1004.64,
+     "description": "specific heat of dry air (F90:400, clm_varcon.F90:59), [J/kg/K]"
+    },
+    "tfrz": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "K",
+     "default": 273.15,
+     "description": "freezing temperature (clm_varcon.F90:76), [K]"
+    },
+    "vkc": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 0.4,
+     "description": "von Karman constant (clm_varcon.F90:53), [-]"
+    },
+    "zetam": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.574,
+     "description": "transition point of the flux-gradient relation, wind profile (FrictionVelocityMod.F90:795), [-]"
+    },
+    "zetat": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 0.465,
+     "description": "transition point of the flux-gradient relation, temperature profile (FrictionVelocityMod.F90:796), [-]"
+    },
+    "meier_param1": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 0.23,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:169), [-]"
+    },
+    "meier_param2": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 0.08,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:170), [-]"
+    },
+    "meier_param3": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 70.0,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:171), [-]"
+    },
+    "b1_param": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.4,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:166), [-]"
+    },
+    "b4_param": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": -0.31,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:167), [-]"
+    },
+    "nu_param": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m^2/s",
+     "default": 1.5e-5,
+     "description": "kinematic viscosity of air (clm_varcon.F90:165), [m^2/s]"
+    },
+    "beta_param": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "s^0.5/m^0.5/K^0.25",
+     "default": 7.2,
+     "description": "Meier et al. (2022) empirical constant (clm_varcon.F90:164), [(s/m)^0.5/K^0.25]"
+    },
+    "zetamaxstable": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 2.0,
+     "description": "maximum zeta in the stable boundary layer (namelist zetamaxstable = 2.0 of the traced run, FrictionVelocityMod.F90:1201), [-]"
+    },
+    "zii": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m",
+     "default": 1000.0,
+     "description": "convective boundary layer height (BiogeophysPreFluxCalcsMod.F90:363), [m]"
+    },
+    "beta": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.0,
+     "description": "coefficient for convective velocity (BiogeophysPreFluxCalcsMod.F90:362; dumped column), [-]"
+    },
+    "forc_hgt_u": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m",
+     "default": 30.0,
+     "description": "observational height of wind (GSWP3 forcing, 30 m in the traced run), [m]"
+    },
+    "forc_hgt_t": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "m",
+     "default": 30.0,
+     "description": "observational height of temperature (GSWP3 forcing, 30 m in the traced run), [m]"
+    },
+    "use_soil_resistance_sl14": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 1.0,
+     "description": "soil_resis_method = 1 selects the Swenson & Lawrence 2014 soil resistance (F90:434; the traced run has it active but the pinned rows never reach the dqh <= 0 branch), [-]"
+    },
+    "use_soilevap_beta": {
+     "type": "parameter",
+     "shape": ["patch"],
+     "units": "1",
+     "default": 0.0,
+     "description": "do_soilevap_beta selects the Lee & Pielke 1992 beta evaporation (F90:427-433; inactive in the traced run), [-]"
+    },
+    "ur": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m/s",
+     "description": "wind speed at the forcing height ur = max(wind_min, sqrt(forc_u^2 + forc_v^2)) (F90:325), [m/s]"
+    },
+    "dth": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "K",
+     "description": "temperature difference dth = thm - t_grnd (F90:326), [K]"
+    },
+    "dqh": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "description": "humidity difference dqh = forc_q - qg (F90:327), [kg/kg]"
+    },
+    "dthv": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "K",
+     "description": "virtual potential temperature difference dthv = dth*(1 + 0.61*forc_q) + 0.61*forc_th*dqh (F90:328), [K]"
+    },
+    "z0mg": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m",
+     "description": "momentum roughness length over ground z0mg_col = z0mg_patch (FrictionVelocityMod.F90:620-623, Meier2022 snowmelt branch), [m]"
+    },
+    "zldis": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m",
+     "description": "iteration height zldis = forc_hgt_u + z0mg (F90:329), [m]"
+    },
+    "um_ini": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m/s",
+     "description": "initial wind speed um of MoninObukIni (FrictionVelocityMod.F90:1190-1194), [m/s]"
+    },
+    "rib": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "bulk Richardson number rib of MoninObukIni (FrictionVelocityMod.F90:1196), [-]"
+    },
+    "zeta_ini": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "initial stability parameter zeta of MoninObukIni (FrictionVelocityMod.F90:1198-1204), [-]"
+    },
+    "obu_ini": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m",
+     "description": "initial Obukhov length obu = zldis/zeta of MoninObukIni (FrictionVelocityMod.F90:1205), [m]"
+    },
+    "ustar": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m/s",
+     "description": "exit friction velocity (step3.ustar, the third pass of the iteration), [m/s]"
+    },
+    "temp1": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "exit inverse integrated temperature profile at the measurement height (step3.temp1), [-]"
+    },
+    "temp2": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "exit inverse integrated humidity profile at the measurement height (step3.temp2), [-]"
+    },
+    "temp12m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "exit inverse integrated temperature profile at 2 m (step3.temp12m), [-]"
+    },
+    "temp22m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "exit inverse integrated humidity profile at 2 m (step3.temp22m), [-]"
+    },
+    "z0h": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m",
+     "description": "exit scalar roughness over ground z0hg_patch (step3.z0h, Meier2022 branch of F90:365), [m]"
+    },
+    "um": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "m/s",
+     "description": "exit wind speed (step3.um), [m/s]"
+    },
+    "ram": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "s/m",
+     "description": "aerodynamic resistance to momentum ram = 1/(ustar^2/um) (F90:396), [s/m]"
+    },
+    "rah": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "s/m",
+     "description": "aerodynamic resistance to sensible heat rah = 1/(temp1*ustar) (F90:397), [s/m]"
+    },
+    "raw": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "s/m",
+     "description": "aerodynamic resistance to latent heat raw = 1/(temp2*ustar) (F90:398), [s/m]"
+    },
+    "raih": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2/K",
+     "default": 0.0,
+     "description": "sensible heat conductance raih = forc_rho*cpair/rah (F90:400), [W/m^2/K]"
+    },
+    "forc_esat": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "Pa",
+     "description": "saturation vapor pressure at the forcing height (QSat at forc_t, F90:410), [Pa]"
+    },
+    "forc_e": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "Pa",
+     "description": "vapor pressure at the forcing height, restricted to no less than the 1% relative humidity value (F90:413), [Pa]"
+    },
+    "forc_dewpoint": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "K",
+     "description": "dewpoint temperature at the forcing height (F90:415, the Magnus law of :548-578), [K]"
+    },
+    "raiw": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "latent heat exchange coefficient raiw (F90:423-438: the dqh > 0 dew branch raiw = forc_rho/raw with the t_grnd > forc_dewpoint no-dew gate, and the dqh <= 0 sl14/beta branches), [kg/m^2/s]"
+    },
+    "ram1": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "s/m",
+     "description": "aerodynamical resistance (F90:439, the dumped ram1 column), [s/m]"
+    },
+    "cgrnds": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2/K",
+     "description": "derivative of the sensible heat flux with respect to ground temperature cgrnds = raih (F90:441), [W/m^2/K]"
+    },
+    "cgrndl": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s/K",
+     "description": "derivative of the latent heat flux with respect to ground temperature cgrndl = raiw*dqgdT (F90:442), [kg/m^2/s/K]"
+    },
+    "cgrnd": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2/K",
+     "description": "derivative of the total ground flux with respect to ground temperature cgrnd = cgrnds + htvp*cgrndl (F90:444; htvp not dumped, so cgrnd is unpinned), [W/m^2/K]"
+    },
+    "taux": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m/s^2",
+     "description": "zonal wind stress taux = -forc_rho*forc_u/ram (F90:447), [kg/m/s^2]"
+    },
+    "tauy": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m/s^2",
+     "description": "meridional wind stress tauy = -forc_rho*forc_v/ram (F90:448), [kg/m/s^2]"
+    },
+    "eflx_sh_grnd": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2",
+     "description": "sensible heat flux from the ground eflx_sh_grnd = -raih*dth (F90:449), [W/m^2]"
+    },
+    "eflx_sh_snow": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2",
+     "description": "sensible heat flux from the snow surface eflx_sh_snow = -raih*(thm - t_soisno_top) (F90:452), [W/m^2]"
+    },
+    "eflx_sh_soil": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2",
+     "description": "sensible heat flux from the soil surface eflx_sh_soil = -raih*(thm - t_soisno_soil) (F90:453), [W/m^2]"
+    },
+    "eflx_sh_h2osfc": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "W/m^2",
+     "description": "sensible heat flux from the h2osfc surface eflx_sh_h2osfc = -raih*(thm - t_h2osfc) (F90:454), [W/m^2]"
+    },
+    "qflx_evap_soi": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s",
+     "description": "soil evaporation qflx_evap_soi = -raiw*dqh (F90:460), [kg/m^2/s]"
+    },
+    "qflx_ev_snow": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s",
+     "description": "evaporation flux from snow qflx_ev_snow = -raiw*(forc_q - qg_snow) (F90:465), [kg/m^2/s]"
+    },
+    "qflx_ev_soil": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s",
+     "description": "evaporation flux from soil qflx_ev_soil = -raiw*(forc_q - qg_soil) (F90:466), [kg/m^2/s]"
+    },
+    "qflx_ev_h2osfc": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/m^2/s",
+     "description": "evaporation flux from h2osfc qflx_ev_h2osfc = -raiw*(forc_q - qg_h2osfc) (F90:467; qg_h2osfc not dumped, so unpinned), [kg/m^2/s]"
+    },
+    "t_ref2m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "K",
+     "description": "2 m height air temperature t_ref2m = thm + temp1*dth*(1/temp12m - 1/temp1) (F90:470), [K]"
+    },
+    "q_ref2m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "description": "2 m height specific humidity q_ref2m = forc_q + temp2*dqh*(1/temp22m - 1/temp2) (F90:473), [kg/kg]"
+    },
+    "e_ref2m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "Pa",
+     "description": "saturation vapor pressure at 2 m (QSat at t_ref2m, F90:476-477), [Pa]"
+    },
+    "qsat_ref2m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "kg/kg",
+     "description": "saturation specific humidity at 2 m (F90:476-477), [kg/kg]"
+    },
+    "rh_ref2m": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "2 m relative humidity rh_ref2m = min(100, q_ref2m/qsat_ref2m*100) (F90:479, in %; not dumped, so unpinned), [%]"
+    },
+    "kbm1": {
+     "type": "unknown",
+     "shape": ["patch"],
+     "units": "1",
+     "description": "natural logarithm of z0mg/z0hg kbm1 = log(z0mg/z0h) (F90:498; not dumped, so unpinned), [-]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "ur",
+     "rhs": {"op": "max", "args": ["wind_min", {"op": "sqrt", "args": [{"op": "+", "args": [{"op": "^", "args": ["forc_u", 2]}, {"op": "^", "args": ["forc_v", 2]}]}]}]}
+    },
+    {
+     "lhs": "dth",
+     "rhs": {"op": "-", "args": ["thm", "t_grnd"]}
+    },
+    {
+     "lhs": "dqh",
+     "rhs": {"op": "-", "args": ["forc_q", "qg"]}
+    },
+    {
+     "lhs": "dthv",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "virtual_potential_scale", "bindings": {
+      "x": "dth", "forc_q": "forc_q", "forc_th": "forc_th", "y": "dqh"
+     }}
+    },
+    {
+     "lhs": "z0mg",
+     "rhs": {"op": "ifelse", "args": [
+      {"op": ">", "args": ["frac_sno_albedo", 0.0]},
+      {"op": "apply_expression_template", "args": [], "name": "z0mg_meier2022_snowmelt", "bindings": {
+       "snomelt_accum": "snomelt_accum", "b1_param": "b1_param", "b4_param": "b4_param",
+       "meier_param1": "meier_param1", "meier_param2": "meier_param2"
+      }},
+      "zlnd"
+     ]}
+    },
+    {
+     "lhs": "zldis",
+     "rhs": {"op": "+", "args": ["forc_hgt_u", "z0mg"]}
+    },
+    {
+     "lhs": "um_ini",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "monin_obukhov_initial_wind", "bindings": {
+      "dthv": "dthv", "ur": "ur", "wc": {"op": "const", "args": [], "value": 0.5, "units": "m/s"}
+     }}
+    },
+    {
+     "lhs": "rib",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "bulk_richardson", "bindings": {
+      "grav": "grav", "zldis": "zldis", "dthv": "dthv", "thv": "thv", "um": "um_ini"
+     }}
+    },
+    {
+     "lhs": "zeta_ini",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "monin_obukhov_initial_zeta", "bindings": {
+      "rib": "rib", "zldis": "zldis", "z0m": "z0mg", "zetamaxstable": "zetamaxstable"
+     }}
+    },
+    {
+     "lhs": "obu_ini",
+     "rhs": {"op": "/", "args": ["zldis", "zeta_ini"]}
+    },
+    {
+     "lhs": "ustar",
+     "rhs": "step3.ustar"
+    },
+    {
+     "lhs": "temp1",
+     "rhs": "step3.temp1"
+    },
+    {
+     "lhs": "temp2",
+     "rhs": "step3.temp2"
+    },
+    {
+     "lhs": "temp12m",
+     "rhs": "step3.temp12m"
+    },
+    {
+     "lhs": "temp22m",
+     "rhs": "step3.temp22m"
+    },
+    {
+     "lhs": "z0h",
+     "rhs": "step3.z0h"
+    },
+    {
+     "lhs": "um",
+     "rhs": "step3.um"
+    },
+    {
+     "lhs": "ram",
+     "rhs": {"op": "/", "args": ["um", {"op": "^", "args": ["ustar", 2]}]}
+    },
+    {
+     "lhs": "rah",
+     "rhs": {"op": "/", "args": [1.0, {"op": "*", "args": ["temp1", "ustar"]}]}
+    },
+    {
+     "lhs": "raw",
+     "rhs": {"op": "/", "args": [1.0, {"op": "*", "args": ["temp2", "ustar"]}]}
+    },
+    {
+     "lhs": "raih",
+     "rhs": {"op": "*", "args": ["forc_rho", "cpair", {"op": "/", "args": [1.0, "rah"]}]}
+    },
+    {
+     "lhs": "forc_esat",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {
+      "T": "forc_t", "TKFRZ": "tfrz"
+     }}
+    },
+    {
+     "lhs": "forc_e",
+     "rhs": {"op": "max", "args": [
+      {"op": "/", "args": [{"op": "*", "args": ["forc_q", "forc_pbot"]}, {"op": "+", "args": ["forc_q", {"op": "const", "args": [], "value": 0.622, "units": "1"}]}]},
+      {"op": "*", "args": [{"op": "const", "args": [], "value": 0.01, "units": "1"}, "forc_esat"]}
+     ]}
+    },
+    {
+     "lhs": "forc_dewpoint",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "dewpoint_magnus", "bindings": {
+      "e": "forc_e", "t": "t_grnd", "tfrz": "tfrz"
+     }}
+    },
+    {
+     "lhs": "raiw",
+     "rhs": {"op": "ifelse", "args": [
+      {"op": ">", "args": ["dqh", 0.0]},
+      {"op": "ifelse", "args": [
+       {"op": ">", "args": ["t_grnd", "forc_dewpoint"]},
+       0.0,
+       {"op": "/", "args": ["forc_rho", "raw"]}
+      ]},
+      {"op": "ifelse", "args": [
+       {"op": ">", "args": ["use_soil_resistance_sl14", 0.5]},
+       {"op": "/", "args": ["forc_rho", {"op": "+", "args": ["raw", "soilresis"]}]},
+       {"op": "ifelse", "args": [
+        {"op": ">", "args": ["use_soilevap_beta", 0.5]},
+        {"op": "ifelse", "args": [
+         {"op": ">", "args": ["t_grnd", "forc_dewpoint"]},
+         0.0,
+         {"op": "*", "args": ["soilbeta", {"op": "/", "args": ["forc_rho", "raw"]}]}
+        ]},
+        0.0
+       ]}
+      ]}
+     ]}
+    },
+    {
+     "lhs": "ram1",
+     "rhs": "ram"
+    },
+    {
+     "lhs": "cgrnds",
+     "rhs": "raih"
+    },
+    {
+     "lhs": "cgrndl",
+     "rhs": {"op": "*", "args": ["raiw", "dqgdT"]}
+    },
+    {
+     "lhs": "cgrnd",
+     "rhs": {"op": "+", "args": ["cgrnds", {"op": "*", "args": ["htvp", "cgrndl"]}]}
+    },
+    {
+     "lhs": "taux",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "wind_stress_component", "bindings": {
+      "forc_rho": "forc_rho", "forc_u": "forc_u", "ram": "ram"
+     }}
+    },
+    {
+     "lhs": "tauy",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "wind_stress_component", "bindings": {
+      "forc_rho": "forc_rho", "forc_u": "forc_v", "ram": "ram"
+     }}
+    },
+    {
+     "lhs": "eflx_sh_grnd",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_grnd"
+     }}
+    },
+    {
+     "lhs": "eflx_sh_snow",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_soisno_top"
+     }}
+    },
+    {
+     "lhs": "eflx_sh_soil",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_soisno_soil"
+     }}
+    },
+    {
+     "lhs": "eflx_sh_h2osfc",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "sensible_heat_flux", "bindings": {
+      "raih": "raih", "thm": "thm", "t_surf": "t_h2osfc"
+     }}
+    },
+    {
+     "lhs": "qflx_evap_soi",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg"
+     }}
+    },
+    {
+     "lhs": "qflx_ev_snow",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_snow"
+     }}
+    },
+    {
+     "lhs": "qflx_ev_soil",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_soil"
+     }}
+    },
+    {
+     "lhs": "qflx_ev_h2osfc",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "evaporation_flux", "bindings": {
+      "raiw": "raiw", "forc_q": "forc_q", "qg_surf": "qg_h2osfc"
+     }}
+    },
+    {
+     "lhs": "t_ref2m",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "ref2m_profile", "bindings": {
+      "base": "thm", "temp": "temp1", "delta": "dth", "temp2m": "temp12m"
+     }}
+    },
+    {
+     "lhs": "q_ref2m",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "ref2m_profile", "bindings": {
+      "base": "forc_q", "temp": "temp2", "delta": "dqh", "temp2m": "temp22m"
+     }}
+    },
+    {
+     "lhs": "e_ref2m",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_esat", "bindings": {
+      "T": "t_ref2m", "TKFRZ": "tfrz"
+     }}
+    },
+    {
+     "lhs": "qsat_ref2m",
+     "rhs": {"op": "apply_expression_template", "args": [], "name": "qsat_qs", "bindings": {
+      "T": "t_ref2m", "p": "forc_pbot", "TKFRZ": "tfrz"
+     }}
+    },
+    {
+     "lhs": "rh_ref2m",
+     "rhs": {"op": "min", "args": [{"op": "const", "args": [], "value": 100.0, "units": "1"}, {"op": "*", "args": [{"op": "const", "args": [], "value": 100.0, "units": "1"}, {"op": "/", "args": ["q_ref2m", "qsat_ref2m"]}]}]}
+    },
+    {
+     "lhs": "kbm1",
+     "rhs": {"op": "log", "args": [{"op": "/", "args": ["z0mg", "z0h"]}]}
+    }
+   ],
+   "tests": [
+  {
+   "id": "row_1_1",
+   "description": "Instantaneous pin of the BareGroundFluxes chain (BareGroundFluxesMod.F90, Meier2022 config) from stage1/dumps/clm/clm_bareground.csv row (step 1, p 1, c 1): a traced bare-ground patch on step 1 of 12. All traced rows are stable with the iteration zeta clamped at 2.0 and in the dew branch (dqh > 0, t_grnd <= forc_dewpoint), so the pinned branches are the stable um = max(ur, 0.1), the zeta > 1 momentum/heat profiles, the zeta <= 1 2-m profiles, the Meier2022 z0hg and z0mg-snowmelt laws and the raiw = forc_rho/raw dew branch; the MoninObukIni initial zeta is unclamped on step 1 only. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output column plus z0mg is asserted at full dump precision.",
+   "time_span": {
+    "start": 0.0,
+    "end": 0.0
+   },
+   "parameter_overrides": {
+    "forc_t": 249.30924313863048,
+    "forc_q": 0.0006480331532619146,
+    "forc_u": 3.452153973484479,
+    "forc_v": 3.452153973484479,
+    "forc_pbot": 68134.13610026057,
+    "forc_rho": 0.9517205665016577,
+    "forc_th": 249.30924313863048,
+    "thm": 249.60324393576448,
+    "t_grnd": 247.89440355155978,
+    "qg": 0.00056337651511675,
+    "thv": 249.40779513816125,
+    "qg_snow": 0.00056337651511675,
+    "qg_soil": 4.889195928923766e-05,
+    "dqgdT": 5.640977357390672e-05,
+    "t_soisno_top": 247.89440355155978,
+    "t_soisno_soil": 225.7397141306359,
+    "t_h2osfc": 225.7397141306359,
+    "beta": 1.0,
+    "snomelt_accum": 0.0,
+    "frac_sno_albedo": 1.0,
+    "zetamaxstable": 2.0,
+    "use_soil_resistance_sl14": 1.0,
+    "use_soilevap_beta": 0.0,
+    "soilbeta": 1.0,
+    "qg_h2osfc": 0.00056337651511675,
+    "htvp": 2501000.0,
+    "soilresis": 0.0,
+    "zii": 1000.0,
+    "wind_min": 1.0,
+    "forc_hgt_u": 30.0,
+    "forc_hgt_t": 30.0
+   },
+   "tolerance": {
+    "rel": 1e-12,
+    "abs": 0.0
+   },
+   "assertions": [
+    {
+     "variable": "ram1",
+     "time": 0.0,
+     "expected": 596.7680523994438,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrnds",
+     "time": 0.0,
+     "expected": 1.9611256907043075,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrndl",
+     "time": 0.0,
+     "expected": 1.1011571922539559e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "taux",
+     "time": 0.0,
+     "expected": -0.005505465518949182,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "tauy",
+     "time": 0.0,
+     "expected": -0.005505465518949182,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_grnd",
+     "time": 0.0,
+     "expected": -3.3512507787768677,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_soil",
+     "time": 0.0,
+     "expected": -46.799381371725644,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_snow",
+     "time": 0.0,
+     "expected": -3.3512507787768677,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_h2osfc",
+     "time": 0.0,
+     "expected": -46.799381371725644,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_evap_soi",
+     "time": 0.0,
+     "expected": -1.6525552233152218e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_soil",
+     "time": 0.0,
+     "expected": -1.1695644090013035e-06,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_snow",
+     "time": 0.0,
+     "expected": -1.6525552233152218e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "t_ref2m",
+     "time": 0.0,
+     "expected": 248.55585000874515,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "q_ref2m",
+     "time": 0.0,
+     "expected": 0.0005961448379489631,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "z0mg",
+     "time": 0.0,
+     "expected": 8.134020505760161e-05,
+     "coords": {
+      "patch": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "row_2_1",
+   "description": "Instantaneous pin of the BareGroundFluxes chain (BareGroundFluxesMod.F90, Meier2022 config) from stage1/dumps/clm/clm_bareground.csv row (step 2, p 1, c 1): a traced bare-ground patch on step 2 of 12. All traced rows are stable with the iteration zeta clamped at 2.0 and in the dew branch (dqh > 0, t_grnd <= forc_dewpoint), so the pinned branches are the stable um = max(ur, 0.1), the zeta > 1 momentum/heat profiles, the zeta <= 1 2-m profiles, the Meier2022 z0hg and z0mg-snowmelt laws and the raiw = forc_rho/raw dew branch; the MoninObukIni initial zeta is unclamped on step 1 only. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output column plus z0mg is asserted at full dump precision.",
+   "time_span": {
+    "start": 0.0,
+    "end": 0.0
+   },
+   "parameter_overrides": {
+    "forc_t": 249.36076958974138,
+    "forc_q": 0.0006513651298453515,
+    "forc_u": 2.7204154149312934,
+    "forc_v": 2.7204154149312934,
+    "forc_pbot": 68132.31866319476,
+    "forc_rho": 0.9514966012761956,
+    "forc_th": 249.36076958974138,
+    "thm": 249.65477038687538,
+    "t_grnd": 247.77377716490702,
+    "qg": 0.0005566248220109339,
+    "thv": 249.4598487848793,
+    "qg_snow": 0.0005566248220109339,
+    "qg_soil": 4.8893254956079944e-05,
+    "dqgdT": 5.578786523663978e-05,
+    "t_soisno_top": 247.77377716490702,
+    "t_soisno_soil": 225.73971267858664,
+    "t_h2osfc": 225.73971267858664,
+    "beta": 1.0,
+    "snomelt_accum": 0.0,
+    "frac_sno_albedo": 1.0,
+    "zetamaxstable": 2.0,
+    "use_soil_resistance_sl14": 1.0,
+    "use_soilevap_beta": 0.0,
+    "soilbeta": 1.0,
+    "qg_h2osfc": 0.0005566248220109339,
+    "htvp": 2501000.0,
+    "soilresis": 0.0,
+    "zii": 1000.0,
+    "wind_min": 1.0,
+    "forc_hgt_u": 30.0,
+    "forc_hgt_t": 30.0
+   },
+   "tolerance": {
+    "rel": 1e-12,
+    "abs": 0.0
+   },
+   "assertions": [
+    {
+     "variable": "ram1",
+     "time": 0.0,
+     "expected": 757.2869908147336,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrnds",
+     "time": 0.0,
+     "expected": 1.5781072264665905,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrndl",
+     "time": 0.0,
+     "expected": 8.763261793188159e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "taux",
+     "time": 0.0,
+     "expected": -0.0034180780242661687,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "tauy",
+     "time": 0.0,
+     "expected": -0.0034180780242661687,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_grnd",
+     "time": 0.0,
+     "expected": -2.9684089965229563,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_soil",
+     "time": 0.0,
+     "expected": -37.740525390816,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_snow",
+     "time": 0.0,
+     "expected": -2.9684089965229563,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_h2osfc",
+     "time": 0.0,
+     "expected": -37.740525390816,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_evap_soi",
+     "time": 0.0,
+     "expected": -1.4881984037183847e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_soil",
+     "time": 0.0,
+     "expected": -9.463740439417452e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_snow",
+     "time": 0.0,
+     "expected": -1.4881984037183847e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "t_ref2m",
+     "time": 0.0,
+     "expected": 248.4773309046152,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "q_ref2m",
+     "time": 0.0,
+     "expected": 0.0005920608337410866,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "z0mg",
+     "time": 0.0,
+     "expected": 8.134020505760161e-05,
+     "coords": {
+      "patch": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "row_6_8",
+   "description": "Instantaneous pin of the BareGroundFluxes chain (BareGroundFluxesMod.F90, Meier2022 config) from stage1/dumps/clm/clm_bareground.csv row (step 6, p 8, c 8): a traced bare-ground patch on step 6 of 12. All traced rows are stable with the iteration zeta clamped at 2.0 and in the dew branch (dqh > 0, t_grnd <= forc_dewpoint), so the pinned branches are the stable um = max(ur, 0.1), the zeta > 1 momentum/heat profiles, the zeta <= 1 2-m profiles, the Meier2022 z0hg and z0mg-snowmelt laws and the raiw = forc_rho/raw dew branch; the MoninObukIni initial zeta is unclamped on step 1 only. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output column plus z0mg is asserted at full dump precision.",
+   "time_span": {
+    "start": 0.0,
+    "end": 0.0
+   },
+   "parameter_overrides": {
+    "forc_t": 247.21745281811005,
+    "forc_q": 0.0005332583758852992,
+    "forc_u": 1.773383276448416,
+    "forc_v": 1.773383276448416,
+    "forc_pbot": 67186.83303198544,
+    "forc_rho": 0.9464951771780321,
+    "forc_th": 247.21745281811005,
+    "thm": 247.51145361524405,
+    "t_grnd": 241.96073639532057,
+    "qg": 0.000310852505516747,
+    "thv": 247.29786959231203,
+    "qg_snow": 0.000310852505516747,
+    "qg_soil": 3.2532611922761126e-05,
+    "dqgdT": 3.266606676186732e-05,
+    "t_soisno_top": 241.96073639532057,
+    "t_soisno_soil": 222.302085110957,
+    "t_h2osfc": 222.302085110957,
+    "beta": 1.0,
+    "snomelt_accum": 0.0,
+    "frac_sno_albedo": 1.0,
+    "zetamaxstable": 2.0,
+    "use_soil_resistance_sl14": 1.0,
+    "use_soilevap_beta": 0.0,
+    "soilbeta": 1.0,
+    "qg_h2osfc": 0.000310852505516747,
+    "htvp": 2501000.0,
+    "soilresis": 0.0,
+    "zii": 1000.0,
+    "wind_min": 1.0,
+    "forc_hgt_u": 30.0,
+    "forc_hgt_t": 30.0
+   },
+   "tolerance": {
+    "rel": 1e-12,
+    "abs": 0.0
+   },
+   "assertions": [
+    {
+     "variable": "ram1",
+     "time": 0.0,
+     "expected": 1161.6976604545414,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrnds",
+     "time": 0.0,
+     "expected": 1.045845035503496,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrndl",
+     "time": 0.0,
+     "expected": 3.400585657780369e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "taux",
+     "time": 0.0,
+     "expected": -0.0014448670902804874,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "tauy",
+     "time": 0.0,
+     "expected": -0.0014448670902804874,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_grnd",
+     "time": 0.0,
+     "expected": -5.8051900479407434,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_soil",
+     "time": 0.0,
+     "expected": -26.365092898386813,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_snow",
+     "time": 0.0,
+     "expected": -5.8051900479407434,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_h2osfc",
+     "time": 0.0,
+     "expected": -26.365092898386813,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_evap_soi",
+     "time": 0.0,
+     "expected": -2.3152778646259804e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_soil",
+     "time": 0.0,
+     "expected": -5.21262894558166e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_snow",
+     "time": 0.0,
+     "expected": -2.3152778646259804e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "t_ref2m",
+     "time": 0.0,
+     "expected": 243.96097748173892,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "q_ref2m",
+     "time": 0.0,
+     "expected": 0.000390998069080143,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "z0mg",
+     "time": 0.0,
+     "expected": 8.134020505760161e-05,
+     "coords": {
+      "patch": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "row_9_4",
+   "description": "Instantaneous pin of the BareGroundFluxes chain (BareGroundFluxesMod.F90, Meier2022 config) from stage1/dumps/clm/clm_bareground.csv row (step 9, p 4, c 4): a traced bare-ground patch on step 9 of 12. All traced rows are stable with the iteration zeta clamped at 2.0 and in the dew branch (dqh > 0, t_grnd <= forc_dewpoint), so the pinned branches are the stable um = max(ur, 0.1), the zeta > 1 momentum/heat profiles, the zeta <= 1 2-m profiles, the Meier2022 z0hg and z0mg-snowmelt laws and the raiw = forc_rho/raw dew branch; the MoninObukIni initial zeta is unclamped on step 1 only. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output column plus z0mg is asserted at full dump precision.",
+   "time_span": {
+    "start": 0.0,
+    "end": 0.0
+   },
+   "parameter_overrides": {
+    "forc_t": 249.49055679109296,
+    "forc_q": 0.0006598444348046829,
+    "forc_u": 1.2569382978249226,
+    "forc_v": 1.2569382978249226,
+    "forc_pbot": 68126.01596498894,
+    "forc_rho": 0.9509087521372553,
+    "forc_th": 249.49055679109296,
+    "thm": 249.78455758822696,
+    "t_grnd": 247.32777074739644,
+    "qg": 0.000532298532171769,
+    "thv": 249.59097801390823,
+    "qg_snow": 0.000532298532171769,
+    "qg_soil": 4.889772036992487e-05,
+    "dqgdT": 5.3541793226572454e-05,
+    "t_soisno_top": 247.32777074739644,
+    "t_soisno_soil": 225.73970283686288,
+    "t_h2osfc": 225.73970283686288,
+    "beta": 1.0,
+    "snomelt_accum": 0.0,
+    "frac_sno_albedo": 1.0,
+    "zetamaxstable": 2.0,
+    "use_soil_resistance_sl14": 1.0,
+    "use_soilevap_beta": 0.0,
+    "soilbeta": 1.0,
+    "qg_h2osfc": 0.000532298532171769,
+    "htvp": 2501000.0,
+    "soilresis": 0.0,
+    "zii": 1000.0,
+    "wind_min": 1.0,
+    "forc_hgt_u": 30.0,
+    "forc_hgt_t": 30.0
+   },
+   "tolerance": {
+    "rel": 1e-12,
+    "abs": 0.0
+   },
+   "assertions": [
+    {
+     "variable": "ram1",
+     "time": 0.0,
+     "expected": 1639.0106076840118,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrnds",
+     "time": 0.0,
+     "expected": 0.7736634976592092,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrndl",
+     "time": 0.0,
+     "expected": 4.123201447146858e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "taux",
+     "time": 0.0,
+     "expected": -0.000729240935168282,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "tauy",
+     "time": 0.0,
+     "expected": -0.000729240935168282,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_grnd",
+     "time": 0.0,
+     "expected": -1.9007263002800567,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_soil",
+     "time": 0.0,
+     "expected": -18.60262642764799,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_snow",
+     "time": 0.0,
+     "expected": -1.9007263002800567,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_h2osfc",
+     "time": 0.0,
+     "expected": -18.60262642764799,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_evap_soi",
+     "time": 0.0,
+     "expected": -9.822185971400811e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_soil",
+     "time": 0.0,
+     "expected": -4.704841256300734e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_snow",
+     "time": 0.0,
+     "expected": -9.822185971400811e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "t_ref2m",
+     "time": 0.0,
+     "expected": 248.15274324999936,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "q_ref2m",
+     "time": 0.0,
+     "expected": 0.0005751275887032881,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "z0mg",
+     "time": 0.0,
+     "expected": 8.134020505760161e-05,
+     "coords": {
+      "patch": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "row_12_16",
+   "description": "Instantaneous pin of the BareGroundFluxes chain (BareGroundFluxesMod.F90, Meier2022 config) from stage1/dumps/clm/clm_bareground.csv row (step 12, p 16, c 16): a traced bare-ground patch on step 12 of 12. All traced rows are stable with the iteration zeta clamped at 2.0 and in the dew branch (dqh > 0, t_grnd <= forc_dewpoint), so the pinned branches are the stable um = max(ur, 0.1), the zeta > 1 momentum/heat profiles, the zeta <= 1 2-m profiles, the Meier2022 z0hg and z0mg-snowmelt laws and the raiw = forc_rho/raw dew branch; the MoninObukIni initial zeta is unclamped on step 1 only. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every dumped output column plus z0mg is asserted at full dump precision.",
+   "time_span": {
+    "start": 0.0,
+    "end": 0.0
+   },
+   "parameter_overrides": {
+    "forc_t": 242.2452084474637,
+    "forc_q": 0.00028614528504726587,
+    "forc_u": 1.4648793859427787,
+    "forc_v": 1.4648793859427787,
+    "forc_pbot": 68444.89720215916,
+    "forc_rho": 0.9841571370246949,
+    "forc_th": 242.2452084474637,
+    "thm": 242.5392092445977,
+    "t_grnd": 238.94086302846574,
+    "qg": 0.00022127811594841744,
+    "thv": 242.28749201523948,
+    "qg_snow": 0.00022127811594841744,
+    "qg_soil": 3.346202735843873e-05,
+    "dqgdT": 2.384299411938375e-05,
+    "t_soisno_top": 238.94086302846574,
+    "t_soisno_soil": 222.67810166186928,
+    "t_h2osfc": 222.67810166186928,
+    "beta": 1.0,
+    "snomelt_accum": 0.0,
+    "frac_sno_albedo": 1.0,
+    "zetamaxstable": 2.0,
+    "use_soil_resistance_sl14": 1.0,
+    "use_soilevap_beta": 0.0,
+    "soilbeta": 1.0,
+    "qg_h2osfc": 0.00022127811594841744,
+    "htvp": 2501000.0,
+    "soilresis": 0.0,
+    "zii": 1000.0,
+    "wind_min": 1.0,
+    "forc_hgt_u": 30.0,
+    "forc_hgt_t": 30.0
+   },
+   "tolerance": {
+    "rel": 1e-12,
+    "abs": 0.0
+   },
+   "assertions": [
+    {
+     "variable": "ram1",
+     "time": 0.0,
+     "expected": 1406.3514191739794,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrnds",
+     "time": 0.0,
+     "expected": 0.9178335305467396,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "cgrndl",
+     "time": 0.0,
+     "expected": 2.178282715340733e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "taux",
+     "time": 0.0,
+     "expected": -0.0010251146924590896,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "tauy",
+     "time": 0.0,
+     "expected": -0.0010251146924590896,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_grnd",
+     "time": 0.0,
+     "expected": -3.302682811681909,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_soil",
+     "time": 0.0,
+     "expected": -18.229190493224262,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_snow",
+     "time": 0.0,
+     "expected": -3.302682811681909,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "eflx_sh_h2osfc",
+     "time": 0.0,
+     "expected": -18.229190493224262,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_evap_soi",
+     "time": 0.0,
+     "expected": -5.926228582434347e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_soil",
+     "time": 0.0,
+     "expected": -2.3085002241060264e-07,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "qflx_ev_snow",
+     "time": 0.0,
+     "expected": -5.926228582434347e-08,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "t_ref2m",
+     "time": 0.0,
+     "expected": 240.18795505770993,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "q_ref2m",
+     "time": 0.0,
+     "expected": 0.00024375936835824454,
+     "coords": {
+      "patch": 1
+     }
+    },
+    {
+     "variable": "z0mg",
+     "time": 0.0,
+     "expected": 8.134020505760161e-05,
+     "coords": {
+      "patch": 1
+     }
+    }
+   ]
+  }
+   ]
+  },
+  "step1": {
+   "ref": "./clm_bareground_step.esm"
+  },
+  "step2": {
+   "ref": "./clm_bareground_step.esm"
+  },
+  "step3": {
+   "ref": "./clm_bareground_step.esm"
+  }
+ },
+ "coupling": [
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_u",
+   "to": "step1.forc_hgt_u",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_u",
+   "to": "step2.forc_hgt_u",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_u",
+   "to": "step3.forc_hgt_u",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_t",
+   "to": "step1.forc_hgt_t",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_t",
+   "to": "step2.forc_hgt_t",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_hgt_t",
+   "to": "step3.forc_hgt_t",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.z0mg",
+   "to": "step1.z0m",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.z0mg",
+   "to": "step2.z0m",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.z0mg",
+   "to": "step3.z0m",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.ur",
+   "to": "step1.ur",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.ur",
+   "to": "step2.ur",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.ur",
+   "to": "step3.ur",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dth",
+   "to": "step1.dth",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dth",
+   "to": "step2.dth",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dth",
+   "to": "step3.dth",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dqh",
+   "to": "step1.dqh",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dqh",
+   "to": "step2.dqh",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.dqh",
+   "to": "step3.dqh",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_q",
+   "to": "step1.forc_q",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_q",
+   "to": "step2.forc_q",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_q",
+   "to": "step3.forc_q",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_th",
+   "to": "step1.forc_th",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_th",
+   "to": "step2.forc_th",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.forc_th",
+   "to": "step3.forc_th",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.thv",
+   "to": "step1.thv",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.thv",
+   "to": "step2.thv",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.thv",
+   "to": "step3.thv",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zii",
+   "to": "step1.zii",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zii",
+   "to": "step2.zii",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zii",
+   "to": "step3.zii",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta",
+   "to": "step1.beta",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta",
+   "to": "step2.beta",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta",
+   "to": "step3.beta",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetamaxstable",
+   "to": "step1.zetamaxstable",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetamaxstable",
+   "to": "step2.zetamaxstable",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetamaxstable",
+   "to": "step3.zetamaxstable",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.vkc",
+   "to": "step1.vkc",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.vkc",
+   "to": "step2.vkc",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.vkc",
+   "to": "step3.vkc",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.grav",
+   "to": "step1.grav",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.grav",
+   "to": "step2.grav",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.grav",
+   "to": "step3.grav",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetam",
+   "to": "step1.zetam",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetam",
+   "to": "step2.zetam",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetam",
+   "to": "step3.zetam",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetat",
+   "to": "step1.zetat",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetat",
+   "to": "step2.zetat",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.zetat",
+   "to": "step3.zetat",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.meier_param3",
+   "to": "step1.meier_param3",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.meier_param3",
+   "to": "step2.meier_param3",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.meier_param3",
+   "to": "step3.meier_param3",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.nu_param",
+   "to": "step1.nu_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.nu_param",
+   "to": "step2.nu_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.nu_param",
+   "to": "step3.nu_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta_param",
+   "to": "step1.beta_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta_param",
+   "to": "step2.beta_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.beta_param",
+   "to": "step3.beta_param",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.um_ini",
+   "to": "step1.um_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.um",
+   "to": "step2.um_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.um",
+   "to": "step3.um_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.obu_ini",
+   "to": "step1.obu_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.obu",
+   "to": "step2.obu_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.obu",
+   "to": "step3.obu_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "BareGroundFluxes.z0mg",
+   "to": "step1.z0h_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step1.z0h",
+   "to": "step2.z0h_prev",
+   "transform": "param_to_var"
+  },
+  {
+   "type": "variable_map",
+   "from": "step2.z0h",
+   "to": "step3.z0h_prev",
+   "transform": "param_to_var"
+  }
+ ]
+}
