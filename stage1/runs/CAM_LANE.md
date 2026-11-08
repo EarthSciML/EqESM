@@ -317,6 +317,79 @@ ZM DUMP CHECKS PASSED (480 cam_zm rows + 15 cam_zm_scal rows):
   "mcon [kg/m2/s]" but no mcon column is written (mcon = mc·100/grav is
   derivable; zm_convr.F90:769).  Cosmetic only.
 
+### RRTMG radiation dump (2026-11-08, run 12255018)
+
+`python3 stage1/analysis/validate_cam_rad_dump.py stage1/dumps/cam
+--info` — ALL RADIATION DUMP CHECKS PASSED.  Adds 8 new CSVs
+(`cam_rad_input/scal/out/out_ifc/cldopt_sw/cldopt_lw/solver_sw/
+solver_lw.csv`) tracing the radiation boundary of `radiation_tend`
+(tphysbc site 11, radiation.F90) at the RRTMG climate call (icall=0,
+the last call of the SW/LW diagnostic loop; radsw.F90/radlw.F90 fill
+the cam_dump_mod buffers on every call, the last one wins).  Sources:
+`cam_dump_mod.F90` (buffers + `cam_dump_rad_sw/lw` + `cam_dump_rad_flush`),
+`radsw.F90`/`radlw.F90` (buffer calls at the end of `rad_rrtmg_sw/lw`),
+`radiation.F90` (flush call before `rrtmg_state_destroy`).  Fork
+commits: cam submodule `81922142` (surface-column fix on top of
+`6a528c94`), superpointer `6951a7a`/`d827b83`.
+
+- **configuration pinned:** `radiation_scheme='rrtmg'`, iradsw=iradlw=2
+  (radiation on steps 3,5,…,47 = 23 steps), icecldoptics='mitchell',
+  liqcldoptics='gammadist', `num_rrtmg_levs`=33=pverp (RRTMG layer k=1
+  is the extra layer above model top: pintmb(1)=0.01 Pa, pmid(1)=
+  0.5·pintmb(2); cam_lev=max(k−1,1)), McICA deterministic
+  (permuteseed=1 SW / 150 LW, single column).  The RRTMG k-distribution
+  gas optics are NOT dumped (too large); the per-g-point solver
+  boundary (cld_sto/tauc_sto/ssac_sto/asmc_sto/fsfc_sto, SW; cld_sto/
+  tauc_sto, LW) pins the solver inputs instead.
+- **day/night:** the lane is NOT always daylight — 13 day steps
+  (3, 25, 27, …, 47) and 10 night steps (5..23, coszrs<0, solin=0).  On
+  night steps the flush records the all-zero SW boundary (radsw.F90
+  early-returns with zeros; the flush zero-fills the SW buffers,
+  cam_dump_mod.F90:1752-1767); LW always runs.  The validator splits
+  its SW identities by day/night accordingly.
+- **identities verified (validator):** (i) h2ovmr = q/(1−q)·amdw
+  (amdw=1.607793), pmid(k)=½(pint_lo+pint_hi) k≥2, pmid(1)=½·pint_hi(1),
+  shared edges pint_hi(k)=pint_lo(k+1) and T_ifc_hi(k)=T_ifc_lo(k+1),
+  cldfprime=max(cld,cldfsnow), cfc22vmr=ccl4vmr=0; (ii) solin =
+  Σ(sfac_b·solar_ref_band_irradiance)·eccf·coszrs on day steps
+  (radsw.F90:395-397), solin=0 at night; (iii) fns=fds−fus, fnl=ful−fdl;
+  (iv) qrs = −g·Δfns/Δp (max resid 2.6e-16 W/kg) and qrl =
+  +g·Δfnl/Δp (4.3e-16) against the interface fluxes and pintmb from
+  cam_rad_input — the RRTMG heating is exactly the flux divergence;
+  (v) column integrals Σqrs·Δp/g = fsnt−fsns, Σqrl·Δp/g = flns−flnt;
+  (vi) per-band cloud optics: ssa=tau_w/tau (tau>0) else 1, asm=
+  tau_w_g/tau_w (tau_w>0) else 0, fsfc likewise, 0≤tau_w≤tau; (vii)
+  McICA invariants per g-point via the RRTMG band→gpt mappings
+  (SW 6,12,8,8,10,10,2,10,8,6,6,8,6,12; LW 10,12,16,14,16,8,12,8,12,6,
+  8,8,4,2,2,2): cld_sto∈{0,1}, tauc_sto = tau(band) when cld_sto=1 else
+  0 (bit-exact), ssac_sto=ssa(band) when cld_sto=1 else 1 (day), asm/
+  fsfc likewise; (viii) scal↔ifc: fsnt=fns(1), fsns=fns(33), fsds=
+  fds(33), flnt=fnl(1), flut=ful(1), flns=fnl(33), flwds=fdl(33),
+  fsntc=fcns(1), fsnsc=fcns(33), flntc=fcnl(1), flnsc=fcnl(33); (ix)
+  sols+soll+solsd+solld = fds(surface) (day); (x) fds(1) ≤ solin with
+  extra-layer absorption solin−fds(1) = 2.0..5.3 W/m2 (the O3
+  P_top=50 Pa linear-decay column).
+- **dump bug found and fixed (validator caught it):** cam_rad_input
+  promised per-row surface columns Ts/asdir/asdif/aldir/aldif in its
+  schema but the row loop never wrote them (rows had 32 fields vs 37
+  declared).  Fixed in cam submodule `81922142` (writes added to the
+  flush row loop); rerun 12255018 re-verified.  (The values are also in
+  cam_surface_exchange.csv phase=bc_in, but the rad input file is now
+  self-contained as its schema says.)
+- **neutrality re-verified:** h0i bit-identical to the pristine run
+  (compare_cam_hist.py: only case attr + date_written/time_written
+  differ) and bit-identical to the ZM-era instrumented run (runs
+  reproducible); all 10 pre-existing CSVs byte-identical to the
+  pre-rad run (backup in /scratch.local/ctessum/cam_dump_backup_20261108/).
+- **queue note:** on 2026-11-08 the ctessum partition was saturated by
+  24-h agent jobs; the case batch script's `#SBATCH --exclusive`
+  (env_batch.xml directive) left the 1-PE run queued ~2 h.  The
+  `--exclusive` line was removed from `.case.run` for runs 12254141/
+  12255018 (they scheduled immediately on the shared node ccc0236) and
+  restored afterwards; env_batch.xml itself was untouched (it is
+  locked).  Recorded here so the next lane knows why the batch script
+  differs from the template in gitignored CaseDocs.
+
 ## Stage-2 ranking (proposed pinning order)
 
 Ranked by (a) standalone-ness (pure state→tendency laws, no pbuf),
@@ -341,6 +414,15 @@ of the Fortran chain:
    cam_phys_tend_q (lq constituents) plus pbuf context; defer.
 6. **CLUBB_SGS (macrop/clubb/shallow)** — state-dependent closure, needs
    pbuf; defer behind ZM.
+7. **RRTMG radiation** — large but now cleanly separable into three
+   pinned pieces (see `stage2/README-cam-rad.md`): the CAM cloud optics
+   (gammadist/mitchell → per-band tau/ssa/asm/fsfc, pinned by
+   cam_rad_cldopt_*.csv), the McICA stochastic subcolumn generator
+   (pinned by cam_rad_solver_*.csv, deterministic seeds), and the
+   two-stream solver boundary/verdict (fluxes/heating, pinned by
+   cam_rad_out*.csv; LW could reuse the RRTMG LW work in
+   EarthSciModels atmospheric_radiation).  The k-distribution gas
+   optics are the only unpinned interior.
 
 Rationale detail in the ranking section of cam_instrument.json.
 
