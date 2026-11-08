@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_eos",
-  "description": "Stage-2 implementation of the MOM6 equation of state (stage 1 boundary B1 of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the Wright 1997 full-range in-situ density rho(T, S, p) and its analytic first derivatives drho/dT, drho/dS, as evaluated by the model's calculate_density / calculate_density_derivs_scalar calls in KPP_compute_BLD (MOM_CVMix_KPP.F90:1437; the EOS law itself is density_elem_Wright_full / calculate_density_derivs_elem_Wright_full, MOM_EOS_Wright_full.F90:75-91 / 179-204). The model WrightEOS carries the 15 Fortran coefficients as named parameters with units (values from MOM_EOS_Wright_full.F90:23-37), computes the three shared polynomials al0/p0/lambda as intermediate unknowns via the wright_alpha0/wright_p0/wright_lambda templates of ./mom6_templates.esm, then rho = (p + p0)/(lambda + al0*(p + p0)) via the wright_density template and the Fortran's hand-coded derivative formulas (wright_drho_dT / wright_drho_dS templates) with the shared denominator inverse I_denom2 = 1/(lambda + al0*(p + p0))^2 (F90:198). The derivatives are transcribed formulas, NOT symbolic D(rho, T)/D(rho, S): in esm 1.3.0 the D operator is a rewrite-target for discretization stencils (esm-spec 4.2 / 9.6.8) and the CLI 0.7.0 evaluator rejects it for algebraic expressions ('unlowered_operator ... reached evaluation without being lowered to a stencil'), so the Fortran derivative formulas are reproduced exactly instead (operation order identical to the Fortran, so the tests pin the derivative columns to round-off, rel 1e-12). State units: T potential temperature [degC], S salinity [ppt], p pressure at the top interface of the layer [Pa] (surface pressure + hydrostatic weight of the layers above, MOM_CVMix_KPP.F90:1428-1440), rho in-situ density [kg m-3], drho/dT [kg m-3 degC-1], drho/dS [kg m-3 ppt-1]. The run configuration (C_JRA_t62_mom6_inst) uses EQN_OF_STATE = WRIGHT_FULL (the MOM6 default), USE_PSURF_IN_EOS = True, and all unit rescale factors 1.0, so the dumped values are the physical-unit law values.",
+  "description": "Stage-2 implementation of the MOM6 equation of state (stage 1 boundary B1 of stage1/runs/MOM6_LANE.md; MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps): the Wright 1997 full-range in-situ density rho(T, S, p) and its analytic first derivatives drho/dT, drho/dS, as evaluated by the model's calculate_density / calculate_density_derivs_scalar calls in KPP_compute_BLD (MOM_CVMix_KPP.F90:1437; the EOS law itself is density_elem_Wright_full / calculate_density_derivs_elem_Wright_full, MOM_EOS_Wright_full.F90:75-91 / 179-204). The model WrightEOS binds the 15 Fortran coefficients by reference from the wright_coeff_a0..c5 constant fragments of ./mom6_templates.esm (MOM_EOS_Wright_full.F90:23-37; the fragments are the single shared source of the coefficient values, also used by the wright_rho composition and by the KPPBLD model of mom6_kpp.esm), computes the three shared polynomials al0/p0/lambda as intermediate unknowns via the wright_alpha0/wright_p0/wright_lambda templates of ./mom6_templates.esm, then rho = (p + p0)/(lambda + al0*(p + p0)) via the wright_density template and the Fortran's hand-coded derivative formulas (wright_drho_dT / wright_drho_dS templates) with the shared denominator inverse I_denom2 = 1/(lambda + al0*(p + p0))^2 (F90:198). The derivatives are transcribed formulas, NOT symbolic D(rho, T)/D(rho, S): in esm 1.3.0 the D operator is a rewrite-target for discretization stencils (esm-spec 4.2 / 9.6.8) and the CLI 0.7.0 evaluator rejects it for algebraic expressions ('unlowered_operator ... reached evaluation without being lowered to a stencil'), so the Fortran derivative formulas are reproduced exactly instead (operation order identical to the Fortran, so the tests pin the derivative columns to round-off, rel 1e-12). State units: T potential temperature [degC], S salinity [ppt], p pressure at the top interface of the layer [Pa] (surface pressure + hydrostatic weight of the layers above, MOM_CVMix_KPP.F90:1428-1440), rho in-situ density [kg m-3], drho/dT [kg m-3 degC-1], drho/dS [kg m-3 ppt-1]. The run configuration (C_JRA_t62_mom6_inst) uses EQN_OF_STATE = WRIGHT_FULL (the MOM6 default), USE_PSURF_IN_EOS = True, and all unit rescale factors 1.0, so the dumped values are the physical-unit law values.",
   "authors": [
    "EqESM stage 2 (wt/mom6-eos)"
   ]
@@ -30,96 +30,6 @@
      "units": "Pa",
      "default": 100000.0,
      "description": "Pressure at the top interface of the layer: surface pressure plus the hydrostatic weight of the layers above (MOM_CVMix_KPP.F90:1428-1440), [Pa]"
-    },
-    "a0": {
-     "type": "parameter",
-     "units": "m^3/kg",
-     "default": 7.133718e-4,
-     "description": "Wright alpha_0 fit parameter a0 (MOM_EOS_Wright_full.F90:23), [m3 kg-1]"
-    },
-    "a1": {
-     "type": "parameter",
-     "units": "m^3/kg/degC",
-     "default": 2.724670e-7,
-     "description": "Wright alpha_0 fit parameter a1 (MOM_EOS_Wright_full.F90:24), [m3 kg-1 degC-1]"
-    },
-    "a2": {
-     "type": "parameter",
-     "units": "m^3/kg/ppt",
-     "default": -1.646582e-7,
-     "description": "Wright alpha_0 fit parameter a2 (MOM_EOS_Wright_full.F90:25), [m3 kg-1 PSU-1]"
-    },
-    "b0": {
-     "type": "parameter",
-     "units": "Pa",
-     "default": 5.613770e8,
-     "description": "Wright p_0 fit parameter b0 (MOM_EOS_Wright_full.F90:26), [Pa]"
-    },
-    "b1": {
-     "type": "parameter",
-     "units": "Pa/degC",
-     "default": 3.600337e6,
-     "description": "Wright p_0 fit parameter b1 (MOM_EOS_Wright_full.F90:27), [Pa degC-1]"
-    },
-    "b2": {
-     "type": "parameter",
-     "units": "Pa/degC^2",
-     "default": -3.727194e4,
-     "description": "Wright p_0 fit parameter b2 (MOM_EOS_Wright_full.F90:28), [Pa degC-2]"
-    },
-    "b3": {
-     "type": "parameter",
-     "units": "Pa/degC^3",
-     "default": 1.660557e2,
-     "description": "Wright p_0 fit parameter b3 (MOM_EOS_Wright_full.F90:29), [Pa degC-3]"
-    },
-    "b4": {
-     "type": "parameter",
-     "units": "Pa/ppt",
-     "default": 6.844158e5,
-     "description": "Wright p_0 fit parameter b4 (MOM_EOS_Wright_full.F90:30), [Pa PSU-1]"
-    },
-    "b5": {
-     "type": "parameter",
-     "units": "Pa/degC/ppt",
-     "default": -8.389457e3,
-     "description": "Wright p_0 fit parameter b5 (MOM_EOS_Wright_full.F90:31), [Pa degC-1 PSU-1]"
-    },
-    "c0": {
-     "type": "parameter",
-     "units": "m^2/s^2",
-     "default": 1.609893e5,
-     "description": "Wright lambda fit parameter c0 (MOM_EOS_Wright_full.F90:32), [m2 s-2]"
-    },
-    "c1": {
-     "type": "parameter",
-     "units": "m^2/s^2/degC",
-     "default": 8.427815e2,
-     "description": "Wright lambda fit parameter c1 (MOM_EOS_Wright_full.F90:33), [m2 s-2 degC-1]"
-    },
-    "c2": {
-     "type": "parameter",
-     "units": "m^2/s^2/degC^2",
-     "default": -6.931554,
-     "description": "Wright lambda fit parameter c2 (MOM_EOS_Wright_full.F90:34), [m2 s-2 degC-2]"
-    },
-    "c3": {
-     "type": "parameter",
-     "units": "m^2/s^2/degC^3",
-     "default": 3.869318e-2,
-     "description": "Wright lambda fit parameter c3 (MOM_EOS_Wright_full.F90:35), [m2 s-2 degC-3]"
-    },
-    "c4": {
-     "type": "parameter",
-     "units": "m^2/s^2/ppt",
-     "default": -1.664201e2,
-     "description": "Wright lambda fit parameter c4 (MOM_EOS_Wright_full.F90:36), [m2 s-2 PSU-1]"
-    },
-    "c5": {
-     "type": "parameter",
-     "units": "m^2/s^2/degC/ppt",
-     "default": -2.765195,
-     "description": "Wright lambda fit parameter c5 (MOM_EOS_Wright_full.F90:37), [m2 s-2 degC-1 PSU-1]"
     },
     "al0": {
      "type": "unknown",
@@ -161,17 +71,35 @@
     {
      "lhs": "al0",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_alpha0",
-       "bindings": { "a0": "a0", "a1": "a1", "a2": "a2", "T": "T", "S": "S" } }
+       "bindings": {
+        "a0": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_a0", "bindings": {} },
+        "a1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_a1", "bindings": {} },
+        "a2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_a2", "bindings": {} },
+        "T": "T", "S": "S" } }
     },
     {
      "lhs": "p0",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_p0",
-       "bindings": { "b0": "b0", "b1": "b1", "b2": "b2", "b3": "b3", "b4": "b4", "b5": "b5", "T": "T", "S": "S" } }
+       "bindings": {
+        "b0": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b0", "bindings": {} },
+        "b1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b1", "bindings": {} },
+        "b2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b2", "bindings": {} },
+        "b3": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b3", "bindings": {} },
+        "b4": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b4", "bindings": {} },
+        "b5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b5", "bindings": {} },
+        "T": "T", "S": "S" } }
     },
     {
      "lhs": "lam",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_lambda",
-       "bindings": { "c0": "c0", "c1": "c1", "c2": "c2", "c3": "c3", "c4": "c4", "c5": "c5", "T": "T", "S": "S" } }
+       "bindings": {
+        "c0": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c0", "bindings": {} },
+        "c1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c1", "bindings": {} },
+        "c2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c2", "bindings": {} },
+        "c3": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c3", "bindings": {} },
+        "c4": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c4", "bindings": {} },
+        "c5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c5", "bindings": {} },
+        "T": "T", "S": "S" } }
     },
     {
      "lhs": "rho",
@@ -192,19 +120,31 @@
      "lhs": "drho_dT",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_drho_dT",
        "bindings": { "T": "T", "S": "S", "p": "p", "p0": "p0", "lambda": "lam", "I_denom2": "I_denom2",
-         "a1": "a1", "b1": "b1", "b2": "b2", "b3": "b3", "b5": "b5", "c1": "c1", "c2": "c2", "c3": "c3", "c5": "c5" } }
+         "a1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_a1", "bindings": {} },
+         "b1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b1", "bindings": {} },
+         "b2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b2", "bindings": {} },
+         "b3": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b3", "bindings": {} },
+         "b5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b5", "bindings": {} },
+         "c1": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c1", "bindings": {} },
+         "c2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c2", "bindings": {} },
+         "c3": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c3", "bindings": {} },
+         "c5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c5", "bindings": {} } } }
     },
     {
      "lhs": "drho_dS",
      "rhs": { "op": "apply_expression_template", "args": [], "name": "wright_drho_dS",
        "bindings": { "T": "T", "S": "S", "p": "p", "p0": "p0", "lambda": "lam", "I_denom2": "I_denom2",
-         "a2": "a2", "b4": "b4", "b5": "b5", "c4": "c4", "c5": "c5" } }
+         "a2": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_a2", "bindings": {} },
+         "b4": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b4", "bindings": {} },
+         "b5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_b5", "bindings": {} },
+         "c4": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c4", "bindings": {} },
+         "c5": { "op": "apply_expression_template", "args": [], "name": "wright_coeff_c5", "bindings": {} } } }
     }
    ],
    "tests": [
     {
      "id": "surface_k1_cell3_78_step1",
-     "description": "Instantaneous pin of the WRIGHT_FULL law and its derivatives at the surface layer of traced cell (gi, gj) = (3, 78) on the first thermo step: mom6_eos.csv row (cpl_step 1, gi 3, gj 78, k 1) gives T = 1.9019792708374321 degC, S = 33.59310698272627 ppt, p = 99753.85917574639 Pa (surface pressure; the same p as the surface-forcing dump's p column for this cell), rho = 1026.872408356005 kg m-3, drho/dT = -0.07330861794257675 kg m-3 degC-1, drho/dS = 0.7969321251520414 kg m-3 ppt-1. The coefficients take their Fortran defaults (MOM_EOS_Wright_full.F90:23-37). time_span {0,0} evaluates the algebraic law pointwise; the dump writes es26.17 so the transcription is pinned to round-off (rel 1e-12).",
+     "description": "Instantaneous pin of the WRIGHT_FULL law and its derivatives at the surface layer of traced cell (gi, gj) = (3, 78) on the first thermo step: mom6_eos.csv row (cpl_step 1, gi 3, gj 78, k 1) gives T = 1.9019792708374321 degC, S = 33.59310698272627 ppt, p = 99753.85917574639 Pa (surface pressure; the same p as the surface-forcing dump's p column for this cell), rho = 1026.872408356005 kg m-3, drho/dT = -0.07330861794257675 kg m-3 degC-1, drho/dS = 0.7969321251520414 kg m-3 ppt-1. The coefficients come from the wright_coeff_a0..c5 constant fragments (MOM_EOS_Wright_full.F90:23-37). time_span {0,0} evaluates the algebraic law pointwise; the dump writes es26.17 so the transcription is pinned to round-off (rel 1e-12).",
      "time_span": {"start": 0.0, "end": 0.0},
      "parameter_overrides": {
       "T": 1.9019792708374321,

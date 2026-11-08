@@ -1,0 +1,135 @@
+{
+  "esm": "1.2.0",
+  "metadata": {
+    "name": "clm_soiltemp_discretization",
+    "description": "CLM snow/soil heat-conduction discretization: conservative finite-volume variable-coefficient vertical diffusion d/dz(K du/dz) on column_nonuniform_1d, identical to varcoeff_face_laplacian_lev_flux_bc (grids/column_nonuniform_1d/rules) except that the TOP layer's divergence is integrated over the capr-weighted trapezoid of SoilTemperatureMod.F90:1895 instead of dz[NLEV]: L u[NLEV] = (kdudz_top - G[NLEV]) / M with M = 0.5*(ze[NLEV+1] - zc[NLEV] + capr*(ze[NLEV+1] - zc[NLEV-1])). CLM's Crank-Nicolson top row (SetMatrix_Snow, SoilTemperatureMod.F90:2617-2710) accumulates the diffusive flux on the top layer against the measure dtime/cv * dz[NLEV] / M (the factor `fact` of ComputeHeatDiffFluxAndFactor :1895, capr = 0.34 from clm_varcon), not dz[NLEV], so the divergence that balances cv dT/dt at the top layer is the flux difference divided by M, and a consumer that multiplies the lowered divergence by its per-layer dz (the dumped layer thickness) reproduces the CLM row exactly; the dz[NLEV] in the numerator is the dumped layer thickness, which need not equal the grid spacing ze[NLEV+1]-ze[NLEV] (they differ for the traced column; bugs.md #34). Interior [2, NLEV-1] and bottom rows are the plain stencil of varcoeff_face_laplacian_lev_flux_bc: (G[k+1]-G[k])/dz[k] and (G[2]-kdudz_bot)/dz[1], with the ONE interface flux G[n] = K[n] (u[n]-u[n-1])/(zc[n]-zc[n-1]) of stencils/interface_flux_K_lev. The consumer declares the free names `kdudz_bot`, `kdudz_top`, `ze`, `zc` and `capr` (esm-spec 9.6.8); `zc` is the cell-center field of grids/column_nonuniform_1d/grid.esm. Priority 11: one above varcoeff_face_laplacian_lev_flux_bc (10), so a consumer that imports both rules (this file is a candidate EarthSciDiscretizations PR) deterministically gets the CLM top-row measure. Fires only on the whole compound D( K*D(u, lev), lev ) with u a bare [lev] field and K a bare [lev_nodes] field (esm-spec 9.6.1/9.6.3).",
+    "license": "MIT",
+    "tags": [
+      "esd:rule",
+      "family:finite_volume",
+      "grid:column_nonuniform_1d",
+      "op:varcoeff_laplacian",
+      "axes:lev",
+      "order:2",
+      "stencil_width:3",
+      "bc:prescribed_flux",
+      "spec:9.6.8"
+    ],
+    "references": [
+      {
+        "citation": "CLM5.0 SoilTemperatureMod.F90: SetMatrix_Snow (top row), ComputeHeatDiffFluxAndFactor (fact with the capr-weighted measure), clm_varcon capr = 0.34.",
+        "url": "https://github.com/ESCOMP/CTSM"
+      },
+      {
+        "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+      }
+    ]
+  },
+  "expression_template_imports": [
+    { "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/stencils/varcoeff_face_laplacian_lev_interior.esm" },
+    { "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/stencils/interface_flux_K_lev.esm" }
+  ],
+  "expression_templates": {
+    "varcoeff_face_laplacian_lev_flux_bc_capr": {
+      "params": ["u", "K"],
+      "priority": 11,
+      "match": {
+        "op": "D",
+        "args": [
+          {
+            "op": "*",
+            "args": ["K", { "op": "D", "args": ["u"], "wrt": "lev" }]
+          }
+        ],
+        "wrt": "lev"
+      },
+      "where": {
+        "u": { "shape": ["lev"] },
+        "K": { "shape": ["lev_nodes"] }
+      },
+      "body": {
+        "op": "makearray",
+        "args": [],
+        "regions": [
+          [[2, { "op": "-", "args": ["NLEV", 1] }]],
+          [[1, 1]],
+          [["NLEV", "NLEV"]]
+        ],
+        "values": [
+          {
+            "op": "apply_expression_template",
+            "args": [],
+            "name": "varcoeff_face_laplacian_lev_interior",
+            "bindings": { "u": "u", "K": "K" }
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev",
+                    "bindings": { "u": "u", "K": "K", "n": 2 }
+                  },
+                  "kdudz_bot"
+                ]
+              },
+              { "op": "index", "args": ["dz", 1] }
+            ]
+          },
+          {
+            "op": "/",
+            "args": [
+              {
+                "op": "-",
+                "args": [
+                  "kdudz_top",
+                  {
+                    "op": "apply_expression_template",
+                    "args": [],
+                    "name": "interface_flux_K_lev",
+                    "bindings": { "u": "u", "K": "K", "n": "NLEV" }
+                  }
+                ]
+              },
+              {
+                "op": "*",
+                "args": [
+                  0.5,
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "-",
+                        "args": [
+                          { "op": "index", "args": ["ze", { "op": "+", "args": ["NLEV", 1] }] },
+                          { "op": "index", "args": ["zc", "NLEV"] }
+                        ]
+                      },
+                      {
+                        "op": "*",
+                        "args": [
+                          "capr",
+                          {
+                            "op": "-",
+                            "args": [
+                              { "op": "index", "args": ["ze", { "op": "+", "args": ["NLEV", 1] }] },
+                              { "op": "index", "args": ["zc", { "op": "-", "args": ["NLEV", 1] }] }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

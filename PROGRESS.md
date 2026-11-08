@@ -1362,3 +1362,88 @@ acted on their verdicts. Previous suite (main a922c00, job 12095573):
   (~27 min of suite time). Apply the same pattern as the GSWP3 decision: NCAR inputdata URL template
   by default, reader tests against a small generated fixture. The GSWP3 Streams model still inlines
   the law now in `stream_interp`; switch it to the template in the same follow-up.
+
+### 2026-11-06 (cont.): cism-velo2 merged
+
+- `wt/cism-velo2` merged as 8b33314: `stage2/cism_velo.esm` (DivaGeometry, DivaIntegrals, DivaVelocity;
+  BasalTraction mounted by reference), `cism_velo_discretization.esm` (σ-column rules importing
+  ESD `integral_lev_*`), extractor that re-verifies the laws on all 128 exit rows. Branch suite
+  2004P/0F/0E. No new bugs.
+- Gaps (README-cism-velo.md): per-level vertex stagger (`stag_omega_k`, θ, F, ω) still dump-fed in
+  DivaVelocity; β-chain pinned at rel 1e-5 (last-accepted-pass mismatch, documented); 2-D FEM solve
+  and Picard iteration are stage-3. Fork commits db624ec/76d170d on `instrument/cism-dumps` not pushed.
+- cism-transport2 (queued) will now merge onto this; expect an append conflict in `cism_templates.esm`.
+
+## Lane round 2026-11-07 (manager review of 11 finished runs)
+
+Four independent read-only review agents checked the nine code branches
+(spot-checking pins against the dumps); the manager acted on their verdicts.
+Combined suite on main `ed25fde`: job **12225099** (`.work/suite-ed25fde/suite.log`,
+worktree `../EqESM-suite-ed25fde`): **2662P/0F/0E**, validate-failures=0, units-issues=0 (previous main d568216: 2126P).
+
+- **Merged (7):** `cam-vdiff3` (cb86b42; union with cam-surface3 verified,
+  2157P on branch), `mom6-kpp3` (2d81bc3; Wright coeffs single-sourced,
+  262→158 assertions; manager renamed two `kfirst1` test ids that assert 2),
+  `m9-datm-clm2` (91a3111; all nine fixes; manager dropped 77 import-copy
+  pins in `clm_atm_forcing.esm` steps 2–12, kept once in step1 as wiring
+  checks), `cmeps-ocnalb2` (9edfa32; manager removed a stray `>>>>>>> main`
+  in bugs.md and numbered/corrected the ocnalb entry as **#35**),
+  `cism-transport2` (d1febb2; manager dropped the Tbar_out = 0 and
+  acab_applied = acab copy pins, fixed the copied `topg` of the cell-25,12
+  blend test), `clm-soiltemp4` (e1f0e64), `clm-soilfluxes2` (0ca8b78;
+  `clm_templates.esm` union conflict with m9's `rhos` resolved by hand).
+  bugs.md re-sorted into numeric order (3c66fa1); entries now #1–#37.
+- **Partial (1):** `cice-dedd2` ended "done" after 11.5 h of a 20 h budget
+  with an empty report. Its stage-1 part (to 87a5f94: run 12124251,
+  `check_cice_dedd.py`, CICE_LANE.md) merged as ed25fde, which also brings
+  the user's two origin/main AGENTS.md commits. The 39 dEdd templates
+  (fca81f2) are held back: duplicated reflectivity/transmissivity pairs,
+  bare 1.31/917/10/1e-11, unfactored dfdir/dfdif, a suspect absorption
+  sign. → `cice-dedd3`.
+- **Sent back (2):** `cam-physics-update2` — `.esm` emitted by a Python
+  build script, 7 vars × 34 constituents written out per constituent,
+  313/572 assertions equal their override, zero-tendency convect_deep
+  sites → `cam-physics-update3`. `cam-zm-parcel` — `faq{k: …}` index-loop
+  wrappers around every pointwise law, `dsubcld` as `faq reduce "+"`,
+  index picks written as `reduce "min"`, unfailable `qstp_launch` and
+  redundant scale-invariance tests → `cam-zm-parcel2`. CAPE/tp/qstp/tl/lcl
+  stay unpinned until the CAM fork dumps `new_q`, `xsh2o`, `tmix`,
+  `qsmix`, `capeten`/`lelten`.
+- **esm-pr-cdeps2:** EarthSciModels `cdeps-datm` (9dd26e1, cd58a9c, not
+  pushed): public NCAR URLs, live-data test dropped, fixture skipped (the
+  spec cannot redirect a document's own test data URLs). `esm test`
+  fetches every data-fed parameter at build, so upstream CI would need
+  network to the NCAR archive. Pushed to ctessum-claude/EarthSciModels `cdeps-datm` (cd58a9c) on 2026-11-07 with user go-ahead; no PR opened yet (PR_DESCRIPTION.md is ready in the worktree).
+- **Commit-message rule:** AGENTS.md (user commit 376a785) forbids
+  Co-Authored-By/LLM-authorship lines. This round's local manager commits
+  were rewritten to drop them before anything was pushed (origin/main
+  ancestry and trees unchanged). Leftover branches `wt/mom6-kpp3`,
+  `wt/m9-datm-clm2`, `wt/cmeps-ocnalb2`, `wt/cism-transport2` hold the
+  pre-rewrite copies of the review commits (content is on main); deleted
+  with `git branch -D` on user go-ahead.
+- **Prompt hygiene:** every worker tried once to open
+  `.slurm-agents/prompts/…` inside its worktree (gitignored, absent). New
+  prompts use absolute paths; old scratch dirs were copied into the
+  follow-up worktrees.
+- **Queued:** `cam-physics-update3`, `cam-zm-parcel2`, `cice-dedd3` plus
+  the 10 jobs of the 2026-11-06 batch (four of them were requeued by the
+  yield watcher and are waiting to restart).
+- **Next:** read suite 12225099; review the batch jobs as they finish
+  (expected template append conflicts as listed 2026-11-06); a CAM fork
+  owner should add the ZM parcel fields above; optional clm-soilfluxes
+  follow-up (`t_grnd0` no-snow branch → `ground_temperature_blend`);
+  JRA data-source portability follow-up after the cdeps push decision.
+
+### 2026-11-07 (cont.): 5 new tasks submitted
+
+`mom6-dynamics-instrument` (owns MOM6 fork: continuity_PPM / CorAdCalc /
+PressureForce_FV dumps, continuity as a PDE on an ESD C-grid rule),
+`cism-velo3` (owns CISM fork: glissade_stagger as one template for
+stag_omega_k/θ/F, β-chain pass mismatch, f_ground < 1 cells),
+`cice-itd-ridge` (owns CICE fork: ridge_ice + linear_itd dumps, the
+redistribution written as integrals over g(h)), `cdeps-jra-portable`
+(JRA data_sources → NCAR URLs, drop the ~27-min reader tests, GSWP3
+Streams via `stream_interp`), `esm-pr-clm-soil` (EarthSciModels branch
+`clm-soil`, not pushed). Fork ownership now: CAM cam-rad-instrument, CLM
+clm-veg-instrument, CMEPS cmeps-prep-atm, MOM6/CISM/CICE the three above.
+18 agent jobs queued or running.

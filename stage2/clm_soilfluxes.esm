@@ -1,0 +1,357 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_soilfluxes",
+  "description": "CTSM/CLM ground energy and moisture flux update SoilFluxes (stage 2 of the EqESM project), transcribed from SoilFluxesMod.F90 (ctsm5.4.063, cesm3.0-alphabranch): the previous-time-step ground temperature and T^4 blend t_grnd0/lw_grnd (SoilFluxesMod.F90:175-183, :344-346), the sensible/latent flux corrections to the present soil temperature (:192-204), the liquid/solid partition of the ground evaporation into liquid evaporation, sublimation, liquid dew and solid dew (:208-274), the snow-evaporation moisture limit of the top layer (:276-297), the ground heat flux from absorbed shortwave, canopy longwave and black-body emission (:341-371), the total vegetation+ground fluxes and the history-tape latent heat breakdown (:373-394), the outgoing/net longwave radiation with the temperature-increment term and the bare-ground skin temperature (:451-495). The equations are written as math over the patch index set (the traced stage-1 dump rows carry p == c, so the column-level quantities of the Fortran are replicated patch-wise); the shared laws are imported by reference from ./clm_templates.esm (ground_temperature_blend, stefan_boltzmann_emission, flux_temperature_correction, stefan_boltzmann_emission_dT). All fluxes are mass fluxes in kg/m^2/s (= mm/s of water): the esm unit system requires the mass-flux form for dimensional consistency with the latent-heat multiplications (qflx*htvp [J/kg] = W/m^2), see stage2/README-clm-soilfluxes.md. The tests pin the stage-1 CLM dumps (stage1/dumps/clm/clm_soilfluxes.csv, clm_bareground.csv, clm_soiltemp.csv, clm_surfrad.csv, clm_run_imports.csv and, for the downward longwave forcing of columns 1-5, stage1/dumps/cdeps/datm_gswp3_exports.csv Faxa_lwdn; the traced columns 6-16 have no forc_lwrad and leave eflx_soil_grnd/eflx_lwrad_* unpinned — a documented gap). The assertions on quantities that are not dump columns (lw_grnd, qflx_ev_snow, qflx_ev_soil, evaporation_limit, qflx_soliddew_to_top_layer, lwrad_emission, lwrad_increment, eflx_lwrad_out, qflx_evap_tot) are labelled derived (not a dump column) and produced by stage1/analysis/clm_soilfluxes_derived.py.",
+  "license": "MIT"
+ },
+ "index_sets": {
+  "patch": {"kind": "interval", "size": "N_PATCH"}
+ },
+ "metaparameters": {
+  "N_PATCH": {"type": "integer", "default": 1, "description": "number of patches in the stage-2 skeleton (one patch; the full model runs the clump-local begp:endp arrays; the traced dump rows have p == c, so one patch stands in for the traced column), [-]"}
+ },
+ "models": {
+  "SoilFluxes": {
+   "expression_template_imports": [
+    {"ref": "./clm_templates.esm"}
+   ],
+   "variables": {
+    "t_grnd": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "ground temperature after the soil-temperature solve, the SoilFluxes input temperature_inst%t_grnd_col (SoilFluxesMod.F90:108), [K]"},
+    "tssbef_snow": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "top snow-layer temperature before the solve, tssbef(c,snl+1) (SoilFluxesMod.F90:106,176), [K]"},
+    "tssbef_soil": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "top soil-layer temperature before the solve, tssbef(c,1) (SoilFluxesMod.F90:177), [K]"},
+    "t_h2osfc_bef": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "saved surface-water temperature (SoilFluxesMod.F90:107); carries zero weight while frac_h2osfc = 0 (all traced rows), [K]"},
+    "frac_sno_fluxes": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "fraction of ground covered by snow for heat-flux calculations (SoilFluxesMod.F90:93), [-]"},
+    "frac_h2osfc": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "fraction of ground covered by surface water (SoilFluxesMod.F90:94), [-]"},
+    "snl": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "number of snow layers col%snl (negative when snow is present; j = snl+1 is the top layer, SoilFluxesMod.F90:170), [-]"},
+    "cgrnds": {"type": "parameter", "shape": ["patch"], "units": "W/m^2/K", "default": 0.0, "description": "derivative of the ground sensible heat flux wrt the soil temperature (SoilFluxesMod.F90:123), [W/m2/K]"},
+    "cgrndl": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s/K", "default": 0.0, "description": "derivative of the ground latent heat flux wrt the soil temperature (SoilFluxesMod.F90:124): the Fortran comments w/m2/k but applies it directly to the mass fluxes qflx_evap_soi/qflx_ev_snow/qflx_ev_soil (:193,:202-204), so its effective units are mm/s/K == kg/m^2/s/K, [kg/m2/s/K]"},
+    "eflx_sh_grnd_pre": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "pre-correction ground sensible heat flux from the surface-flux component (BareGroundFluxes/CanopyFluxes), corrected at SoilFluxesMod.F90:192, [W/m2]"},
+    "qflx_evap_soi_pre": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "pre-correction soil evaporation (mass flux; 1 mm/s == 1 kg/m2/s of water), corrected at SoilFluxesMod.F90:193, [mm/s]"},
+    "qflx_ev_snow_pre": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "pre-correction evaporation from snow, corrected at SoilFluxesMod.F90:202, [mm/s]"},
+    "qflx_ev_soil_pre": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "pre-correction evaporation from soil, corrected at SoilFluxesMod.F90:203, [mm/s]"},
+    "qflx_ev_h2osfc_pre": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "pre-correction evaporation from surface water, corrected at SoilFluxesMod.F90:204; not dumped by stage 1 (untested input, see README-clm-soilfluxes.md), [mm/s]"},
+    "h2osoi_liq_top": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2", "default": 0.0, "description": "liquid water in the top snow/soil layer h2osoi_liq(c,j) (SoilFluxesMod.F90:96), [kg/m2]"},
+    "h2osoi_ice_top": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2", "default": 0.0, "description": "ice in the top snow/soil layer h2osoi_ice(c,j) (SoilFluxesMod.F90:95), [kg/m2]"},
+    "sabg_soil": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "solar radiation absorbed by the soil sub-area (SoilFluxesMod.F90:97), [W/m2]"},
+    "sabg_snow": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "solar radiation absorbed by the snow sub-area (SoilFluxesMod.F90:98), [W/m2]"},
+    "dlrad": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "downward longwave radiation below the canopy (SoilFluxesMod.F90:121); 0 for the bare traced patches (BareGroundFluxesMod.F90:313), [W/m2]"},
+    "ulrad": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "upward longwave radiation above the canopy (SoilFluxesMod.F90:122); 0 for the bare traced patches (BareGroundFluxesMod.F90:314), [W/m2]"},
+    "forc_lwrad": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "atmospheric downward longwave radiation forc_lwrad_downscaled_col (SoilFluxesMod.F90:89); for the traced columns 1-5 sourced from the DATM dump Faxa_lwdn at datm step s-1 (see README-clm-soilfluxes.md), [W/m2]"},
+    "emg": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.97, "description": "ground emissivity temperature_inst%emg_col (SoilFluxesMod.F90:101); 0.97 for all traced rows (frac_sno_albedo = 1), [-]"},
+    "htvp": {"type": "parameter", "shape": ["patch"], "units": "J/kg", "default": 2834700.0, "description": "latent heat of vaporization or sublimation energyflux_inst%htvp_col (SoilFluxesMod.F90:115); 2.8347e6 = LATICE + LATVAP for all traced rows (frozen top layer), [J/kg]"},
+    "frac_veg_nosno": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "fraction of vegetation not covered by snow, 0 or 1 (SoilFluxesMod.F90:91); 0 for the traced bare patches, [-]"},
+    "eflx_sh_veg": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "sensible heat flux from leaves (SoilFluxesMod.F90:140), [W/m2]"},
+    "eflx_sh_stem": {"type": "parameter", "shape": ["patch"], "units": "W/m^2", "default": 0.0, "description": "sensible heat flux from stems (SoilFluxesMod.F90:86), [W/m2]"},
+    "qflx_evap_veg": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "vegetation evaporation (SoilFluxesMod.F90:128), [mm/s]"},
+    "qflx_tran_veg": {"type": "parameter", "shape": ["patch"], "units": "kg/m^2/s", "default": 0.0, "description": "vegetation transpiration (SoilFluxesMod.F90:129), [mm/s]"},
+    "t_skin_veg": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "vegetation-branch skin temperature, set by CanopyFluxes and used only when frac_veg_nosno = 1 (the untested branch of SoilFluxesMod.F90:483), [K]"},
+    "hvap": {"type": "parameter", "units": "J/kg", "default": 2.501e6, "description": "latent heat of vaporization (clm_varcon hvap = SHR_CONST_LATVAP; SoilFluxesMod.F90:49,379), [J/kg]"},
+    "sb": {"type": "parameter", "units": "W/m^2/K^4", "default": 5.67e-8, "description": "Stefan-Boltzmann constant (clm_varcon sb = SHR_CONST_STEBOL = 5.67e-8, shr_const_mod.F90:23; CESM carries the rounded value rather than the CODATA 5.670374419e-8, and the dump pins 5.67e-8 exactly — see README-clm-soilfluxes.md), [W/m2/K4]"},
+    "tfrz": {"type": "parameter", "units": "K", "default": 273.15, "description": "freezing point of water (SHR_CONST_TKFRZ; SoilFluxesMod.F90:245), [K]"},
+    "dtime": {"type": "parameter", "units": "s", "default": 1800.0, "description": "land model time step (get_step_size_real, SoilFluxesMod.F90:165), [s]"},
+    "t_grnd0": {"type": "unknown", "shape": ["patch"], "units": "K", "description": "ground temperature of the previous time step (SoilFluxesMod.F90:79,175-181), [K]"},
+    "tinc": {"type": "unknown", "shape": ["patch"], "units": "K", "description": "soil-temperature change since the last time step, tinc = t_grnd - t_grnd0 (SoilFluxesMod.F90:77,183), [K]"},
+    "lw_grnd": {"type": "unknown", "shape": ["patch"], "units": "K^4", "description": "ground longwave-weighted fourth power of temperature (SoilFluxesMod.F90:80,344-346), [K4]"},
+    "eflx_sh_grnd_raw": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "pre-limit corrected ground sensible heat flux (the correction of SoilFluxesMod.F90:192), [W/m2]"},
+    "qflx_evap_soi_raw": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "pre-limit corrected soil evaporation (SoilFluxesMod.F90:193), [mm/s]"},
+    "qflx_ev_snow_raw": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "pre-limit corrected snow evaporation (SoilFluxesMod.F90:202), [mm/s]"},
+    "qflx_ev_soil_raw": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "pre-limit corrected soil-subarea evaporation (SoilFluxesMod.F90:203), [mm/s]"},
+    "qflx_ev_h2osfc": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "evaporation from surface water (SoilFluxesMod.F90:204; untested: qflx_ev_h2osfc_pre is not dumped), [mm/s]"},
+    "h2osoi_top": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2", "description": "total water (liquid + ice) in the top snow/soil layer, h2osoi_liq(c,j) + h2osoi_ice(c,j) (SoilFluxesMod.F90:95-96); written out at :238-248 (the evaporation-ratio denominator) and :287 (the evaporation limit) in the Fortran and named once here, [kg/m2]"},
+    "evaporation_limit": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "top-layer moisture available for evaporation (SoilFluxesMod.F90:81,287), [mm/s]"},
+    "qflx_ev_snow_excess": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "snow-evaporation overshoot evaporation_demand - evaporation_limit of the limiting branch (SoilFluxesMod.F90:288-296), transcribed as max(qflx_ev_snow_raw - evaporation_limit, 0): exact because the limited qflx_ev_snow, the qflx_evap_soi/eflx_sh_grnd corrections and the top-layer partition are all linear in the excess, [mm/s]"},
+    "qflx_ev_snow": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "evaporation flux from snow after correction and moisture limiting (SoilFluxesMod.F90:135,202,288-291), [mm/s]"},
+    "qflx_ev_soil": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "evaporation flux from the soil sub-area (SoilFluxesMod.F90:136,203), [mm/s]"},
+    "qflx_evap_soi": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "soil evaporation (SoilFluxesMod.F90:127,193,291), [mm/s]"},
+    "eflx_sh_grnd": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "sensible heat flux from ground (SoilFluxesMod.F90:139,192,295), [W/m2]"},
+    "qflx_liqevap_from_top_layer": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "rate of liquid water evaporated from the top snow/soil layer (SoilFluxesMod.F90:131,238-242; the limiting-branch values of :292 are the general-branch values evaluated at the limited qflx_ev_snow, so no separate branch is needed), [mm/s]"},
+    "qflx_solidevap_from_top_layer": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "rate of ice sublimated from the top snow/soil layer (SoilFluxesMod.F90:132,243), [mm/s]"},
+    "qflx_soliddew_to_top_layer": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "rate of solid water deposited on the top snow/soil layer as frost (SoilFluxesMod.F90:134,246), [mm/s]"},
+    "qflx_liqdew_to_top_layer": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "rate of liquid water deposited on the top snow/soil layer as dew (SoilFluxesMod.F90:133,248), [mm/s]"},
+    "lwrad_emission": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "ground black-body longwave emission emg*sb*lw_grnd (the stefan_boltzmann_emission template; SoilFluxesMod.F90:350,471), [W/m2]"},
+    "lwrad_increment": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "longwave increment from the temperature change, 4*emg*sb*t_grnd0^3*tinc = stefan_boltzmann_emission_dT(emg, sb, t_grnd0)*tinc, put into the outgoing longwave for conservation (SoilFluxesMod.F90:350,472; the urban eflx_lwrad_del of :361), [W/m2]"},
+    "eflx_soil_grnd": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "soil heat flux, + = into soil (SoilFluxesMod.F90:141,348-351), [W/m2]"},
+    "eflx_sh_tot": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "total sensible heat flux, vegetation + ground + stems (SoilFluxesMod.F90:144,375-376), [W/m2]"},
+    "qflx_evap_tot": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "total evaporation qflx_evap_veg + qflx_evap_soi (SoilFluxesMod.F90:130,377), [mm/s]"},
+    "eflx_lh_tot": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "total latent heat flux (SoilFluxesMod.F90:147,379), [W/m2]"},
+    "qflx_evap_can": {"type": "unknown", "shape": ["patch"], "units": "kg/m^2/s", "description": "evaporation from the canopy qflx_evap_veg - qflx_tran_veg (SoilFluxesMod.F90:126,390), [mm/s]"},
+    "eflx_lh_vege": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "canopy evaporation heat flux qflx_evap_can*hvap, reusing the qflx_evap_can intermediate of :390 (SoilFluxesMod.F90:156,391), [W/m2]"},
+    "eflx_lh_vegt": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "canopy transpiration heat flux (SoilFluxesMod.F90:157,392), [W/m2]"},
+    "eflx_lh_grnd": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "ground evaporation heat flux (SoilFluxesMod.F90:158,393), [W/m2]"},
+    "eflx_lwrad_out": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "emitted infrared (longwave) radiation, vegetation + ground (SoilFluxesMod.F90:150,469-472), [W/m2]"},
+    "eflx_lwrad_net": {"type": "unknown", "shape": ["patch"], "units": "W/m^2", "description": "net infrared (longwave) radiation, + = to atm (SoilFluxesMod.F90:151,485), [W/m2]"},
+    "t_skin": {"type": "unknown", "shape": ["patch"], "units": "K", "description": "patch skin temperature; the bare-ground branch (frac_veg_nosno = 0) is the fourth root of lw_grnd, the vegetation branch is set in CanopyFluxes (SoilFluxesMod.F90:104,483), [K]"}
+   },
+   "equations": [
+    {"lhs": "t_grnd0", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": ["snl", {"op": "const", "args": [], "value": 0.0, "units": "1"}]},
+     {"op": "apply_expression_template", "args": [], "name": "ground_temperature_blend", "bindings": {
+      "frac_sno_fluxes": "frac_sno_fluxes", "t_snow": "tssbef_snow", "frac_h2osfc": "frac_h2osfc", "t_soil": "tssbef_soil", "t_h2osfc": "t_h2osfc_bef"}},
+     {"op": "+", "args": [
+      {"op": "*", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_h2osfc"]}, "tssbef_soil"]},
+      {"op": "*", "args": ["frac_h2osfc", "t_h2osfc_bef"]}]}
+    ]}},
+    {"lhs": "tinc", "rhs": {"op": "-", "args": ["t_grnd", "t_grnd0"]}},
+    {"lhs": "lw_grnd", "rhs": {"op": "apply_expression_template", "args": [], "name": "ground_temperature_blend", "bindings": {
+     "frac_sno_fluxes": "frac_sno_fluxes",
+     "t_snow": {"op": "^", "args": ["tssbef_snow", 4]},
+     "frac_h2osfc": "frac_h2osfc",
+     "t_soil": {"op": "^", "args": ["tssbef_soil", 4]},
+     "t_h2osfc": {"op": "^", "args": ["t_h2osfc_bef", 4]}}}},
+    {"lhs": "qflx_ev_snow_raw", "rhs": {"op": "apply_expression_template", "args": [], "name": "flux_temperature_correction", "bindings": {"pre": "qflx_ev_snow_pre", "tinc": "tinc", "deriv": "cgrndl"}}},
+    {"lhs": "qflx_ev_soil_raw", "rhs": {"op": "apply_expression_template", "args": [], "name": "flux_temperature_correction", "bindings": {"pre": "qflx_ev_soil_pre", "tinc": "tinc", "deriv": "cgrndl"}}},
+    {"lhs": "qflx_ev_h2osfc", "rhs": {"op": "apply_expression_template", "args": [], "name": "flux_temperature_correction", "bindings": {"pre": "qflx_ev_h2osfc_pre", "tinc": "tinc", "deriv": "cgrndl"}}},
+    {"lhs": "qflx_evap_soi_raw", "rhs": {"op": "apply_expression_template", "args": [], "name": "flux_temperature_correction", "bindings": {"pre": "qflx_evap_soi_pre", "tinc": "tinc", "deriv": "cgrndl"}}},
+    {"lhs": "eflx_sh_grnd_raw", "rhs": {"op": "apply_expression_template", "args": [], "name": "flux_temperature_correction", "bindings": {"pre": "eflx_sh_grnd_pre", "tinc": "tinc", "deriv": "cgrnds"}}},
+    {"lhs": "h2osoi_top", "rhs": {"op": "+", "args": ["h2osoi_liq_top", "h2osoi_ice_top"]}},
+    {"lhs": "evaporation_limit", "rhs": {"op": "/", "args": [
+     "h2osoi_top",
+     {"op": "*", "args": ["frac_sno_fluxes", "dtime"]}]}},
+    {"lhs": "qflx_ev_snow_excess", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": ["snl", {"op": "const", "args": [], "value": 0.0, "units": "1"}]},
+     {"op": "max", "args": [{"op": "-", "args": ["qflx_ev_snow_raw", "evaporation_limit"]}, 0.0]},
+     0.0]}},
+    {"lhs": "qflx_ev_snow", "rhs": {"op": "-", "args": ["qflx_ev_snow_raw", "qflx_ev_snow_excess"]}},
+    {"lhs": "qflx_ev_soil", "rhs": "qflx_ev_soil_raw"},
+    {"lhs": "qflx_evap_soi", "rhs": {"op": "-", "args": [
+     "qflx_evap_soi_raw",
+     {"op": "*", "args": ["frac_sno_fluxes", "qflx_ev_snow_excess"]}]}},
+    {"lhs": "eflx_sh_grnd", "rhs": {"op": "+", "args": [
+     "eflx_sh_grnd_raw",
+     {"op": "*", "args": ["frac_sno_fluxes", "qflx_ev_snow_excess", "htvp"]}]}},
+    {"lhs": "qflx_liqevap_from_top_layer", "rhs": {"op": "ifelse", "args": [
+     {"op": ">=", "args": ["qflx_ev_snow", 0.0]},
+     {"op": "ifelse", "args": [
+      {"op": ">", "args": ["h2osoi_top", 0.0]},
+      {"op": "max", "args": [{"op": "*", "args": [
+       "qflx_ev_snow",
+       {"op": "/", "args": ["h2osoi_liq_top", "h2osoi_top"]}]}, 0.0]},
+      0.0]},
+     0.0]}},
+    {"lhs": "qflx_solidevap_from_top_layer", "rhs": {"op": "ifelse", "args": [
+     {"op": ">=", "args": ["qflx_ev_snow", 0.0]},
+     {"op": "-", "args": ["qflx_ev_snow", "qflx_liqevap_from_top_layer"]},
+     0.0]}},
+    {"lhs": "qflx_soliddew_to_top_layer", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": ["qflx_ev_snow", 0.0]},
+     {"op": "ifelse", "args": [
+      {"op": "<", "args": ["t_grnd", "tfrz"]},
+      {"op": "abs", "args": ["qflx_ev_snow"]},
+      0.0]},
+     0.0]}},
+    {"lhs": "qflx_liqdew_to_top_layer", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": ["qflx_ev_snow", 0.0]},
+     {"op": "ifelse", "args": [
+      {"op": "<", "args": ["t_grnd", "tfrz"]},
+      0.0,
+      {"op": "abs", "args": ["qflx_ev_snow"]}]},
+     0.0]}},
+    {"lhs": "lwrad_emission", "rhs": {"op": "apply_expression_template", "args": [], "name": "stefan_boltzmann_emission", "bindings": {"emg": "emg", "sb": "sb", "T4": "lw_grnd"}}},
+    {"lhs": "lwrad_increment", "rhs": {"op": "*", "args": [
+     {"op": "apply_expression_template", "args": [], "name": "stefan_boltzmann_emission_dT", "bindings": {"emg": "emg", "sb": "sb", "T": "t_grnd0"}},
+     "tinc"]}},
+    {"lhs": "eflx_soil_grnd", "rhs": {"op": "-", "args": [
+     {"op": "-", "args": [
+      {"op": "-", "args": [
+       {"op": "+", "args": [
+        {"op": "*", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_sno_fluxes"]}, "sabg_soil"]},
+        {"op": "*", "args": ["frac_sno_fluxes", "sabg_snow"]},
+        "dlrad",
+        {"op": "*", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_veg_nosno"]}, "emg", "forc_lwrad"]}]},
+       "lwrad_emission"]},
+      "lwrad_increment"]},
+     {"op": "+", "args": ["eflx_sh_grnd", {"op": "*", "args": ["qflx_evap_soi", "htvp"]}]}]}},
+    {"lhs": "eflx_sh_tot", "rhs": {"op": "+", "args": ["eflx_sh_veg", "eflx_sh_grnd", "eflx_sh_stem"]}},
+    {"lhs": "qflx_evap_tot", "rhs": {"op": "+", "args": ["qflx_evap_veg", "qflx_evap_soi"]}},
+    {"lhs": "eflx_lh_tot", "rhs": {"op": "+", "args": [
+     {"op": "*", "args": ["hvap", "qflx_evap_veg"]},
+     {"op": "*", "args": ["htvp", "qflx_evap_soi"]}]}},
+    {"lhs": "qflx_evap_can", "rhs": {"op": "-", "args": ["qflx_evap_veg", "qflx_tran_veg"]}},
+    {"lhs": "eflx_lh_vege", "rhs": {"op": "*", "args": ["qflx_evap_can", "hvap"]}},
+    {"lhs": "eflx_lh_vegt", "rhs": {"op": "*", "args": ["qflx_tran_veg", "hvap"]}},
+    {"lhs": "eflx_lh_grnd", "rhs": {"op": "*", "args": ["qflx_evap_soi", "htvp"]}},
+    {"lhs": "eflx_lwrad_out", "rhs": {"op": "+", "args": [
+     "ulrad",
+     {"op": "*", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_veg_nosno"]}, {"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "emg"]}, "forc_lwrad"]},
+     {"op": "*", "args": [{"op": "-", "args": [{"op": "const", "args": [], "value": 1.0, "units": "1"}, "frac_veg_nosno"]}, "lwrad_emission"]},
+     "lwrad_increment"]}},
+    {"lhs": "eflx_lwrad_net", "rhs": {"op": "-", "args": ["eflx_lwrad_out", "forc_lwrad"]}},
+    {"lhs": "t_skin", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": ["frac_veg_nosno", {"op": "const", "args": [], "value": 0.5, "units": "1"}]},
+     {"op": "sqrt", "args": [{"op": "sqrt", "args": ["lw_grnd"]}]},
+     "t_skin_veg"]}}
+   ],
+   "tests": [
+    {
+     "id": "clm_soilfluxes_step1_p1",
+     "description": "Full instantaneous pin against clm_soilfluxes.csv / clm_bareground.csv / clm_soiltemp.csv / clm_surfrad.csv / clm_run_imports.csv (step 1, patch/column 1, a bare istsoil column with snl = -9, frac_sno_fluxes = 1, frac_h2osfc = 0, p == c): the sensible/latent corrections eflx_sh_grnd = pre + tinc*cgrnds, qflx_evap_soi = qflx_ev_snow = pre + tinc*cgrndl (:192-204, the flux_temperature_correction template) reproduce the dumped post-correction fluxes to round-off. The partition (qflx_ev_snow < 0 = dew at t_grnd < tfrz) gives qflx_soliddew_to_top_layer = |qflx_ev_snow| (:246); the snow-evaporation limit (:287) = (h2osoi_liq+h2osoi_ice)/(frac_sno_fluxes*dtime) = 3.0e-3 mm/s far exceeds the dew rate. With forc_lwrad = 147.651925373077091 W/m2 from the DATM dump (Faxa_lwdn, datm step 0 = clm step 1 - 1; see README-clm-soilfluxes.md), eflx_soil_grnd = (1-fs)*sabg_soil + fs*sabg_snow + dlrad + (1-fvn)*emg*forc_lwrad - emg*sb*lw_grnd - 4*emg*sb*t_grnd0^3*tinc - (eflx_sh_grnd + qflx_evap_soi*htvp) (:348-351) and eflx_lwrad_net = eflx_lwrad_out - forc_lwrad (:469-485) reproduce the dump to 7.9e-15/4.6e-16 rel — the pin that fixes sb = SHR_CONST_STEBOL = 5.67e-8 exactly. t_skin = sqrt(sqrt(lw_grnd)) (:483) and the totals eflx_sh_tot/eflx_lh_tot/eflx_lh_grnd (:375-393) are exact. The assertions on lw_grnd, qflx_ev_snow, qflx_ev_soil, evaporation_limit, qflx_soliddew_to_top_layer, lwrad_emission, lwrad_increment, eflx_lwrad_out and qflx_evap_tot are derived (not a dump column): expected values computed by stage1/analysis/clm_soilfluxes_derived.py from the pinned dump inputs (f64 evaluations of the transcribed equations, cross-checked against every dump column they touch, all 192 rows, max rel err 7.9e-15); the clm_soilfluxes.csv dump-column pins here are eflx_sh_grnd, qflx_evap_soi, eflx_soil_grnd, eflx_lwrad_net, t_skin, eflx_sh_tot, eflx_lh_tot, eflx_lh_grnd.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_grnd": [2.47773777164907018e+02],
+      "tssbef_snow": [2.47894403551559776e+02],
+      "tssbef_soil": [2.25739714130635889e+02],
+      "frac_sno_fluxes": [1.0],
+      "snl": [-9.0],
+      "cgrnds": [1.96112569070430746e+00],
+      "cgrndl": [1.10115719225395588e-07],
+      "eflx_sh_grnd_pre": [-3.35125077877686769e+00],
+      "qflx_evap_soi_pre": [-1.65255522331522184e-07],
+      "qflx_ev_snow_pre": [-1.65255522331522184e-07],
+      "qflx_ev_soil_pre": [-1.16956440900130353e-06],
+      "h2osoi_liq_top": [0.0],
+      "h2osoi_ice_top": [5.39439117719703098e+00],
+      "sabg_soil": [3.18265102170917429e+02],
+      "sabg_snow": [6.41600439131343016e+01],
+      "emg": [9.7e-01],
+      "htvp": [2.8347e+06],
+      "forc_lwrad": [1.47651925373077091e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "lw_grnd", "time": 0.0, "expected": 3.77630348254160676e+09, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_grnd", "time": 0.0, "expected": -3.58781428461842494e+00, "coords": {"patch": 1}},
+      {"variable": "qflx_evap_soi", "time": 0.0, "expected": -1.78538383655351423e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_snow", "time": 0.0, "expected": -1.78538383655351423e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_soil", "time": 0.0, "expected": -1.18284727032513279e-06, "coords": {"patch": 1}},
+      {"variable": "evaporation_limit", "time": 0.0, "expected": 2.99688398733168396e-03, "coords": {"patch": 1}},
+      {"variable": "qflx_soliddew_to_top_layer", "time": 0.0, "expected": 1.78538383655351423e-07, "coords": {"patch": 1}},
+      {"variable": "lwrad_emission", "time": 0.0, "expected": 2.07692915236305819e+02, "coords": {"patch": 1}},
+      {"variable": "lwrad_increment", "time": 0.0, "expected": -4.04256740602416035e-01, "coords": {"patch": 1}},
+      {"variable": "eflx_soil_grnd", "time": 0.0, "expected": 4.18767007008192405e+00, "coords": {"patch": 1}},
+      {"variable": "eflx_lwrad_out", "time": 0.0, "expected": 2.11718216256895716e+02, "coords": {"patch": 1}},
+      {"variable": "eflx_lwrad_net", "time": 0.0, "expected": 6.40662908838186240e+01, "coords": {"patch": 1}},
+      {"variable": "t_skin", "time": 0.0, "expected": 2.47894403551559776e+02, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_tot", "time": 0.0, "expected": -3.58781428461842494e+00, "coords": {"patch": 1}},
+      {"variable": "qflx_evap_tot", "time": 0.0, "expected": -1.78538383655351423e-07, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_tot", "time": 0.0, "expected": -5.06102756147824634e-01, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_grnd", "time": 0.0, "expected": -5.06102756147824634e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_soilfluxes_step12_p1",
+     "description": "Same full pin as clm_soilfluxes_step1_p1 at the last traced step (step 12, patch/column 1): a smaller tinc = -2.42e-2 K and weaker cgrnds/cgrndl (0.779 W/m2/K, 4.09e-8 kg/m2/s/K) with forc_lwrad = 145.790538681878843 W/m2 from the DATM dump at datm step 11. eflx_soil_grnd and eflx_lwrad_net reproduce the dump to round-off (the sb = 5.67e-8 pin at a second longwave value), t_skin = sqrt(sqrt(lw_grnd)) = t_grnd0 exactly, and the dew partition again gives qflx_soliddew_to_top_layer = |qflx_ev_snow| with the evaporation limit (h2osoi_liq+h2osoi_ice)/(frac_sno_fluxes*dtime) = 3.07e-3 far above the dew rate. The assertions on lw_grnd, qflx_ev_snow, qflx_ev_soil, evaporation_limit, qflx_soliddew_to_top_layer, lwrad_emission and lwrad_increment are derived (not a dump column), produced by stage1/analysis/clm_soilfluxes_derived.py at the pinned inputs; the dump-column pins here are eflx_sh_grnd, qflx_evap_soi, eflx_soil_grnd, eflx_lwrad_net, t_skin, eflx_sh_tot, eflx_lh_tot, eflx_lh_grnd.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_grnd": [2.47134012088066358e+02],
+      "tssbef_snow": [2.47158184491187031e+02],
+      "tssbef_soil": [2.25739698157117314e+02],
+      "frac_sno_fluxes": [1.0],
+      "snl": [-9.0],
+      "cgrnds": [7.78828467878325601e-01],
+      "cgrndl": [4.08614233234446795e-08],
+      "eflx_sh_grnd_pre": [-1.94522636369699350e+00],
+      "qflx_evap_soi_pre": [-9.93888094662331399e-08],
+      "qflx_ev_snow_pre": [-9.93888094662331399e-08],
+      "qflx_ev_soil_pre": [-4.67159363342597661e-07],
+      "h2osoi_liq_top": [0.0],
+      "h2osoi_ice_top": [5.52257155846292789e+00],
+      "sabg_soil": [3.24174571996455501e+02],
+      "sabg_snow": [6.53775636486943602e+01],
+      "emg": [9.7e-01],
+      "htvp": [2.8347e+06],
+      "forc_lwrad": [1.45790538681878843e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "lw_grnd", "time": 0.0, "expected": 3.73164211392780543e+09, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_grnd", "time": 0.0, "expected": -1.96405251938440448e+00, "coords": {"patch": 1}},
+      {"variable": "qflx_evap_soi", "time": 0.0, "expected": -1.00376528262891921e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_snow", "time": 0.0, "expected": -1.00376528262891921e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_soil", "time": 0.0, "expected": -4.68147082139256475e-07, "coords": {"patch": 1}},
+      {"variable": "evaporation_limit", "time": 0.0, "expected": 3.06809531025718183e-03, "coords": {"patch": 1}},
+      {"variable": "qflx_soliddew_to_top_layer", "time": 0.0, "expected": 1.00376528262891921e-07, "coords": {"patch": 1}},
+      {"variable": "lwrad_emission", "time": 0.0, "expected": 2.05236584623915349e+02, "coords": {"patch": 1}},
+      {"variable": "lwrad_increment", "time": 0.0, "expected": -8.02896569070126231e-02, "coords": {"patch": 1}},
+      {"variable": "eflx_soil_grnd", "time": 0.0, "expected": 3.88668106715972604e+00, "coords": {"patch": 1}},
+      {"variable": "eflx_lwrad_net", "time": 0.0, "expected": 6.37394724455858537e+01, "coords": {"patch": 1}},
+      {"variable": "t_skin", "time": 0.0, "expected": 2.47158184491187031e+02, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_tot", "time": 0.0, "expected": -1.96405251938440448e+00, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_tot", "time": 0.0, "expected": -2.84537344666819737e-01, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_grnd", "time": 0.0, "expected": -2.84537344666819737e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_soilfluxes_step7_p8",
+     "description": "Correction/partition/totals pin against the dumps at step 7, patch/column 8 (a column without a DATM longwave input: the traced columns 6-16 carry no forc_lwrad, so the forc_lwrad-dependent outputs eflx_soil_grnd/eflx_lwrad_out/eflx_lwrad_net are unpinned — a documented gap, see README-clm-soilfluxes.md). tinc = +2.44e-1 K here (warming, unlike the step-1/12 dew rows), pinning the corrections at a positive tinc; everything else reproduces the dumps to round-off: the corrected fluxes, the evaporation limit 3.36e-3 with excess 0, the solid-dew partition, lw_grnd and its emission/increment terms, t_skin = sqrt(sqrt(lw_grnd)) and the totals. The assertions on lw_grnd, qflx_ev_snow, qflx_ev_soil, evaporation_limit, qflx_soliddew_to_top_layer, lwrad_emission and lwrad_increment are derived (not a dump column), produced by stage1/analysis/clm_soilfluxes_derived.py at the pinned inputs; the dump-column pins here are eflx_sh_grnd, qflx_evap_soi, t_skin, eflx_sh_tot, eflx_lh_tot, eflx_lh_grnd.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_grnd": [2.42308723604477424e+02],
+      "tssbef_snow": [2.42064762279572329e+02],
+      "tssbef_soil": [2.22302083985014516e+02],
+      "frac_sno_fluxes": [1.0],
+      "snl": [-9.0],
+      "cgrnds": [1.04529302859118212e+00],
+      "cgrndl": [3.43319294733369072e-08],
+      "eflx_sh_grnd_pre": [-5.81846855026674316e+00],
+      "qflx_evap_soi_pre": [-2.34578378784555744e-07],
+      "qflx_ev_snow_pre": [-2.34578378784555744e-07],
+      "qflx_ev_soil_pre": [-5.27714474751095114e-07],
+      "h2osoi_liq_top": [0.0],
+      "h2osoi_ice_top": [6.05663380731253266e+00],
+      "sabg_soil": [3.32277798993192815e+02],
+      "sabg_snow": [6.51421552900382872e+01],
+      "emg": [9.7e-01],
+      "htvp": [2.8347e+06]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "lw_grnd", "time": 0.0, "expected": 3.43341494054151980e+09, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_grnd", "time": 0.0, "expected": -5.56345747809755789e+00, "coords": {"patch": 1}},
+      {"variable": "qflx_evap_soi", "time": 0.0, "expected": -2.26202715783691501e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_snow", "time": 0.0, "expected": -2.26202715783691501e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_soil", "time": 0.0, "expected": -5.19338811750230876e-07, "coords": {"patch": 1}},
+      {"variable": "evaporation_limit", "time": 0.0, "expected": 3.36479655961807370e-03, "coords": {"patch": 1}},
+      {"variable": "qflx_soliddew_to_top_layer", "time": 0.0, "expected": 2.26202715783691501e-07, "coords": {"patch": 1}},
+      {"variable": "lwrad_emission", "time": 0.0, "expected": 1.88834388314843045e+02, "coords": {"patch": 1}},
+      {"variable": "lwrad_increment", "time": 0.0, "expected": 7.61255576848142303e-01, "coords": {"patch": 1}},
+      {"variable": "t_skin", "time": 0.0, "expected": 2.42064762279572329e+02, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_tot", "time": 0.0, "expected": -5.56345747809755789e+00, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_tot", "time": 0.0, "expected": -6.41216838432030383e-01, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_grnd", "time": 0.0, "expected": -6.41216838432030383e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_soilfluxes_step6_p16",
+     "description": "Same no-forc_lwrad pin as clm_soilfluxes_step7_p8 at the coldest traced column (step 6, patch/column 16, t_grnd = 238.5 K): the largest positive tinc of the pins (+2.92e-1 K) exercises the corrections at their strongest, and the partition is again solid dew. The assertions on lw_grnd, qflx_ev_snow, qflx_ev_soil, evaporation_limit, qflx_soliddew_to_top_layer, lwrad_emission and lwrad_increment are derived (not a dump column), produced by stage1/analysis/clm_soilfluxes_derived.py at the pinned inputs; the dump-column pins here are eflx_sh_grnd, qflx_evap_soi, t_skin, eflx_sh_tot, eflx_lh_tot, eflx_lh_grnd (eflx_soil_grnd/eflx_lwrad_* remain unpinned — no forc_lwrad for columns 6-16).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "t_grnd": [2.38534664138795015e+02],
+      "tssbef_snow": [2.38242498339136552e+02],
+      "tssbef_soil": [2.22678103915075016e+02],
+      "frac_sno_fluxes": [1.0],
+      "snl": [-9.0],
+      "cgrnds": [1.01241803755333742e+00],
+      "cgrndl": [2.24078256000898536e-08],
+      "eflx_sh_grnd_pre": [-5.50998976685700550e+00],
+      "qflx_evap_soi_pre": [-1.19228193131553883e-07],
+      "qflx_ev_snow_pre": [-1.19228193131553883e-07],
+      "qflx_ev_soil_pre": [-2.92260465954986597e-07],
+      "h2osoi_liq_top": [0.0],
+      "h2osoi_ice_top": [5.45165511789674451e+00],
+      "sabg_soil": [4.59834478030961113e+02],
+      "sabg_snow": [9.86503200179942252e+01],
+      "emg": [9.7e-01],
+      "htvp": [2.8347e+06]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "lw_grnd", "time": 0.0, "expected": 3.22163947971056594e+09, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_grnd", "time": 0.0, "expected": -5.21419584132656850e+00, "coords": {"patch": 1}},
+      {"variable": "qflx_evap_soi", "time": 0.0, "expected": -1.12681392846495943e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_snow", "time": 0.0, "expected": -1.12681392846495943e-07, "coords": {"patch": 1}},
+      {"variable": "qflx_ev_soil", "time": 0.0, "expected": -2.85713665669928670e-07, "coords": {"patch": 1}},
+      {"variable": "evaporation_limit", "time": 0.0, "expected": 3.02869728772041413e-03, "coords": {"patch": 1}},
+      {"variable": "qflx_soliddew_to_top_layer", "time": 0.0, "expected": 1.12681392846495943e-07, "coords": {"patch": 1}},
+      {"variable": "lwrad_emission", "time": 0.0, "expected": 1.77186949744601397e+02, "coords": {"patch": 1}},
+      {"variable": "lwrad_increment", "time": 0.0, "expected": 8.69164271228997978e-01, "coords": {"patch": 1}},
+      {"variable": "t_skin", "time": 0.0, "expected": 2.38242498339136552e+02, "coords": {"patch": 1}},
+      {"variable": "eflx_sh_tot", "time": 0.0, "expected": -5.21419584132656850e+00, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_tot", "time": 0.0, "expected": -3.19417944301962023e-01, "coords": {"patch": 1}},
+      {"variable": "eflx_lh_grnd", "time": 0.0, "expected": -3.19417944301962023e-01, "coords": {"patch": 1}}
+     ]
+    }
+   ]
+  }
+ }
+}
