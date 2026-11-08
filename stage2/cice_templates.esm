@@ -2909,6 +2909,71 @@
     }
    }
 ,
+  "dEdd_refindx":   {
+   "description": "Refractive index of sea ice and water refindx = 1.310 (solution_dEdd, icepack_shortwave.F90:3177).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 1.31,
+    "units": "1"
+   }
+  },
+  "dEdd_rhoi":   {
+   "description": "Density of pure ice rhoi = 917 kg/m^3 (icepack_parameters.F90:62, 94).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 917.0,
+    "units": "kg/m^3"
+   }
+  },
+  "dEdd_exp_argmax":   {
+   "description": "Exponential argument clamp exp_argmax = 10 (solution_dEdd, icepack_shortwave.F90:123): all exp(-x) evaluations clamp x at 10 to avoid underflow.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 10.0,
+    "units": "1"
+   }
+  },
+  "dEdd_puny":   {
+   "description": "Icepack infinitesimal puny = 1e-11 (icepack_parameters.F90:36).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 1e-11,
+    "units": "1"
+   }
+  },
+  "dEdd_puny_guard":   {
+   "description": "Guard zeroing a flux fraction below puny (compute_dEdd_3bd, icepack_shortwave.F90:2827, 2830): ifelse(x < puny, 0, x) with puny = 1e-11 (icepack_parameters.F90:36).",
+   "params": [
+    "x"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       "x",
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "dEdd_puny",
+        "bindings": {}
+       }
+      ]
+     },
+     0.0,
+     "x"
+    ]
+   }
+  },
   "dEdd_scaled_tau":   {
    "description": "Scaled extinction optical depth ts of the delta-Eddington solution (taus, icepack_shortwave.F90:4755-4761; applied at solution_dEdd F90:3294-3296): ts = (1 - w*f)*t, with w the layer single-scattering albedo, f = g^2 the forward-scattering fraction and t the layer extinction optical depth.",
    "params": [
@@ -3274,7 +3339,12 @@
        {
         "op": "min",
         "args": [
-         10.0,
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "dEdd_exp_argmax",
+          "bindings": {}
+         },
          "x"
         ]
        }
@@ -3401,124 +3471,6 @@
     ]
    }
   },
-  "dEdd_gauss_direct_reflectivity":   {
-   "description": "Gaussian-angle direct reflectivity (solution_dEdd, icepack_shortwave.F90:3345): rdr = (alp+gam)*R1 + (alp-gam)*(T1*trn - 1), with R1/T1 the first-calc diffuse reflectivity/transmissivity and trn the clamped transmission at the gauss angle.",
-   "params": [
-    "alp",
-    "gam",
-    "R1",
-    "T1",
-    "trn"
-   ],
-   "body": {
-    "op": "+",
-    "args": [
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         "alp",
-         "gam"
-        ]
-       },
-       "R1"
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "-",
-        "args": [
-         "alp",
-         "gam"
-        ]
-       },
-       {
-        "op": "-",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "T1",
-           "trn"
-          ]
-         },
-         1.0
-        ]
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "dEdd_gauss_direct_transmissivity":   {
-   "description": "Gaussian-angle direct transmissivity (solution_dEdd, icepack_shortwave.F90:3346): tdr = (alp+gam)*T1 + ((alp-gam)*R1 - (alp+gam) + 1)*trn.",
-   "params": [
-    "alp",
-    "gam",
-    "R1",
-    "T1",
-    "trn"
-   ],
-   "body": {
-    "op": "+",
-    "args": [
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         "alp",
-         "gam"
-        ]
-       },
-       "T1"
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             {
-              "op": "-",
-              "args": [
-               "alp",
-               "gam"
-              ]
-             },
-             "R1"
-            ]
-           },
-           {
-            "op": "+",
-            "args": [
-             "alp",
-             "gam"
-            ]
-           }
-          ]
-         },
-         1.0
-        ]
-       },
-       "trn"
-      ]
-     }
-    ]
-   }
-  },
   "dEdd_coszen_clamp":   {
    "description": "Cosine solar zenith angle above the fresnel level mu0 (solution_dEdd, icepack_shortwave.F90:3251-3253): mu0 = max(coszen, 0.01), the sun-just-above-the-horizon floor for a stable radiation solution.",
    "params": [
@@ -3564,14 +3516,16 @@
           "op": "*",
           "args": [
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 1.31
+            "name": "dEdd_refindx",
+            "bindings": {}
            },
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 1.31
+            "name": "dEdd_refindx",
+            "bindings": {}
            }
           ]
          }
@@ -3599,9 +3553,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0n"
         ]
@@ -3616,9 +3571,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0n"
         ]
@@ -3644,9 +3600,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0"
         ]
@@ -3661,9 +3618,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0"
         ]
@@ -3698,9 +3656,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0n"
         ]
@@ -3733,9 +3692,10 @@
         "op": "*",
         "args": [
          {
-          "op": "const",
+          "op": "apply_expression_template",
           "args": [],
-          "value": 1.31
+          "name": "dEdd_refindx",
+          "bindings": {}
          },
          "mu0"
         ]
@@ -3810,9 +3770,10 @@
       ]
      },
      {
-      "op": "const",
+      "op": "apply_expression_template",
       "args": [],
-      "value": 1.31
+      "name": "dEdd_refindx",
+      "bindings": {}
      },
      {
       "op": "/",
@@ -3974,36 +3935,6 @@
     ]
    }
   },
-  "dEdd_fresnel_tdif_b":   {
-   "description": "Fresnel-combined layer diffuse transmission from below (solution_dEdd, icepack_shortwave.F90:3405): tdif_b' = tdif_b*rintfc*Tf_dif_b.",
-   "params": [
-    "tdif_b",
-    "rintfc",
-    "Tf_dif_b"
-   ],
-   "body": {
-    "op": "*",
-    "args": [
-     "tdif_b",
-     "rintfc",
-     "Tf_dif_b"
-    ]
-   }
-  },
-  "dEdd_fresnel_trnlay":   {
-   "description": "Fresnel-combined direct-beam layer transmission (solution_dEdd, icepack_shortwave.F90:3406): trnlay' = Tf_dir_a*trnlay.",
-   "params": [
-    "Tf_dir_a",
-    "trnlay"
-   ],
-   "body": {
-    "op": "*",
-    "args": [
-     "Tf_dir_a",
-     "trnlay"
-    ]
-   }
-  },
   "dEdd_snow_grain_adjust":   {
    "description": "Adjusted snow grain radius frsnw (compute_dEdd_3bd, icepack_shortwave.F90:2122-2125): frsnw = (fr_max*fnidr + fr_min*(1-fnidr))*rsnw, the clear/overcast-sky adjustment of the snow grain radius (fr_max = 1.0, fr_min = 0.8; F90:2057-2058); rsnw and frsnw are in micrometres.",
    "params": [
@@ -4064,10 +3995,10 @@
           "args": [
            "rhosnw",
            {
-            "op": "const",
+            "op": "apply_expression_template",
             "args": [],
-            "value": 917.0,
-            "units": "kg/m^3"
+            "name": "dEdd_rhoi",
+            "bindings": {}
            }
           ]
          },
@@ -4168,20 +4099,6 @@
     ]
    }
   },
-  "dEdd_aerosol_mix_tau":   {
-   "description": "Aerosol-mixed extinction optical depth (compute_dEdd_3bd, icepack_shortwave.F90:2488): tau' = tau + taer.",
-   "params": [
-    "tau",
-    "taer"
-   ],
-   "body": {
-    "op": "+",
-    "args": [
-     "tau",
-     "taer"
-    ]
-   }
-  },
   "dEdd_nir_band_weight_2":   {
    "description": "Near-IR band-2 spectral weight (compute_dEdd_3bd, icepack_shortwave.F90:2116-2118): wghtns(2) = cp67 + (cp78 - cp67)*(1 - fnidr) = 0.67 + 0.11*(1 - fnidr), with cp67 = 0.67 and cp78 = 0.78 (F90:1923-1924); the band-3 weight is wghtns(3) = 1 - wghtns(2) and wghtns(1) = 1.",
    "params": [
@@ -4240,7 +4157,7 @@
    }
   },
   "dEdd_dfdir":   {
-   "description": "Down-up direct-beam flux fraction at an interface dfdir (compute_dEdd_3bd, icepack_shortwave.F90:2824-2827): dfdir = trndir + (trntdr - trndir)*(1 - rupdif)*refk - trndir*rupdir*(1 - rdndif)*refk with refk the interface scattering term; set to 0 when below puny = 1e-11 (F90:2827).",
+   "description": "Down-up direct-beam flux fraction at an interface dfdir (compute_dEdd_3bd, icepack_shortwave.F90:2824-2827): dfdir = trndir + refk*((trntdr - trndir)*(1 - rupdif) - trndir*rupdir*(1 - rdndif)) with refk = 1/(1 - rdndif*rupdif) the interface scattering term (dEdd_interface_refk, F90:2807); set to 0 when below puny (dEdd_puny_guard, F90:2827).",
    "params": [
     "trndir",
     "trntdr",
@@ -4249,15 +4166,26 @@
     "rdndif"
    ],
    "body": {
-    "op": "ifelse",
-    "args": [
-     {
-      "op": "<",
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "dEdd_puny_guard",
+    "bindings": {
+     "x": {
+      "op": "+",
       "args": [
+       "trndir",
        {
-        "op": "+",
+        "op": "*",
         "args": [
-         "trndir",
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "dEdd_interface_refk",
+          "bindings": {
+           "rdndif": "rdndif",
+           "rupdif": "rupdif"
+          }
+         },
          {
           "op": "-",
           "args": [
@@ -4277,25 +4205,6 @@
                1.0,
                "rupdif"
               ]
-             },
-             {
-              "op": "/",
-              "args": [
-               1.0,
-               {
-                "op": "-",
-                "args": [
-                 1.0,
-                 {
-                  "op": "*",
-                  "args": [
-                   "rdndif",
-                   "rupdif"
-                  ]
-                 }
-                ]
-               }
-              ]
              }
             ]
            },
@@ -4310,109 +4219,6 @@
                1.0,
                "rdndif"
               ]
-             },
-             {
-              "op": "/",
-              "args": [
-               1.0,
-               {
-                "op": "-",
-                "args": [
-                 1.0,
-                 {
-                  "op": "*",
-                  "args": [
-                   "rdndif",
-                   "rupdif"
-                  ]
-                 }
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       1e-11
-      ]
-     },
-     0.0,
-     {
-      "op": "+",
-      "args": [
-       "trndir",
-       {
-        "op": "-",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             "trntdr",
-             "trndir"
-            ]
-           },
-           {
-            "op": "-",
-            "args": [
-             1.0,
-             "rupdif"
-            ]
-           },
-           {
-            "op": "/",
-            "args": [
-             1.0,
-             {
-              "op": "-",
-              "args": [
-               1.0,
-               {
-                "op": "*",
-                "args": [
-                 "rdndif",
-                 "rupdif"
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "*",
-          "args": [
-           "trndir",
-           "rupdir",
-           {
-            "op": "-",
-            "args": [
-             1.0,
-             "rdndif"
-            ]
-           },
-           {
-            "op": "/",
-            "args": [
-             1.0,
-             {
-              "op": "-",
-              "args": [
-               1.0,
-               {
-                "op": "*",
-                "args": [
-                 "rdndif",
-                 "rupdif"
-                ]
-               }
-              ]
              }
             ]
            }
@@ -4422,59 +4228,22 @@
        }
       ]
      }
-    ]
+    }
    }
   },
   "dEdd_dfdif":   {
-   "description": "Down-up diffuse flux fraction at an interface dfdif (compute_dEdd_3bd, icepack_shortwave.F90:2829-2830): dfdif = trndif*(1 - rupdif)*refk with refk the interface scattering term; set to 0 when below puny = 1e-11.",
+   "description": "Down-up diffuse flux fraction at an interface dfdif (compute_dEdd_3bd, icepack_shortwave.F90:2829-2830): dfdif = trndif*(1 - rupdif)*refk with refk = 1/(1 - rdndif*rupdif) the interface scattering term (dEdd_interface_refk, F90:2807); set to 0 when below puny (dEdd_puny_guard, F90:2830).",
    "params": [
     "trndif",
     "rupdif",
     "rdndif"
    ],
    "body": {
-    "op": "ifelse",
-    "args": [
-     {
-      "op": "<",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "trndif",
-         {
-          "op": "-",
-          "args": [
-           1.0,
-           "rupdif"
-          ]
-         },
-         {
-          "op": "/",
-          "args": [
-           1.0,
-           {
-            "op": "-",
-            "args": [
-             1.0,
-             {
-              "op": "*",
-              "args": [
-               "rdndif",
-               "rupdif"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       1e-11
-      ]
-     },
-     0.0,
-     {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "dEdd_puny_guard",
+    "bindings": {
+     "x": {
       "op": "*",
       "args": [
        "trndif",
@@ -4486,36 +4255,26 @@
         ]
        },
        {
-        "op": "/",
-        "args": [
-         1.0,
-         {
-          "op": "-",
-          "args": [
-           1.0,
-           {
-            "op": "*",
-            "args": [
-             "rdndif",
-             "rupdif"
-            ]
-           }
-          ]
-         }
-        ]
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "dEdd_interface_refk",
+        "bindings": {
+         "rdndif": "rdndif",
+         "rupdif": "rupdif"
+        }
        }
       ]
      }
-    ]
+    }
    }
   },
   "dEdd_band_absorption":   {
-   "description": "Flux divergence absorbed in a radiation layer (the Sabs/Iabs band accumulations, compute_dEdd_3bd F90:2868-2870 and 2889-2891): abs = (dfdir_lo*swdr + dfdif_lo*swdf) - (dfdir_hi*swdr + dfdif_hi*swdf), the difference of the down-up fluxes at the layer's bottom and top interfaces (lo = lower interface, hi = upper interface).",
+   "description": "Flux divergence absorbed in a radiation layer (the Sabs/Iabs band accumulations, compute_dEdd_3bd F90:2868-2870 and 2889-2891): abs = (dfdir_top*swdr + dfdif_top*swdf) - (dfdir_bot*swdr + dfdif_bot*swdf), the down-up flux at the layer's top interface minus that at its bottom interface (top = upper interface, bot = lower interface), positive when radiation is absorbed in the layer. The Fortran evaluates Sabs(ki) += dfdir(km)*swdr + dfdif(km)*swdf - (dfdir(kp)*swdr + dfdif(kp)*swdf) with km < kp the upper and lower interfaces (F90:2868-2870), and Iabs with the same top-minus-bottom difference (F90:2889-2891).",
    "params": [
-    "dfdir_lo",
-    "dfdif_lo",
-    "dfdir_hi",
-    "dfdif_hi",
+    "dfdir_top",
+    "dfdif_top",
+    "dfdir_bot",
+    "dfdif_bot",
     "swdr",
     "swdf"
    ],
@@ -4528,14 +4287,14 @@
        {
         "op": "*",
         "args": [
-         "dfdir_lo",
+         "dfdir_top",
          "swdr"
         ]
        },
        {
         "op": "*",
         "args": [
-         "dfdif_lo",
+         "dfdif_top",
          "swdf"
         ]
        }
@@ -4547,14 +4306,14 @@
        {
         "op": "*",
         "args": [
-         "dfdir_hi",
+         "dfdir_bot",
          "swdr"
         ]
        },
        {
         "op": "*",
         "args": [
-         "dfdif_hi",
+         "dfdif_bot",
          "swdf"
         ]
        }
