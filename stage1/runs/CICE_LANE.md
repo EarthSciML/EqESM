@@ -166,3 +166,83 @@ pieces, `wghtns`, IOP lookups) appended to `stage2/cice_templates.esm`;
   `5.58...-322`) — parse with the DENORM regex in `check_cice_dedd.py`.
 - The shared queue is contended with other lanes' runs; submit early,
   rerun late.
+
+## 7. Ridge + ITD instrumentation (2026-11-09)
+
+Runs 12277990 / 12280008 / 12280215 instrumented the mechanical
+redistribution (ridging) and the thickness-category remap for stage 2 of
+`stage2/cice_itd.esm`, on the same D_cice_inst case (fork branch
+`instrument/cice-dumps`, superproject commit 90b4900; icepack d404867 =
+thread-private recorder buffers, 90b4900 = da0_melt/da0_himin init;
+cice 425c1db = dump rows, 9e504f1 pointer; wrapper 7cdffa2).
+
+### Dumps (both land in stage1/dumps/cice/, 32 traced cells x 12 steps)
+
+- `cice_ridge.csv` (156 cols): the ridge law
+  (`icepack_mechred.F90` ridge_ice + ridge_shift, armed/drained in
+  `ice_step_mod.F90` step_dyn_ridge): inputs rdg_conv/rdg_shear/Tf; the
+  first-iteration ridge_prep rates closing_net/opning/divu_adv; ridge_itd
+  outputs aksum/apartic_0..5/hrmin/hrmax/hrexp/krdg (krdg_partic=1,
+  krdg_redist=1, exponential); per-category transfers ardg1n/ardg2n/
+  virdgn + totals ardg1/ardg2/virdg; the n=1 redistribution fractions
+  aredistn/vredistn; rafting araftn/vraftn; entry/exit state + energies;
+  msnow_mlt/esnow_mlt/mpond; niter; hin_max_0..4. niter = 1 on all rows.
+- `cice_itd.csv` (136 cols): the linear remap (`icepack_therm_itd.F90`
+  linear_itd + shift_ice, armed/drained in step_therm2): pre-thermo and
+  pre-ITD entry states; hicen_init/hicen/dhicen; hbnew_0..5; the
+  per-category linear fits g0/g1/hL/hR + remap_flag (= 1 on all rows);
+  boundary transfers donor/daice/dvice; da0_melt/da0_himin; post- and
+  exit states + aice/aice0; the 12 conservation totals; linear_itd_ran.
+
+### Bugs found and fixed in the instrumentation
+
+- **OMP race (cice run 12277990)**: `step_dyn_ridge` and `step_therm2`
+  run their iblk loops under `!$OMP PARALLEL DO`; an untraced block's
+  `ridge_ice`/`icepack_step_therm2` could see the shared recorder
+  `*_armed` flag while a traced cell sat between arm and drain and
+  overwrite its row (11/384 ridge rows internally inconsistent, e.g.
+  entry snapshot of one cell with the transfers and exit state of
+  another). Fixed with `!$OMP THREADPRIVATE` on both recorders' module
+  state (icepack d404867); the dEdd recorder is untouched (its dump is
+  clean and must stay bit-identical).
+- **Uninitialized da0_melt/da0_himin** (run 12280008): the dh0<0 melt
+  and hi_min closures assign them only when they fire; uninitialized
+  locals leaked denormal garbage into rows where they did not. Fixed by
+  initializing both to 0 at the top of linear_itd (icepack 90b4900).
+
+### Validation (final run 12280215)
+
+- `stage1/analysis/check_cice_itd.py`: 55007/55007 identity checks pass
+  (71 per row x 768 rows, rtol/atol 1e-12) - every recorded quantity
+  recomputed from the others with the exact Fortran formulas: ridge
+  participation/aksum/krdg/hrmin/hrexp, ridge_prep rates, per-category
+  transfers + totals, aredistn/vredistn from the exponential ridge ITD
+  integrals (sum farea = sum fvol = 1), rafting mask, energy/volume/
+  snow conservation (msnow_mlt/rhos and esnow_mlt added back); ITD
+  hbnew interpolation + top extrapolation, fit_line area/first-moment
+  identities + h13/h23 bound shifts, boundary-transfer eta integrals
+  with the puny/full-category clamps, post state (da0_melt, transfers,
+  hi_min closure at 0.01 m), exit-state aggregate identities, and the
+  conservation totals within linear_itd's own thresholds.
+- `stage1/analysis/check_cice.py` now also delegates to
+  check_cice_itd.py and counts both new CSVs (384 rows each, zero blank
+  lines); the pre-existing 15 CSVs re-verified bit-identical in content
+  (deterministic trajectory + unchanged dump code, and the checks pass).
+- Solution neutrality: `compare_iceh.py` bit-identical vs the D_f19g17
+  reference after every rerun (modulo case metadata).
+
+### Notes for stage 2 (`stage2/cice_itd.esm`)
+
+- Ridge rates are the first-iteration ridge_prep values (the loop
+  zeroes closing_net/opning on convergence; niter = 1 everywhere in
+  this run, so iteration accumulation never engaged).
+- `step_dyn_ridge` does not pass `closing` to icepack_step_ridge, so
+  ridge_ice takes the ridge_prep branch (rates from rdg_conv/rdg_shear).
+- The dumped `hicen` is post-shift_ice (shift_ice recomputes it from
+  vicen/aicen); `dhicen` is pre-shift; the fits used the pre-shift
+  entry thicknesses.
+- `da0_melt`/`da0_himin` fire on all 384 rows in this run (category-1
+  melt everywhere; post-remap hicen_1 < 0.01 m everywhere).
+- Coverage gaps: no niter > 1 rows (no rate-capped ridging), no
+  remap_flag = 0 rows (no failed remap), no srftyp-related ITD variety;
+  all rows have ice in every category.
