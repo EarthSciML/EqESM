@@ -4321,6 +4321,82 @@
      }
     ]
    }
+  },
+  "dEdd_fresnel_Rf_dif_a":   {
+   "description": "Fresnel reflectivity to diffuse radiation from above Rf_dif_a = cp063 = 0.063 (solution_dEdd, icepack_shortwave.F90:3378; cp063 = 0.063 declared at F90:3178).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 0.063,
+    "units": "1"
+   }
+  },
+  "dEdd_fresnel_Rf_dif_b":   {
+   "description": "Fresnel reflectivity to diffuse radiation from below Rf_dif_b = cp455 = 0.455 (solution_dEdd, icepack_shortwave.F90:3380; cp455 = 0.455 declared at F90:3179).",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 0.455,
+    "units": "1"
+   }
+  },
+  "dEdd_fresnel_Tf_dif_a":   {
+   "description": "Fresnel transmission to diffuse radiation from above Tf_dif_a = 1 - Rf_dif_a (solution_dEdd, icepack_shortwave.F90:3379).",
+   "params": [
+    "Rf_dif_a"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     1.0,
+     "Rf_dif_a"
+    ]
+   }
+  },
+  "dEdd_fresnel_Tf_dif_b":   {
+   "description": "Fresnel transmission to diffuse radiation from below Tf_dif_b = 1 - Rf_dif_b (solution_dEdd, icepack_shortwave.F90:3381).",
+   "params": [
+    "Rf_dif_b"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     1.0,
+     "Rf_dif_b"
+    ]
+   }
+  },
+  "dEdd_fresnel_tdif_b":   {
+   "description": "Fresnel-combined layer diffuse transmission from below (solution_dEdd, icepack_shortwave.F90:3405): tdif_b' = tdif_b*rintfc*Tf_dif_b.",
+   "params": [
+    "tdif_b",
+    "rintfc",
+    "Tf_dif_b"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "tdif_b",
+     "rintfc",
+     "Tf_dif_b"
+    ]
+   }
+  },
+  "dEdd_fresnel_trnlay":   {
+   "description": "Fresnel-combined direct-beam layer transmission (solution_dEdd, icepack_shortwave.F90:3406): trnlay' = Tf_dir_a*trnlay.",
+   "params": [
+    "Tf_dir_a",
+    "trnlay"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "Tf_dir_a",
+     "trnlay"
+    ]
+   }
   }
   }
  }
