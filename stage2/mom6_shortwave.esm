@@ -1,0 +1,3104 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_shortwave",
+  "description": "Stage-2 implementation of the MOM6 penetrating shortwave absorption (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps; in this MOM6 version the two routines live in MOM_opacity.F90: absorbRemainingSW :602-869, which heats the water column by the Beer-Lambert decay of the penetrating bands, and sumSWoverBands :894-1041, which accumulates the penetrating shortwave for the KPP buoyancy-flux path; the per-band surface split penSW_bnd = sw_pen_band*dt/(RHO_0*C_P) is extractFluxes1d of MOM_forcing_type.F90:619; run configuration C_JRA_t62_mom6_inst: OPACITY_SCHEME=OHLMANN_03 (chlorophyll-driven opacity_from_chl :247-479), N_SW_BANDS=2, RHO_0=1035 kg m-3, C_P=3992 J kg-1 K-1, all unit rescale factors 1.0). The component is written as math, not as the Fortran's loop: the optical depth at interface i is the measure-weighted cumulative sum tau(n,i) = sum_{j<i} opacity(n,j)*h(j), spelled with the sw_optical_depth expression template of ./mom6_templates.esm (an exp-of-prefix-sum form of the Beer-Lambert integral int_0^z opacity dz', esm-spec 4.3.1), applied once per thickness field the model uses: h = h_after (the post-flux thickness the heating path sees, absorbRemainingSW :748-750) for OD and once more with h = h_buoy = h_before (the pre-flux thickness of the KPP buoyancy path, thickness_to_dz via MOM_forcing_type.F90:1102) for OD_buoy. The remaining penetrating SW after layer k is pen_sw_rem(n,k) = penSW_bnd(n)*exp(-tau(n,k+1)) (absorbRemainingSW :752-753, 760-766), the layer heating is dT(k) = sum_n penSW_bnd(n)*exp(-tau(n,k))*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), and the interface net penetrating flux is netPen(i) = sum_n penSW_bnd(n)*exp(-tau_buoy(n,i))/dt (sumSWoverBands :1000-1004). Coverage gap (see README-mom6-shortwave.md): absorbRemainingSW's min_SW_heat clamp (PEN_SW_FLUX_ABSORB = 2.5e-11 degC m s-1, PEN_SW_ABSORB_MINTHICK = 1.0 m, answer_date >= 20190101, :711-730) rewrites pen_sw_rem/dT below the layers where nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m; it is a stateful recurrence (the clamped remaining feeds the next layer), so it is not expressed as pure math here and those layers are pinned only via the conservation identity absorbed_total = sum_k dT(k)*h(k) (which the clamp preserves up to the ~1e-24 leftover). State units: sw_pen_band [W m-2], opacity [m-1], h/h_buoy [m], dt [s], penSW_bnd [degC m] (heating per step), OD/OD_buoy dimensionless, pen_sw_rem [degC m], dT [degC], netPen [degC m s-1], absorbed_total [degC m]. Pins: mom6_sw_abs.csv rows (joined to mom6_bflux.csv for h_after/h_before/dt) at rel 1e-12 within the unclamped region, extracted by stage1/analysis/make_mom6_sw_abs_tests.py.",
+  "authors": [
+   "EqESM stage 2 (wt/mom6-shortwave)"
+  ]
+ },
+ "index_sets": {
+  "band": {
+   "kind": "interval",
+   "size": "N_BAND"
+  },
+  "layer": {
+   "kind": "interval",
+   "size": "N_LAYER"
+  },
+  "iface": {
+   "kind": "interval",
+   "size": "N_IFACE"
+  }
+ },
+ "metaparameters": {
+  "N_BAND": {
+   "type": "integer",
+   "default": 2
+  },
+  "N_LAYER": {
+   "type": "integer",
+   "default": 75
+  },
+  "N_IFACE": {
+   "type": "integer",
+   "default": 76
+  }
+ },
+ "models": {
+  "ShortwaveAbsorption": {
+   "expression_template_imports": [
+    {
+     "ref": "./mom6_templates.esm"
+    }
+   ],
+   "variables": {
+    "sw_pen_band": {
+     "type": "parameter",
+     "shape": [
+      "band"
+     ],
+     "units": "W m^-2",
+     "default": 0.0,
+     "description": "Penetrating shortwave flux entering the surface in each band (the dumped sw_pen_band_n column, the OHLMANN_03 surface split of the downwelling SW), [W m-2]"
+    },
+    "opacity": {
+     "type": "parameter",
+     "shape": [
+      "band",
+      "layer"
+     ],
+     "units": "m^-1",
+     "default": 0.0,
+     "description": "Optical attenuation coefficient per band and layer (opacity_from_chl, MOM_opacity.F90:247-479; the dumped opacity_n_k column), [m-1]"
+    },
+    "h": {
+     "type": "parameter",
+     "shape": [
+      "layer"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "Layer thickness AFTER the boundary flux application, as seen by the heating path of absorbRemainingSW (the dumped h_after_k column of mom6_bflux.csv), [m]"
+    },
+    "h_buoy": {
+     "type": "parameter",
+     "shape": [
+      "layer"
+     ],
+     "units": "m",
+     "default": 0.0,
+     "description": "Layer thickness BEFORE the boundary flux application, as used by the sumSWoverBands/KPP buoyancy-flux path (thickness_to_dz via MOM_forcing_type.F90:1102; the dumped h_before_k column of mom6_bflux.csv), [m]"
+    },
+    "dt": {
+     "type": "parameter",
+     "units": "s",
+     "default": 3600.0,
+     "description": "Length of the coupling step over which the flux acts (the dumped dt column of mom6_bflux.csv), [s]"
+    },
+    "RHO_0": {
+     "type": "parameter",
+     "units": "kg m^-3",
+     "default": 1035.0,
+     "description": "MOM6 reference density used in the surface flux split (the run's RHO_0), [kg m-3]"
+    },
+    "C_P": {
+     "type": "parameter",
+     "units": "J kg^-1 degC^-1",
+     "default": 3992.0,
+     "description": "MOM6 specific heat used in the surface flux split (the run's C_P), [J kg-1 degC-1]"
+    },
+    "penSW_bnd": {
+     "type": "unknown",
+     "shape": [
+      "band"
+     ],
+     "units": "degC m",
+     "description": "Per-band penetrating shortwave converted to a heating depth per step, penSW_bnd(n) = sw_pen_band(n)*dt/(RHO_0*C_P) (extractFluxes1d, MOM_forcing_type.F90:619), [degC m]"
+    },
+    "OD": {
+     "type": "unknown",
+     "shape": [
+      "band",
+      "iface"
+     ],
+     "units": "dimensionless",
+     "description": "Cumulative optical depth at interface i along the heating path, tau(n,i) = sum_{j<i} opacity(n,j)*h_after(j) (absorbRemainingSW :748-750), dimensionless"
+    },
+    "OD_buoy": {
+     "type": "unknown",
+     "shape": [
+      "band",
+      "iface"
+     ],
+     "units": "dimensionless",
+     "description": "Cumulative optical depth at interface i along the buoyancy-flux path, tau(n,i) = sum_{j<i} opacity(n,j)*h_before(j) (sumSWoverBands :980-982 with the pre-flux thickness), dimensionless"
+    },
+    "pen_sw_rem": {
+     "type": "unknown",
+     "shape": [
+      "band",
+      "layer"
+     ],
+     "units": "degC m",
+     "description": "Penetrating shortwave remaining at the bottom of layer k, pen_sw_rem(n,k) = penSW_bnd(n)*exp(-tau(n,k+1)) (absorbRemainingSW :752-753, 760-766), [degC m]"
+    },
+    "dT": {
+     "type": "unknown",
+     "shape": [
+      "layer"
+     ],
+     "units": "degC",
+     "description": "Layer heating by the absorbed shortwave, dT(k) = sum_n penSW_bnd(n)*exp(-tau(n,k))*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), [degC]"
+    },
+    "netPen": {
+     "type": "unknown",
+     "shape": [
+      "iface"
+     ],
+     "units": "degC m s^-1",
+     "description": "Net penetrating shortwave crossing interface i as a flux, netPen(i) = sum_n penSW_bnd(n)*exp(-tau_buoy(n,i))/dt (sumSWoverBands :1000-1004), [degC m s-1]"
+    },
+    "absorbed_total": {
+     "type": "unknown",
+     "units": "degC m",
+     "description": "Total shortwave heating absorbed in the water column, absorbed_total = sum_k dT(k)*h(k); a conservation pin (the sum of the model's dT_k*h_after_k), not a dump column, [degC m]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "penSW_bnd",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "b"
+      ],
+      "ranges": {
+       "b": {
+        "from": "band"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "sw_pen_band",
+            "b"
+           ]
+          },
+          "dt"
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "RHO_0",
+          "C_P"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "sw_pen_band"
+      ]
+     }
+    },
+    {
+     "lhs": "OD",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "sw_optical_depth",
+      "bindings": {
+       "opacity": "opacity",
+       "h": "h"
+      }
+     }
+    },
+    {
+     "lhs": "OD_buoy",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "sw_optical_depth",
+      "bindings": {
+       "opacity": "opacity",
+       "h": "h_buoy"
+      }
+     }
+    },
+    {
+     "lhs": "pen_sw_rem",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "b",
+       "k"
+      ],
+      "ranges": {
+       "b": {
+        "from": "band"
+       },
+       "k": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "penSW_bnd",
+          "b"
+         ]
+        },
+        {
+         "op": "exp",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "OD",
+              "b",
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "args": [
+       "penSW_bnd",
+       "OD"
+      ]
+     }
+    },
+    {
+     "lhs": "dT",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "ranges": {
+       "k": {
+        "from": "layer"
+       },
+       "b": {
+        "from": "band"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "penSW_bnd",
+            "b"
+           ]
+          },
+          {
+           "op": "exp",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "OD",
+                "b",
+                "k"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "-",
+           "args": [
+            1.0,
+            {
+             "op": "exp",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "index",
+                   "args": [
+                    "opacity",
+                    "b",
+                    "k"
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "h",
+                    "k"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "h",
+          "k"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "penSW_bnd",
+       "OD",
+       "opacity",
+       "h"
+      ]
+     }
+    },
+    {
+     "lhs": "netPen",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "i"
+      ],
+      "ranges": {
+       "i": {
+        "from": "iface"
+       },
+       "b": {
+        "from": "band"
+       }
+      },
+      "expr": {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "penSW_bnd",
+            "b"
+           ]
+          },
+          {
+           "op": "exp",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "OD_buoy",
+                "b",
+                "i"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "dt"
+       ]
+      },
+      "args": [
+       "penSW_bnd",
+       "OD_buoy"
+      ]
+     }
+    },
+    {
+     "lhs": "absorbed_total",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "reduce": "+",
+      "ranges": {
+       "k": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "dT",
+          "k"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "h",
+          "k"
+         ]
+        }
+       ]
+      },
+      "args": [
+       "dT",
+       "h"
+      ]
+     }
+    }
+   ],
+   "tests":    [
+    {
+     "id": "sw_g3j78_step1_t3600",
+     "description": "mom6_sw_abs.csv row (cpl_step 1, tod 3600, gi 3, gj 78, i 7, j 82, lon -285.33333333333337, lat -69.50444906328708) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k20, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/7, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       95.60676522603994,
+       34.920225974727146
+      ],
+      "opacity": [
+       [
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691
+       ],
+       [
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293
+       ]
+      ],
+      "h": [
+       2.505937959830134,
+       2.501892978164657,
+       2.5017272545267977,
+       2.5015693814166826,
+       3.001726517137612,
+       3.0015593590329077,
+       4.001807120040217,
+       5.0018870024358435,
+       5.001492177647564,
+       5.0011284090633845,
+       5.00083930807502,
+       5.000628417858856,
+       5.000488628830354,
+       5.000401849324857,
+       5.000396867081619,
+       5.000467952434573,
+       5.000572200145099,
+       5.000735150856453,
+       5.001008941766694,
+       5.001503210891359,
+       5.0023653454907215,
+       5.003790098254819,
+       5.006071033680151,
+       5.009629768138034,
+       5.015074076068978,
+       5.023160594684109,
+       5.034925407435693,
+       5.051731910594908,
+       5.075367891423117,
+       5.108103636445879,
+       5.1527974185346865,
+       5.213007285789468,
+       5.293130012105934,
+       5.398545436034885,
+       5.535702362341015,
+       5.71290727783589,
+       5.93902285082774,
+       6.225753904267744,
+       6.586379406182547,
+       7.036631765948616,
+       7.594949272917944,
+       8.282801837278132,
+       9.125530909640725,
+       10.151740250381746,
+       11.394334798084529,
+       12.891492437510122,
+       14.687463397187956,
+       16.832907389496818,
+       19.381317682286536,
+       22.396719964256963,
+       25.95622227092345,
+       30.135244286889563,
+       35.02536929516961,
+       40.729080456111625,
+       47.358878422378254,
+       49.631692734966386,
+       0.001513827257149827,
+       0.0010000085529628421,
+       0.000999962085871611,
+       0.0009999599688644196,
+       0.0009999603995984824,
+       0.0009999604862692374,
+       0.0009999605668350338,
+       0.0009999606417310767,
+       0.0009999607118574131,
+       0.0009999607791579305,
+       0.0009999608479388797,
+       0.0009999609278773275,
+       0.000999961040885174,
+       0.0009999612367414307,
+       0.0009999616285651701,
+       0.000999962472857992,
+       0.0009999643486363742,
+       0.0009999685535890417,
+       0.0009999779638633285
+      ],
+      "h_buoy": [
+       2.505951254018008,
+       2.501892978164657,
+       2.5017272545267977,
+       2.5015693814166826,
+       3.001726517137612,
+       3.0015593590329077,
+       4.001807120040217,
+       5.0018870024358435,
+       5.001492177647564,
+       5.0011284090633845,
+       5.00083930807502,
+       5.000628417858856,
+       5.000488628830354,
+       5.000401849324857,
+       5.000396867081619,
+       5.000467952434573,
+       5.000572200145099,
+       5.000735150856453,
+       5.001008941766694,
+       5.001503210891359,
+       5.0023653454907215,
+       5.003790098254819,
+       5.006071033680151,
+       5.009629768138034,
+       5.015074076068978,
+       5.023160594684109,
+       5.034925407435693,
+       5.051731910594908,
+       5.075367891423117,
+       5.108103636445879,
+       5.1527974185346865,
+       5.213007285789468,
+       5.293130012105934,
+       5.398545436034885,
+       5.535702362341015,
+       5.71290727783589,
+       5.93902285082774,
+       6.225753904267744,
+       6.586379406182547,
+       7.036631765948616,
+       7.594949272917944,
+       8.282801837278132,
+       9.125530909640725,
+       10.151740250381746,
+       11.394334798084529,
+       12.891492437510122,
+       14.687463397187956,
+       16.832907389496818,
+       19.381317682286536,
+       22.396719964256963,
+       25.95622227092345,
+       30.135244286889563,
+       35.02536929516961,
+       40.729080456111625,
+       47.358878422378254,
+       49.631692734966386,
+       0.001513827257149827,
+       0.0010000085529628421,
+       0.000999962085871611,
+       0.0009999599688644196,
+       0.0009999603995984824,
+       0.0009999604862692374,
+       0.0009999605668350338,
+       0.0009999606417310767,
+       0.0009999607118574131,
+       0.0009999607791579305,
+       0.0009999608479388797,
+       0.0009999609278773275,
+       0.000999961040885174,
+       0.0009999612367414307,
+       0.0009999616285651701,
+       0.000999962472857992,
+       0.0009999643486363742,
+       0.0009999685535890417,
+       0.0009999779638633285
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.05491221259691788
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.023893656222586587
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.0012993558856831675
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 20
+       },
+       "expected": 6.01910425522744e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.006667240636168104
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 1.648385776554969e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.020810465965843017
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.005384655860658727
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.0007057549926394735
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 3.159144162740144e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 1.7105355037134166e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 7
+       },
+       "expected": 1.6138211621264834e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.11372918985864665
+      }
+     ]
+    },
+    {
+     "id": "sw_g7j80_step1_t3600",
+     "description": "mom6_sw_abs.csv row (cpl_step 1, tod 3600, gi 7, gj 80, i 11, j 84, lon -282.66666666666674, lat -69.03248285013665) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k20, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/7, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       109.19140607615775,
+       39.78959017062563
+      ],
+      "opacity": [
+       [
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147
+       ],
+       [
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729
+       ]
+      ],
+      "h": [
+       2.487121262890343,
+       2.498413302371859,
+       2.4984636163347167,
+       2.4984896065497355,
+       2.9981379217849966,
+       2.9980966879360187,
+       3.9974456603890887,
+       4.996834980969886,
+       4.996925641759502,
+       4.997076363758009,
+       4.997261460140166,
+       4.997451603550523,
+       4.9976392161912875,
+       4.997827909665866,
+       4.997961819453403,
+       4.99812590238134,
+       4.998287502046111,
+       4.9985712926683235,
+       4.99893991619021,
+       4.999504447368247,
+       5.000421886054464,
+       5.001902035388606,
+       5.004310446986138,
+       5.0078732437830205,
+       5.013355512422344,
+       5.021566357896912,
+       5.033436801037826,
+       5.050373503629741,
+       5.074152828013639,
+       5.10703361298613,
+       5.151861609331785,
+       5.212194490720269,
+       5.29242817529179,
+       5.397950222359949,
+       5.535354252486961,
+       5.712371007997995,
+       5.9387543377285406,
+       6.225626131417505,
+       6.586407155810753,
+       7.036883631868407,
+       7.59551415304259,
+       8.283847892086692,
+       9.126871367179508,
+       10.153565885245879,
+       11.397161234956846,
+       12.895816146652148,
+       14.693145091585757,
+       16.838789046558368,
+       19.38924076886001,
+       22.408121074455998,
+       25.967525204431027,
+       30.147966551781987,
+       35.03959585681851,
+       40.7440775198378,
+       43.74283280420597,
+       0.0017593870036773354,
+       0.0010000823957908604,
+       0.0010000820517989154,
+       0.0010000818070983201,
+       0.0010000817826533019,
+       0.0010000817582120562,
+       0.0010000817337736264,
+       0.0010000817093365605,
+       0.001000081684898762,
+       0.0010000816604571403,
+       0.0010000816360069532,
+       0.0010000816115405726,
+       0.0010000815870450247,
+       0.0010000815624966947,
+       0.001000081537848709,
+       0.0010000815129965815,
+       0.0010000814876650955,
+       0.001000081460873459,
+       0.0010000814230470088,
+       0.0010000808539779441
+      ],
+      "h_buoy": [
+       2.4871035945487163,
+       2.498413302371859,
+       2.4984636163347167,
+       2.4984896065497355,
+       2.9981379217849966,
+       2.9980966879360187,
+       3.9974456603890887,
+       4.996834980969886,
+       4.996925641759502,
+       4.997076363758009,
+       4.997261460140166,
+       4.997451603550523,
+       4.9976392161912875,
+       4.997827909665866,
+       4.997961819453403,
+       4.99812590238134,
+       4.998287502046111,
+       4.9985712926683235,
+       4.99893991619021,
+       4.999504447368247,
+       5.000421886054464,
+       5.001902035388606,
+       5.004310446986138,
+       5.0078732437830205,
+       5.013355512422344,
+       5.021566357896912,
+       5.033436801037826,
+       5.050373503629741,
+       5.074152828013639,
+       5.10703361298613,
+       5.151861609331785,
+       5.212194490720269,
+       5.29242817529179,
+       5.397950222359949,
+       5.535354252486961,
+       5.712371007997995,
+       5.9387543377285406,
+       6.225626131417505,
+       6.586407155810753,
+       7.036883631868407,
+       7.59551415304259,
+       8.283847892086692,
+       9.126871367179508,
+       10.153565885245879,
+       11.397161234956846,
+       12.895816146652148,
+       14.693145091585757,
+       16.838789046558368,
+       19.38924076886001,
+       22.408121074455998,
+       25.967525204431027,
+       30.147966551781987,
+       35.03959585681851,
+       40.7440775198378,
+       43.74283280420597,
+       0.0017593870036773354,
+       0.0010000823957908604,
+       0.0010000820517989154,
+       0.0010000818070983201,
+       0.0010000817826533019,
+       0.0010000817582120562,
+       0.0010000817337736264,
+       0.0010000817093365605,
+       0.001000081684898762,
+       0.0010000816604571403,
+       0.0010000816360069532,
+       0.0010000816115405726,
+       0.0010000815870450247,
+       0.0010000815624966947,
+       0.001000081537848709,
+       0.0010000815129965815,
+       0.0010000814876650955,
+       0.001000081460873459,
+       0.0010000814230470088,
+       0.0010000808539779441
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.06237440334739964
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.02670732698746764
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.00137188982770193
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 20
+       },
+       "expected": 5.198109238823934e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.007638412129972602
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 1.834501549828945e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.024042049907795127
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.006169153292364449
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.000778779859042178
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 3.605786361292231e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 1.9448079064367145e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 7
+       },
+       "expected": 1.7548138218980425e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.1298083090065208
+      }
+     ]
+    },
+    {
+     "id": "sw_g4j78_step1_t3600",
+     "description": "mom6_sw_abs.csv row (cpl_step 1, tod 3600, gi 4, gj 78, i 8, j 82, lon -284.66666666666663, lat -69.50444906328708) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k19, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/7, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       79.29667472255852,
+       28.895883865653012
+      ],
+      "opacity": [
+       [
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147,
+        0.16974943659534147
+       ],
+       [
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729,
+        0.6081953711933729
+       ]
+      ],
+      "h": [
+       2.4932045383813675,
+       2.498124249625839,
+       2.498279650855017,
+       2.4984044487608776,
+       2.9982096610983477,
+       2.998348484171444,
+       3.998032151591633,
+       4.997846087730756,
+       4.99814140958289,
+       4.9984309696540405,
+       4.998684673690728,
+       4.998895442343829,
+       4.999064608327703,
+       4.999201676783652,
+       4.999271407182148,
+       4.999294911868541,
+       4.999360250472482,
+       4.99949946710892,
+       4.999765715934547,
+       5.0002444488552396,
+       5.001075534294629,
+       5.002479450918819,
+       5.0047878655837374,
+       5.008323500534026,
+       5.013754301217408,
+       5.021878310790949,
+       5.033709623995366,
+       5.050644959426404,
+       5.07444118250311,
+       5.107346171705088,
+       5.152196835759313,
+       5.212544509578435,
+       5.2927817655344915,
+       5.398300406699846,
+       5.535753963154339,
+       5.712644256168754,
+       5.939086107844549,
+       6.225961793560606,
+       6.586755291765139,
+       7.03725641795443,
+       7.595963965449645,
+       8.2844850406861,
+       9.127478115444415,
+       10.154136807401388,
+       11.398077770580153,
+       12.89738387453574,
+       14.694967905789882,
+       16.83938325363945,
+       19.38959990302108,
+       22.40930462030785,
+       4.547124565258976,
+       0.004550515654966672,
+       0.00440036415926252,
+       0.0035054798504326958,
+       0.0024106434592723503,
+       0.001189026854031373,
+       0.0010000465407254244,
+       0.0010000549065044306,
+       0.0010000545790287013,
+       0.00100005419062496,
+       0.0010000538286844653,
+       0.0010000534930188858,
+       0.0010000531833084451,
+       0.0010000528990000185,
+       0.0010000526390102665,
+       0.0010000524010472505,
+       0.0010000521800520691,
+       0.0010000519646059794,
+       0.001000051728625652,
+       0.0010000514121320722,
+       0.0010000508766584305,
+       0.0010000498017525374,
+       0.001000047444601632,
+       0.0010000420816076467,
+       0.0010000297127238404
+      ],
+      "h_buoy": [
+       2.49310163037841,
+       2.498124249625839,
+       2.498279650855017,
+       2.4984044487608776,
+       2.9982096610983477,
+       2.998348484171444,
+       3.998032151591633,
+       4.997846087730756,
+       4.99814140958289,
+       4.9984309696540405,
+       4.998684673690728,
+       4.998895442343829,
+       4.999064608327703,
+       4.999201676783652,
+       4.999271407182148,
+       4.999294911868541,
+       4.999360250472482,
+       4.99949946710892,
+       4.999765715934547,
+       5.0002444488552396,
+       5.001075534294629,
+       5.002479450918819,
+       5.0047878655837374,
+       5.008323500534026,
+       5.013754301217408,
+       5.021878310790949,
+       5.033709623995366,
+       5.050644959426404,
+       5.07444118250311,
+       5.107346171705088,
+       5.152196835759313,
+       5.212544509578435,
+       5.2927817655344915,
+       5.398300406699846,
+       5.535753963154339,
+       5.712644256168754,
+       5.939086107844549,
+       6.225961793560606,
+       6.586755291765139,
+       7.03725641795443,
+       7.595963965449645,
+       8.2844850406861,
+       9.127478115444415,
+       10.154136807401388,
+       11.398077770580153,
+       12.89738387453574,
+       14.694967905789882,
+       16.83938325363945,
+       19.38959990302108,
+       22.40930462030785,
+       4.547124565258976,
+       0.004550515654966672,
+       0.00440036415926252,
+       0.0035054798504326958,
+       0.0024106434592723503,
+       0.001189026854031373,
+       0.0010000465407254244,
+       0.0010000549065044306,
+       0.0010000545790287013,
+       0.00100005419062496,
+       0.0010000538286844653,
+       0.0010000534930188858,
+       0.0010000531833084451,
+       0.0010000528990000185,
+       0.0010000526390102665,
+       0.0010000524010472505,
+       0.0010000521800520691,
+       0.0010000519646059794,
+       0.001000051728625652,
+       0.0010000514121320722,
+       0.0010000508766584305,
+       0.0010000498017525374,
+       0.001000047444601632,
+       0.0010000420816076467,
+       0.0010000297127238404
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.04525061175351291
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.019376857514493532
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.0009950314496041757
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 19
+       },
+       "expected": 8.788896151034261e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.005526660574931157
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 1.327042562754376e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.01744411690996861
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.004474854212052293
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.0005649762217107002
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 2.61858399378979e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 1.4105113531522089e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 7
+       },
+       "expected": 1.2731287250332133e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.09426902377643394
+      }
+     ]
+    },
+    {
+     "id": "sw_g3j80_step1_t3600",
+     "description": "mom6_sw_abs.csv row (cpl_step 1, tod 3600, gi 3, gj 80, i 7, j 84, lon -285.33333333333337, lat -69.03248285013665) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k19, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/7, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       139.9235168164285,
+       50.60055071383721
+      ],
+      "opacity": [
+       [
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736,
+        0.18109051285048736
+       ],
+       [
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421,
+        0.6160764580825421
+       ]
+      ],
+      "h": [
+       2.500954303967864,
+       2.5003190287678767,
+       2.5002989110683735,
+       2.5002866589533324,
+       3.0003187939816787,
+       3.0002883806156446,
+       4.000340409759639,
+       5.000370082803833,
+       5.000313912110692,
+       5.0002545645445915,
+       5.000194662006089,
+       5.000143865496881,
+       5.0001081875904285,
+       5.000086136381882,
+       5.000087169036737,
+       5.000109874295756,
+       5.000165796339925,
+       5.000295224820046,
+       5.000553545661315,
+       5.001029049796779,
+       5.001862117478286,
+       5.003257726483841,
+       5.005495061861784,
+       5.009072324708911,
+       5.014499860186743,
+       5.022561344842473,
+       5.034338540301867,
+       5.051190568951868,
+       5.074889049567158,
+       5.107693330820123,
+       5.152451914867748,
+       5.212716846797746,
+       5.292880020266334,
+       5.3983290910494555,
+       5.535605141306496,
+       5.7126468891193145,
+       5.938888647526349,
+       6.225659111875453,
+       6.586334544925956,
+       7.036666914409648,
+       7.5951293661819355,
+       8.283250053105107,
+       9.12606347252958,
+       10.152398958352537,
+       11.395565065689958,
+       12.893672145020993,
+       14.689767025876147,
+       16.834782844601015,
+       19.38368009950818,
+       22.40087416323381,
+       25.95792368705886,
+       30.135703528423804,
+       35.02514791780543,
+       40.72727537244359,
+       47.35552563714884,
+       55.03707688138751,
+       63.91203797997571,
+       74.13918976964771,
+       65.65260019058046,
+       0.0010001855442644898,
+       0.001000184724573261,
+       0.0010001847117738333,
+       0.0010001846980717236,
+       0.0010001846834152464,
+       0.0010001846677253525,
+       0.0010001846508774358,
+       0.0010001846326671167,
+       0.001000184612741509,
+       0.0010001845904493247,
+       0.001000184564476927,
+       0.0010001845318212549,
+       0.0010001844840880941,
+       0.0010001843865506252,
+       0.0010001839514547789,
+       0.0010001786483272244
+      ],
+      "h_buoy": [
+       2.5009627975504296,
+       2.5003190287678767,
+       2.5002989110683735,
+       2.5002866589533324,
+       3.0003187939816787,
+       3.0002883806156446,
+       4.000340409759639,
+       5.000370082803833,
+       5.000313912110692,
+       5.0002545645445915,
+       5.000194662006089,
+       5.000143865496881,
+       5.0001081875904285,
+       5.000086136381882,
+       5.000087169036737,
+       5.000109874295756,
+       5.000165796339925,
+       5.000295224820046,
+       5.000553545661315,
+       5.001029049796779,
+       5.001862117478286,
+       5.003257726483841,
+       5.005495061861784,
+       5.009072324708911,
+       5.014499860186743,
+       5.022561344842473,
+       5.034338540301867,
+       5.051190568951868,
+       5.074889049567158,
+       5.107693330820123,
+       5.152451914867748,
+       5.212716846797746,
+       5.292880020266334,
+       5.3983290910494555,
+       5.535605141306496,
+       5.7126468891193145,
+       5.938888647526349,
+       6.225659111875453,
+       6.586334544925956,
+       7.036666914409648,
+       7.5951293661819355,
+       8.283250053105107,
+       9.12606347252958,
+       10.152398958352537,
+       11.395565065689958,
+       12.893672145020993,
+       14.689767025876147,
+       16.834782844601015,
+       19.38368009950818,
+       22.40087416323381,
+       25.95792368705886,
+       30.135703528423804,
+       35.02514791780543,
+       40.72727537244359,
+       47.35552563714884,
+       55.03707688138751,
+       63.91203797997571,
+       74.13918976964771,
+       65.65260019058046,
+       0.0010001855442644898,
+       0.001000184724573261,
+       0.0010001847117738333,
+       0.0010001846980717236,
+       0.0010001846834152464,
+       0.0010001846677253525,
+       0.0010001846508774358,
+       0.0010001846326671167,
+       0.001000184612741509,
+       0.0010001845904493247,
+       0.001000184564476927,
+       0.0010001845318212549,
+       0.0010001844840880941,
+       0.0010001843865506252,
+       0.0010001839514547789,
+       0.0010001786483272244
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.07751232280451387
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.03133928619031745
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.0013171864140899712
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 19
+       },
+       "expected": 6.221595370178435e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.009444413954365337
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 1.9606669968879147e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.03160728508345323
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.007814080476516994
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.0008666250051001523
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 4.611253122918923e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 2.4154602254746395e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 7
+       },
+       "expected": 1.867963357494765e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.16600511242508
+      }
+     ]
+    },
+    {
+     "id": "sw_g3j78_step5_t21600",
+     "description": "mom6_sw_abs.csv row (cpl_step 5, tod 21600, gi 3, gj 78, i 7, j 82, lon -285.33333333333337, lat -69.50444906328708) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k21, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/8, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       173.95370471865604,
+       63.536326781422645
+      ],
+      "opacity": [
+       [
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691,
+        0.1663041444126691
+       ],
+       [
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293,
+        0.6058011851003293
+       ]
+      ],
+      "h": [
+       2.5377086396264357,
+       2.516730695089421,
+       2.5036403747280582,
+       2.5039184698995784,
+       3.0034689560300096,
+       3.002435355887736,
+       4.001653008386438,
+       4.9997987011418115,
+       4.997473587104419,
+       4.995309809765503,
+       4.99350211352097,
+       4.992119346833862,
+       4.991101670886511,
+       4.990380074560923,
+       4.990078811590056,
+       4.990166163425136,
+       4.990367935333405,
+       4.990596588452685,
+       4.99087045249809,
+       4.99137259437616,
+       4.992289787061448,
+       4.993753177171479,
+       4.995983100850646,
+       4.999551263774276,
+       5.005007162182473,
+       5.012983818611903,
+       5.024526535112959,
+       5.040942973349271,
+       5.064077729399942,
+       5.09625647118017,
+       5.1403851086575365,
+       5.200041003027737,
+       5.279625542483232,
+       5.384471259789205,
+       5.520901346891878,
+       5.697534131342501,
+       5.9226546607037385,
+       6.208197576371615,
+       6.56736678507366,
+       7.015777023192521,
+       7.571736810273838,
+       8.256565593819783,
+       9.095420063483482,
+       10.11681693044705,
+       11.353336674429192,
+       12.84341958541313,
+       14.63011209780128,
+       16.765468687297915,
+       19.302358782431597,
+       22.3000572577784,
+       25.844103114353718,
+       30.00334727405956,
+       34.87460309776484,
+       40.56042980941329,
+       47.18273918084569,
+       49.452193369287265,
+       0.003999581225916062,
+       0.004934754945945629,
+       0.0012908318766503227,
+       0.000999956314221932,
+       0.00099995704855845,
+       0.0009999575980464738,
+       0.0009999581619945224,
+       0.000999958677946723,
+       0.0009999591986016353,
+       0.000999959755357821,
+       0.0009999603788157594,
+       0.0009999611208457288,
+       0.0009999620720112432,
+       0.0009999636579397686,
+       0.0009999669881514334,
+       0.0009999702716094276,
+       0.0009999683109088605,
+       0.0009999590675592032,
+       0.0009999568218205892
+      ],
+      "h_buoy": [
+       2.5362787070156374,
+       2.516730695089421,
+       2.5036403747280582,
+       2.5039184698995784,
+       3.0034689560300096,
+       3.002435355887736,
+       4.001653008386438,
+       4.9997987011418115,
+       4.997473587104419,
+       4.995309809765503,
+       4.99350211352097,
+       4.992119346833862,
+       4.991101670886511,
+       4.990380074560923,
+       4.990078811590056,
+       4.990166163425136,
+       4.990367935333405,
+       4.990596588452685,
+       4.99087045249809,
+       4.99137259437616,
+       4.992289787061448,
+       4.993753177171479,
+       4.995983100850646,
+       4.999551263774276,
+       5.005007162182473,
+       5.012983818611903,
+       5.024526535112959,
+       5.040942973349271,
+       5.064077729399942,
+       5.09625647118017,
+       5.1403851086575365,
+       5.200041003027737,
+       5.279625542483232,
+       5.384471259789205,
+       5.520901346891878,
+       5.697534131342501,
+       5.9226546607037385,
+       6.208197576371615,
+       6.56736678507366,
+       7.015777023192521,
+       7.571736810273838,
+       8.256565593819783,
+       9.095420063483482,
+       10.11681693044705,
+       11.353336674429192,
+       12.84341958541313,
+       14.63011209780128,
+       16.765468687297915,
+       19.302358782431597,
+       22.3000572577784,
+       25.844103114353718,
+       30.00334727405956,
+       34.87460309776484,
+       40.56042980941329,
+       47.18273918084569,
+       49.452193369287265,
+       0.003999581225916062,
+       0.004934754945945629,
+       0.0012908318766503227,
+       0.000999956314221932,
+       0.00099995704855845,
+       0.0009999575980464738,
+       0.0009999581619945224,
+       0.000999958677946723,
+       0.0009999591986016353,
+       0.000999959755357821,
+       0.0009999603788157594,
+       0.0009999611208457288,
+       0.0009999620720112432,
+       0.0009999636579397686,
+       0.0009999669881514334,
+       0.0009999702716094276,
+       0.0009999683109088605,
+       0.0009999590675592032,
+       0.0009999568218205892
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.09938466192748344
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.04312441369545439
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.0023440770865625067
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 21
+       },
+       "expected": 4.818222945990975e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.01189960226672244
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 2.9038334511114713e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.03768859002621561
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.009703183286969175
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.0012727252699711311
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 5.747970131085327e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 3.092172600034481e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 8
+       },
+       "expected": 1.4959133117860166e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.20692692471907217
+      }
+     ]
+    },
+    {
+     "id": "sw_g4j79_step12_t46800",
+     "description": "mom6_sw_abs.csv row (cpl_step 12, tod 46800, gi 4, gj 79, i 8, j 83, lon -284.66666666666663, lat -69.26974994776106) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k19, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/6, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "sw_pen_band": [
+       67.14145786887957,
+       24.376471980773083
+      ],
+      "opacity": [
+       [
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057,
+        0.17522419911697057
+       ],
+       [
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796,
+        0.6119998671829796
+       ]
+      ],
+      "h": [
+       2.4776450701913624,
+       2.4819878756038283,
+       2.4945232171552365,
+       2.494363618732923,
+       2.9944878835717166,
+       2.9949634232539375,
+       3.993775897697959,
+       4.992787624144754,
+       4.99320462119311,
+       4.993548767075909,
+       4.993860162768785,
+       4.994138161208829,
+       4.9943486063678755,
+       4.994455340812147,
+       4.994413693908614,
+       4.99427841399265,
+       4.994230503398786,
+       4.994296161776777,
+       4.994454935002099,
+       4.994795729136252,
+       4.9954861015402585,
+       4.996779036155931,
+       4.998963903608054,
+       5.002533763397365,
+       5.007974509420652,
+       5.016015890795412,
+       5.027873864757672,
+       5.044884305149309,
+       5.068793130043494,
+       5.101816730017788,
+       5.146750725108975,
+       5.207120901152017,
+       5.287334309029698,
+       5.392794987395209,
+       5.530006481396381,
+       5.706982693723598,
+       5.933115550809884,
+       6.219787772154024,
+       6.580317676297418,
+       7.030484442737444,
+       7.58878389538994,
+       8.276806398142304,
+       9.119549735054086,
+       10.145845429787032,
+       11.389298545023017,
+       12.888303715893855,
+       14.68651837488432,
+       16.831828945793223,
+       19.383920641174747,
+       22.405760144528628,
+       25.924375714933515,
+       30.048592643487904,
+       34.921265754547335,
+       40.576190474013345,
+       47.167872178297856,
+       54.84151599088712,
+       2.3585305359124598,
+       0.015914405619887467,
+       0.004454590950226243,
+       0.0009999950025056821,
+       0.001000015759163436,
+       0.001000018245481456,
+       0.001000022584075391,
+       0.001000029643787397,
+       0.0010000393582775627,
+       0.001000049505896943,
+       0.0010000555358704861,
+       0.0010000525521443966,
+       0.0010000386467052408,
+       0.0010000174157577483,
+       0.0009999996052863325,
+       0.0009999833291932532,
+       0.0009999678105291627,
+       0.0009999653497507405,
+       0.0009999922927687852
+      ],
+      "h_buoy": [
+       2.4756847228029386,
+       2.4819878756038283,
+       2.4945232171552365,
+       2.494363618732923,
+       2.9944878835717166,
+       2.9949634232539375,
+       3.993775897697959,
+       4.992787624144754,
+       4.99320462119311,
+       4.993548767075909,
+       4.993860162768785,
+       4.994138161208829,
+       4.9943486063678755,
+       4.994455340812147,
+       4.994413693908614,
+       4.99427841399265,
+       4.994230503398786,
+       4.994296161776777,
+       4.994454935002099,
+       4.994795729136252,
+       4.9954861015402585,
+       4.996779036155931,
+       4.998963903608054,
+       5.002533763397365,
+       5.007974509420652,
+       5.016015890795412,
+       5.027873864757672,
+       5.044884305149309,
+       5.068793130043494,
+       5.101816730017788,
+       5.146750725108975,
+       5.207120901152017,
+       5.287334309029698,
+       5.392794987395209,
+       5.530006481396381,
+       5.706982693723598,
+       5.933115550809884,
+       6.219787772154024,
+       6.580317676297418,
+       7.030484442737444,
+       7.58878389538994,
+       8.276806398142304,
+       9.119549735054086,
+       10.145845429787032,
+       11.389298545023017,
+       12.888303715893855,
+       14.68651837488432,
+       16.831828945793223,
+       19.383920641174747,
+       22.405760144528628,
+       25.924375714933515,
+       30.048592643487904,
+       34.921265754547335,
+       40.576190474013345,
+       47.167872178297856,
+       54.84151599088712,
+       2.3585305359124598,
+       0.015914405619887467,
+       0.004454590950226243,
+       0.0009999950025056821,
+       0.001000015759163436,
+       0.001000018245481456,
+       0.001000022584075391,
+       0.001000029643787397,
+       0.0010000393582775627,
+       0.001000049505896943,
+       0.0010000555358704861,
+       0.0010000525521443966,
+       0.0010000386467052408,
+       0.0010000174157577483,
+       0.0009999996052863325,
+       0.0009999833291932532,
+       0.0009999678105291627,
+       0.0009999653497507405,
+       0.0009999922927687852
+      ],
+      "dt": 3600.0
+     },
+     "tolerance": {
+      "rel": 1e-12
+     },
+     "assertions": [
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 1
+       },
+       "expected": 0.03789800197481177
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 3
+       },
+       "expected": 0.01584562158916424
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 8
+       },
+       "expected": 0.0007420491115104002
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 1,
+        "layer": 19
+       },
+       "expected": 4.89690829491657e-08
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 1
+       },
+       "expected": 0.0046624451015177095
+      },
+      {
+       "variable": "pen_sw_rem",
+       "time": 0.0,
+       "coords": {
+        "band": 2,
+        "layer": 7
+       },
+       "expected": 1.0703356897436675e-07
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 1
+       },
+       "expected": 0.015006121140668682
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 3
+       },
+       "expected": 0.003802635552941025
+      },
+      {
+       "variable": "dT",
+       "time": 0.0,
+       "coords": {
+        "layer": 7
+       },
+       "expected": 0.0004518876786951953
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 1
+       },
+       "expected": 2.2150080317556042e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 2
+       },
+       "expected": 1.1827517869582948e-05
+      },
+      {
+       "variable": "netPen",
+       "time": 0.0,
+       "coords": {
+        "iface": 6
+       },
+       "expected": 1.6850522186971258e-06
+      },
+      {
+       "variable": "absorbed_total",
+       "time": 0.0,
+       "expected": 0.07974028914319901
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

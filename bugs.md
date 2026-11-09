@@ -421,3 +421,32 @@ Format template:
   unpinned by the dump.
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
+
+## TBD. MOM6 sumSWoverBands hardcodes a 1000x-wrong min_SW_heat clamp length scale (I_Habs = 1e3*H_to_m)
+
+- **Location:** `components/mom/MOM6/src/parameterizations/vertical/MOM_opacity.F90:950`
+  (`sumSWoverBands`, `I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen`)
+  vs. `:711` (`absorbRemainingSW`, `I_Habs = optics%PenSW_absorb_Invlen`) and
+  `:1211` (`optics%PenSW_absorb_Invlen = 1.0/(PenSW_absorb_minthick +
+  GV%H_subroundoff)`, the setter the commented-out assignment would use).
+- **Description:** the two routines implement the same min_SW_heat clamp
+  of `SW_trans`, but `sumSWoverBands` hardcodes `I_Habs = 1e3*GV%H_to_m`
+  (1000 m-1 with the run's H_to_m = 1) instead of the optics value
+  `PenSW_absorb_Invlen ~= 1 m-1` (PEN_SW_ABSORB_MINTHICK = 1.0 m); the
+  comment on :950 shows the intended expression.  The zero sub-branch
+  `nsw*Pen_SW_bnd <= min_SW_heat*(I_Habs*(h - h_min_heat))` (compare :757
+  and :989) therefore fires whenever `nsw*Pen_SW_bnd <= 4.5e-4 degC m`
+  (dt = 3600 s) in `sumSWoverBands`, versus `4.5e-7` in
+  `absorbRemainingSW`, so in this window `sumSWoverBands`' clamp is
+  all-zero (no min-branch) where `absorbRemainingSW` takes its min-branch
+  90 times, and `netPen` is written exactly 0 below the first clamped
+  interface.
+- **Impact on results:** the KPP buoyancy-flux shortwave profile
+  (`netPen`, consumed by MXL_SW) is zeroed slightly shallower than the
+  heating path's remaining SW; the affected values are ~1e-7 degC m s-1
+  and below, i.e. negligible for the mixed layer in this window.  All
+  pinned tests are unaffected (the pins stay above the clamp region).
+- **Reproduced/corrected in .esm:** neither routine's clamp is expressed
+  (stateful recurrence gap of `mom6_shortwave.esm`); the component pins
+  the unclamped law exactly as the model computes it.
+- **Status:** open.
