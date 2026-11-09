@@ -1505,7 +1505,9 @@ closure) + 56 (vertdiff) + ~19 (cism_velo net) − 16 (JRA reader).
   `../EarthSciModels-wt-clm-soil`, PR_DESCRIPTION.md ready): bareground/
   soiltemp/soilfluxes + a 35-template clm_templates subset (psixhu_unstable
   inlined from cmeps), Rust 335P/0F/0E. Python gate 260E is the known
-  array-override runner bug. Not pushed — awaiting user decision.
+  array-override runner bug. Pushed to ctessum-claude/EarthSciModels
+  `clm-soil` (8e66171) on 2026-11-09 with user go-ahead; no PR opened yet
+  (PR_DESCRIPTION.md is in the worktree).
 - **Still running:** `mom6-dynamics-instrument`, `cice-itd-ridge` (their
   uncommitted lane-doc edits are in the main checkout; leave them).
 - **Next:** read suite 12284981; review the 6 follow-ups and the 2 running
