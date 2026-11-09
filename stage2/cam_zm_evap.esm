@@ -1,0 +1,3643 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_zm_evap",
+  "description": "Stage-2 implementation of the CAM Zhang-McFarlane rain evaporation step zm_conv_evap_run (stage 2 of the EqESM project; instrumented cam6_4_212 fork of the SCAM ARM97_4scam run, dump window steps 18-23 and 40-48): the per-level laws of zm_conv_evap.F90:118-236 evaluated on the dumped convr state (the zm_conv_evap_run call of zm_conv_intr.F90:671-679; all dumped columns of the window are g = 1). The evaporation of each layer: the relative-humidity depression evplimit_rh = max(1 - q/qs, 0) (F90:158), the Sundqvist rate evpprec_raw = ke (1 - cldfrc) evplimit_rh sqrt(flxprec_lo) with kemask = ke (the zmconv_ke coefficient; F90:160-164), and the three upper bounds of the Fortran's min chain - the saturation limit max(0, (qs - q)/deltat) (F90:168), the falling-flux limit flxprec_lo gravit/pdel (F90:173) and the remaining-precipitation limit (prec_gen - evpvint) gravit/pdel (F90:176) - combined as evpprec = min(min(min(limit_dt, limit_flx), limit_avail), evpprec_raw) (F90:178). The snow branch runs with old_snow = .true. (F90:108): the melt split flxsntm = 0 / snowmlt = flxsnow_lo gravit/pdel where t1 > tmelt, else flxsntm = flxsnow_lo, snowmlt = 0 (F90:128-134); the snow evaporation evpsnow = evpprec work1 with work1 = min(max(0, flxsntm/flxprec_lo), 1) when flxprec_lo > 0 else 0 (F90:186-192); the net production ntprprd = rprd - evpprec (F90:198); the net snow production ntsnprd = rprd work2 - evpsnow - snowmlt with work2 = max(fsnow_conv, work1b) zeroed when snowmlt > 0 (F90:204-215); and the fluxes flxprec_hi = max(flxprec_lo + ntprprd pdel/gravit, 0), flxsnow_hi likewise (F90:219-224). The precipitation flux is the vertical integral of the net production; the coupled top-down recurrence (the evaporation at a level depends on the flux entering it, which is the integral of production-minus-evaporation above it) cannot be expressed in the CLI - it is rejected as an observed dependency cycle (esm-spec 4.9.6; the exact CLI error is quoted in README-cam-zm-evap.md) - so this component pins the per-level step with the accumulated boundary flux flxprec_lo/flxsnow_lo taken from the dump (the recurrence boundary) and the Fortran's running accumulator evpvint supplied as a derived input: evpvint(k) = sum_{j<k} (rprd(j) - ntprprd(j)) pdel(j)/gravit, reconstructed from the dumped rprd and ntprprd columns (each increment equals evpprec(j) pdel(j)/gravit of F90:195 because ntprprd = rprd - evpprec, F90:198). qs is the estblf table lookup (wv_saturation.F90:191-254, the Goff-Gratch mixed-phase table, 251 knots at T = 127.16 + (i-1) K) followed by the svp_to_qsat conversion (eps es/(p - omeps es)); the estbl table is duplicated here as a function_tables entry (extracted verbatim from the committed cam_wv_saturation.esm table) because function tables are data, not template libraries, and cannot be imported by reference (the CLI rejects template_import_not_library; the duplication is the same data as the Fortran's estbl and is cross-checked by the cam_qsat.csv dump). Levels are the CAM convention, lev 1 = model top, lev 32 = surface, exactly as dumped. The surface rates are the bottom-interface fluxes divided by density_fresh_water = 1000 kg/m3 (F90:234-236): prec_evap = flxprec_hi(32)/1000, snow_evap = flxsnow_hi(32)/1000. Tests at steps 18, 22, 40 and 48: the step-18 and step-22 columns evaporate the precipitation fully (prec_evap = 0; the roundoff guard of F90:222-224 fires at lev 31, turning a residual flux of order 1e-19 kg/m2/s to zero); across the dumped window the evpprec min chain binds the Sundqvist rate at 401 of 480 levels (0.85 of the window), the falling-flux limit at 45 levels and the remaining-precipitation limit at 34 levels, and never the deltat saturation limit; step 22 pins the Sundqvist limit binding non-degenerately in the evanesced regime (levels 23-26) and steps 40 and 48 are the active-evaporation columns (prec_evap = 4.5e-9 and 1.0e-8 m/s) where the Sundqvist rate binds at every level with flxprec_lo > 0, so their tend_q pins exercise the qs-dependent factor max(1 - q/qs, 0) of F90:158 through the table-interpolated qs.",
+  "license": "MIT",
+  "tags": [
+   "eqesm:stage2",
+   "model:convection",
+   "cam:zm"
+  ],
+  "references": [
+   {
+    "citation": "CAM6.4 (cam6_4_212, Zhang-McFarlane deep convection), components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_conv_evap.F90, subroutine zm_conv_evap_run, called from zm_conv_intr.F90:671-679."
+   }
+  ]
+ },
+ "metaparameters": {
+  "PVER": {
+   "type": "integer",
+   "default": 32,
+   "description": "Number of model levels (pver = 32 in the SCAM run; the dump's pver)."
+  }
+ },
+ "index_sets": {
+  "lev": {
+   "kind": "interval",
+   "size": "PVER"
+  }
+ },
+ "function_tables": {
+  "estbl": {
+   "description": "The estbl saturation vapor pressure table of wv_sat_init (wv_saturation.F90:191-254): 251 knots at T = tmin + (i - 1) K, i = 1..251, tmin = 127.16 K, holding svp_trans(T) (wv_sat_methods.F90:479-513, the Goff-Gratch mixed-phase blend over the 20 K band below tmelt) in double precision; estblf clamps T to tmax = 375.16 K so the 251st knot is unreachable. The values are copied verbatim from the committed function_tables.estbl of cam_wv_saturation.esm (same data as the Fortran's estbl; the CLI cannot import a function table by reference - function tables are data, not template libraries - so the table is duplicated here and cross-checked against the cam_qsat.csv dump rows by the evap tests).",
+   "axes": [
+    {
+     "name": "T",
+     "units": "K",
+     "values": [
+      127.16,
+      128.16,
+      129.16,
+      130.16,
+      131.16,
+      132.16,
+      133.16,
+      134.16,
+      135.16,
+      136.16,
+      137.16,
+      138.16,
+      139.16,
+      140.16,
+      141.16,
+      142.16,
+      143.16,
+      144.16,
+      145.16,
+      146.16,
+      147.16,
+      148.16,
+      149.16,
+      150.16,
+      151.16,
+      152.16,
+      153.16,
+      154.16,
+      155.16,
+      156.16,
+      157.16,
+      158.16,
+      159.16,
+      160.16,
+      161.16,
+      162.16,
+      163.16,
+      164.16,
+      165.16,
+      166.16,
+      167.16,
+      168.16,
+      169.16,
+      170.16,
+      171.16,
+      172.16,
+      173.16,
+      174.16,
+      175.16,
+      176.16,
+      177.16,
+      178.16,
+      179.16,
+      180.16,
+      181.16,
+      182.16,
+      183.16,
+      184.16,
+      185.16,
+      186.16,
+      187.16,
+      188.16,
+      189.16,
+      190.16,
+      191.16,
+      192.16,
+      193.16,
+      194.16,
+      195.16,
+      196.16,
+      197.16,
+      198.16,
+      199.16,
+      200.16,
+      201.16,
+      202.16,
+      203.16,
+      204.16,
+      205.16,
+      206.16,
+      207.16,
+      208.16,
+      209.16,
+      210.16,
+      211.16,
+      212.16,
+      213.16,
+      214.16,
+      215.16,
+      216.16,
+      217.16,
+      218.16,
+      219.16,
+      220.16,
+      221.16,
+      222.16,
+      223.16,
+      224.16,
+      225.16,
+      226.16,
+      227.16,
+      228.16,
+      229.16,
+      230.16,
+      231.16,
+      232.16,
+      233.16,
+      234.16,
+      235.16,
+      236.16,
+      237.16,
+      238.16,
+      239.16,
+      240.16,
+      241.16,
+      242.16,
+      243.16,
+      244.16,
+      245.16,
+      246.16,
+      247.16,
+      248.16,
+      249.16,
+      250.16,
+      251.16,
+      252.16,
+      253.16,
+      254.16,
+      255.16,
+      256.15999999999997,
+      257.15999999999997,
+      258.15999999999997,
+      259.15999999999997,
+      260.15999999999997,
+      261.15999999999997,
+      262.15999999999997,
+      263.15999999999997,
+      264.15999999999997,
+      265.15999999999997,
+      266.15999999999997,
+      267.15999999999997,
+      268.15999999999997,
+      269.15999999999997,
+      270.15999999999997,
+      271.15999999999997,
+      272.15999999999997,
+      273.15999999999997,
+      274.15999999999997,
+      275.15999999999997,
+      276.15999999999997,
+      277.15999999999997,
+      278.15999999999997,
+      279.15999999999997,
+      280.15999999999997,
+      281.15999999999997,
+      282.15999999999997,
+      283.15999999999997,
+      284.15999999999997,
+      285.15999999999997,
+      286.15999999999997,
+      287.15999999999997,
+      288.15999999999997,
+      289.15999999999997,
+      290.15999999999997,
+      291.15999999999997,
+      292.15999999999997,
+      293.15999999999997,
+      294.15999999999997,
+      295.15999999999997,
+      296.15999999999997,
+      297.15999999999997,
+      298.15999999999997,
+      299.15999999999997,
+      300.15999999999997,
+      301.15999999999997,
+      302.15999999999997,
+      303.15999999999997,
+      304.15999999999997,
+      305.15999999999997,
+      306.15999999999997,
+      307.15999999999997,
+      308.15999999999997,
+      309.15999999999997,
+      310.15999999999997,
+      311.15999999999997,
+      312.15999999999997,
+      313.15999999999997,
+      314.15999999999997,
+      315.15999999999997,
+      316.15999999999997,
+      317.15999999999997,
+      318.15999999999997,
+      319.15999999999997,
+      320.15999999999997,
+      321.15999999999997,
+      322.15999999999997,
+      323.15999999999997,
+      324.15999999999997,
+      325.15999999999997,
+      326.15999999999997,
+      327.15999999999997,
+      328.15999999999997,
+      329.15999999999997,
+      330.15999999999997,
+      331.15999999999997,
+      332.15999999999997,
+      333.15999999999997,
+      334.15999999999997,
+      335.15999999999997,
+      336.15999999999997,
+      337.15999999999997,
+      338.15999999999997,
+      339.15999999999997,
+      340.15999999999997,
+      341.15999999999997,
+      342.15999999999997,
+      343.15999999999997,
+      344.15999999999997,
+      345.15999999999997,
+      346.15999999999997,
+      347.15999999999997,
+      348.15999999999997,
+      349.15999999999997,
+      350.15999999999997,
+      351.15999999999997,
+      352.15999999999997,
+      353.15999999999997,
+      354.15999999999997,
+      355.15999999999997,
+      356.15999999999997,
+      357.15999999999997,
+      358.15999999999997,
+      359.15999999999997,
+      360.15999999999997,
+      361.15999999999997,
+      362.15999999999997,
+      363.15999999999997,
+      364.15999999999997,
+      365.15999999999997,
+      366.15999999999997,
+      367.15999999999997,
+      368.15999999999997,
+      369.15999999999997,
+      370.15999999999997,
+      371.15999999999997,
+      372.15999999999997,
+      373.15999999999997,
+      374.15999999999997,
+      375.15999999999997,
+      376.15999999999997,
+      377.15999999999997
+     ]
+    }
+   ],
+   "interpolation": "linear",
+   "out_of_bounds": "clamp",
+   "data": [
+    4.218158277483428e-09,
+    6.116868700806532e-09,
+    8.820231685929848e-09,
+    1.2648273602767794e-08,
+    1.8040024216503212e-08,
+    2.5594705716764813e-08,
+    3.612611909967037e-08,
+    5.0734116019946845e-08,
+    7.089808845516389e-08,
+    9.859870550305773e-08,
+    1.364757306378527e-07,
+    1.8803172815092236e-07,
+    2.5789389032582003e-07,
+    3.521491765921896e-07,
+    4.787715572798236e-07,
+    6.481645200000699e-07,
+    8.738472683947691e-07,
+    1.1733193858564578e-06,
+    1.5691463411362774e-06,
+    2.090317297422093e-06,
+    2.7739375024233565e-06,
+    3.6673303709134986e-06,
+    4.830639549456786e-06,
+    6.340039146102938e-06,
+    8.29168133468752e-06,
+    1.0806535176518401e-05,
+    1.4036299272791676e-05,
+    1.8170604364294982e-05,
+    2.34457608958744e-05,
+    3.015535160265836e-05,
+    3.866302117609287e-05,
+    4.941787494197283e-05,
+    6.297296723660788e-05,
+    8.000743890989723e-05,
+    0.00010135295333343214,
+    0.0001280251827820529,
+    0.00016126121354634968,
+    0.00020256387020995036,
+    0.0002537541089156039,
+    0.0003170327980197792,
+    0.0003950533943208821,
+    0.000491007236224333,
+    0.0006087234141280662,
+    0.0007527854454958827,
+    0.0009286672802337457,
+    0.0011428914939793765,
+    0.001403212895832525,
+    0.0017188311861588799,
+    0.0021006367528612693,
+    0.0025614941945941616,
+    0.0031165687106732938,
+    0.0037837011039797567,
+    0.0045838378092597975,
+    0.005541523089373469,
+    0.006685461340940722,
+    0.00804915832338044,
+    0.009671651076636064,
+    0.011598337328235916,
+    0.013881916315238068,
+    0.016583454166740383,
+    0.019773588313849243,
+    0.0235338868223279,
+    0.027958380084759753,
+    0.033155283970311505,
+    0.03924893531750853,
+    0.046381962575445704,
+    0.05471771645822449,
+    0.06444298768291301,
+    0.07577104121981298,
+    0.08894499900217906,
+    0.10424160572769858,
+    0.12197541524292686,
+    0.14250343804140433,
+    0.1662302936332299,
+    0.193613914965247,
+    0.22517185569341866,
+    0.2614882549390548,
+    0.30322151820472754,
+    0.35111277739033236,
+    0.405995197340778,
+    0.46880420108023885,
+    0.5405886908492102,
+    0.622523347265251,
+    0.7159220943809986,
+    0.8222528241188413,
+    0.9431534795243027,
+    1.0804496025040486,
+    1.236173458202447,
+    1.412584854926184,
+    1.6121937855514863,
+    1.837785023645554,
+    2.092444815103558,
+    2.3795898139465135,
+    2.7029984190430225,
+    3.066844676909294,
+    3.475734924405791,
+    3.9347473540835796,
+    4.44947469413619,
+    5.026070204381324,
+    5.671297199425633,
+    6.392582320152311,
+    7.1980727849081605,
+    8.096697862249735,
+    9.098234817827638,
+    10.213379598941339,
+    11.453822531467365,
+    12.832329315252048,
+    14.362827615646562,
+    16.060499560644082,
+    17.941880465037862,
+    20.02496411514838,
+    22.329314959948952,
+    24.876187566843726,
+    27.68865371290007,
+    30.791737494995854,
+    34.212558855095814,
+    37.98048592970152,
+    42.127296645408336,
+    46.68734999543408,
+    51.69776744493531,
+    57.19862492588788,
+    63.23315589523856,
+    69.84796594294532,
+    77.09325944935233,
+    85.02307880411718,
+    93.69555671155977,
+    103.18429580767774,
+    114.69043157689902,
+    127.22476892525403,
+    140.8548560732734,
+    155.6503254546551,
+    171.68269484457426,
+    189.02512784937147,
+    207.752149889716,
+    227.9393155788685,
+    249.66282316013235,
+    272.9990714230719,
+    298.02415426677334,
+    324.8132878203888,
+    353.4401647666941,
+    383.9762302434716,
+    416.4898734205361,
+    451.0455285672044,
+    487.7026791363912,
+    526.5147580973277,
+    567.5279374496766,
+    610.779764665194,
+    656.6166752496093,
+    705.475424865171,
+    757.5260046527021,
+    812.9461727702799,
+    871.921714622723,
+    934.6467076589322,
+    1001.3237906678338,
+    1072.1644374985751,
+    1147.3892351256638,
+    1227.2281659747816,
+    1311.9208944202796,
+    1401.7170573604365,
+    1496.876558772139,
+    1597.6698681419623,
+    1704.378322666244,
+    1817.2944331085223,
+    1936.7221931985146,
+    2062.977392452695,
+    2196.3879322928788,
+    2337.2941453352582,
+    2486.0491177189133,
+    2643.0190143393847,
+    2808.5834068496724,
+    2983.135604287802,
+    3167.0829861875964,
+    3360.847338026077,
+    3564.865188858792,
+    3779.588150991952,
+    4005.483261537923,
+    4243.033325698884,
+    4492.7372616217635,
+    4755.110446665693,
+    5030.685064922219,
+    5320.010455827298,
+    5623.653463702888,
+    5942.1987880656125,
+    6276.249334539097,
+    6626.4265662066155,
+    6993.370855240123,
+    7377.7418346420745,
+    7780.218749936964,
+    8201.500810649302,
+    8642.307541406271,
+    9103.379132503473,
+    9585.476789773647,
+    10089.383083599596,
+    10615.902296913267,
+    11165.86077202598,
+    11740.107256134905,
+    12339.513245354417,
+    12964.973327122,
+    13617.405520831708,
+    14297.751616549647,
+    15006.977511669655,
+    15746.073545369563,
+    16516.054830731067,
+    17317.96158439127,
+    18152.859453593865,
+    19021.839840515255,
+    19926.02022374127,
+    20866.544476775514,
+    21844.58318346366,
+    22861.33395022242,
+    23918.021714964776,
+    25015.899052618548,
+    26156.246477138575,
+    27340.372739918068,
+    28569.615124507498,
+    29845.339737556315,
+    31168.941795894574,
+    32541.845909678625,
+    33965.50636152704,
+    35441.40738158167,
+    36971.063418428115,
+    38556.01940582053,
+    40197.85102515514,
+    41898.16496364615,
+    43658.59916815975,
+    45480.82309466795,
+    47366.53795328994,
+    49317.476948889875,
+    51335.40551721121,
+    53422.121556525795,
+    55579.45565478618,
+    57809.27131227123,
+    60113.46515972152,
+    62493.967171967764,
+    64952.74087705295,
+    67491.78356086614,
+    70113.12646729645,
+    72818.83499393359,
+    75611.00888333435,
+    78491.78240989032,
+    81463.32456232696,
+    84527.8392218728,
+    87687.56533614582,
+    90944.77708880094,
+    94301.78406499061,
+    97760.93141269806,
+    101324.59999999969,
+    104995.20656832322,
+    108775.20388176915,
+    112667.08087257046,
+    116673.36278276157
+   ]
+  }
+ },
+ "models": {
+  "ZMevap": {
+   "expression_template_imports": [
+    {
+     "ref": "./cam_templates.esm"
+    }
+   ],
+   "variables": {
+    "t1": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "K",
+     "default": 0.0,
+     "description": "Entry temperature of the evap step, the convr-updated state t passed to zm_conv_evap_run (zm_conv_intr.F90:671-679), [K]; dump column t1"
+    },
+    "q1": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Entry specific humidity of the evap step, [kg/kg]; dump column q1"
+    },
+    "pmid": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Layer midpoint pressure, [Pa]; dump column pmid"
+    },
+    "pdel": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Layer pressure thickness, [Pa]; dump column pdel"
+    },
+    "cldfrc": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Layer cloud fraction (F90:164), [1]; dump column cldfrc"
+    },
+    "fsnow_conv": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Convective snow-production fraction of the layer, the lower bound of the net-snow-production phase fraction work2 = max(fsnow_conv, work1) (F90:211), [1]; dump column fsnow_conv"
+    },
+    "rprd": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Net precipitation production of cldprp, the prdprec_gen input of F90:198 and F90:213, [kg/kg/s]; dump column rprd"
+    },
+    "flxprec_lo": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Precipitation flux entering the layer from above, the top-of-layer flxprec(i,k) of the per-level loop (zeroed at the top boundary, F90:118-120, updated at F90:219-224), [kg/m2/s]; dump column flxprec_lo. The recurrence boundary of the pinned per-level step (see the file description)."
+    },
+    "flxsnow_lo": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Snow flux entering the layer from above, the top-of-layer flxsnow(i,k) (F90:118-120, 220-224), [kg/m2/s]; dump column flxsnow_lo"
+    },
+    "evpvint": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Vertically integrated evaporation above the layer, the Fortran running accumulator evpvint(i) at the top of layer k (zeroed at F90:120, updated at F90:195), [kg/m2/s]. Not a dump column: derived from the dumped rprd and ntprprd columns as evpvint(k) = sum_{j<k} (rprd(j) - ntprprd(j)) pdel(j)/gravit - each increment equals evpprec(j) pdel(j)/gravit of F90:195 because ntprprd = rprd - evpprec (F90:198). Supplied as an input because the CLI rejects the coupled top-down recurrence of the flux integral (see the file description and README-cam-zm-evap.md)."
+    },
+    "prec_convr": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Input precipitation rate prec (m/s) passed to zm_conv_evap_run (zm_conv_intr.F90:671-679), converted to flux units prec_gen = prec density_fresh_water at F90:111, [m/s]; dump column prec_convr"
+    },
+    "gravit": {
+     "type": "parameter",
+     "units": "m/s^2",
+     "default": 9.80616,
+     "description": "Gravity gravit = SHR_CONST_G (shr_const_mod.F90:21), [m/s^2]; dump constant grav"
+    },
+    "latvap": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 2501000.0,
+     "description": "Latent heat of vaporization latvap = SHR_CONST_LATVAP (shr_const_mod.F90:31), [J/kg]; dump constant rl"
+    },
+    "latice": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 333700.0,
+     "description": "Latent heat of fusion latice = SHR_CONST_LATICE (shr_const_mod.F90:34), [J/kg]; dump constant latice"
+    },
+    "tmelt": {
+     "type": "parameter",
+     "units": "K",
+     "default": 273.15,
+     "description": "Freezing temperature tmelt = tfreez = SHR_CONST_TKFRZ (shr_const_mod.F90:41), passed by zm_conv_intr.F90:671-679, [K]; dump constant tfreez"
+    },
+    "cpres": {
+     "type": "parameter",
+     "units": "J/(kg*K)",
+     "default": 1004.64,
+     "description": "Dry-air heat capacity cpres = SHR_CONST_CPDAIR (shr_const_mod.F90:36), [J/(kg*K)]; dump constant cpres"
+    },
+    "ke": {
+     "type": "parameter",
+     "units": "m/(kg^(1/2)*s^(1/2))",
+     "default": 5e-06,
+     "description": "The ZM evaporation coefficient ke = zmconv_ke, used as kemask = ke unconditionally (F90:160; the ke_lnd argument and landfrac are unused in this CAM version - see bugs.md), [m kg^-1/2 s^-1/2] - the effective units that make evpprec_raw = ke (1 - cldfrc) evplimit_rh sqrt(flxprec_lo) a kg/kg/s rate; the dump constant ke = 5e-6"
+    },
+    "deltat": {
+     "type": "parameter",
+     "units": "s",
+     "default": 1800.0,
+     "description": "Physics timestep deltat = ztodt (F90:168-170), [s]; dump constant ztodt"
+    },
+    "density_fresh_water": {
+     "type": "parameter",
+     "units": "kg/m^3",
+     "default": 1000.0,
+     "description": "Fresh-water density density_fresh_water = 1000 kg/m3, the kg m-2 s-1 to m s-1 conversion of F90:72 and F90:234-236, [kg/m^3]"
+    },
+    "es0": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Saturation vapor pressure es0 = estblf(t1), the linear interpolation of the estbl table with the estblf clamps (wv_saturation.F90:191-254), [Pa]"
+    },
+    "qs": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Saturation mixing ratio qs = eps es0/(p - omeps es0) (the svp_to_qsat law of cam_templates.esm; wv_saturation.F90:264-274), [kg/kg]"
+    },
+    "evplimit_rh": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Relative-humidity depression max(1 - q/qs, 0) of F90:158, [1]"
+    },
+    "evpprec_raw": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Sundqvist evaporation rate ke (1 - cldfrc) evplimit_rh sqrt(flxprec_lo) of F90:160-164, [kg/kg/s]"
+    },
+    "evplimit_dt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Saturation upper bound max(0, (qs - q)/deltat) of F90:168, [kg/kg/s]"
+    },
+    "evplimit_flx": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Falling-flux upper bound flxprec_lo gravit/pdel of F90:173, [kg/kg/s]"
+    },
+    "evplimit_avail": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Remaining-precipitation upper bound (prec_gen - evpvint) gravit/pdel of F90:176, [kg/kg/s]"
+    },
+    "evpprec": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Layer evaporation evpprec = min(min(min(evplimit_dt, evplimit_flx), evplimit_avail), evpprec_raw) in the Fortran's nesting (F90:178), [kg/kg/s]"
+    },
+    "flxsntm": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Snow flux into the layer after melting: 0 where t1 > tmelt (all snow melted), flxsnow_lo otherwise (F90:128-134, old_snow = .true. at F90:108), [kg/m2/s]"
+    },
+    "snowmlt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Snow melt rate flxsnow_lo gravit/pdel where t1 > tmelt, 0 otherwise (F90:128-134), [kg/kg/s]"
+    },
+    "work1": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Snow share of the evaporated rain, work1 = min(max(0, flxsntm/flxprec_lo), 1) when flxprec_lo > 0 else 0 (F90:186-192), [1]"
+    },
+    "evpsnow": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Snow evaporation evpsnow = evpprec work1 (F90:189-190), [kg/kg/s]"
+    },
+    "ntprprd": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Net precipitation production ntprprd = rprd - evpprec (F90:198), [kg/kg/s]; dump column ntprprd"
+    },
+    "work1b": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Snow fraction of the precipitation entering the layer, work1 = min(max(0, flxsnow_lo/flxprec_lo), 1) when flxprec_lo > 0 else 0 (F90:206-208), [1]"
+    },
+    "work2": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "1",
+     "default": 0.0,
+     "description": "Net-snow-production phase fraction work2 = max(fsnow_conv, work1b), zeroed when snowmlt > 0 (F90:211-212), [1]"
+    },
+    "ntsnprd": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Net snow production ntsnprd = rprd work2 - evpsnow - snowmlt (F90:213), [kg/kg/s]; dump column ntsnprd"
+    },
+    "flxprec_hi": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Precipitation flux leaving the layer, flxprec_hi = max(flxprec_lo + ntprprd pdel/gravit, 0) - the per-level step of the top-down flux integral with the roundoff guard of F90:219-224, [kg/m2/s]; dump column flxprec_hi"
+    },
+    "flxsnow_hi": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Snow flux leaving the layer, flxsnow_hi = max(flxsnow_lo + ntsnprd pdel/gravit, 0) (F90:220-224), [kg/m2/s]; dump column flxsnow_hi"
+    },
+    "tend_s": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "J/(kg*s)",
+     "default": 0.0,
+     "description": "Temperature tendency tend_s = -evpprec latvap + ntsnprd latice (F90:228), [J/kg/s]; dump column tend_s"
+    },
+    "tend_q": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Moisture tendency tend_q = evpprec (F90:231), [kg/kg/s]; dump column tend_q"
+    },
+    "tend_s_snwprd": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "J/(kg*s)",
+     "default": 0.0,
+     "description": "Snow-production heating tend_s_snwprd = rprd work2 latice (F90:214), [J/kg/s]; dump column tend_snwprd"
+    },
+    "tend_s_snwevmlt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "J/(kg*s)",
+     "default": 0.0,
+     "description": "Snow evaporation/melt heating tend_s_snwevmlt = -(evpsnow + snowmlt) latice (F90:215), [J/kg/s]; dump column tend_snwevmlt"
+    },
+    "prec_gen": {
+     "type": "unknown",
+     "units": "kg/(m^2*s)",
+     "default": 0.0,
+     "description": "Input precipitation in flux units prec_gen = prec_convr density_fresh_water (F90:111), [kg/m2/s]"
+    },
+    "prec_evap": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Surface precipitation rate prec_evap = flxprec_hi(lev 32)/density_fresh_water, the bottom-interface flux of F90:235 converted at F90:234-236, [m/s]; dump column prec_evap"
+    },
+    "snow_evap": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "Surface snow rate snow_evap = flxsnow_hi(lev 32)/density_fresh_water (F90:236), [m/s]; dump column snow_evap"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "es0",
+     "rhs": {
+      "op": "table_lookup",
+      "table": "estbl",
+      "axes": {
+       "T": {
+        "op": "min",
+        "args": [
+         "t1",
+         {
+          "op": "const",
+          "args": [],
+          "value": 375.16,
+          "units": "K"
+         }
+        ]
+       }
+      },
+      "args": []
+     }
+    },
+    {
+     "lhs": "qs",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "svp_to_qsat",
+      "bindings": {
+       "es": "es0",
+       "p": "pmid"
+      }
+     }
+    },
+    {
+     "lhs": "evplimit_rh",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "/",
+          "args": [
+           "q1",
+           "qs"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "evpprec_raw",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "ke",
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           },
+           "cldfrc"
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "evplimit_rh",
+           {
+            "op": "sqrt",
+            "args": [
+             "flxprec_lo"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "evplimit_dt",
+     "rhs": {
+      "op": "max",
+      "args": [
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "qs",
+           "q1"
+          ]
+         },
+         "deltat"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(kg*s)"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "evplimit_flx",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "flxprec_lo",
+         "gravit"
+        ]
+       },
+       "pdel"
+      ]
+     }
+    },
+    {
+     "lhs": "evplimit_avail",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "prec_gen",
+           "evpvint"
+          ]
+         },
+         "gravit"
+        ]
+       },
+       "pdel"
+      ]
+     }
+    },
+    {
+     "lhs": "evpprec",
+     "rhs": {
+      "op": "min",
+      "args": [
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "min",
+          "args": [
+           "evplimit_dt",
+           "evplimit_flx"
+          ]
+         },
+         "evplimit_avail"
+        ]
+       },
+       "evpprec_raw"
+      ]
+     }
+    },
+    {
+     "lhs": "flxsntm",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "t1",
+         "tmelt"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(m^2*s)"
+       },
+       "flxsnow_lo"
+      ]
+     }
+    },
+    {
+     "lhs": "snowmlt",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "t1",
+         "tmelt"
+        ]
+       },
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "flxsnow_lo",
+           "gravit"
+          ]
+         },
+         "pdel"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(kg*s)"
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "work1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_evap_snow_frac",
+      "bindings": {
+       "flxprec": "flxprec_lo",
+       "flxsnow": "flxsntm"
+      }
+     }
+    },
+    {
+     "lhs": "evpsnow",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "evpprec",
+       "work1"
+      ]
+     }
+    },
+    {
+     "lhs": "ntprprd",
+     "rhs": {
+      "op": "-",
+      "args": [
+       "rprd",
+       "evpprec"
+      ]
+     }
+    },
+    {
+     "lhs": "work1b",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_evap_snow_frac",
+      "bindings": {
+       "flxprec": "flxprec_lo",
+       "flxsnow": "flxsnow_lo"
+      }
+     }
+    },
+    {
+     "lhs": "work2",
+     "rhs": {
+      "op": "ifelse",
+      "args": [
+       {
+        "op": ">",
+        "args": [
+         "snowmlt",
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "kg/(kg*s)"
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       },
+       {
+        "op": "max",
+        "args": [
+         "fsnow_conv",
+         "work1b"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "ntsnprd",
+     "rhs": {
+      "op": "-",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "rprd",
+           "work2"
+          ]
+         },
+         "evpsnow"
+        ]
+       },
+       "snowmlt"
+      ]
+     }
+    },
+    {
+     "lhs": "tend_s_snwprd",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "rprd",
+         "work2"
+        ]
+       },
+       "latice"
+      ]
+     }
+    },
+    {
+     "lhs": "tend_s_snwevmlt",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": -1.0,
+          "units": "1"
+         },
+         {
+          "op": "+",
+          "args": [
+           "evpsnow",
+           "snowmlt"
+          ]
+         }
+        ]
+       },
+       "latice"
+      ]
+     }
+    },
+    {
+     "lhs": "flxprec_hi",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_evap_flux_step",
+      "bindings": {
+       "flx_lo": "flxprec_lo",
+       "prod": "ntprprd",
+       "pdel": "pdel",
+       "gravit": "gravit"
+      }
+     }
+    },
+    {
+     "lhs": "flxsnow_hi",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_evap_flux_step",
+      "bindings": {
+       "flx_lo": "flxsnow_lo",
+       "prod": "ntsnprd",
+       "pdel": "pdel",
+       "gravit": "gravit"
+      }
+     }
+    },
+    {
+     "lhs": "tend_s",
+     "rhs": {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": -1.0,
+            "units": "1"
+           },
+           "evpprec"
+          ]
+         },
+         "latvap"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "ntsnprd",
+         "latice"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "lhs": "tend_q",
+     "rhs": "evpprec"
+    },
+    {
+     "lhs": "prec_gen",
+     "rhs": {
+      "op": "*",
+      "args": [
+       "prec_convr",
+       "density_fresh_water"
+      ]
+     }
+    },
+    {
+     "lhs": "prec_evap",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "index",
+        "args": [
+         "flxprec_hi",
+         "PVER"
+        ]
+       },
+       "density_fresh_water"
+      ]
+     }
+    },
+    {
+     "lhs": "snow_evap",
+     "rhs": {
+      "op": "/",
+      "args": [
+       {
+        "op": "index",
+        "args": [
+         "flxsnow_hi",
+         "PVER"
+        ]
+       },
+       "density_fresh_water"
+      ]
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "s18_g1",
+     "description": "Step 18, g = 1 column (cam_zm.csv step 18 rows lev 1..32 with cam_zm_scal.csv step 18; prec_convr = 4.255483e-09 m/s, ke = 5.0e-06, deltat = 1800 s): the zm_conv_evap_run chain of zm_conv_evap.F90:118-236 pinned at the first raining levels (levs 16-17), the deep-evaporation region (lev 25, where the net production ntprprd goes negative and the snow flux has vanished so ntsnprd = 0) and the bottom boundary (lev 32, the surface rates prec_evap/snow_evap = flxprec_hi(32)/1000 of F90:234-236). The precipitation evaporates completely in the column (prec_evap = 0): at lev 31 the unclamped flux flxprec_lo + ntprprd pdel/gravit is a roundoff residual of order -1e-19 kg/m2/s and the max guard of F90:222-224 pins it to 0 (the dumped flxprec_hi(31) = 0), so flxprec_hi(32) and prec_evap are 0; lev 17 pins the evaporation of the first raining layer (tend_q = evpprec > 0); lev 25 pins the net production going negative (evaporation of the downdraft-evaporated precipitation exceeds the production) with ntsnprd = 0 below the snow region (fsnow_conv = 0, work2 = 0). The evpprec min chain binds the falling-flux limit F90:173 at 9 levels and the remaining-precipitation limit F90:176 at 6 levels of this column (never the deltat limit F90:168, which does not bind on any dumped column); the Sundqvist rate F90:164 is never the active bound with flxprec_lo > 0 here (it binds only where the entering flux is zero). lev 22 is the melting level of this column (t1(22) = 274.57 K > tmelt with flxsnow_lo > 0): the melt branch of F90:128-134 fires (flxsntm = 0, snowmlt = flxsnow_lo gravit/pdel > 0), work2 is zeroed at F90:212 so ntsnprd(22) = -snowmlt (the dumped net snow production goes negative), tend_s_snwevmlt(22) = -snowmlt latice is the melt cooling, and the snow flux vanishes below the melting level (flxsnow_hi(22) = 0, so no snow reaches the surface and snow_evap = 0).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "t1": [
+       251.95350682111328,
+       236.6574237432868,
+       230.35001290201555,
+       226.0942234179124,
+       222.87271140016188,
+       220.35922621781032,
+       217.95345609654245,
+       215.70691671675567,
+       214.46732242684283,
+       214.91839006310497,
+       216.1263903536118,
+       209.10921159163988,
+       209.2784236916746,
+       210.63113083691192,
+       214.18029223299152,
+       220.73599103460035,
+       229.20983146474288,
+       239.1240384739281,
+       248.6375198188145,
+       258.166077859464,
+       266.8983348971975,
+       274.57003077425924,
+       279.8789080982699,
+       284.8725638062504,
+       289.63686653389954,
+       292.523555439372,
+       294.4526542741525,
+       296.2147736815398,
+       297.7623825228476,
+       299.05895905564756,
+       299.60166125140694,
+       298.7991414326327
+      ],
+      "q1": [
+       1.1229078062109587e-08,
+       1.061244360292124e-08,
+       1.0310850481875767e-08,
+       1.016230809783829e-08,
+       1.0106136815963177e-08,
+       1.0081888734819481e-08,
+       1.0065592069821086e-08,
+       1.0051279582337537e-08,
+       1.0041740084643665e-08,
+       2.2818220005037954e-08,
+       1.1535937167036489e-07,
+       8.308480358048786e-06,
+       1.1904357986575238e-05,
+       1.549409851743249e-05,
+       2.3168477912955137e-05,
+       3.782589823342267e-05,
+       6.392367146520063e-05,
+       0.00011959893919311427,
+       0.0002725625973873788,
+       0.0005502862878994334,
+       0.0012676265868845995,
+       0.0023566566512217505,
+       0.004676462155492892,
+       0.007296820244510905,
+       0.007834065729229076,
+       0.008183101983084142,
+       0.008734767332549461,
+       0.009504955972289817,
+       0.010124019109663337,
+       0.010691201826100824,
+       0.011844877708892667,
+       0.016518656819340578
+      ],
+      "pmid": [
+       364.34657096285605,
+       759.4819704706736,
+       1435.6632380163576,
+       2414.4996563557916,
+       3450.3838758332,
+       4319.375050514189,
+       5167.74994736087,
+       6152.049885210779,
+       7375.09585756603,
+       8782.123125359516,
+       10331.712872173302,
+       12154.732569285268,
+       14299.43435684107,
+       16822.573390472775,
+       19646.475230984088,
+       22824.23140563217,
+       26562.77567142486,
+       30961.165876196894,
+       36136.20349782047,
+       42225.71069308892,
+       49393.3997660476,
+       57150.52674692395,
+       64602.70222596978,
+       71194.59788159223,
+       76462.36967626541,
+       80010.04805972785,
+       82532.45676014735,
+       84885.61483833162,
+       87050.15578207668,
+       89007.55584487616,
+       90741.40405413808,
+       92251.8987469929
+      ],
+      "pdel": [
+       277.64523713626426,
+       512.6255618793708,
+       839.7369732119973,
+       1117.9358634668708,
+       953.8325754879452,
+       784.1497738740336,
+       912.6000198193282,
+       1055.9998558804919,
+       1390.0920888300066,
+       1423.9624467569672,
+       1675.2170468706076,
+       1970.822347353322,
+       2318.581227758279,
+       2727.6968395051313,
+       2920.106841517495,
+       3435.4055077786743,
+       4041.6830238067096,
+       4755.09738573736,
+       5594.97785750979,
+       6584.036533027117,
+       7751.341612890242,
+       7762.912348862453,
+       7141.438609229207,
+       6042.3527020156735,
+       4493.190887330713,
+       2602.165879594154,
+       2442.651521244884,
+       2263.664635123606,
+       2065.4172523665065,
+       1849.3828732324769,
+       1618.3135452913791,
+       1402.6758404182465
+      ],
+      "cldfrc": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fsnow_conv": [
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rprd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2.755361363117345e-10,
+       5.507079661424731e-10,
+       8.153486766123781e-10,
+       9.922770979435065e-10,
+       1.0297622275121397e-09,
+       8.987571345184467e-10,
+       7.735920235194614e-10,
+       6.56346761512132e-10,
+       5.565173459327182e-10,
+       4.2954068399270624e-10,
+       3.9619791376934116e-10,
+       2.5137819040276666e-10,
+       6.36647967538086e-11,
+       -3.5611484075052504e-10,
+       -4.1228355302974927e-10,
+       -5.525514164500265e-10,
+       0.0
+      ],
+      "flxprec_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       9.652895325768581e-08,
+       2.2697845413833283e-07,
+       3.953700898847189e-07,
+       5.661511123118521e-07,
+       6.91401336126609e-07,
+       7.10428299831415e-07,
+       6.124035374051331e-07,
+       4.779913955825006e-07,
+       3.4291446283919004e-07,
+       1.9681590827131407e-07,
+       1.6663528347481176e-07,
+       2.2925197738915784e-07,
+       2.439484282847101e-07,
+       1.689419287058856e-07,
+       9.118772707256003e-08,
+       0.0
+      ],
+      "flxsnow_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       9.652895325768581e-08,
+       2.2697845413833283e-07,
+       3.953700898847189e-07,
+       5.661511123118521e-07,
+       6.91401336126609e-07,
+       7.10428299831415e-07,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "evpvint": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       9.65289532576858e-08,
+       3.235074073960186e-07,
+       7.188774972807374e-07,
+       1.2850286095925896e-06,
+       1.9764299457191987e-06,
+       2.6868582455506134e-06,
+       3.2992617829557466e-06,
+       3.777253178538247e-06,
+       4.120167641377437e-06,
+       4.255483476365999e-06,
+       4.255483476365999e-06,
+       4.255483476365999e-06,
+       4.255483476365999e-06,
+       4.255483476365999e-06,
+       4.255483476365999e-06
+      ],
+      "prec_convr": 4.255483476365998e-09,
+      "gravit": 9.80616,
+      "latvap": 2501000.0,
+      "latice": 333700.0,
+      "tmelt": 273.15,
+      "cpres": 1004.64,
+      "ke": 5e-06,
+      "deltat": 1800.0
+     },
+     "assertions": [
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": 3.165039588757574e-10,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -3.1885264565566496e-10,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -5.525514164500265e-10,
+       "coords": {
+        "lev": 31
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 9.652895325768581e-08,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 1.9681590827131407e-07,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 31
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 3.165039588757574e-10,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 2.342040072667157e-10,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s",
+       "time": 0.0,
+       "expected": -0.00048012685109721575,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwprd",
+       "time": 0.0,
+       "expected": 9.19464086872258e-05,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -7.815387722490304e-05,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": -8.97417523681777e-10,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxsnow_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.000299468227652609,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "prec_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "snow_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s22_g1",
+     "description": "Step 22, g = 1 column (cam_zm.csv step 22 rows lev 1..32 with cam_zm_scal.csv step 22; prec_convr = 2.213691e-08 m/s, ke = 5.0e-06, deltat = 1800 s): the zm_conv_evap_run chain of zm_conv_evap.F90:118-236 pinned at the first raining levels (levs 16-17), the deep-evaporation region (lev 25, where the net production ntprprd goes negative and the snow flux has vanished so ntsnprd = 0) and the bottom boundary (lev 32, the surface rates prec_evap/snow_evap = flxprec_hi(32)/1000 of F90:234-236). prec_evap = 0 (the column evaporates its precipitation; the roundoff guard of F90:222-224 fires at lev 31, flxprec_hi(31) = 0). lev 24 pins the Sundqvist limit binding NON-degenerately: at levels 23-26 of this column evpprec = evpprec_raw = ke (1 - cldfrc) max(1 - q/qs, 0) sqrt(flxprec_lo) (F90:160-164, 178) with flxprec_lo > 0, so tend_q pins the relative-humidity factor max(1 - q/qs, 0) of F90:158 through the table-interpolated qs. The min chain binds the falling-flux limit at 6 levels and the remaining-precipitation limit at 5 levels. lev 22 is the melting level of this column (t1(22) = 274.52 K > tmelt with flxsnow_lo > 0): the melt branch of F90:128-134 fires (flxsntm = 0, snowmlt = flxsnow_lo gravit/pdel > 0), work2 is zeroed at F90:212 so ntsnprd(22) = -snowmlt (the dumped net snow production goes negative), tend_s_snwevmlt(22) = -snowmlt latice is the melt cooling, and the snow flux vanishes below the melting level (flxsnow_hi(22) = 0, so no snow reaches the surface and snow_evap = 0).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "t1": [
+       251.81465717408778,
+       236.6022915538073,
+       230.33581387324625,
+       226.1073569247137,
+       222.90082128079533,
+       220.39048671520996,
+       217.9856502848073,
+       215.7354707321731,
+       214.48990181105458,
+       214.93295782360175,
+       216.12940872322804,
+       209.05515964188425,
+       209.22636496997825,
+       210.60276951568318,
+       214.35241197308466,
+       220.6708126229514,
+       228.95784247778818,
+       238.99480745433098,
+       248.74206206218784,
+       258.420311357278,
+       267.11106563008434,
+       274.52191425066167,
+       279.6384167934136,
+       284.76643075762945,
+       289.70249451773253,
+       292.7066882480338,
+       294.7396596018853,
+       296.50712971209595,
+       297.97945032402737,
+       299.12899825084736,
+       299.39195816621725,
+       298.3573188017713
+      ],
+      "q1": [
+       1.1503256173718339e-08,
+       1.0749041530456457e-08,
+       1.0380041214013342e-08,
+       1.0198414761461392e-08,
+       1.012973741729976e-08,
+       1.0100091947826889e-08,
+       1.0080170763375324e-08,
+       1.0062677086066192e-08,
+       1.0051017133348788e-08,
+       2.2827698949473556e-08,
+       1.1459093369724142e-07,
+       8.306240067367977e-06,
+       1.209568386394462e-05,
+       1.575199399008472e-05,
+       2.9351929948037908e-05,
+       4.150622222226839e-05,
+       7.041386739556076e-05,
+       0.00012507265805324777,
+       0.0002777462268627666,
+       0.0005545845312448708,
+       0.0013335847459643349,
+       0.0025673450662412173,
+       0.005037064883273469,
+       0.007405570981414909,
+       0.007751556268269498,
+       0.008141119756791132,
+       0.008768097013586874,
+       0.00971354701275622,
+       0.010490529526433336,
+       0.011093440210375784,
+       0.012472917796957646,
+       0.01714875151193906
+      ],
+      "pmid": [
+       364.3465710009182,
+       759.4819705818096,
+       1435.6632381915565,
+       2414.499656580224,
+       3450.3838760890694,
+       4319.375050788451,
+       5167.749947648921,
+       6152.049885511501,
+       7375.095857879216,
+       8782.1231256859,
+       10331.712871862786,
+       12154.732566123475,
+       14299.434573276627,
+       16822.57418044918,
+       19647.34943344711,
+       22827.00333712952,
+       26567.785195910918,
+       30968.813699073202,
+       36146.95469438551,
+       42240.1144730604,
+       49412.3479424332,
+       57175.18859374128,
+       64633.94716548479,
+       71231.41842299506,
+       76502.47479168189,
+       80052.02132040312,
+       82575.92009517396,
+       84930.76293575861,
+       87097.2171576903,
+       89056.54474727935,
+       90792.32680629432,
+       92304.65000767738
+      ],
+      "pdel": [
+       277.6452372123885,
+       512.6255619493944,
+       839.7369732700993,
+       1117.9358635072356,
+       953.8325755104562,
+       784.1497738883077,
+       912.6000198326327,
+       1055.9998558925276,
+       1390.0920888429025,
+       1423.962446770465,
+       1675.217045583307,
+       1970.8223429380703,
+       2318.5816713682325,
+       2727.6975429768786,
+       2921.852963018981,
+       3437.4548443458443,
+       4044.1088732169414,
+       4757.9481331076295,
+       5598.333857516984,
+       6587.985699832797,
+       7756.481238912814,
+       7769.200063703351,
+       7148.317079783675,
+       6046.62543523687,
+       4495.487302136793,
+       2603.6057553056276,
+       2444.1917942360906,
+       2265.4938869331977,
+       2067.4145569301936,
+       1851.2406222479078,
+       1620.323495782022,
+       1404.3229069841157
+      ],
+      "cldfrc": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0001,
+       0.0919993031782554,
+       0.0850506813490188,
+       0.07810411634096777,
+       0.07103443954254919,
+       0.06374998298033037,
+       0.056085601292621245,
+       0.04893769647877658,
+       0.04252802497862912,
+       0.03702521560392293,
+       0.03278751976489015,
+       0.030252312225741054,
+       0.027805733126610967,
+       0.02547162357279058,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fsnow_conv": [
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rprd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.453849948225439e-09,
+       2.9404304149171784e-09,
+       4.383476442165538e-09,
+       5.30200609813364e-09,
+       5.408256431114316e-09,
+       4.641796582098606e-09,
+       3.947800956547489e-09,
+       3.3430301927899565e-09,
+       2.7855507533167184e-09,
+       2.049901114870456e-09,
+       1.8265762852768977e-09,
+       1.2497579540362963e-09,
+       1.726861556245145e-09,
+       -2.1044965004970285e-09,
+       -2.5121707516473292e-09,
+       -3.2900732037217294e-09,
+       0.0
+      ],
+      "flxprec_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       5.096330824175304e-07,
+       1.2126480428672932e-06,
+       2.126862457325069e-06,
+       3.0269137207574698e-06,
+       3.6333810614154646e-06,
+       3.6715705336133064e-06,
+       3.1277539264194036e-06,
+       2.716359440908224e-06,
+       2.5560160852027475e-06,
+       1.7301818695551786e-06,
+       1.2938787670840773e-06,
+       1.062626742903001e-06,
+       1.4615794725396095e-06,
+       1.0178923717645654e-06,
+       5.436361343104962e-07,
+       0.0
+      ],
+      "flxsnow_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       5.096330824175304e-07,
+       1.2126480428672932e-06,
+       2.126862457325069e-06,
+       3.0269137207574698e-06,
+       3.6333810614154646e-06,
+       3.6715705336133064e-06,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "evpvint": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       5.096330824175304e-07,
+       1.7222811252848236e-06,
+       3.8491435826098926e-06,
+       6.876057303367362e-06,
+       1.0509438364782828e-05,
+       1.4181008898396135e-05,
+       1.702934504357358e-05,
+       1.890730080170244e-05,
+       2.0672881506550285e-05,
+       2.1594153702820765e-05,
+       2.2136908714515486e-05,
+       2.2136908714515486e-05,
+       2.2136908714515486e-05,
+       2.2136908714515486e-05,
+       2.2136908714515486e-05
+      ],
+      "prec_convr": 2.2136908714515485e-08,
+      "gravit": 9.80616,
+      "latvap": 2501000.0,
+      "latice": 333700.0,
+      "tmelt": 273.15,
+      "cpres": 1004.64,
+      "ke": 5e-06,
+      "deltat": 1800.0
+     },
+     "assertions": [
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": 1.7046715112494526e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -2.600380357317764e-10,
+       "coords": {
+        "lev": 24
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -3.2900732037217294e-09,
+       "coords": {
+        "lev": 31
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 5.096330824175304e-07,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 2.55601608520275e-06,
+       "coords": {
+        "lev": 24
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 31
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 1.7046715112494526e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 24
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 3.0455887890484948e-09,
+       "coords": {
+        "lev": 24
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s",
+       "time": 0.0,
+       "expected": -0.007617017561410286,
+       "coords": {
+        "lev": 24
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": -4.63419757615759e-09,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxsnow_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.0015464317311637877,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "prec_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "snow_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s40_g1",
+     "description": "Step 40, g = 1 column (cam_zm.csv step 40 rows lev 1..32 with cam_zm_scal.csv step 40; prec_convr = 7.365285e-08 m/s, ke = 5.0e-06, deltat = 1800 s): the zm_conv_evap_run chain of zm_conv_evap.F90:118-236 pinned at the first raining levels (levs 16-17), the deep-evaporation region (lev 25, where the net production ntprprd goes negative and the snow flux has vanished so ntsnprd = 0) and the bottom boundary (lev 32, the surface rates prec_evap/snow_evap = flxprec_hi(32)/1000 of F90:234-236). prec_evap = 4.540434e-09 m/s, the second-window early column (steps 40-48); the evpprec min chain binds the Sundqvist rate evpprec_raw of F90:160-164 at every level with flxprec_lo > 0 (levels 17-32) - the falling-flux and remaining-precipitation limits of F90:173/176 never bind in this column - so tend_q at lev 17 pins the max(1 - q/qs, 0) factor of F90:158 through the table-interpolated qs, and tend_q at lev 30 pins the same factor deeper in the column. lev 22 is the melting level of this column (t1(22) = 274.67 K > tmelt with flxsnow_lo > 0): the melt branch of F90:128-134 fires (flxsntm = 0, snowmlt = flxsnow_lo gravit/pdel > 0), work2 is zeroed at F90:212 so ntsnprd(22) = -snowmlt (the dumped net snow production goes negative), tend_s_snwevmlt(22) = -snowmlt latice is the melt cooling, and the snow flux vanishes below the melting level (flxsnow_hi(22) = 0, so no snow reaches the surface and snow_evap = 0).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "t1": [
+       255.22805223802504,
+       238.49770654119303,
+       231.5548650965532,
+       226.99712916571033,
+       223.5777983531911,
+       220.8993699553513,
+       218.3939067553605,
+       216.0415728133091,
+       214.7109831581609,
+       215.08170106667967,
+       216.21050424639282,
+       208.85434184856103,
+       209.04639025948305,
+       210.3846589923164,
+       214.55634059958086,
+       220.50580562077366,
+       228.50565868782158,
+       238.37087276315117,
+       248.19130847274556,
+       258.0060441769265,
+       266.9076008760843,
+       274.6735415011229,
+       280.0352785303865,
+       285.28246619259494,
+       290.1071613824539,
+       293.2742672609418,
+       295.53455715004037,
+       297.4340922207753,
+       298.6836457037059,
+       299.54601281384066,
+       299.3944635717763,
+       298.8261494274223
+      ],
+      "q1": [
+       1.274149044366558e-08,
+       1.136618054081766e-08,
+       1.0692230683706016e-08,
+       1.0361204127205173e-08,
+       1.0236076322333277e-08,
+       1.01820725507807e-08,
+       1.0145810903859222e-08,
+       1.0113988290962739e-08,
+       1.0092771823440373e-08,
+       2.2869991349500752e-08,
+       1.1386341634170829e-07,
+       8.747520566146072e-06,
+       1.2905222174095652e-05,
+       1.6691925750931595e-05,
+       4.051945563703908e-05,
+       5.482284352717926e-05,
+       9.979692011911239e-05,
+       0.00018340327381858833,
+       0.00038108320933984363,
+       0.0008024652720422265,
+       0.0018484193104680872,
+       0.0033744086048162814,
+       0.005934390234224044,
+       0.007254261228063095,
+       0.0074883906985726955,
+       0.00824838939969939,
+       0.009142558930584839,
+       0.010439854452691591,
+       0.011896577655968367,
+       0.012762938657181665,
+       0.015092230479149772,
+       0.01877883400295341
+      ],
+      "pmid": [
+       364.34657117281307,
+       759.4819710837801,
+       1435.6632389827862,
+       2414.499657593526,
+       3450.383877244081,
+       4319.37505202632,
+       5167.749948948885,
+       6152.049886868508,
+       7375.095859292338,
+       8782.123127158155,
+       10331.712872755776,
+       12154.733001253628,
+       14299.436381755771,
+       16822.57821022367,
+       19646.27400722978,
+       22823.58702400638,
+       26561.663967459706,
+       30959.619418434486,
+       36134.34885180295,
+       42224.116175913776,
+       49393.89821212713,
+       57156.203869913006,
+       64615.87617488117,
+       71211.2461187068,
+       76477.32954739069,
+       80023.79349138067,
+       82546.43852592769,
+       84900.84671154415,
+       87068.01334127744,
+       89028.93711664731,
+       90767.16857288053,
+       92281.9320830724
+      ],
+      "pdel": [
+       277.64523755617836,
+       512.6255622657557,
+       839.7369735322565,
+       1117.9358636892239,
+       953.8325756118858,
+       784.1497739525927,
+       912.6000198925359,
+       1055.9998559467122,
+       1390.0920889009456,
+       1423.962446830688,
+       1675.2170443645578,
+       1970.8232126311448,
+       2318.5835483731444,
+       2727.7001085626484,
+       2919.6914854495703,
+       3434.934548103635,
+       4041.2193388030128,
+       4754.691563146553,
+       5594.767303590378,
+       6584.767344631258,
+       7754.796727795461,
+       7769.8145877762945,
+       7149.530022160025,
+       6041.20986549122,
+       4490.956991876542,
+       2601.9708961034203,
+       2443.3191729906316,
+       2265.497198242271,
+       2068.8360612243405,
+       1853.0114895154043,
+       1623.4514229510232,
+       1406.075597432721
+      ],
+      "cldfrc": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0001,
+       0.13611065441741824,
+       0.0001,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fsnow_conv": [
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rprd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       5.079419736675345e-09,
+       1.02149200158796e-08,
+       1.528323966075989e-08,
+       1.8503895687157988e-08,
+       1.8710274245547124e-08,
+       1.5775736446715227e-08,
+       1.3000112905765055e-08,
+       1.0595954402109127e-08,
+       8.167529622198746e-09,
+       5.6646658228479105e-09,
+       4.834181328040484e-09,
+       2.70806042640312e-09,
+       1.7525665101230496e-09,
+       4.79450677319804e-10,
+       -9.223577096626827e-09,
+       -1.036135695011884e-08,
+       0.0
+      ],
+      "flxprec_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.7792361472610695e-06,
+       4.80026483083636e-06,
+       9.019029394259731e-06,
+       1.3996874172017496e-05,
+       1.803744232261482e-05,
+       2.0252546876856207e-05,
+       2.079759959546412e-05,
+       2.2159866627468334e-05,
+       2.1148366278536487e-05,
+       1.818706263582823e-05,
+       1.6333935313424232e-05,
+       1.420423654856685e-05,
+       1.2273119373030408e-05,
+       1.053495280211709e-05,
+       7.330387308571324e-06,
+       4.8014014843636975e-06
+      ],
+      "flxsnow_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.7792361472610695e-06,
+       4.80026483083636e-06,
+       9.019029394259731e-06,
+       1.3996874172017496e-05,
+       1.803744232261482e-05,
+       2.0252546876856207e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "evpvint": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.1886448596361835e-06,
+       4.380231613401377e-06,
+       9.959525468865844e-06,
+       1.8482774639337522e-05,
+       2.874325985474611e-05,
+       3.8498718946872694e-05,
+       4.486180966054241e-05,
+       5.0905020743372014e-05,
+       5.6460588663204334e-05,
+       5.959641982911567e-05,
+       6.240086344429652e-05,
+       6.473687249579837e-05,
+       6.657619026665312e-05,
+       6.803783148255293e-05,
+       6.885145067146459e-05
+      ],
+      "prec_convr": 7.365285215582834e-08,
+      "gravit": 9.80616,
+      "latvap": 2501000.0,
+      "latice": 333700.0,
+      "tmelt": 273.15,
+      "cpres": 1004.64,
+      "ke": 5e-06,
+      "deltat": 1800.0
+     },
+     "assertions": [
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": 7.330631710899249e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -6.466108978889618e-09,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -1.8200255078267277e-09,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 4.800264830836359e-06,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 1.8187062635828233e-05,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 4.540433536333048e-06,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 7.330631710899249e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 2.884288304980351e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s",
+       "time": 0.0,
+       "expected": -0.004767373248828779,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwprd",
+       "time": 0.0,
+       "expected": 0.0034087188092990226,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.0009624870073719432,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 7.735023612539205e-09,
+       "coords": {
+        "lev": 30
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": -2.5560418828319957e-08,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxsnow_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.00852951176301037,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "prec_evap",
+       "time": 0.0,
+       "expected": 4.540433536333048e-09,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "snow_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    },
+    {
+     "id": "s48_g1",
+     "description": "Step 48, g = 1 column (cam_zm.csv step 48 rows lev 1..32 with cam_zm_scal.csv step 48; prec_convr = 7.246726e-08 m/s, ke = 5.0e-06, deltat = 1800 s): the zm_conv_evap_run chain of zm_conv_evap.F90:118-236 pinned at the first raining levels (levs 16-17), the deep-evaporation region (lev 25, where the net production ntprprd goes negative and the snow flux has vanished so ntsnprd = 0) and the bottom boundary (lev 32, the surface rates prec_evap/snow_evap = flxprec_hi(32)/1000 of F90:234-236). prec_evap = 1.009212e-08 m/s, the largest of the window; as in step 40 the Sundqvist rate evpprec_raw of F90:160-164 binds at every level with flxprec_lo > 0, so tend_q at levs 30 and 32 pins the max(1 - q/qs, 0) factor of F90:158 through the table-interpolated qs, and tend_s at lev 32 pins the evaporation heating of the bottom layer. lev 22 is the melting level of this column (t1(22) = 274.27 K > tmelt with flxsnow_lo > 0): the melt branch of F90:128-134 fires (flxsntm = 0, snowmlt = flxsnow_lo gravit/pdel > 0), work2 is zeroed at F90:212 so ntsnprd(22) = -snowmlt (the dumped net snow production goes negative), tend_s_snwevmlt(22) = -snowmlt latice is the melt cooling, and the snow flux vanishes below the melting level (flxsnow_hi(22) = 0, so no snow reaches the surface and snow_evap = 0).",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "t1": [
+       257.69110028737356,
+       239.98498170290424,
+       232.5638494250951,
+       227.72921369081922,
+       224.11133407307128,
+       221.28148968882306,
+       218.68522418178088,
+       216.24920553043688,
+       214.8548268264689,
+       215.17722394307307,
+       216.26832723612375,
+       208.75405589763844,
+       209.00320518315,
+       210.36351576608362,
+       217.25713734793052,
+       221.6596664532606,
+       229.10195500895125,
+       238.48212930415758,
+       248.1338686487613,
+       257.57214329252474,
+       266.2617418843079,
+       274.2672376031926,
+       280.4052339968421,
+       285.56221437256465,
+       290.05523502332153,
+       293.0818897607385,
+       295.16913906599626,
+       296.8564001668198,
+       297.9813123063651,
+       298.818188003893,
+       298.81997022530317,
+       297.41634128004324
+      ],
+      "q1": [
+       1.3298167527750368e-08,
+       1.1642610480093786e-08,
+       1.0831793605404521e-08,
+       1.043386355591715e-08,
+       1.0283481705745125e-08,
+       1.021858377103925e-08,
+       1.0175027262691308e-08,
+       1.0136817967097644e-08,
+       1.0111338927741061e-08,
+       2.2888701310857122e-08,
+       1.1421531662867727e-07,
+       8.875465045413164e-06,
+       1.3058092110326444e-05,
+       1.670580546219737e-05,
+       6.455134618388711e-05,
+       7.684081084864507e-05,
+       0.00011113094082315327,
+       0.00023734625302506573,
+       0.0004827937961081187,
+       0.000995359573131032,
+       0.0020830064259963707,
+       0.003577950200729169,
+       0.0059399488350681175,
+       0.007274340974510184,
+       0.00782814615608521,
+       0.008596258002482775,
+       0.009510939185836294,
+       0.010908713883081008,
+       0.012387130742314704,
+       0.013316123706553122,
+       0.01558247376726841,
+       0.017762144800112185
+      ],
+      "pmid": [
+       364.34657125009244,
+       759.4819713091913,
+       1435.6632393376478,
+       2414.4996580476004,
+       3450.3838777613782,
+       4319.375052580541,
+       5167.749949530751,
+       6152.04988747576,
+       7375.095859924548,
+       8782.12312781659,
+       10331.712873722288,
+       12154.733128593987,
+       14299.436812398399,
+       16822.578836188597,
+       19642.365914087164,
+       22811.156419664705,
+       26539.1668800977,
+       30925.358933172633,
+       36086.485150431385,
+       42160.676980792676,
+       49312.57785754358,
+       57055.54512209579,
+       64495.80500535922,
+       71073.38272132789,
+       76326.03261919951,
+       79864.11354196476,
+       82380.83355156411,
+       84729.85447367604,
+       86892.20030780855,
+       88848.84415554948,
+       90583.28466325803,
+       92093.95980611096
+      ],
+      "pdel": [
+       277.6452377107371,
+       512.6255624074607,
+       839.7369736494525,
+       1117.9358637704524,
+       953.8325756571026,
+       784.149773981223,
+       912.6000199191986,
+       1055.9998559708204,
+       1390.0920889267557,
+       1423.96244685733,
+       1675.217044954067,
+       1970.823464789332,
+       2318.5839028194914,
+       2727.700144760903,
+       2911.8740110362355,
+       3425.707000118848,
+       4030.3139207471418,
+       4742.070185402725,
+       5580.1822491147805,
+       6568.201411607789,
+       7735.600341894021,
+       7750.334187210396,
+       7130.185579316465,
+       6024.969852620847,
+       4480.329943122393,
+       2595.831902408115,
+       2437.6081167905745,
+       2260.4337274332797,
+       2064.2579408317483,
+       1849.0297546500824,
+       1619.8512607670448,
+       1401.4990249387895
+      ],
+      "cldfrc": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0001,
+       0.999,
+       0.3950846540018894,
+       0.18599071489017016,
+       0.17464494221707372,
+       0.16279942220208585,
+       0.1500809238990305,
+       0.1359570891331173,
+       0.1218349030574172,
+       0.10809914345689241,
+       0.09529474387176885,
+       0.08462523171274339,
+       0.0778264867274981,
+       0.07092236234116846,
+       0.06398214779867281,
+       0.057112951946919836,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "fsnow_conv": [
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rprd": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       4.453648722593481e-09,
+       9.64139969997209e-09,
+       1.4464856480032068e-08,
+       1.770399706721349e-08,
+       1.8133219265475152e-08,
+       1.569120855638478e-08,
+       1.3187572771965797e-08,
+       1.0521994898629062e-08,
+       7.865246402827626e-09,
+       5.580738368193559e-09,
+       4.862670551205989e-09,
+       2.9198553319775543e-09,
+       2.4950615931287227e-09,
+       4.132160104565447e-09,
+       -9.068361300079735e-09,
+       -1.1188194638878255e-08,
+       0.0
+      ],
+      "flxprec_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.5558481204731366e-06,
+       4.661695970693406e-06,
+       9.543754677725736e-06,
+       1.552522325824483e-05,
+       2.1112401467531295e-05,
+       2.5064638907147432e-05,
+       2.6691589449372402e-05,
+       2.765864279244829e-05,
+       2.624741448781379e-05,
+       2.338142808509601e-05,
+       2.1536280249136918e-05,
+       1.9424979540764597e-05,
+       1.7625303059758412e-05,
+       1.6597828203854202e-05,
+       1.323352532251063e-05,
+       1.0421760292254917e-05
+      ],
+      "flxsnow_lo": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.5558481204731366e-06,
+       4.661695970693406e-06,
+       9.543754677725736e-06,
+       1.552522325824483e-05,
+       2.1112401467531295e-05,
+       2.5064638907147432e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "evpvint": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       8.567498869454351e-07,
+       2.9696172926921614e-06,
+       7.062584594602567e-06,
+       1.3621102190451594e-05,
+       2.2046892263490817e-05,
+       3.0842787779344796e-05,
+       3.7526412815149766e-05,
+       4.377010076356644e-05,
+       4.9185867020554355e-05,
+       5.231823384414173e-05,
+       5.515535006613842e-05,
+       5.7530167211495545e-05,
+       5.942748758375247e-05,
+       6.108187854546953e-05,
+       6.204549800279007e-05
+      ],
+      "prec_convr": 7.24672582950451e-08,
+      "gravit": 9.80616,
+      "latvap": 2501000.0,
+      "latice": 333700.0,
+      "tmelt": 273.15,
+      "cpres": 1004.64,
+      "ke": 5e-06,
+      "deltat": 1800.0
+     },
+     "assertions": [
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": 7.556840869921604e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -6.272824006191109e-09,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntprprd",
+       "time": 0.0,
+       "expected": -2.306437141283235e-09,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 4.661695970693404e-06,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 2.3381428085096012e-05,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxprec_hi",
+       "time": 0.0,
+       "expected": 1.0092123675618943e-05,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 7.556840869921604e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 2.0845588300504858e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s",
+       "time": 0.0,
+       "expected": -0.002691763835663426,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwprd",
+       "time": 0.0,
+       "expected": 0.0032173350798806863,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.000695617281587847,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 8.773910983504696e-09,
+       "coords": {
+        "lev": 30
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_q",
+       "time": 0.0,
+       "expected": 2.306437141283235e-09,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "tend_s",
+       "time": 0.0,
+       "expected": -0.005768399290349371,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "ntsnprd",
+       "time": 0.0,
+       "expected": -3.171319500923096e-08,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "flxsnow_hi",
+       "time": 0.0,
+       "expected": 0.0,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      },
+      {
+       "variable": "tend_s_snwevmlt",
+       "time": 0.0,
+       "expected": -0.010582693174580372,
+       "coords": {
+        "lev": 22
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "prec_evap",
+       "time": 0.0,
+       "expected": 1.0092123675618942e-08,
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "snow_evap",
+       "time": 0.0,
+       "expected": 0.0,
+       "tolerance": {
+        "rel": 1e-12,
+        "abs": 1e-24
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -980,6 +980,125 @@
      "cappa"
     ]
    }
+  },
+  "zm_mass_flux_excess": {
+   "description": "Mass-flux-weighted excess of the ZM plume properties used by q1q2_pjr (zm_convr.F90:2590-2601, 2612-2619): g = mu (x - xhat), the plume mass flux mu times the excess of the plume value x over the environmental value xhat at the same level. The four flux terms of each q1q2 tendency are four applications of this law at the k and k+1 neighbors (the cam_zm_q1q2 model applies it with index operands inside its level faq); the subcloud tendency is the negative sum of two applications divided by dsubcld (F90:2612-2619).",
+   "params": [
+    "mu",
+    "x",
+    "xhat"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "mu",
+     {
+      "op": "-",
+      "args": [
+       "x",
+       "xhat"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_evap_flux_step": {
+   "description": "Per-level step of the top-down precipitation-flux integral of zm_conv_evap_run (zm_conv_evap.F90:219-224): flx_hi = max(flx_lo + prod pdel / gravit, 0). The precipitation flux is the vertical integral of the net production: the interface value flx_lo plus the layer contribution prod pdel / gravit (the integral of the production over the layer mass pdel/gravit), accumulated top-down; the max is the roundoff guard of F90:222-224, which fires on 4 of the 480 dumped levels of this lane by up to 3.0e-19 kg/m2/s. The cam_zm_evap model pins this per-level step with the accumulated flx_lo taken from the dump because the CLI rejects the coupled top-down recurrence: the evaporation at a level depends on the flux entering it, which is the integral of production-minus-evaporation above it (observed dependency cycle, esm-spec 4.9.6). Applied once for the rain flux (ntprprd) and once for the snow flux (ntsnprd).",
+   "params": [
+    "flx_lo",
+    "prod",
+    "pdel",
+    "gravit"
+   ],
+   "body": {
+    "op": "max",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "flx_lo",
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "prod",
+           "pdel"
+          ]
+         },
+         "gravit"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "kg/(m^2*s)"
+     }
+    ]
+   }
+  },
+  "zm_evap_snow_frac": {
+   "description": "Snow fraction of the precipitation flux entering a layer, clamped to [0, 1] (zm_conv_evap.F90:186-192 and 205-209, the work1 expressions): w = min(max(0, flxsnow / flxprec), 1) when flxprec > 0, else 0 (the flxprec = 0 guard of F90:190-192 prevents a 0/0). Applied twice in the evap chain: with flxsntm, the snow flux after melting (F90:186-192), the share of evaporated rain that is snow evaporation; and with flxsnow, the snow flux into the layer (F90:205-209), the lower bound of the net-snow-production phase fraction work2 = max(fsnow_conv, work1).",
+   "params": [
+    "flxprec",
+    "flxsnow"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">",
+      "args": [
+       "flxprec",
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(m^2*s)"
+       }
+      ]
+     },
+     {
+      "op": "min",
+      "args": [
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         },
+         {
+          "op": "/",
+          "args": [
+           "flxsnow",
+           "flxprec"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    ]
+   }
   }
   }
  }
