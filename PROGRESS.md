@@ -1535,3 +1535,10 @@ mom6-dynamics-instrument, CICE cice-itd-ridge. 18 agent jobs queued or
 running. Expected append conflicts: `clm_templates.esm` (twostream,
 canopy-veg), `cam_templates.esm` (rad-optics, zm-evap2),
 `README-cam-zm-parcel.md`/`cam_zm_*` (zm-dump2, janitor).
+
+### 2026-11-09 (cont.): EarthSciModels PRs opened (user go-ahead)
+
+PR **#47** `data_models/cdeps` (ctessum-claude:cdeps-datm, cd58a9c) and PR
+**#48** `land_surface/clm` (ctessum-claude:clm-soil, 8e66171), bodies from
+the worktrees' PR_DESCRIPTION.md. Open upstream PRs from this project now:
+#33 mosart-routing, #37 cice, #44 clmu-verify2, #47 cdeps, #48 clm-soil.
