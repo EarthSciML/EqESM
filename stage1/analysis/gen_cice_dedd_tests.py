@@ -21,25 +21,35 @@ Index mapping (model -> dump):
   dzk_{k-1}, frsnw_{sl}, Sabs_{sl}, Iabs_{il}, fthrul_{pl} as dumped (band-3 row
   for the running accumulations).
 
-Curation (210 assertions: 118 snow + 92 bare; every assertion can fail):
+Curation (189 assertions: 113 snow + 76 bare; every assertion can fail):
   dzk layers {1,2,5,6,13} (geometry: snow SSL, snow interior, ice SSL,
-    ice delta layer, ice interior); frsnw all 3 snow layers; the snow IOPs
+    ice delta layer, ice interior; the bare-group snow layers are
+    identically zero and skipped); frsnw all 3 snow layers; the snow IOPs
     Qs/ws_snw/gs_snw/ks_snw at snow layers {1,3} x all bands (snow group
     only - the dump records zeros for srftyp = 0 rows); the mixed tau/w0/g
-    at layer 6 x all bands (snow) / layers {1,6} x all bands (bare, with the
-    bare-ice SSL); the guard-zeroed layer props m_* at one active layer per
-    band (band1 layer 6, band2 layer 1, band3 layer 1 for snow; band1/2
-    layer 6 and band3 layer 5 for bare - the last active layer before the
-    band-3 cutoff); the downward trndir/trntdr/rdndif/trndif at the top and
-    bottom interfaces of band 1 plus one guarded-interface pin per truncated
-    band (snow band2 iface 5 and band3 iface 2, bare band3 iface 6 - the
-    dump value 0 exercises the trmin guard branch); the upward rupdir/rupdif
-    at ifaces {1,14} of band 1 and iface 1 of band 3 (the truncated-column
-    reflectivity); dfdir/dfdif at ifaces {1,14} of band 1; the 11 scalar
-    accumulations avdr/avdf/aidr/aidf/fsfc/fint/fthru/fthruvdr/fthruvdf/
-    fthruidr/fthruidf (band-3 row); Sabs snow layers {1,2,3} (snow group;
-    Sabs is identically zero for bare ice, so it is skipped there), Iabs ice
-    layers {1,2,8} and fthrul levels {1,5,9} (band-3 row).
+    at layer 6 x all bands (snow) / layer 6 x all bands (bare; the bare
+    layer-1 tau/w0/g are identically zero and skipped); the guard-zeroed
+    layer props m_* at one active layer per band (band1 layer 6, band2
+    layer 1, band3 layer 1 for snow; band1/2 layer 6 and band3 layer 5 for
+    bare - the last active layer before the band-3 cutoff); the downward
+    trndir/trntdr/rdndif/trndif at the top and bottom interfaces of band 1
+    plus one guarded-interface pin per truncated band (snow band2 iface 5
+    and band3 iface 2, bare band3 iface 6 - the dump value 0 exercises the
+    trmin guard branch; the iface-1 rdndif boundary value 0 is skipped);
+    the upward rupdir/rupdif at the top of the column (iface 14) of band 1
+    and band 3 (the truncated-column reflectivity; the ocean-interface
+    iface-1 values equal the band albodr constant and are skipped);
+    dfdir/dfdif at ifaces {1,14} of band 1; the 11 scalar accumulations
+    avdr/avdf/aidr/aidf/fsfc/fint/fthru/fthruvdr/fthruvdf/fthruidr/fthruidf
+    (band-3 row); Sabs snow layers {1,2,3} (snow group; Sabs is identically
+    zero for bare ice, so it is skipped there), Iabs ice layers {1,2,8} and
+    fthrul levels {1,5,9} (band-3 row).
+  The unfailable pins are not emitted: the extractor skips them with
+  tolerance-aware copy/zero checks (|value - reference| <= rel*|value|,
+  matching the assertion tolerance) instead of asserting them - rupdir/
+  rupdif at iface 1 (a copy of the band ocean albedo albodr), rdndif at
+  iface 1 (the boundary value 0) and the identically-zero dzk layers 1-2
+  and tau/w0/g at layer 1 of the bare group (the hs = 0 zero region).
 
 Tolerances: rel 1e-12 for the layer/table/accumulated quantities; rel 1e-9
 for the interface quantities trndir/trntdr/rdndif/trndif/rupdir/rupdif/
@@ -69,6 +79,21 @@ def tofloat(s):
     if m:
         s = s[: m.start(1) + 1] + "E" + m.group(2) + m.group(3)
     return float(s)
+
+
+def is_copy(v, ref, rel=1e-9):
+    """True when the dump value v equals the reference constant ref within
+    the assertion tolerance (|v - ref| <= rel*|v|): an assertion of such a
+    value could not fail (it is a copy of a constant), so the pin is not
+    emitted."""
+    return abs(v - ref) <= rel * abs(v) if v != 0.0 else v == ref
+
+
+def is_zero(v):
+    """True when the dump value v is identically zero (|v| <= rel*|v| only
+    when v == 0.0): an assertion of a constant-zero region could not fail,
+    so the pin is not emitted."""
+    return v == 0.0
 
 
 PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else \
@@ -114,12 +139,14 @@ GROUPS = [
                  "downward interface chain at the top and bottom of band 1 "
                  "plus the first guarded interface of bands 2 and 3 "
                  "(expected 0, exercising the trmin guard), the upward "
-                 "chain, the dfdir/dfdif flux fractions, the band-weighted "
-                 "scalar accumulations and the Sabs/Iabs/fthrul layer "
-                 "absorptions. Tolerances: rel 1e-9 on the interface "
-                 "quantities (round-off amplification of the near-pole "
-                 "band-3 algebra, see README-cice-shortwave.md), rel 1e-12 "
-                 "elsewhere."),
+                 "chain at the top of the column (the ocean-interface "
+                 "values equal the band albodr constant and are not "
+                 "pinned), the dfdir/dfdif flux fractions, the "
+                 "band-weighted scalar accumulations and the Sabs/Iabs/"
+                 "fthrul layer absorptions. Tolerances: rel 1e-9 on the "
+                 "interface quantities (round-off amplification of the "
+                 "near-pole band-3 algebra, see README-cice-shortwave.md), "
+                 "rel 1e-12 elsewhere."),
         "dzk_layers": [1, 2, 5, 6, 13],
         "tau_layers": [6],
         "m_pins": {1: 6, 2: 1, 3: 1},          # band -> layer
@@ -144,18 +171,20 @@ GROUPS = [
                  "SSL/delta-layer/interior stack with the unconditional ice "
                  "aerosol mixing and the ocean albedo; band 3 truncates at "
                  "the interface below the sea-ice SSL. The pins cover the "
-                 "layer geometry (snow layers identically zero), frsnw, the "
-                 "mixed tau/w0/g at the SSL and the delta layer, the "
-                 "delta-Eddington layer props at one active layer per band "
-                 "(band 3 at the last layer above the cutoff), the downward "
-                 "chain at the top and bottom of band 1 plus the first "
-                 "guarded interface of band 3 (expected 0), the upward "
-                 "chain, the dfdir/dfdif fractions, the scalar "
-                 "accumulations and the Iabs/fthrul layer absorptions. The "
-                 "snow IOPs Qs/ws_snw/gs_snw/ks_snw and Sabs are not pinned: "
-                 "the dump records zeros for srftyp = 0 rows and Sabs is "
-                 "identically zero for bare ice. Tolerances: rel 1e-9 on "
-                 "the interface quantities, rel 1e-12 elsewhere."),
+                 "layer geometry (the snow-layer dzk values are identically "
+                 "zero and not pinned), frsnw, the mixed tau/w0/g at the "
+                 "delta layer (the SSL values are identically zero and not "
+                 "pinned), the delta-Eddington layer props at one active "
+                 "layer per band (band 3 at the last layer above the "
+                 "cutoff), the downward chain at the top and bottom of "
+                 "band 1 plus the first guarded interface of band 3 "
+                 "(expected 0), the upward chain at the top of the column, "
+                 "the dfdir/dfdif fractions, the scalar accumulations and "
+                 "the Iabs/fthrul layer absorptions. The snow IOPs "
+                 "Qs/ws_snw/gs_snw/ks_snw and Sabs are not pinned: the dump "
+                 "records zeros for srftyp = 0 rows and Sabs is identically "
+                 "zero for bare ice. Tolerances: rel 1e-9 on the interface "
+                 "quantities, rel 1e-12 elsewhere."),
         "dzk_layers": [1, 2, 5, 6, 13],
         "tau_layers": [1, 6],
         "m_pins": {1: 6, 2: 6, 3: 5},
@@ -226,9 +255,13 @@ def main():
         def band_row(ns):
             return bands[ns]
 
-        # layer geometry and grain radii
+        # layer geometry and grain radii; skip identically-zero layers (the
+        # bare-group snow layers with hs = 0, which could not fail)
         for k in g["dzk_layers"]:
-            add("dzk", tofloat(b1[f"dzk_{k - 1}"]), {"layer": k})
+            v = tofloat(b1[f"dzk_{k - 1}"])
+            if is_zero(v):
+                continue
+            add("dzk", v, {"layer": k})
         for sl in (1, 2, 3):
             add("frsnw", tofloat(b1[f"frsnw_{sl}"]), {"snow_layer": sl})
 
@@ -241,12 +274,15 @@ def main():
                         add(var, tofloat(b[f"{col}_{sl}"]),
                             {"band": ns, "snow_layer": sl})
 
-        # mixed layer IOPs (after the aerosol mixing)
+        # mixed layer IOPs (after the aerosol mixing); skip identically-zero
+        # values (the bare-group layer 1 with hs = 0, which could not fail)
         for k in g["tau_layers"]:
             for ns, b in ((1, b1), (2, b2), (3, b3)):
                 for var in ("tau", "w0", "g"):
-                    add(var, tofloat(b[f"{var}_{k - 1}"]),
-                        {"band": ns, "layer": k})
+                    v = tofloat(b[f"{var}_{k - 1}"])
+                    if is_zero(v):
+                        continue
+                    add(var, v, {"band": ns, "layer": k})
 
         # guard-zeroed layer props feeding the upward recurrence
         m_vars = ("m_rdir", "m_tdir", "m_rdif_a", "m_rdif_b",
@@ -259,21 +295,29 @@ def main():
                 add(var, tofloat(b[f"{col}_{k - 1}"]),
                     {"band": ns, "layer": k})
 
-        # downward interface chain (rel 1e-9)
+        # downward interface chain (rel 1e-9); skip the iface-1 rdndif
+        # boundary value 0 (identically zero, could not fail)
         for ns, ks in sorted(g["down_pins"].items()):
             b = band_row(ns)
             for k in ks:
                 for var in ("trndir", "trntdr", "rdndif", "trndif"):
-                    add(var, tofloat(b[f"{var}_{k - 1}"]),
-                        {"band": ns, "iface": k}, rel=1e-9)
+                    v = tofloat(b[f"{var}_{k - 1}"])
+                    if var == "rdndif" and k == 1 and is_zero(v):
+                        continue
+                    add(var, v, {"band": ns, "iface": k}, rel=1e-9)
 
-        # upward chain: model iface k = Fortran iface 14-k
+        # upward chain: model iface k = Fortran iface 14-k; skip the
+        # ocean-interface (iface 1) values, a copy of the band ocean albedo
+        # albodr (0.01 for band 1, 0 otherwise), which could not fail
         for ns, ks in sorted(g["up_pins"].items()):
             b = band_row(ns)
+            albodr = 0.01 if ns == 1 else 0.0
             for k in ks:
                 for var in ("rupdir", "rupdif"):
-                    add(var, tofloat(b[f"{var}_{14 - k}"]),
-                        {"band": ns, "iface": k}, rel=1e-9)
+                    v = tofloat(b[f"{var}_{14 - k}"])
+                    if k == 1 and is_copy(v, albodr):
+                        continue
+                    add(var, v, {"band": ns, "iface": k}, rel=1e-9)
 
         # down-up flux fractions
         for k in g["df_pins"]:
@@ -307,15 +351,17 @@ def main():
                 v = tofloat(band_row(ns)[f"{col}_{k - 1}"])
                 assert v != 0.0, (g["id"], "active m_ pin is zero", var, ns, k)
         for ns, ks in g["up_pins"].items():
+            albodr = 0.01 if ns == 1 else 0.0
             for k in ks:
                 for var in ("rupdir", "rupdif"):
                     v = tofloat(band_row(ns)[f"{var}_{14 - k}"])
-                    if k == 14:    # top of the column: the actual albedo
+                    if k == 1:     # ocean interface: albodr per band, so
+                        assert is_copy(v, albodr), \
+                            (g["id"], "ocean up pin is not albodr",
+                             var, ns, k, v)
+                    else:          # top of the column: the actual albedo
                         assert v != 0.0, (g["id"], "top up pin is zero",
                                           var, ns, k)
-                    else:          # ocean interface: albodr per band
-                        assert v == (0.01 if ns == 1 else 0.0), \
-                            (g["id"], "ocean up pin", var, ns, k, v)
 
         tests.append({
             "id": g["id"],

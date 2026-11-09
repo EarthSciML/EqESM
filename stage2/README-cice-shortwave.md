@@ -121,27 +121,37 @@ files, fixed on the branch. (No `bugs.md` entries.)
 
 ## Coverage and gaps
 
-Pinned (210 assertions, all against the instrumented dump):
+Pinned (189 assertions, all against the instrumented dump):
 
 - layer geometry `dzk` at the snow SSL / snow interior / ice SSL / delta
-  layer / ice interior; `frsnw` all 3 snow layers
+  layer / ice interior (bare-group snow layers are identically zero and
+  unpinned); `frsnw` all 3 snow layers
 - snow-table IOPs `Qs`/`ws_snw`/`gs_snw`/`ks_snw` at snow layers {1,3}
   × all bands (snow group only)
-- mixed `tau/w0/g` at layer 6 × all bands (snow) / layers {1,6} × all
-  bands (bare)
+- mixed `tau/w0/g` at layer 6 × all bands (snow) / layer 6 × all bands
+  (bare; the bare SSL values are identically zero and unpinned)
 - the guard-zeroed layer props `m_*` at one active layer per band (band
   1 layer 6, bands 2/3 layer 1 for snow; band 1/2 layer 6 and band 3
   layer 5 for bare — the last active layer before the cutoff), including
   `m_* = 0` pins below the cutoff
 - the downward chain `trndir`/`trntdr`/`rdndif`/`trndif` at the top and
   bottom of band 1 plus the first guarded interface of bands 2 and 3
-  (expected 0, exercising the trmin guard)
-- the upward chain `rupdir`/`rupdif` at ifaces {1, 14} for bands 1 and 3
+  (expected 0, exercising the trmin guard; the iface-1 `rdndif` boundary
+  value 0 is unpinned)
+- the upward chain `rupdir`/`rupdif` at the top of the column (iface 14)
+  for bands 1 and 3; the ocean-interface (iface 1) values equal the band
+  ocean albedo `albodr` by construction and are unpinned
 - `dfdir`/`dfdif` straddling the cutoff, the scalar band sums
   `avdr`/`avdf`/`aidr`/`aidf`, `fsfc`/`fint`/`fthru`,
   `fthruvdr`/`fthruvdf` and the band-3 row `fthruidr`/`fthruidf`
 - `Sabs` snow layers {1,2,3} (snow only), `Iabs` ice layers {1,2,8},
   `fthrul` levels {1,5,9}
+
+The extractor (`gen_cice_dedd_tests.py`) skips the unfailable pins with
+tolerance-aware copy/zero checks (|value − reference| ≤ rel·|value|): the
+ocean-interface `rupdir`/`rupdif` (a copy of `albodr`), the iface-1
+`rdndif` (= 0) and the bare-group `dzk` layers 1-2 and `tau/w0/g` at
+layer 1 (the hs = 0 zero region).
 
 Tolerances: rel 1e-12 except rel 1e-9 on the interface quantities
 (`trndir`/`trntdr`/`rdndif`/`trndif`/`rupdir`/`rupdif`/`dfdir`/`dfdif`).
