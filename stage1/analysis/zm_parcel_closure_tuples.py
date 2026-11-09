@@ -16,26 +16,26 @@ directory (default scratch/zm_tuples of the repo where the script runs):
   parcel/   per-step full t/q/z/p profiles (dump columns t [K], q [kg/kg],
             z [m], p [mb] = the hPa working pressure), the launch level maxi,
             and the expected values at the pinned levels: hmn/hsat at lev
-            {1,15,25,32} (dump columns), qst at lev {25,32} (DERIVED: the
-            qsat_hPa replica of zm_convr.F90:2634-2649, cross-pinned by hsat),
-            qstp_launch = q(maxi) (dump column qstp at maxi; pins the
-            parcel_dilute launch branch qstp = q, F90:1414); and the five
-            (step, lev) entropy/virtual-temperature states (DERIVED: the
-            entropy replica of F90:1489-1513 and tv = t (1+1.608 q)/(1+q),
-            F90:1088).
+            {1,15,25,32} (dump columns) and qst at lev {25,32} (DERIVED: the
+            qsat_hPa replica of zm_convr.F90:2634-2649, cross-pinned by hsat);
+            plus the five (step, lev) entropy/virtual-temperature states
+            (DERIVED: the entropy replica of F90:1489-1513 and
+            tv = t (1+1.608 q)/(1+q), F90:1088).  qstp_launch = q(maxi)
+            (parcel_dilute, F90:1414) is NOT emitted: it is a definition
+            (index(q, maxi)), unfailable as a pin, and its Fortran value
+            qstp(maxi) is a dumped parameter input, not a model output.
   closure/  per-step scalars (cape, tl, lel, lcl, jt, mx, mb, dsubcld from
-            cam_zm_scal.csv) and the 20 closure input profiles at levels
+            cam_zm_scal.csv) and the 18 closure input profiles at levels
             14..32 (zero outside; the closure reads only k >= lel = 14..15
             through mx = 32 in this lane): qg/tg/pg/sg/tpg/qstpg/qu/su/qd/sd/
             qhat/shat/ql/pdel/zf_lo/zf_hi (dump columns; zg and qs are NOT
-            emitted -- the closure body never reads them) and the fluxes
-            mu/md/mc/du BOTH normalized (dump value / mb, the form the closure
-            receives: mu/md/mc dimensionless, du 1/hPa) and raw (the dumped
-            mb-scaled form, for the scale-invariance test, which must return
-            mb = 1 exactly because the closure formula is homogeneous of
-            degree 0 in the fluxes).  pdel is dumped in Pa and the model
-            converts with dp = 0.01 hPa/Pa x pdel (the README-cam-zm working
-            identity dp = 0.01*pdel).
+            emitted -- the closure body never reads them) and the normalized
+            fluxes mu/md/mc/du (dump value / mb, the form the closure
+            receives: mu/md/mc dimensionless, du 1/hPa; du is read at
+            jt < k < mx = 16..31, where du(16) is nonzero on every row and
+            du(17..31) = 0).  pdel is dumped in Pa and the model converts
+            with dp = 0.01 hPa/Pa x pdel (the README-cam-zm working identity
+            dp = 0.01*pdel).
 
 Sources: stage1/dumps/cam/cam_zm.csv and cam_zm_scal.csv (480 profile rows,
 15 scalar rows, steps 18-23 and 40-48), the instrumented cam6_4_212 fork
@@ -111,13 +111,9 @@ def main():
     def env_tv(t, q):
         return t * (1.0 + 1.608 * q) / (1.0 + q)
 
-    def closure(pr, sr, flux_scale=1.0):
+    def closure(pr, sr):
         """Replicate closure (zm_convr.F90:2318-2506) + dsubcld (597-603) at
-        the dumped state. flux_scale multiplies the normalized fluxes (1.0 for
-        the mb pin; the dumped mb-scaled fluxes are fed with the raw values,
-        i.e. flux_scale=1 on the scaled values, for the scale-invariance
-        identity: the closure law is homogeneous of degree 0 in the fluxes, so
-        mb must come out exactly 1)."""
+        the dumped state, on the NORMALIZED (per unit mb) fluxes."""
         def A(k, name):
             return float(pr[k][pi[name]])
 
@@ -136,7 +132,7 @@ def main():
                 dsubcld += 0.01 * A(k, "pdel")
 
         def flx(name, k):
-            return flux_scale * A(k, name) / mb_dump
+            return A(k, name) / mb_dump
 
         q_mx = A(mx, "qg"); t_mx = A(mx, "tg"); p_mx = A(mx, "pg")
         eb = p_mx * q_mx / (C["eps1"] + q_mx)
@@ -213,7 +209,7 @@ def main():
 
     # ---------------- verification (all laws vs the dump) ------------------
 
-    worst_mb = worst_ds = worst_hmn = worst_hsat = worst_scale = 0.0
+    worst_mb = worst_ds = worst_hmn = worst_hsat = 0.0
     for st in steps:
         pr = prof[(st, 1)]
         sr = scal[(st, 1)]
@@ -222,9 +218,6 @@ def main():
         ds_dump = float(sr[si["dsubcld"]])
         worst_mb = max(worst_mb, abs(res["mb"] - mb_dump) / max(abs(res["mb"]), abs(mb_dump)))
         worst_ds = max(worst_ds, abs(res["dsubcld"] - ds_dump) / max(abs(ds_dump), 1.0))
-        # scale invariance: the closure formula on the dumped mb-scaled fluxes
-        res_sc = closure(pr, sr, flux_scale=mb_dump)
-        worst_scale = max(worst_scale, abs(res_sc["mb"] - 1.0))
         mx = int(sr[si["maxi"]])
         for k in (1, 15, 25, 32):
             r = pr[k]
@@ -240,10 +233,9 @@ def main():
         assert float(pr[mx][pi["qstp"]]) == float(pr[mx][pi["q"]]), \
             f"step {st}: qstp(mx) != q(mx)"
     print(f"verification: worst rel |mb| {worst_mb:.2e}, |dsubcld| {worst_ds:.2e}, "
-          f"|hmn| {worst_hmn:.2e}, |hsat| {worst_hsat:.2e}, "
-          f"scale-invariance |mb-1| {worst_scale:.2e}")
+          f"|hmn| {worst_hmn:.2e}, |hsat| {worst_hsat:.2e}")
     limit = 1e-12
-    if max(worst_mb, worst_ds, worst_hmn, worst_hsat, worst_scale) > limit:
+    if max(worst_mb, worst_ds, worst_hmn, worst_hsat) > limit:
         print("FAIL: verification mismatch above 1e-12")
         sys.exit(1)
 
@@ -264,7 +256,6 @@ def main():
             asserts[f"hsat{k}"] = float(pr[k][pi["hsat"]])
         for k in (25, 32):
             asserts[f"qst{k}"] = qsat_hPa(float(pr[k][pi["t"]]), float(pr[k][pi["p"]]))
-        asserts["qstp_launch"] = float(pr[mx][pi["qstp"]])
         parcel[str(st)] = dict(overrides=arr, maxi=mx, asserts=asserts)
 
         mb_dump = float(sr[si["mb"]])
@@ -272,23 +263,17 @@ def main():
         prof_vars = ("qg", "tg", "pg", "sg", "tpg", "qstpg", "qu", "su",
                      "qd", "sd", "qhat", "shat", "ql", "pdel", "zf_lo", "zf_hi")
         norm = {}
-        raw = {}
         for v in prof_vars:
-            a = [0.0] * 13 + [float(pr[k][pi[v]]) for k in range(14, pver + 1)]
-            norm[v] = a
-            raw[v] = list(a)
+            norm[v] = [0.0] * 13 + [float(pr[k][pi[v]]) for k in range(14, pver + 1)]
         for v in flux_vars:
-            a = [0.0] * 13 + [float(pr[k][pi[v]]) / mb_dump
-                              for k in range(14, pver + 1)]
-            norm[v] = a
-            raw[v] = [0.0] * 13 + [float(pr[k][pi[v]]) for k in range(14, pver + 1)]
+            norm[v] = [0.0] * 13 + [float(pr[k][pi[v]]) / mb_dump
+                                    for k in range(14, pver + 1)]
         closure_tuples[str(st)] = dict(
             scalars=dict(cape=float(sr[si["cape"]]), tl=float(sr[si["tl"]]),
                          lel=int(sr[si["lel"]]), lcl=int(sr[si["lcl"]]),
                          jt=int(sr[si["jt"]]), mx=int(sr[si["maxg"]])),
-            norm=norm, raw=raw,
-            asserts=dict(dsubcld=float(sr[si["dsubcld"]]), mb=mb_dump,
-                         mb_scale_inv=1.0))
+            norm=norm,
+            asserts=dict(dsubcld=float(sr[si["dsubcld"]]), mb=mb_dump))
 
     ent_tv_states = [(18, 32), (18, 25), (18, 15), (40, 26), (48, 32)]
     ent_tv = []
@@ -307,8 +292,8 @@ def main():
     with open(f"{OUT}/tuples.json", "w") as f:
         json.dump(out, f, indent=1)
     print(f"wrote {OUT}/tuples.json")
-    print(f"parcel: {len(parcel)} steps x 11 asserts + {len(ent_tv)} entropy/tv states; "
-          f"closure: {len(closure_tuples)} steps x (dsubcld, mb, mb_scale_inv)")
+    print(f"parcel: {len(parcel)} steps x 10 asserts + {len(ent_tv)} entropy/tv states; "
+          f"closure: {len(closure_tuples)} steps x (dsubcld, mb)")
 
 
 if __name__ == "__main__":

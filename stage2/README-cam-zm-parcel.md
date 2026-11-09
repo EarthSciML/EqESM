@@ -7,16 +7,22 @@ decomposition): **buoyan_dilute** (the parcel/CAPE calculation) and
 
 | file | contents |
 |---|---|
-| `stage2/cam_zm_templates.esm` | shared expression-template library (17 templates): the ZM qsat (zm_qsat_hPa), the moist static energies hmn/hsat, the virtual temperatures tv/tpv, the Raymond–Blyth entropy, the closure per-level laws (thetavp/thetavm, dqsdtp, dtpdt, dtmdt/dqmdt at jt and mid, dboydt above/below the LCL) |
+| `stage2/cam_zm_templates.esm` | shared expression-template library (17 templates): the ZM qsat (zm_qsat_hPa), the moist static energies hmn/hsat, the virtual temperatures tv/tpv, the Raymond–Blyth entropy, the closure per-level laws (thetavp/thetavm, dqsdtp, dtpdt, dtmdt/dqmdt at jt and mid, dboydt above/below the LCL), each with its lel/lcl/jt/mx region guard inside the template body |
 | `stage2/cam_zm_parcel.esm` | model `Parcel`: buoyan_dilute (zm_convr.F90:890-1490) + the parcel_dilute launch/entropy laws (F90:1414-1415, 1476, 1489-1513) + the cldprp hmn/hsat laws (F90:1829-1830) |
 | `stage2/cam_zm_closure.esm` | model `Closure`: closure (zm_convr.F90:2318-2506) + the driver's dsubcld (F90:597-603) |
 
 Both models import the templates by reference
 (`expression_template_imports`), so every shared law has a single
-definition.  The CAPE integral and the dadt integral lower through the
-ESD rule `integral_lev_whole` (`${ESD_ROOT}/grids/column_nonuniform_1d/
+definition.  The CAPE, dsubcld and dadt integrals lower through the ESD
+rule `integral_lev_whole` (`${ESD_ROOT}/grids/column_nonuniform_1d/
 rules/integral_lev_whole.esm`, binding NLEV = 32) with the consumer's
-free-name layer measure `dz`.
+free-name layer measure `dz`.  `dz` is the trivial measure 1 in both
+models: in `Parcel` the Fortran d(ln p) increments are written into the
+integrand's own `dz` variable (log(pf_hi/pf_lo)), and in `Closure` the
+two integrals share the one imported rule, whose free name `dz` binds by
+consumer variable name, so the Fortran layer weight zf_lo − zf_hi of the
+dadt summand is carried in the integrand `dadt_integrand` rather than
+the measure.
 
 Sources: `stage1/dumps/cam/cam_zm.csv` (480 profile rows) and
 `cam_zm_scal.csv` (15 scalar rows, steps 18–23 and 40–48, g = 1) of the
@@ -47,8 +53,9 @@ Variables/equations: `qst`, `hmn`, `hsat`, `tv`, `tpv`, `buoy`,
   qtot·cpliq)·log(TK/tfreez) − rgas·log((p−e)/pref) + L·qv/TK −
   qv·rh2o·log(qv/qst), with L = rl − (cpliq−cpwv)·(TK−tfreez),
   qv = min(qtot, qst), e = qv·p/(eps1+qv), pref = 1000 hPa.
-- `qstp_launch` = q(maxi): pins the parcel_dilute launch branch
-  qstp = q (F90:1414).
+- `qstp_launch` = q(maxi): carries the parcel_dilute launch branch
+  qstp = q (F90:1414) as the bare index q(maxi) — a definition, not
+  pinned by any test (its Fortran value is a dumped parameter input).
 
 The logarithms are taken of **dimensionless ratios** (TK/tfreez,
 (p−e)/pref, qv/qst, t/1K, eb/1hPa) as the dimensional checker requires;
@@ -78,20 +85,23 @@ zm_qsat_hPa via the declared 100 Pa/hPa constant.
 
 ## Model `Closure` (closure + dsubcld)
 
-Variables/equations: the dp conversion, `dsubcld`, the launch-level
-extractions t_mx/q_mx/p_mx, `eb`, `dtbdt`, `dqbdt`, `debdt`, `dtldt`,
+Variables/equations: the dp conversion, `dp_subcld`, `dsubcld` (an
+`integral`), the launch-level extractions t_mx/q_mx/p_mx, `eb`,
+`dtbdt`, `dqbdt`, `debdt`, `dtldt`,
 `dtmdt_jt`/`dtmdt_mid`/`dtmdt`, `dqmdt_jt`/`dqmdt_mid`/`dqmdt`,
 `thetavp_above`/`thetavp_below`/`thetavp`, `thetavm`, `dqsdtp`,
-`dtpdt`, `dboydt_above`/`dboydt_below`/`dboydt`, `dz`, `dadt` (an
-`integral`), `mb`.
+`dtpdt`, `dboydt_above`/`dboydt_below`/`dboydt`, `dz`,
+`dadt_integrand`, `dadt` (an `integral`), `mb`.
 
 - `dp` = 0.01·pdel (the README-cam-zm working identity; pdel dumped in
   Pa, dp in hPa).
-- `dsubcld` = Σ dp over k ≥ mx (F90:597-603).  Written as a filtered
-  faq reduction (measure-sum guidance: the ESD integral rule's free-name
-  dz cannot serve two different measures in one model); with mx = 32 =
-  pver the sum collapses to dp(32), pinned exactly (14.026758 hPa =
-  0.01·pdel(32)).
+- `dsubcld` = Σ dp over k ≥ mx (F90:597-603).  Written as the
+  whole-column integral of the masked thickness `dp_subcld` (dp for
+  k ≥ mx, else 0) under the trivial measure dz = 1 — the ESD rule's
+  free name dz cannot serve two different measures in one model, so the
+  measure is shared and the masks/weights live in the integrands; with
+  mx = 32 = pver the sum collapses to dp(32), pinned exactly
+  (14.026758 hPa = 0.01·pdel(32)).
 - Launch-level block (F90:2401-2410): eb = p(mx)·q(mx)/(eps1+q(mx)),
   dtbdt/dqbdt from the mu/md fluxes at mx, debdt =
   eps1·p(mx)/(eps1+q(mx))²·dqbdt, dtldt =
@@ -113,10 +123,14 @@ extractions t_mx/q_mx/p_mx, `eb`, `dtbdt`, `dqbdt`, `debdt`, `dtldt`,
   tp/(1 + rl/cp·(dqsdtp − qstp/tp))·(dtbdt/t(mx) + rl/cp·(dqbdt/tl −
   q(mx)/tl²·dtldt)) (F90:2460-2462).
 - dboydt above the LCL (F90:2464-2468) and below (F90:2482-2485);
-  `dadt` = integral of dboydt over the layer thickness dz = zf_lo −
-  zf_hi for lel ≤ k < mx (F90:2490-2499; dboydt is zero outside that
-  range, so the whole-column `integral_lev_whole` sum equals the Fortran
-  sum).  dz carries units of m, so dadt comes out in m²/(s²·hPa).
+  `dadt_integrand` = dboydt·(zf_lo − zf_hi), the literal Fortran dadt
+  summand, and `dadt` = integral of it over the active levels lel ≤
+  k < mx (F90:2490-2499; dboydt is zero outside that range, so the
+  whole-column `integral_lev_whole` sum equals the Fortran sum).  The
+  layer weight is in the integrand, not the measure: dz is the trivial
+  measure 1 (both integrals share the one imported rule, whose free name
+  dz binds by consumer variable name), and dadt comes out in
+  m²/(s²·hPa) because the weight carries the m.
 - `mb` = max((capelmt − cape)/(tau·dadt), 0), zero when dadt = 0
   (F90:2500-2503: dltaa = −(cape − capelmt), mb = max(dltaa/tau/dadt,
   0)).
@@ -125,38 +139,37 @@ The closure consumes the **NORMALIZED** fluxes: mu/md/mc are
 dimensionless fractions of mb and du is per hPa (1/hPa) — the form the
 closure receives after the zm_convr_run mb scaling (F90:648-714); the
 dumped mu/md/mc/du are the mb-scaled values, and the tests feed
-dump/mb (the mb pin) and the raw dump values (the scale-invariance
-test).  Omitted with justification: `zg` and `qs` (closure arguments
-never read by its body — grep-verified); the msg loop lower bound
-(loops start at msg+1 = 6, F90:2401 etc., inactive because every
-branch lower bound is lel ≥ 14 > 6); the mumax flux limit (F90:675-690,
-inactive on all 15 rows — verified, mumax-limited mb equals the dumped
-mb); lel/lcl/jt/mx enter as dumped parameters (they are computed by
-other blocks of the chain).
+dump/mb (the mb pin; du is read at jt < k < mx = 16..31, where du(16)
+is nonzero on every row and du(17..31) = 0).  The lel/lcl/jt/mx
+region masks of the branch laws live inside the `zm_*` template bodies
+(zeroing the inactive levels — the `surface_layer_source` pattern), not
+in the consumer equations.  Omitted with justification: `zg` and `qs`
+(closure arguments never read by its body — grep-verified); the msg
+loop lower bound (loops start at msg+1 = 6, F90:2401 etc., inactive
+because every branch lower bound is lel ≥ 14 > 6); the mumax flux
+limit (F90:675-690, inactive on all 15 rows — verified, mumax-limited
+mb equals the dumped mb); lel/lcl/jt/mx enter as dumped parameters
+(they are computed by other blocks of the chain).
 
 ## Tests
 
 All tests `time_span {0,0}`, rel 1e-12, citing dump file, step, g and
-lev (220 assertions):
+lev (190 assertions):
 
-- **Parcel — 165 assertions** (15 steps × 11): hmn and hsat at lev
+- **Parcel — 150 assertions** (15 steps × 10): hmn and hsat at lev
   {1, 15, 25, 32} against the dumped columns (cam_zm.csv rows
   (step, 1, k)); qst at lev {25, 32} against the qsat_hPa replica
   (DERIVED, cross-pinned by hsat through hsat = cpres·t + grav·z +
-  rl·qst, which inverts to qst = (hsat − cpres·t − grav·z)/rl); and
-  qstp_launch = q(maxi) against the dumped qstp at maxi (== q(maxi) on
-  all 15 rows), pinning the launch branch qstp = q (F90:1414).
+  rl·qst, which inverts to qst = (hsat − cpres·t − grav·z)/rl).
 - **Parcel — 10 ent/tv assertions** (5 states × 2): ent at (18,32),
   (18,25), (18,15), (40,32), (48,32) and tv at the same states, against
   the entropy (F90:1489-1513) and virtual-temperature (F90:1088)
   replicas (DERIVED — not dump columns).
 - **Closure — 30 assertions** (15 steps × 2): dsubcld (exact) and mb
   (worst rel 2.5e-16) against the dumped columns, from the NORMALIZED
-  fluxes dump/mb.
-- **Closure — 15 scale-invariance assertions** (15 steps): feeding the
-  RAW dumped (mb-scaled) fluxes must give mb = 1 exactly, because the
-  closure law is homogeneous of degree 0 in the fluxes (every term is
-  linear in mu/md/mc/du); worst |mb − 1| 4.4e-16.
+  fluxes dump/mb.  The step-18 test runs on the model defaults (every
+  step-18 profile equals a default, so the default run *is* the step-18
+  state); the other steps override all 24 profile/scalar arrays.
 
 Data volume: 15 columns × 32 levels; the dump window spans cape
 94–594 J/kg, lel 14/15, lcl 25/26/27, jt 15, mx 32.
@@ -166,11 +179,13 @@ Data volume: 15 columns × 32 levels; the dump window spans cape
 `stage1/analysis/zm_parcel_closure_tuples.py` extracts the numeric
 arrays of the tests blocks from the dumps (per the stage-2 workflow:
 scripts may extract numeric test tuples into an existing hand-authored
-tests block; all equations and structure are hand-authored in the
-skeletons under `scratch/` and assembled by
-`scratch/assemble_zm_esm.py`).  It also *verifies* every law replica
-against the dump before writing the tuples: worst rel |mb| 2.5e-16,
-|dsubcld|, |hmn|, |hsat| 0.0, scale-invariance |mb−1| 4.4e-16 (run with
+tests block; all equations and structure are hand-authored in the .esm
+files).  `scratch/splice_zm_tests.py` regenerates only the `tests`
+blocks of the two .esm files from the tuples, in the exact
+json.dumps(indent=1) format the region was originally written in, so
+`git diff` shows only test-block changes.  The tuples script also
+*verifies* every law replica against the dump before writing the
+tuples: worst rel |mb| 2.5e-16, |dsubcld|, |hmn|, |hsat| 0.0 (run with
 `ZM_DUMP_DIR`/`ZM_TUPLE_DIR` env overrides; default output
 `scratch/zm_tuples/tuples.json`, gitignored).
 
@@ -187,7 +202,7 @@ against the dump before writing the tuples: worst rel |mb| 2.5e-16,
   through the collapsed lel parameter.
 - **argmax (maxi) and the Brent root-find are not evaluable** by the
   CLI interpreter (probed); `maxi` is a parameter (dump column; the
-  qstp = q(mx) launch law is pinned via qstp_launch).
+  qstp = q(mx) launch law is carried via qstp_launch, a definition).
 - pl ≥ 600 gate (F90:1079-1080) omitted (pl not dumped; uniformly true
   on the active rows); landfrac unused (lparcel_pbl = F); mumax limit
   (F90:675-690) and the msg loop bound omitted (inactive on all 15
@@ -203,4 +218,9 @@ against the dump before writing the tuples: worst rel |mb| 2.5e-16,
   during development and is regression-covered by the tests above).
 - The closure tests feed level values 1–13 zeroed (the closure reads
   only lel..mx = 14/15..32 on this lane; thetavm is zeroed outside
-  [lel, mx), everything else below lel is unused).
+  [lel, mx), everything else below lel is unused).  The step-18 test
+  omits the overrides entirely and exercises the zeroed defaults, which
+  is why the region guards live inside the template bodies rather than
+  mask-multiplied in the consumer: a mask multiply would evaluate the
+  (1000/p)^(rd/cp) law at p = 0 (levels 1–13) and turn mb into NaN,
+  while the ifelse guard short-circuits the untaken branch.

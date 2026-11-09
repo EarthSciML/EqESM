@@ -540,71 +540,111 @@
    }
   },
   "zm_theta_v_env": {
-   "description": "Environmental virtual potential temperature thetavm = t (1000/p)^(rd/cp) (1 + 0.608 q) of closure (zm_convr.F90:2462 above the LCL and 2480 below), with 1000 the pref = 1000 hPa reference pressure and rd/cp the dimensionless R/cp ratio.",
+   "description": "Environmental virtual potential temperature thetavm = t (1000/p)^(rd/cp) (1 + 0.608 q) of closure (zm_convr.F90:2462 above the LCL and 2480 below), with 1000 the pref = 1000 hPa reference pressure and rd/cp the dimensionless R/cp ratio. Applied to the full [lev] arrays with the lel <= k < mx guard inside the body (the Fortran writes thetavm only there; the law involves 1000/p, so it must not evaluate where the profile is undefined); zero outside lel <= k < mx.",
    "params": [
     "t",
     "p",
     "rd",
     "cp",
-    "q"
+    "q",
+    "lel",
+    "mx"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "*",
-      "args": [
-       "t",
-       {
-        "op": "^",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1000.0,
-            "units": "hPa"
-           },
-           "p"
-          ]
-         },
-         {
-          "op": "/",
-          "args": [
-           "rd",
-           "cp"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "*",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.608,
-          "units": "1"
-         },
-         "q"
-        ]
-       }
-      ]
-     }
-    ]
+     "t",
+     "p",
+     "rd",
+     "cp",
+     "q",
+     "lel",
+     "mx"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">=",
+         "args": ["k", "lel"]
+        },
+        {
+         "op": "<",
+         "args": ["k", "mx"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "t",
+          {
+           "op": "^",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1000.0,
+               "units": "hPa"
+              },
+              "p"
+             ]
+            },
+            {
+             "op": "/",
+             "args": [
+              "rd",
+              "cp"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "const",
+           "args": [],
+           "value": 1.0,
+           "units": "1"
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "const",
+             "args": [],
+             "value": 0.608,
+             "units": "1"
+            },
+            "q"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K"
+      }
+     ]
+    }
    }
   },
   "zm_theta_v_parcel_above_lcl": {
@@ -615,71 +655,112 @@
     "rd",
     "cp",
     "qstp",
-    "q_mx"
+    "q_mx",
+    "lel",
+    "lcl"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "*",
-      "args": [
-       "tp",
-       {
-        "op": "^",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1000.0,
-            "units": "hPa"
-           },
-           "p"
-          ]
-         },
-         {
-          "op": "/",
-          "args": [
-           "rd",
-           "cp"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "-",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.608,
-            "units": "1"
-           },
-           "qstp"
-          ]
-         },
-         "q_mx"
-        ]
-       }
-      ]
-     }
-    ]
+     "tp",
+     "p",
+     "rd",
+     "cp",
+     "qstp",
+     "q_mx",
+     "lel",
+     "lcl"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">=",
+         "args": ["k", "lel"]
+        },
+        {
+         "op": "<=",
+         "args": ["k", "lcl"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "tp",
+          {
+           "op": "^",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1000.0,
+               "units": "hPa"
+              },
+              "p"
+             ]
+            },
+            {
+             "op": "/",
+             "args": [
+              "rd",
+              "cp"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "const",
+           "args": [],
+           "value": 1.0,
+           "units": "1"
+          },
+          {
+           "op": "-",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1.608,
+               "units": "1"
+              },
+              "qstp"
+             ]
+            },
+            "q_mx"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K"
+      }
+     ]
+    }
    }
   },
   "zm_theta_v_parcel_below_lcl": {
@@ -689,65 +770,105 @@
     "p",
     "rd",
     "cp",
-    "q_mx"
+    "q_mx",
+    "lcl",
+    "mx"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "*",
-      "args": [
-       "tp",
-       {
-        "op": "^",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1000.0,
-            "units": "hPa"
-           },
-           "p"
-          ]
-         },
-         {
-          "op": "/",
-          "args": [
-           "rd",
-           "cp"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       {
-        "op": "*",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.608,
-          "units": "1"
-         },
-         "q_mx"
-        ]
-       }
-      ]
-     }
-    ]
+     "tp",
+     "p",
+     "rd",
+     "cp",
+     "q_mx",
+     "lcl",
+     "mx"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">",
+         "args": ["k", "lcl"]
+        },
+        {
+         "op": "<",
+         "args": ["k", "mx"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          "tp",
+          {
+           "op": "^",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1000.0,
+               "units": "hPa"
+              },
+              "p"
+             ]
+            },
+            {
+             "op": "/",
+             "args": [
+              "rd",
+              "cp"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "const",
+           "args": [],
+           "value": 1.0,
+           "units": "1"
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "const",
+             "args": [],
+             "value": 0.608,
+             "units": "1"
+            },
+            "q_mx"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K"
+      }
+     ]
+    }
    }
   },
   "zm_dqsdtp": {
@@ -757,61 +878,101 @@
     "eps1",
     "rl",
     "rd",
-    "tp"
+    "tp",
+    "lel",
+    "lcl"
    ],
    "body": {
-    "op": "/",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "qstp",
-         {
-          "op": "+",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.0,
-            "units": "1"
-           },
-           {
-            "op": "/",
-            "args": [
-             "qstp",
-             "eps1"
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         "eps1",
-         "rl"
-        ]
-       }
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       "rd",
-       {
-        "op": "^",
-        "args": [
-         "tp",
-         2
-        ]
-       }
-      ]
-     }
-    ]
+     "qstp",
+     "eps1",
+     "rl",
+     "rd",
+     "tp",
+     "lel",
+     "lcl"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">=",
+         "args": ["k", "lel"]
+        },
+        {
+         "op": "<=",
+         "args": ["k", "lcl"]
+        }
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            "qstp",
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1.0,
+               "units": "1"
+              },
+              {
+               "op": "/",
+               "args": [
+                "qstp",
+                "eps1"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            "eps1",
+            "rl"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "rd",
+          {
+           "op": "^",
+           "args": [
+            "tp",
+            2
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "1/K"
+      }
+     ]
+    }
    }
   },
   "zm_dtpdt": {
@@ -827,520 +988,1198 @@
     "q_mx",
     "dtldt",
     "rl",
-    "cp"
+    "cp",
+    "lel",
+    "lcl"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "/",
-      "args": [
-       "tp",
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         },
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             "rl",
-             "cp"
-            ]
-           },
-           {
-            "op": "-",
-            "args": [
-             "dqsdtp",
-             {
-              "op": "/",
-              "args": [
-               "qstp",
-               "tp"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "/",
-        "args": [
-         "dtbdt",
-         "t_mx"
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           "rl",
-           "cp"
-          ]
-         },
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             "dqbdt",
-             "tl"
-            ]
-           },
-           {
-            "op": "*",
-            "args": [
-             {
-              "op": "/",
-              "args": [
-               "q_mx",
-               {
-                "op": "^",
-                "args": [
-                 "tl",
-                 2
-                ]
-               }
-              ]
-             },
-             "dtldt"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
-    ]
+     "tp",
+     "qstp",
+     "dqsdtp",
+     "dtbdt",
+     "t_mx",
+     "dqbdt",
+     "tl",
+     "q_mx",
+     "dtldt",
+     "rl",
+     "cp",
+     "lel",
+     "lcl"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">=",
+         "args": ["k", "lel"]
+        },
+        {
+         "op": "<=",
+         "args": ["k", "lcl"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "/",
+         "args": [
+          "tp",
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "const",
+             "args": [],
+             "value": 1.0,
+             "units": "1"
+            },
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                "rl",
+                "cp"
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                "dqsdtp",
+                {
+                 "op": "/",
+                 "args": [
+                  "qstp",
+                  "tp"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            "dtbdt",
+            "t_mx"
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              "rl",
+              "cp"
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                "dqbdt",
+                "tl"
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  "q_mx",
+                  {
+                   "op": "^",
+                   "args": [
+                    "tl",
+                    2
+                   ]
+                  }
+                 ]
+                },
+                "dtldt"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K/hPa"
+      }
+     ]
+    }
    }
   },
   "zm_dtmdt_jt": {
-   "description": "Cumulus heating at the updraft-top level k = jt, dtmdt = (mu(k+1) (su(k+1) - shat(k+1) - rl/cp ql(k+1)) + md(k+1) (sd(k+1) - shat(k+1)))/dp(k) (closure, zm_convr.F90:2423-2425): the jt interface fluxes in, minus the (evaporated) condensate term rl/cp ql(k+1). K per unit cloud-base mass flux (K/hPa).",
+   "description": "Cumulus heating at the updraft-top level k = jt, dtmdt = (mu(k+1) (su(k+1) - shat(k+1) - rl/cp ql(k+1)) + md(k+1) (sd(k+1) - shat(k+1)))/dp(k) (closure, zm_convr.F90:2423-2425): the jt interface fluxes in, minus the (evaporated) condensate term rl/cp ql(k+1). K per unit cloud-base mass flux (K/hPa). Applied to the full [lev] arrays with the level-k == jt guard and the k+1 flux reads inside the body (the guard keeps the k+1 gather in range at k = pver); zero outside k == jt.",
    "params": [
-    "mu_kp1",
-    "su_kp1",
-    "shat_kp1",
+    "mu",
+    "su",
+    "shat",
+    "ql",
+    "md",
+    "sd",
+    "dp",
     "rl",
     "cp",
-    "ql_kp1",
-    "md_kp1",
-    "sd_kp1",
-    "dp_k"
+    "jt"
    ],
    "body": {
-    "op": "/",
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
     "args": [
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "mu_kp1",
-         {
-          "op": "-",
-          "args": [
-           "su_kp1",
-           {
-            "op": "+",
-            "args": [
-             "shat_kp1",
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "/",
-                "args": [
-                 "rl",
-                 "cp"
-                ]
-               },
-               "ql_kp1"
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         "md_kp1",
-         {
-          "op": "-",
-          "args": [
-           "sd_kp1",
-           "shat_kp1"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     "dp_k"
-    ]
+     "mu",
+     "su",
+     "shat",
+     "ql",
+     "md",
+     "sd",
+     "dp",
+     "rl",
+     "cp",
+     "jt"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "==",
+       "args": [
+        "k",
+        "jt"
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "mu",
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "su",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "+",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "shat",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "/",
+                   "args": [
+                    "rl",
+                    "cp"
+                   ]
+                  },
+                  {
+                   "op": "index",
+                   "args": [
+                    "ql",
+                    {
+                     "op": "+",
+                     "args": [
+                      "k",
+                      1
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "md",
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "sd",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "shat",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "dp",
+          "k"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K/hPa"
+      }
+     ]
+    }
    }
   },
   "zm_dqmdt_jt": {
-   "description": "Cumulus drying at the updraft-top level k = jt, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + ql(k+1)) + md(k+1) (qd(k+1) - qhat(k+1)))/dp(k) (closure, zm_convr.F90:2426-2428): the updraft's condensate ql(k+1) is re-evaporated into the environment at the top. 1/hPa (kg/kg per unit cloud-base mass flux).",
+   "description": "Cumulus drying at the updraft-top level k = jt, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + ql(k+1)) + md(k+1) (qd(k+1) - qhat(k+1)))/dp(k) (closure, zm_convr.F90:2426-2428): the updraft's condensate ql(k+1) is re-evaporated into the environment at the top. 1/hPa (kg/kg per unit cloud-base mass flux). Applied to the full [lev] arrays with the level-k == jt guard and the k+1 flux reads inside the body (the guard keeps the k+1 gather in range at k = pver); zero outside k == jt.",
    "params": [
-    "mu_kp1",
-    "qu_kp1",
-    "qhat_kp1",
-    "ql_kp1",
-    "md_kp1",
-    "qd_kp1",
-    "dp_k"
+    "mu",
+    "qu",
+    "qhat",
+    "ql",
+    "md",
+    "qd",
+    "dp",
+    "jt"
    ],
    "body": {
-    "op": "/",
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
     "args": [
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         "mu_kp1",
-         {
-          "op": "+",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             "qu_kp1",
-             "qhat_kp1"
-            ]
-           },
-           "ql_kp1"
-          ]
-         }
-        ]
-       },
-       {
-        "op": "*",
-        "args": [
-         "md_kp1",
-         {
-          "op": "-",
-          "args": [
-           "qd_kp1",
-           "qhat_kp1"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     "dp_k"
-    ]
+     "mu",
+     "qu",
+     "qhat",
+     "ql",
+     "md",
+     "qd",
+     "dp",
+     "jt"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "==",
+       "args": [
+        "k",
+        "jt"
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "mu",
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "qu",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "qhat",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "ql",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "md",
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "qd",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "qhat",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "dp",
+          "k"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "1/hPa"
+      }
+     ]
+    }
    }
   },
   "zm_dtmdt_mid": {
-   "description": "Cumulus heating in the updraft interior, dtmdt = (mc(k) (shat(k) - s(k)) + mc(k+1) (s(k) - shat(k+1)))/dp(k) - rl/cp du(k) ql(k+1) (closure, zm_convr.F90:2432-2435): the net convective mass flux convergence of dry static energy minus the evaporative cooling of the detrained condensate. beta = 0 (F90:2433) collapses the condensate weight (beta ql(k) + (1-beta) ql(k+1)) to ql(k+1). K/hPa.",
+   "description": "Cumulus heating in the updraft interior, dtmdt = (mc(k) (shat(k) - s(k)) + mc(k+1) (s(k) - shat(k+1)))/dp(k) - rl/cp du(k) ql(k+1) (closure, zm_convr.F90:2432-2435): the net convective mass flux convergence of dry static energy minus the evaporative cooling of the detrained condensate. beta = 0 (F90:2433) collapses the condensate weight (beta ql(k) + (1-beta) ql(k+1)) to ql(k+1). K/hPa. Applied to the full [lev] arrays with the jt < k < mx guard and the k+1 reads inside the body (the guard keeps the k+1 gathers in range at k = pver); zero outside jt < k < mx.",
    "params": [
-    "mc_k",
-    "shat_k",
-    "sg_k",
-    "mc_kp1",
-    "shat_kp1",
-    "dp_k",
+    "mc",
+    "shat",
+    "sg",
+    "dp",
+    "du",
+    "ql",
     "rl",
     "cp",
-    "du_k",
-    "ql_kp1"
+    "jt",
+    "mx"
    ],
    "body": {
-    "op": "-",
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
     "args": [
-     {
-      "op": "/",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "mc_k",
-           {
-            "op": "-",
-            "args": [
-             "shat_k",
-             "sg_k"
-            ]
-           }
-          ]
-         },
-         {
-          "op": "*",
-          "args": [
-           "mc_kp1",
-           {
-            "op": "-",
-            "args": [
-             "sg_k",
-             "shat_kp1"
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       "dp_k"
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "*",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           "rl",
-           "cp"
-          ]
-         },
-         "du_k"
-        ]
-       },
-       "ql_kp1"
-      ]
+     "mc",
+     "shat",
+     "sg",
+     "dp",
+     "du",
+     "ql",
+     "rl",
+     "cp",
+     "jt",
+     "mx"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
      }
-    ]
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">",
+         "args": [
+          "k",
+          "jt"
+         ]
+        },
+        {
+         "op": "<",
+         "args": [
+          "k",
+          "mx"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "-",
+       "args": [
+        {
+         "op": "/",
+         "args": [
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "mc",
+                "k"
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "shat",
+                  "k"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "sg",
+                  "k"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "index",
+               "args": [
+                "mc",
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "sg",
+                  "k"
+                 ]
+                },
+                {
+                 "op": "index",
+                 "args": [
+                  "shat",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "dp",
+            "k"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              "rl",
+              "cp"
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "du",
+              "k"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "ql",
+            {
+             "op": "+",
+             "args": [
+              "k",
+              1
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "K/hPa"
+      }
+     ]
+    }
    }
   },
   "zm_dqmdt_mid": {
-   "description": "Cumulus drying in the updraft interior, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + cp/rl (su(k+1) - s(k))) - mu(k) (qu(k) - qhat(k) + cp/rl (su(k) - s(k))) + md(k+1) (qd(k+1) - qhat(k+1) + cp/rl (sd(k+1) - s(k))) - md(k) (qd(k) - qhat(k) + cp/rl (sd(k) - s(k))))/dp(k) + du(k) ql(k+1) (closure, zm_convr.F90:2436-2446): the flux convergence of specific humidity with the s-flux detrainment terms cp/rl (sx(k+1) - s(k)) and the re-evaporation of the detrained condensate (beta = 0, F90:2433). 1/hPa.",
+   "description": "Cumulus drying in the updraft interior, dqmdt = (mu(k+1) (qu(k+1) - qhat(k+1) + cp/rl (su(k+1) - s(k))) - mu(k) (qu(k) - qhat(k) + cp/rl (su(k) - s(k))) + md(k+1) (qd(k+1) - qhat(k+1) + cp/rl (sd(k+1) - s(k))) - md(k) (qd(k) - qhat(k) + cp/rl (sd(k) - s(k))))/dp(k) + du(k) ql(k+1) (closure, zm_convr.F90:2436-2446): the flux convergence of specific humidity with the s-flux detrainment terms cp/rl (sx(k+1) - s(k)) and the re-evaporation of the detrained condensate (beta = 0, F90:2433). 1/hPa. Applied to the full [lev] arrays with the jt < k < mx guard and the k+1 reads inside the body (the guard keeps the k+1 gathers in range at k = pver); zero outside jt < k < mx.",
    "params": [
-    "mu_kp1",
-    "qu_kp1",
-    "qhat_kp1",
+    "mu",
+    "qu",
+    "qhat",
+    "su",
+    "sg",
+    "md",
+    "qd",
+    "sd",
+    "dp",
+    "du",
+    "ql",
     "cp",
     "rl",
-    "su_kp1",
-    "sg_k",
-    "mu_k",
-    "qu_k",
-    "qhat_k",
-    "su_k",
-    "md_kp1",
-    "qd_kp1",
-    "sd_kp1",
-    "md_k",
-    "qd_k",
-    "sd_k",
-    "dp_k",
-    "du_k",
-    "ql_kp1"
+    "jt",
+    "mx"
    ],
    "body": {
-    "op": "+",
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
     "args": [
-     {
-      "op": "/",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "*",
-            "args": [
-             "mu_kp1",
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "-",
-                "args": [
-                 "qu_kp1",
-                 "qhat_kp1"
-                ]
-               },
-               {
-                "op": "*",
-                "args": [
-                 {
-                  "op": "/",
-                  "args": [
-                   "cp",
-                   "rl"
-                  ]
-                 },
-                 {
-                  "op": "-",
-                  "args": [
-                   "su_kp1",
-                   "sg_k"
-                  ]
-                 }
-                ]
-               }
-              ]
-             }
-            ]
-           },
-           {
-            "op": "*",
-            "args": [
-             "mu_k",
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "-",
-                "args": [
-                 "qu_k",
-                 "qhat_k"
-                ]
-               },
-               {
-                "op": "*",
-                "args": [
-                 {
-                  "op": "/",
-                  "args": [
-                   "cp",
-                   "rl"
-                  ]
-                 },
-                 {
-                  "op": "-",
-                  "args": [
-                   "su_k",
-                   "sg_k"
-                  ]
-                 }
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "+",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "*",
-              "args": [
-               "md_kp1",
-               {
-                "op": "+",
-                "args": [
-                 {
-                  "op": "-",
-                  "args": [
-                   "qd_kp1",
-                   "qhat_kp1"
-                  ]
-                 },
-                 {
-                  "op": "*",
-                  "args": [
-                   {
-                    "op": "/",
-                    "args": [
-                     "cp",
-                     "rl"
-                    ]
-                   },
-                   {
-                    "op": "-",
-                    "args": [
-                     "sd_kp1",
-                     "sg_k"
-                    ]
-                   }
-                  ]
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "op": "*",
-              "args": [
-               "md_k",
-               {
-                "op": "+",
-                "args": [
-                 {
-                  "op": "-",
-                  "args": [
-                   "qd_k",
-                   "qhat_k"
-                  ]
-                 },
-                 {
-                  "op": "*",
-                  "args": [
-                   {
-                    "op": "/",
-                    "args": [
-                     "cp",
-                     "rl"
-                    ]
-                   },
-                   {
-                    "op": "-",
-                    "args": [
-                     "sd_k",
-                     "sg_k"
-                    ]
-                   }
-                  ]
-                 }
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       "dp_k"
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       "du_k",
-       "ql_kp1"
-      ]
+     "mu",
+     "qu",
+     "qhat",
+     "su",
+     "sg",
+     "md",
+     "qd",
+     "sd",
+     "dp",
+     "du",
+     "ql",
+     "cp",
+     "rl",
+     "jt",
+     "mx"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
      }
-    ]
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">",
+         "args": [
+          "k",
+          "jt"
+         ]
+        },
+        {
+         "op": "<",
+         "args": [
+          "k",
+          "mx"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "+",
+       "args": [
+        {
+         "op": "/",
+         "args": [
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "mu",
+                  {
+                   "op": "+",
+                   "args": [
+                    "k",
+                    1
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "-",
+                   "args": [
+                    {
+                     "op": "index",
+                     "args": [
+                      "qu",
+                      {
+                       "op": "+",
+                       "args": [
+                        "k",
+                        1
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "index",
+                     "args": [
+                      "qhat",
+                      {
+                       "op": "+",
+                       "args": [
+                        "k",
+                        1
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      "cp",
+                      "rl"
+                     ]
+                    },
+                    {
+                     "op": "-",
+                     "args": [
+                      {
+                       "op": "index",
+                       "args": [
+                        "su",
+                        {
+                         "op": "+",
+                         "args": [
+                          "k",
+                          1
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "op": "index",
+                       "args": [
+                        "sg",
+                        "k"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "index",
+                 "args": [
+                  "mu",
+                  "k"
+                 ]
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "-",
+                   "args": [
+                    {
+                     "op": "index",
+                     "args": [
+                      "qu",
+                      "k"
+                     ]
+                    },
+                    {
+                     "op": "index",
+                     "args": [
+                      "qhat",
+                      "k"
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    {
+                     "op": "/",
+                     "args": [
+                      "cp",
+                      "rl"
+                     ]
+                    },
+                    {
+                     "op": "-",
+                     "args": [
+                      {
+                       "op": "index",
+                       "args": [
+                        "su",
+                        "k"
+                       ]
+                      },
+                      {
+                       "op": "index",
+                       "args": [
+                        "sg",
+                        "k"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "op": "+",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "index",
+                   "args": [
+                    "md",
+                    {
+                     "op": "+",
+                     "args": [
+                      "k",
+                      1
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "-",
+                     "args": [
+                      {
+                       "op": "index",
+                       "args": [
+                        "qd",
+                        {
+                         "op": "+",
+                         "args": [
+                          "k",
+                          1
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "op": "index",
+                       "args": [
+                        "qhat",
+                        {
+                         "op": "+",
+                         "args": [
+                          "k",
+                          1
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      {
+                       "op": "/",
+                       "args": [
+                        "cp",
+                        "rl"
+                       ]
+                      },
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "index",
+                         "args": [
+                          "sd",
+                          {
+                           "op": "+",
+                           "args": [
+                            "k",
+                            1
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "op": "index",
+                         "args": [
+                          "sg",
+                          "k"
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "index",
+                   "args": [
+                    "md",
+                    "k"
+                   ]
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "-",
+                     "args": [
+                      {
+                       "op": "index",
+                       "args": [
+                        "qd",
+                        "k"
+                       ]
+                      },
+                      {
+                       "op": "index",
+                       "args": [
+                        "qhat",
+                        "k"
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      {
+                       "op": "/",
+                       "args": [
+                        "cp",
+                        "rl"
+                       ]
+                      },
+                      {
+                       "op": "-",
+                       "args": [
+                        {
+                         "op": "index",
+                         "args": [
+                          "sd",
+                          "k"
+                         ]
+                        },
+                        {
+                         "op": "index",
+                         "args": [
+                          "sg",
+                          "k"
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "dp",
+            "k"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "index",
+           "args": [
+            "du",
+            "k"
+           ]
+          },
+          {
+           "op": "index",
+           "args": [
+            "ql",
+            {
+             "op": "+",
+             "args": [
+              "k",
+              1
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "1/hPa"
+      }
+     ]
+    }
    }
   },
   "zm_dboydt_above_lcl": {
@@ -1358,163 +2197,211 @@
     "dqmdt",
     "grav",
     "thetavp",
-    "thetavm"
+    "thetavm",
+    "lel",
+    "lcl"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "-",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           "dtpdt",
-           "tp"
-          ]
-         },
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 1.0,
-              "units": "1"
-             },
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 1.0,
-                "units": "1"
-               },
-               {
-                "op": "-",
-                "args": [
-                 {
-                  "op": "*",
-                  "args": [
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": 1.608,
-                    "units": "1"
-                   },
-                   "qstp"
-                  ]
-                 },
-                 "q_mx"
-                ]
-               }
-              ]
-             }
-            ]
-           },
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "*",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 1.608,
-                "units": "1"
-               },
-               {
-                "op": "*",
-                "args": [
-                 "dqsdtp",
-                 "dtpdt"
-                ]
-               }
-              ]
-             },
-             "dqbdt"
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "/",
-          "args": [
-           "dtmdt",
-           "t"
-          ]
-         },
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 0.608,
-              "units": "1"
-             },
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 1.0,
-                "units": "1"
-               },
-               {
-                "op": "*",
-                "args": [
-                 {
-                  "op": "const",
-                  "args": [],
-                  "value": 0.608,
-                  "units": "1"
-                 },
-                 "q"
-                ]
-               }
-              ]
-             }
-            ]
-           },
-           "dqmdt"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       "grav",
-       {
-        "op": "/",
-        "args": [
-         "thetavp",
-         "thetavm"
-        ]
-       }
-      ]
-     }
-    ]
+     "tp",
+     "qstp",
+     "q_mx",
+     "dqsdtp",
+     "dtpdt",
+     "dqbdt",
+     "dtmdt",
+     "t",
+     "q",
+     "dqmdt",
+     "grav",
+     "thetavp",
+     "thetavm",
+     "lel",
+     "lcl"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">=",
+         "args": ["k", "lel"]
+        },
+        {
+         "op": "<=",
+         "args": ["k", "lcl"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "-",
+         "args": [
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              "dtpdt",
+              "tp"
+             ]
+            },
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "const",
+                 "args": [],
+                 "value": 1.0,
+                 "units": "1"
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": 1.0,
+                   "units": "1"
+                  },
+                  {
+                   "op": "-",
+                   "args": [
+                    {
+                     "op": "*",
+                     "args": [
+                      {
+                       "op": "const",
+                       "args": [],
+                       "value": 1.608,
+                       "units": "1"
+                      },
+                      "qstp"
+                     ]
+                    },
+                    "q_mx"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": 1.608,
+                   "units": "1"
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    "dqsdtp",
+                    "dtpdt"
+                   ]
+                  }
+                 ]
+                },
+                "dqbdt"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "/",
+             "args": [
+              "dtmdt",
+              "t"
+             ]
+            },
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "const",
+                 "args": [],
+                 "value": 0.608,
+                 "units": "1"
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": 1.0,
+                   "units": "1"
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    {
+                     "op": "const",
+                     "args": [],
+                     "value": 0.608,
+                     "units": "1"
+                    },
+                    "q"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              "dqmdt"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "grav",
+          {
+           "op": "/",
+           "args": [
+            "thetavp",
+            "thetavm"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "m/(s^2*hPa)"
+      }
+     ]
+    }
    }
   },
   "zm_dboydt_below_lcl": {
@@ -1530,145 +2417,191 @@
     "dqmdt",
     "grav",
     "thetavp",
-    "thetavm"
+    "thetavm",
+    "lcl",
+    "mx"
    ],
    "body": {
-    "op": "*",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "/",
-        "args": [
-         "dtbdt",
-         "t_mx"
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "/",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 0.608,
-              "units": "1"
-             },
-             {
-              "op": "+",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 1.0,
-                "units": "1"
-               },
-               {
-                "op": "*",
-                "args": [
-                 {
-                  "op": "const",
-                  "args": [],
-                  "value": 0.608,
-                  "units": "1"
-                 },
-                 "q_mx"
-                ]
-               }
-              ]
-             }
-            ]
-           },
-           "dqbdt"
-          ]
-         },
-         {
-          "op": "-",
-          "args": [
-           {
-            "op": "-",
-            "args": [
-             {
-              "op": "const",
-              "args": [],
-              "value": 0.0,
-              "units": "1/hPa"
-             },
-             {
-              "op": "/",
-              "args": [
-               "dtmdt",
-               "t"
-              ]
-             }
-            ]
-           },
-           {
-            "op": "*",
-            "args": [
-             {
-              "op": "/",
-              "args": [
-               {
-                "op": "const",
-                "args": [],
-                "value": 0.608,
-                "units": "1"
-               },
-               {
-                "op": "+",
-                "args": [
-                 {
-                  "op": "const",
-                  "args": [],
-                  "value": 1.0,
-                  "units": "1"
-                 },
-                 {
-                  "op": "*",
-                  "args": [
-                   {
-                    "op": "const",
-                    "args": [],
-                    "value": 0.608,
-                    "units": "1"
-                   },
-                   "q"
-                  ]
-                 }
-                ]
-               }
-              ]
-             },
-             "dqmdt"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "*",
-      "args": [
-       "grav",
-       {
-        "op": "/",
-        "args": [
-         "thetavp",
-         "thetavm"
-        ]
-       }
-      ]
-     }
-    ]
+     "dtbdt",
+     "t_mx",
+     "q_mx",
+     "dqbdt",
+     "dtmdt",
+     "t",
+     "q",
+     "dqmdt",
+     "grav",
+     "thetavp",
+     "thetavm",
+     "lcl",
+     "mx"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">",
+         "args": ["k", "lcl"]
+        },
+        {
+         "op": "<",
+         "args": ["k", "mx"]
+        }
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "/",
+           "args": [
+            "dtbdt",
+            "t_mx"
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "const",
+                 "args": [],
+                 "value": 0.608,
+                 "units": "1"
+                },
+                {
+                 "op": "+",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": 1.0,
+                   "units": "1"
+                  },
+                  {
+                   "op": "*",
+                   "args": [
+                    {
+                     "op": "const",
+                     "args": [],
+                     "value": 0.608,
+                     "units": "1"
+                    },
+                    "q_mx"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              "dqbdt"
+             ]
+            },
+            {
+             "op": "-",
+             "args": [
+              {
+               "op": "-",
+               "args": [
+                {
+                 "op": "const",
+                 "args": [],
+                 "value": 0.0,
+                 "units": "1/hPa"
+                },
+                {
+                 "op": "/",
+                 "args": [
+                  "dtmdt",
+                  "t"
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "*",
+               "args": [
+                {
+                 "op": "/",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": 0.608,
+                   "units": "1"
+                  },
+                  {
+                   "op": "+",
+                   "args": [
+                    {
+                     "op": "const",
+                     "args": [],
+                     "value": 1.0,
+                     "units": "1"
+                    },
+                    {
+                     "op": "*",
+                     "args": [
+                      {
+                       "op": "const",
+                       "args": [],
+                       "value": 0.608,
+                       "units": "1"
+                      },
+                      "q"
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                "dqmdt"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "*",
+         "args": [
+          "grav",
+          {
+           "op": "/",
+           "args": [
+            "thetavp",
+            "thetavm"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "const",
+       "args": [],
+       "value": 0.0,
+       "units": "m/(s^2*hPa)"
+      }
+     ]
+    }
    }
   }
  }
