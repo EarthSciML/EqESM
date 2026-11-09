@@ -77,8 +77,9 @@ only to the solve's round-off, which convective entrainments
 (residual ~ 1.6e-10 degC*m vs terms ~ 2.1e-6; perturbing T'_75 by one
 ULP moves the ent term by ~ 3.6e6 * 2e-16 ~ 7e-10).  The scaled residual
 stays <= 1.4e-16 — this is the double-precision conditioning limit of
-the solve, not a defect, so the tendency pins there carry rel 1e-3 (T)
-or abs 2e-8 K/s (S) as justified in the test descriptions.  The
+the solve, not a defect, so the tendencies at those layers (esd 1-5
+of row A) are not pinned (manager review: rel 1e-3 / abs 2e-8 K/s would
+be uninformative); the scaled tri_res identity covers them.  The
 deep-interface ent pins use rel 1e-9 because the esd column reconstructs
 dz_int from ze, and subtracting ~1e-3 m from a ~743 m depth coordinate
 rounds at the depth magnitude (~1e-13 m absolute -> ~1e-10 relative on
