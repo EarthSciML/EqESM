@@ -914,23 +914,12 @@
     {
      "lhs": "es0",
      "rhs": {
-      "op": "table_lookup",
-      "table": "estbl",
-      "axes": {
-       "T": {
-        "op": "min",
-        "args": [
-         "t1",
-         {
-          "op": "const",
-          "args": [],
-          "value": 375.16,
-          "units": "K"
-         }
-        ]
-       }
-      },
-      "args": []
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "estbl_es0",
+      "bindings": {
+       "T": "t1"
+      }
      }
     },
     {
