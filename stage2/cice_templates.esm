@@ -3785,32 +3785,6 @@
     ]
    }
   },
-  "dEdd_fresnel_rintfc":   {
-   "description": "Fresnel-layer multiple-scattering term rintfc (solution_dEdd, icepack_shortwave.F90:3395): rintfc = 1/(1 - Rf_dif_b*rdif_a), with Rf_dif_b = 0.455 the precomputed diffuse fresnel reflectivity from below (cp455, F90:3179).",
-   "params": [
-    "Rf_dif_b",
-    "rdif_a"
-   ],
-   "body": {
-    "op": "/",
-    "args": [
-     1.0,
-     {
-      "op": "-",
-      "args": [
-       1.0,
-       {
-        "op": "*",
-        "args": [
-         "Rf_dif_b",
-         "rdif_a"
-        ]
-       }
-      ]
-     }
-    ]
-   }
-  },
   "dEdd_fresnel_tdir":   {
    "description": "Fresnel-combined layer transmission to the direct beam (solution_dEdd, icepack_shortwave.F90:3396-3397): tdir' = Tf_dir_a*tdir + Tf_dir_a*rdir*Rf_dif_b*rintfc*tdif_a.",
    "params": [
@@ -3919,19 +3893,19 @@
     ]
    }
   },
-  "dEdd_fresnel_tdif_a":   {
-   "description": "Fresnel-combined layer diffuse transmission from above (solution_dEdd, icepack_shortwave.F90:3404): tdif_a' = tdif_a*rintfc*Tf_dif_a.",
+  "dEdd_fresnel_tdif":   {
+   "description": "Fresnel-combined layer diffuse transmission tdif' = tdif*rintfc*Tf_dif (solution_dEdd, icepack_shortwave.F90:3404-3405), the same law from above (tdif_a', F90:3404) and from below (tdif_b', F90:3405).",
    "params": [
-    "tdif_a",
+    "tdif",
     "rintfc",
-    "Tf_dif_a"
+    "Tf_dif"
    ],
    "body": {
     "op": "*",
     "args": [
-     "tdif_a",
+     "tdif",
      "rintfc",
-     "Tf_dif_a"
+     "Tf_dif"
     ]
    }
   },
@@ -4342,59 +4316,69 @@
     "units": "1"
    }
   },
-  "dEdd_fresnel_Tf_dif_a":   {
-   "description": "Fresnel transmission to diffuse radiation from above Tf_dif_a = 1 - Rf_dif_a (solution_dEdd, icepack_shortwave.F90:3379).",
+  "dEdd_fresnel_Tf_dif":   {
+   "description": "Fresnel transmission to diffuse radiation Tf_dif = 1 - Rf_dif (solution_dEdd, icepack_shortwave.F90:3379, 3381), the same law from above (Tf_dif_a, F90:3379) and from below (Tf_dif_b, F90:3381).",
    "params": [
-    "Rf_dif_a"
+    "Rf_dif"
    ],
    "body": {
     "op": "-",
     "args": [
      1.0,
-     "Rf_dif_a"
+     "Rf_dif"
     ]
    }
   },
-  "dEdd_fresnel_Tf_dif_b":   {
-   "description": "Fresnel transmission to diffuse radiation from below Tf_dif_b = 1 - Rf_dif_b (solution_dEdd, icepack_shortwave.F90:3381).",
+  "dEdd_active_mask":   {
+   "description": "Mask a radiation-layer quantity to the active layers (solution_dEdd, icepack_shortwave.F90:3423-3443): x_masked = ifelse(active, x, 0), zeroing the layer props of layers whose top-interface total transmission is at or below trmin; also applied to the interface quantities with the active flag of the layer above the interface (F90:3415-3421).",
    "params": [
-    "Rf_dif_b"
+    "active",
+    "x"
    ],
    "body": {
-    "op": "-",
+    "op": "ifelse",
     "args": [
-     1.0,
-     "Rf_dif_b"
+     {
+      "op": "==",
+      "args": [
+       "active",
+       1.0
+      ]
+     },
+     "x",
+     0.0
     ]
    }
   },
-  "dEdd_fresnel_tdif_b":   {
-   "description": "Fresnel-combined layer diffuse transmission from below (solution_dEdd, icepack_shortwave.F90:3405): tdif_b' = tdif_b*rintfc*Tf_dif_b.",
+  "dEdd_snow_prop_gather":   {
+   "description": "Snow-layer optical property gathered into the radiation-layer profile (compute_dEdd_3bd, icepack_shortwave.F90:2398-2400): x_l(k) = x_snw(max(min(k-1, nslyr), 1)), the Fortran ksnow = max(k,1) snow-layer clamp (with the k = 0 SSL duplicate of the top snow layer) saturated at the bottom snow layer for the layers below.",
    "params": [
-    "tdif_b",
-    "rintfc",
-    "Tf_dif_b"
+    "x"
    ],
    "body": {
-    "op": "*",
+    "op": "index",
     "args": [
-     "tdif_b",
-     "rintfc",
-     "Tf_dif_b"
-    ]
-   }
-  },
-  "dEdd_fresnel_trnlay":   {
-   "description": "Fresnel-combined direct-beam layer transmission (solution_dEdd, icepack_shortwave.F90:3406): trnlay' = Tf_dir_a*trnlay.",
-   "params": [
-    "Tf_dir_a",
-    "trnlay"
-   ],
-   "body": {
-    "op": "*",
-    "args": [
-     "Tf_dir_a",
-     "trnlay"
+     "x",
+     "b",
+     {
+      "op": "max",
+      "args": [
+       {
+        "op": "min",
+        "args": [
+         {
+          "op": "-",
+          "args": [
+           "k",
+           1
+          ]
+         },
+         "N_SLYR"
+        ]
+       },
+       1
+      ]
+     }
     ]
    }
   }

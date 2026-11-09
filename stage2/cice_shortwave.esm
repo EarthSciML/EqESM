@@ -462,8 +462,10 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "index",
-       "args": ["ks_snw", "b", { "op": "max", "args": [{ "op": "min", "args": [{ "op": "-", "args": ["k", 1] }, "N_SLYR"] }, 1] }]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "ks_snw" }
       },
       "args": ["ks_snw"]
      }
@@ -475,8 +477,10 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "index",
-       "args": ["ws_snw", "b", { "op": "max", "args": [{ "op": "min", "args": [{ "op": "-", "args": ["k", 1] }, "N_SLYR"] }, 1] }]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "ws_snw" }
       },
       "args": ["ws_snw"]
      }
@@ -488,8 +492,10 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "index",
-       "args": ["gs_snw", "b", { "op": "max", "args": [{ "op": "min", "args": [{ "op": "-", "args": ["k", 1] }, "N_SLYR"] }, 1] }]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "gs_snw" }
       },
       "args": ["gs_snw"]
      }
@@ -1667,8 +1673,8 @@
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
-      "name": "dEdd_fresnel_Tf_dif_a",
-      "bindings": { "Rf_dif_a": "Rf_dif_a" }
+      "name": "dEdd_fresnel_Tf_dif",
+      "bindings": { "Rf_dif": "Rf_dif_a" }
      }
     },
     {
@@ -1676,8 +1682,8 @@
      "rhs": {
       "op": "apply_expression_template",
       "args": [],
-      "name": "dEdd_fresnel_Tf_dif_b",
-      "bindings": { "Rf_dif_b": "Rf_dif_b" }
+      "name": "dEdd_fresnel_Tf_dif",
+      "bindings": { "Rf_dif": "Rf_dif_b" }
      }
     },
     {
@@ -1689,13 +1695,13 @@
       "expr": {
        "op": "apply_expression_template",
        "args": [],
-       "name": "dEdd_fresnel_rintfc",
+       "name": "dEdd_interface_refk",
        "bindings": {
-        "Rf_dif_b": "Rf_dif_b",
-        "rdif_a": { "op": "index", "args": ["rdif_g", "b", "k"] }
+        "rdndif": "Rf_dif_b",
+        "rupdif": { "op": "index", "args": ["rdif_g", "b", "k"] }
        }
       },
-      "args": ["rdif_g"]
+      "args": ["Rf_dif_b", "rdif_g"]
      }
     },
     {
@@ -1801,10 +1807,10 @@
        "op": "ifelse",
        "args": [
         { "op": "==", "args": ["k", "kfrsnl"] },
-        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif_a", "bindings": {
-         "tdif_a": { "op": "index", "args": ["tdif_g", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif", "bindings": {
+         "tdif": { "op": "index", "args": ["tdif_g", "b", "k"] },
          "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
-         "Tf_dif_a": "Tf_dif_a"
+         "Tf_dif": "Tf_dif_a"
         } },
         { "op": "index", "args": ["tdif_g", "b", "k"] }
        ]
@@ -1822,10 +1828,10 @@
        "op": "ifelse",
        "args": [
         { "op": "==", "args": ["k", "kfrsnl"] },
-        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif_b", "bindings": {
-         "tdif_b": { "op": "index", "args": ["tdif_g", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif", "bindings": {
+         "tdif": { "op": "index", "args": ["tdif_g", "b", "k"] },
          "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
-         "Tf_dif_b": "Tf_dif_b"
+         "Tf_dif": "Tf_dif_b"
         } },
         { "op": "index", "args": ["tdif_g", "b", "k"] }
        ]
@@ -1843,10 +1849,10 @@
        "op": "ifelse",
        "args": [
         { "op": "==", "args": ["k", "kfrsnl"] },
-        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_trnlay", "bindings": {
-         "Tf_dir_a": "Tf_dir_a",
-         "trnlay": { "op": "index", "args": ["trnlay0", "b", "k"] }
-        } },
+        { "op": "*", "args": [
+         "Tf_dir_a",
+         { "op": "index", "args": ["trnlay0", "b", "k"] }
+        ] },
         { "op": "index", "args": ["trnlay0", "b", "k"] }
        ]
       },
@@ -1891,16 +1897,10 @@
            { "op": "index", "args": ["tdif_b", "b", { "op": "-", "args": ["k", 1] }] },
            { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] }
           ] },
-          { "op": "/", "args": [
-           1.0,
-           { "op": "-", "args": [
-            1.0,
-            { "op": "*", "args": [
-             { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
-             { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
-            ] }
-           ] }
-          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+           "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
           { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
          ] }
         ] }
@@ -1922,16 +1922,10 @@
         1.0,
         { "op": "*", "args": [
          { "op": "index", "args": ["trndif_f", "b", { "op": "-", "args": ["k", 1] }] },
-         { "op": "/", "args": [
-          1.0,
-          { "op": "-", "args": [
-           1.0,
-           { "op": "*", "args": [
-            { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
-            { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
-           ] }
-          ] }
-         ] },
+         { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+          "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+          "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+         } },
          { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
         ] }
        ]
@@ -1969,16 +1963,10 @@
             { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] }
            ] }
           ] },
-          { "op": "/", "args": [
-           1.0,
-           { "op": "-", "args": [
-            1.0,
-            { "op": "*", "args": [
-             { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
-             { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
-            ] }
-           ] }
-          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+           "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
           { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
          ] }
         ] }
@@ -2015,11 +2003,10 @@
        "args": [
         { "op": "<=", "args": ["k", 1] },
         { "op": "index", "args": ["trndir_f", "b", "k"] },
-        { "op": "ifelse", "args": [
-         { "op": "==", "args": [{ "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] }, 1.0] },
-         { "op": "index", "args": ["trndir_f", "b", "k"] },
-         0.0
-        ] }
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trndir_f", "b", "k"] }
+        } }
        ]
       },
       "args": ["trndir_f", "active"]
@@ -2036,11 +2023,10 @@
        "args": [
         { "op": "<=", "args": ["k", 1] },
         { "op": "index", "args": ["trntdr_f", "b", "k"] },
-        { "op": "ifelse", "args": [
-         { "op": "==", "args": [{ "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] }, 1.0] },
-         { "op": "index", "args": ["trntdr_f", "b", "k"] },
-         0.0
-        ] }
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trntdr_f", "b", "k"] }
+        } }
        ]
       },
       "args": ["trntdr_f", "active"]
@@ -2057,11 +2043,10 @@
        "args": [
         { "op": "<=", "args": ["k", 1] },
         { "op": "index", "args": ["rdndif_f", "b", "k"] },
-        { "op": "ifelse", "args": [
-         { "op": "==", "args": [{ "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] }, 1.0] },
-         { "op": "index", "args": ["rdndif_f", "b", "k"] },
-         0.0
-        ] }
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["rdndif_f", "b", "k"] }
+        } }
        ]
       },
       "args": ["rdndif_f", "active"]
@@ -2078,11 +2063,10 @@
        "args": [
         { "op": "<=", "args": ["k", 1] },
         { "op": "index", "args": ["trndif_f", "b", "k"] },
-        { "op": "ifelse", "args": [
-         { "op": "==", "args": [{ "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] }, 1.0] },
-         { "op": "index", "args": ["trndif_f", "b", "k"] },
-         0.0
-        ] }
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trndif_f", "b", "k"] }
+        } }
        ]
       },
       "args": ["trndif_f", "active"]
@@ -2095,12 +2079,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["rdir", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdir", "b", "k"] }
+       }
       },
       "args": ["active", "rdir"]
      }
@@ -2112,12 +2097,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["tdir", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdir", "b", "k"] }
+       }
       },
       "args": ["active", "tdir"]
      }
@@ -2129,12 +2115,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["rdif_a", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdif_a", "b", "k"] }
+       }
       },
       "args": ["active", "rdif_a"]
      }
@@ -2146,12 +2133,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["rdif_b", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdif_b", "b", "k"] }
+       }
       },
       "args": ["active", "rdif_b"]
      }
@@ -2163,12 +2151,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["tdif_a", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdif_a", "b", "k"] }
+       }
       },
       "args": ["active", "tdif_a"]
      }
@@ -2180,12 +2169,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["tdif_b", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdif_b", "b", "k"] }
+       }
       },
       "args": ["active", "tdif_b"]
      }
@@ -2197,12 +2187,13 @@
       "output_idx": ["b", "k"],
       "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
       "expr": {
-       "op": "ifelse",
-       "args": [
-        { "op": "==", "args": [{ "op": "index", "args": ["active", "b", "k"] }, 1.0] },
-        { "op": "index", "args": ["trnlay", "b", "k"] },
-        0.0
-       ]
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["trnlay", "b", "k"] }
+       }
       },
       "args": ["active", "trnlay"]
      }
@@ -2225,16 +2216,10 @@
            { "op": "index", "args": ["m_tdif_a", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
            { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
           ] },
-          { "op": "/", "args": [
-           1.0,
-           { "op": "-", "args": [
-            1.0,
-            { "op": "*", "args": [
-             { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
-             { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
-            ] }
-           ] }
-          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+           "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
           { "op": "index", "args": ["m_tdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] }
          ] }
         ] }
@@ -2270,16 +2255,10 @@
             { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
            ] }
           ] },
-          { "op": "/", "args": [
-           1.0,
-           { "op": "-", "args": [
-            1.0,
-            { "op": "*", "args": [
-             { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
-             { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
-            ] }
-           ] }
-          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+           "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
           { "op": "index", "args": ["m_tdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] }
          ] }
         ] }
@@ -2653,7 +2632,7 @@
    "tests": [
      {
       "id": "cice_shortwave_snow",
-      "description": "Snow-covered category (step 1, i=2, j=4, ncat 2, srftyp 1): hs = 0.15364 m, hi = 1.2089 m, frsnw = 290.36 um and aerosols in all four slots, so every band runs the full snow/ice column with the SNICAR snow IOPs, the chlorophyll absorption and the bulk aerosol mixing; band 3 truncates at the interface below the snow SSL (trntdr < trmin = 1e-3 there), so the layer props of layers 2..13 are guard-zeroed and feed the upward recurrence as zeros. The pins cover the layer geometry dzk and the grain-radius adjustment frsnw, the snow-table IOPs at the SSL and the bottom snow layer, the mixed tau/w0/g at the sea-ice delta layer (the kfrsnl fresnel layer), the delta-Eddington layer props at one active layer per band (including the band-3 truncated-column top layer), the downward interface chain at the top and bottom of band 1 plus the first guarded interface of bands 2 and 3 (expected 0, exercising the trmin guard), the upward chain, the dfdir/dfdif flux fractions, the band-weighted scalar accumulations and the Sabs/Iabs/fthrul layer absorptions. Tolerances: rel 1e-9 on the interface quantities (round-off amplification of the near-pole band-3 algebra, see README-cice-shortwave.md), rel 1e-12 elsewhere.",
+      "description": "Snow-covered category (step 1, i=2, j=4, ncat 2, srftyp 1): hs = 0.15364 m, hi = 1.2089 m, frsnw = 290.36 um and aerosols in all four slots, so every band runs the full snow/ice column with the SNICAR snow IOPs, the chlorophyll absorption and the bulk aerosol mixing; band 3 truncates at the interface below the snow SSL (trntdr < trmin = 1e-3 there), so the layer props of layers 2..13 are guard-zeroed and feed the upward recurrence as zeros. The pins cover the layer geometry dzk and the grain-radius adjustment frsnw, the snow-table IOPs at the SSL and the bottom snow layer, the mixed tau/w0/g at the sea-ice delta layer (the kfrsnl fresnel layer), the delta-Eddington layer props at one active layer per band (including the band-3 truncated-column top layer), the downward interface chain at the top and bottom of band 1 plus the first guarded interface of bands 2 and 3 (expected 0, exercising the trmin guard), the upward chain at the top of the column (the ocean-interface values equal the band albodr constant and are not pinned), the dfdir/dfdif flux fractions, the band-weighted scalar accumulations and the Sabs/Iabs/fthrul layer absorptions. Tolerances: rel 1e-9 on the interface quantities (round-off amplification of the near-pole band-3 algebra, see README-cice-shortwave.md), rel 1e-12 elsewhere.",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -3358,19 +3337,6 @@
         }
        },
        {
-        "variable": "rdndif",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
         "variable": "trndif",
         "time": 0.0,
         "expected": 1.0,
@@ -3646,32 +3612,6 @@
        {
         "variable": "rupdir",
         "time": 0.0,
-        "expected": 0.01,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdif",
-        "time": 0.0,
-        "expected": 0.01,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdir",
-        "time": 0.0,
         "expected": 0.9686546575454275,
         "coords": {
          "band": 1,
@@ -3689,32 +3629,6 @@
         "coords": {
          "band": 1,
          "iface": 14
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdir",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdif",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "iface": 1
         },
         "tolerance": {
          "rel": 1e-09,
@@ -3930,7 +3844,7 @@
      },
      {
       "id": "cice_shortwave_bare",
-      "description": "Bare-ice category (same cell, ncat 1, srftyp 0): hs = 0 so the snow branch is inactive and the column is the sea-ice SSL/delta-layer/interior stack with the unconditional ice aerosol mixing and the ocean albedo; band 3 truncates at the interface below the sea-ice SSL. The pins cover the layer geometry (snow layers identically zero), frsnw, the mixed tau/w0/g at the SSL and the delta layer, the delta-Eddington layer props at one active layer per band (band 3 at the last layer above the cutoff), the downward chain at the top and bottom of band 1 plus the first guarded interface of band 3 (expected 0), the upward chain, the dfdir/dfdif fractions, the scalar accumulations and the Iabs/fthrul layer absorptions. The snow IOPs Qs/ws_snw/gs_snw/ks_snw and Sabs are not pinned: the dump records zeros for srftyp = 0 rows and Sabs is identically zero for bare ice. Tolerances: rel 1e-9 on the interface quantities, rel 1e-12 elsewhere.",
+      "description": "Bare-ice category (same cell, ncat 1, srftyp 0): hs = 0 so the snow branch is inactive and the column is the sea-ice SSL/delta-layer/interior stack with the unconditional ice aerosol mixing and the ocean albedo; band 3 truncates at the interface below the sea-ice SSL. The pins cover the layer geometry (the snow-layer dzk values are identically zero and not pinned), frsnw, the mixed tau/w0/g at the delta layer (the SSL values are identically zero and not pinned), the delta-Eddington layer props at one active layer per band (band 3 at the last layer above the cutoff), the downward chain at the top and bottom of band 1 plus the first guarded interface of band 3 (expected 0), the upward chain at the top of the column, the dfdir/dfdif fractions, the scalar accumulations and the Iabs/fthrul layer absorptions. The snow IOPs Qs/ws_snw/gs_snw/ks_snw and Sabs are not pinned: the dump records zeros for srftyp = 0 rows and Sabs is identically zero for bare ice. Tolerances: rel 1e-9 on the interface quantities, rel 1e-12 elsewhere.",
       "time_span": {
        "start": 0.0,
        "end": 0.0
@@ -4061,22 +3975,6 @@
        {
         "variable": "dzk",
         "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "layer": 1
-        }
-       },
-       {
-        "variable": "dzk",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "layer": 2
-        }
-       },
-       {
-        "variable": "dzk",
-        "time": 0.0,
         "expected": 0.011393588671721128,
         "coords": {
          "layer": 5
@@ -4120,87 +4018,6 @@
         "expected": 290.3645833333333,
         "coords": {
          "snow_layer": 3
-        }
-       },
-       {
-        "variable": "tau",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 1,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 1,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 1,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "tau",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 2,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 2,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 2,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "tau",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "layer": 1
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "layer": 1
         }
        },
        {
@@ -4500,19 +4317,6 @@
         }
        },
        {
-        "variable": "rdndif",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
         "variable": "trndif",
         "time": 0.0,
         "expected": 1.0,
@@ -4684,32 +4488,6 @@
        {
         "variable": "rupdir",
         "time": 0.0,
-        "expected": 0.01,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdif",
-        "time": 0.0,
-        "expected": 0.01,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdir",
-        "time": 0.0,
         "expected": 0.6585071169203559,
         "coords": {
          "band": 1,
@@ -4727,32 +4505,6 @@
         "coords": {
          "band": 1,
          "iface": 14
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdir",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "rupdif",
-        "time": 0.0,
-        "expected": 0.0,
-        "coords": {
-         "band": 3,
-         "iface": 1
         },
         "tolerance": {
          "rel": 1e-09,
@@ -4943,7 +4695,6 @@
       ]
      }
    ]
-
   }
  }
 }
