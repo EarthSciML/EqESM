@@ -11,33 +11,67 @@ HO_APPROX_DIVA = 4`, `which_ho_gradient = 0`, `margin = 1`,
 What is implemented here is everything in `glissade_velo_higher_solve` that is
 a *local law of a single column*: the vertex geometry of the driving stress
 and the DIVA slope correction, the Goldberg (2011) vertical integrals of the
-σ column, and the 3-D velocity recovery from the 2-D solve.  The finite-
-element matrix solve itself, the vertex staggers of the per-level quantities,
-and the Picard iteration are **stage-3 assembly** concerns and are left to the
-full `eqesm.esm`; this file feeds their inputs from the dumps.
+σ column, the vertex staggers of `omega`/`omega_k`, and the 3-D velocity
+recovery from the 2-D solve.  The finite-element matrix solve itself and the
+Picard iteration are **stage-3 assembly** concerns and are left to the full
+`eqesm.esm`; this file feeds their inputs from the dumps.
 
 All model logic lives in `.esm` files; this README is the human-readable map.
 Sources: `stage1/cesm/components/cism/source_cism/libglissade/`
 (`glissade_velo_higher.F90`, `glissade_grid_operators.F90`,
 `glissade_basal_traction.F90`, `glissade_calc_effecpress`), the run namelists
 (`stage1/cime/cases/T1850Gg_cism_inst/run/cism.gris.config`), the stage-1
-instrumentation dumps `stage1/dumps/cism/cism_velo.csv` +
-`cism_velo_nbr.csv` (2026-11-05 rerun, job 12118489, fork commits
-`db624ec`/`76d170d`, branch `instrument/cism-dumps`, not pushed — see
-`stage1/runs/CISM_LANE.md` §4d), and `stage1/runs/cism_instrument.json`.
+instrumentation dumps `stage1/dumps/cism/cism_velo.csv` + `cism_velo_nbr.csv`
++ `cism_velo_stag.csv` + `cism_basal_traction.csv` +
+`cism_velo_marine_exit.csv` + `cism_velo_marine_pass.csv` (2026-11-09 rerun,
+jobs 12277039/12279575/12279827/12279959, fork commits `db624ec`/`76d170d`
+with the uncommitted stage-2 dump additions `cism_dump_velo_stag` /
+`cism_dump_marine_pass` / `cism_dump_marine_exit`, branch
+`instrument/cism-dumps`, not pushed — see `stage1/runs/CISM_LANE.md` §4d),
+and `stage1/runs/cism_instrument.json`.
 
 ## File map
 
 | File | Contents |
 |---|---|
-| `cism_velo.esm` | the three pointwise components `DivaGeometry`, `DivaIntegrals`, `DivaVelocity` (13 tests, 136 assertions), plus the top-level mount of `BasalTraction` and the `variable_map` edge `BasalTraction.beta → DivaVelocity.beta_raw` |
+| `cism_velo.esm` | the three pointwise components `DivaGeometry`, `DivaIntegrals`, `DivaVelocity` (17 tests, 175 assertions), plus the top-level mount of `BasalTraction` and the seven `variable_map` edges feeding `DivaVelocity` from the mounted/upstream components |
 | `cism_velo_discretization.esm` | local ESD-format σ-column rules: `NLAYERS = 10`, `lev`/`lev_nodes`, the `cism_sigma_measure` / `cism_sigma_midpoint` templates, and the `integral_lev_whole` / `integral_lev_nodes_cumulative_to_top` rules imported by reference from `EarthSciDiscretizations` with `NLEV = NLAYERS` |
-| `cism_templates.esm` (lines 376–742) | the DIVA expression templates `cism_hybrid_edge_gradient`, `cism_vertex_gradient`, `cism_driving_stress`, `cism_theta_slope_x`, `cism_diva_slope_factor`, `cism_beta_eff` |
+| `cism_templates.esm` (lines 376–742 + `cism_stagger_masked_mean` at the end) | the DIVA expression templates `cism_hybrid_edge_gradient`, `cism_vertex_gradient`, `cism_driving_stress`, `cism_theta_slope_x`, `cism_diva_slope_factor`, `cism_beta_eff`, and the vertex stagger `cism_stagger_masked_mean` |
 | `cism_basal.esm` | the mounted `BasalTraction` (pseudo-plastic law, its own 2P/0F tests live in that file) |
-| `stage1/analysis/extract_cism_velo_test_rows.py` | the committed tuple extractor: verifies every law below on **all 128 exit rows** of the dumps, then emits the numeric `parameter_overrides`/`assertions` fragments keyed by test id |
+| `stage1/analysis/extract_cism_velo_test_rows.py` | the committed tuple extractor: verifies every law below on **all 128 exit rows** of the dumps (and the 32 marine exit rows), then emits the numeric `parameter_overrides`/`assertions` fragments keyed by test id |
 
 The shared DIVA templates live in `cism_templates.esm` because this file is
 self-contained for review; the stage-3 assembly will import them by reference.
+
+## The vertex stagger law — `cism_stagger_masked_mean`
+
+`glissade_stagger` (glissade_grid_operators.F90:69-157) interpolates a
+cell-centered field to the staggered grid.  The vertex `(i,j)` is the **NE
+corner** of cell `(i,j)`, so its four cells are SW = `(i,j)`, SE = `(i+1,j)`,
+NW = `(i,j+1)`, NE = `(i+1,j+1)` (F90:141-143).  With `stagger_margin = 1`
+(F90:135-148) the vertex value is the **ice-masked mean**
+`Σ mask·var / max(Σ mask, 1)` over the four cells, where the mask is the
+`ice_plus_land_mask` of glissade_velo_higher.F90:1532-1537 (1 where
+`ice_mask = 1 or land_mask = 1`); where all four masks are 0 the vertex takes
+the 0 of the F90:123 initialization, which the `max(Σmask, 1)` denominator
+reproduces exactly since the masks are 0/1.  This is the one-parameter
+`cism_stagger_masked_mean` expression template (8 params: the 4 cell values
+and the 4 masks).  `DivaIntegrals` applies it to `omega` (scalar) and per
+velocity level to `omega_k` (the `stag_omega_k` array), using the cell's own
+computed values as the SW cell and the dumped `omega_se/nw/ne` +
+`omega_k_se/nw/ne` per-level values as the other cells.  The per-level
+application is the exact transcription of the two stagger calls of
+glissade_velo_higher.F90:2549-2552 (depth-integrated `omega`) and
+F90:2561-2564 (per-level `omega_k`).
+
+**Not staggered: θ and F.**  CISM computes the DIVA slope angles and
+correction factors *directly at the vertices* from the plain vertex gradient
+of `z_mean` (`glissade_slope_angle_staggered`, glissade_grid_operators.F90:
+1482+, with the separate center/vertex calls of glissade_velo_higher.F90:
+2174-2193 "to avoid issues with angle interpolation"), so `DivaGeometry`
+remains the vertex law for `theta_x/y` and `F_x/y` and there is no stagger
+template applied to them (a deviation from the task's literal wording,
+documented here with the F90 citations).
 
 ## DivaGeometry — the vertex geometry of the driving stress
 
@@ -62,7 +96,9 @@ SW/SE/NW/NE cells around it.  Inputs are the four cells' `usrf`, `thck`,
   row).
 - `theta_x = atan(|dz_dx|)`, `theta_y = atan(|dz_dy|)` (slope_mask = 1
   everywhere on gris20), and the DIVA slope factor
-  `F = cos²θ + 4·sin²θ` (F90:2189-2193).
+  `F = cos²θ + 4·sin²θ` (F90:2189-2193).  These four are the vertex laws of
+  the slope correction and are consumed by `DivaVelocity` through the
+  `variable_map` edges `DivaGeometry.theta_x/y, F_x/y → DivaVelocity`.
 - `stagthck = (thck_sw + thck_se + thck_nw + thck_ne)/4` (the 4-cell mean of
   `glissade_stagger`, `ice_plus_land_mask`).
 - `taudx = −rhoi·g·stagthck·dusrf_dx`, `taudy = −rhoi·g·stagthck·dusrf_dy`
@@ -91,9 +127,18 @@ SW/SE/NW/NE cells around it.  Inputs are the four cells' `usrf`, `thck`,
   over the σ measure (`integral_lev_whole`; the exact trapezoid sum of
   F90:5655-5661 — note **no `thck` factor**: this `omega` is Goldberg's
   ω/H).
-- `stag_omega = (omega + omega_se + omega_nw + omega_ne)/4` — the plain
-  4-cell mean of the cell-centered omegas (`glissade_stagger`,
-  `ice_plus_land_mask`, stagger_margin = 1, F90:5790-5798).
+- `stag_omega` and `stag_omega_k` = the **ice-masked 4-cell vertex means**
+  (`cism_stagger_masked_mean`, `glissade_stagger` with `ice_plus_land_mask`
+  and stagger_margin = 1, F90:135-148): `stag_omega` from the four
+  cell-centered `omega` values (the cell's own as SW, the dumped
+  `omega_se/nw/ne` as the others) and `stag_omega_k` applied **per velocity
+  level** to the four cells' `omega_k` (the cell's own computed `omega_k` as
+  SW, the dumped per-level `omega_k_se/nw/ne` as the others; the four
+  `ice_plus_land_mask_sw/se/nw/ne` enter from the new `cism_velo_stag.csv`
+  dump).  On every traced row of the reference run the four masks are 1, so
+  the masked mean equals the plain 4-cell mean exactly; the masked branch is
+  exercised by the marine-margin rows only if a partially grounded vertex
+  exists (none does in this window — see Coverage).
 - **Inactive-cell guard**: on ice-free cells the Fortran skips the whole
   block, so `efvs` and `omega_k` are 0 there (the dumped `efvs_*` columns
   confirm 0 while the `efvs_q*` columns carry **stale** previous-step values).
@@ -105,19 +150,33 @@ SW/SE/NW/NE cells around it.  Inputs are the four cells' `usrf`, `thck`,
 
 ## DivaVelocity — the 2-D recovery and the 3-D profile
 
-`compute_3d_velocity_diva` (F90:5700-5821) and the calcbeta chain:
+`compute_3d_velocity_diva` (F90:5700-5821) and the calcbeta chain.  Every
+input that is a *pointwise law of another component* now arrives through the
+top-level `variable_map` edges (`param_to_var`, the same pattern as
+`BasalTraction.beta → beta_raw`):
 
-- `beta_internal = f_ground·beta_raw`, with `beta_raw` fed by the top-level
-  `variable_map` edge `BasalTraction.beta → DivaVelocity.beta_raw`
-  (`param_to_var`): the mounted `BasalTraction` recomputes the pseudo-plastic
-  law (φ(bed) ramp → tanφ → τ_c = tanφ·N → β = τ_c/(u₀^q·speed^(1−q))) from
-  the dumped `u, v, bed, N_stag` — the same inputs the Fortran had at the
-  last accepted calcbeta pass.
+- `theta_x/y` and `F_x/y` ← `DivaGeometry` (the vertex slope-angle laws
+  above).
+- `omega` and `stag_omega_k` ← `DivaIntegrals` (the staggered integrals
+  above).
+- `beta_raw` ← the mounted `BasalTraction` (the pseudo-plastic law φ(bed)
+  ramp → tanφ → τ_c = tanφ·N → β = τ_c/(u₀^q·speed^(1−q))) evaluated at the
+  **accepted calcbeta pass** `(u, v, bed, N_stag)` of the Picard loop.
+
+The laws:
+
+- `beta_internal = f_ground·beta_raw` (the calcbeta weighting,
+  F90:595-630).  The tests feed the accepted pass (the single
+  `cism_basal_traction.csv` row whose `beta` equals the dumped
+  `beta_internal`, velo_iter 38 of 39 on all 128 exit rows; its `bed`/`N`
+  equal the exit row's `topg − eus`/`effecpress_stag` exactly), so the chain
+  is **exact**: `beta_raw` reproduces the pass `beta` at rel 0.0 and
+  `beta_internal = f_ground·beta_raw` the dumped value at rel 0.0 on all 128
+  rows (the pass velocity iterate differs from the exit basal velocity by the
+  final Picard correction — feeding the exit velocity instead would leave a
+  ~6e-7 residual, the reason the earlier 1e-5 tolerance existed).
 - `beta_eff_x = F_x·β/(F_x + β·ω)` and `beta_eff_y` analogously
-  (the `cism_beta_eff` template, F90:5756-5770), with `F_x/F_y`, `omega`,
-  `theta_x/theta_y`, and the per-level `stag_omega_k` fed **from the dump**:
-  the vertex stagger of these per-level/vertex quantities is part of the
-  stage-3 assembly, not of the pointwise column laws.
+  (the `cism_beta_eff` template, F90:5756-5770).
 - **Basal recovery** (Goldberg 2011 eq. 34, F90:5801):
   `uvel_basal_recovered = uvel_2d·beta_eff_x/beta_internal`,
   `vvel_basal_recovered = vvel_2d·beta_eff_y/beta_internal` — pinned as
@@ -134,10 +193,10 @@ SW/SE/NW/NE cells around it.  Inputs are the four cells' `usrf`, `thck`,
 
 ## Testing
 
-`./esm test stage2/cism_velo.esm` runs 13 tests / 136 assertions
-(whole suite: 2004P/0F/0E, esm 0.7.0; `./esm units --check` clean apart from
+`./esm test stage2/cism_velo.esm` runs 17 tests / 175 assertions
+(whole suite: 2662P/0F/0E, esm 0.7.0; `./esm units --check` clean apart from
 the pre-existing BasalTraction fractional-exponent notices).  Pinned rows
-(from the 128 exit rows of the 2026-11-05 dumps; all tuples at full dump
+(from the 128 exit rows of the 2026-11-09 dumps; all tuples at full dump
 precision):
 
 | test id | row | why this row |
@@ -149,44 +208,48 @@ precision):
 | `int_step1_cell2511` / `cell2612` / `cell2713` | step 1 | thin / mid (83.6 m) / thick columns: the σ-column integrals across the thickness range |
 | `int_step3_cell2414` | step 3 | fastest column's integrals |
 | `int_step3_cell1714_inactive` | step 3, cell (17,14) | **inactive-cell guard**: `ice_mask` dropped to 0 between steps (thck 97.3 → 0.986 m) with stale nonzero `efvs_q*` inputs |
-| `velo_step1_cell2511` / `cell2713` / `step3_cell2414` | — | the recovery + profile laws on the standard rows |
+| `velo_step1_cell2511` / `cell2713` / `step3_cell2414` | — | the coupled recovery + profile laws on the standard rows |
 | `velo_step1_cell2213` | step 1, cell (22,13) | traced cell **ice-free** (thck = 0) with an active vertex — exercises the full 11-level profile through the β chain on a zero-thickness column |
+| `marine_step1_cell2749` | step 1, cell (27,49) | the first marine-margin cell (topg = −6.8 m < eus): fully grounded, deep column with the largest `omega` of the pinned rows (2.36e-4 m/(Pa yr)) — the strongest β_eff correction of all pinned rows (β_eff/β_internal = 1.35e-3) |
+| `marine_step3_cell3951` | step 3, cell (39,51) | the deep-bed marine cell (topg = −56.7 m) |
 
-Tolerances: rel 1e-12 everywhere except:
-
-- the **β chain** (`beta_internal`, `beta_eff_x/y`, `btractx/y`, and every
-  velocity derived from them) at rel 1e-5, and
-- `dusrf_dx/dy` + `taudx/taudy` at rel 1e-11.
-
-The `dusrf`/`taud` loosening is the dump round-trip of ~1800 m elevation
-differences (worst deviation 6.6e-13 over the 128 rows; >15× margin).  The β
-chain loosening has a real physical reason: the dumped `beta_internal` is the
-last **accepted** calcbeta pass of the Picard iteration, while the exit
-velocities come from the next iteration's accepted `beta_eff`; the
-law-at-exit-velocity chain (β from the dumped inputs → recovery → profile)
-has worst rel deviation 6.0e-7 over the 128 rows (verified by the extractor),
-so 1e-5 leaves >16× margin.
+Tolerances: **rel 1e-12 everywhere** except `dusrf_dx/dy` + `taudx/taudy` at
+rel 1e-11.  The `dusrf`/`taud` loosening is the dump round-trip of ~1800 m
+elevation differences (worst deviation 6.6e-13 over the 128 rows; >15×
+margin).  The β chain needs no loosening any more: feeding the accepted
+calcbeta pass makes `beta_internal` exact to machine precision (rel 0.0 on
+all 128 rows and all 32 marine rows), and every downstream law then holds at
+≤ 2.9e-16 (worst profile deviation over all rows).
 
 ## Coverage limitations (this data window)
 
-- **The 2-D finite-element matrix solve, the vertex staggers, and the Picard
-  iteration are not here** — they are the stage-3 assembly.  Consequently
-  `uvel_2d`, `vvel_2d`, `uvel_basal`, `vvel_basal`, `omega`,
-  `stag_omega_k_001..011`, `theta_x/y`, `F_x/y` are dump-fed inputs in this
-  file (independent-model tests), and `effecpress_stag` is pinned via the
-  bwat = 0 identity instead of being computed.
-- **`stag_omega_k` stagger gap**: `omega_k` is computed per cell in
-  `DivaIntegrals`, but its vertex stagger (`stag_omega_k`) is a dumped input
-  in `DivaVelocity`; only the scalar `stag_omega` (4-cell mean) is
-  implemented.  The per-level stagger is stage 3.
+- **The 2-D finite-element matrix solve and the Picard iteration are not
+  here** — they are the stage-3 assembly.  Consequently `uvel_2d`, `vvel_2d`,
+  `uvel_basal`, `vvel_basal` are dump-fed inputs in this file
+  (independent-model tests), and `effecpress_stag` is pinned via the bwat = 0
+  identity instead of being computed.
+- **The vertex stagger of `omega`/`omega_k` IS implemented** (the
+  `cism_stagger_masked_mean` law in `DivaIntegrals`), but the four stencil
+  cells' `omega`/`omega_k` enter as dumped inputs for the SE/NW/NE cells (the
+  new `cism_velo_stag.csv` boundary): computing them from the neighbors'
+  `efvs_q`/`thck` is the stage-3 field-level coupling.  The masks
+  (`ice_plus_land_mask_sw/se/nw/ne`) are all 1 on every traced row, so the
+  masked branch of the stagger law is verified only by construction (the
+  `max(Σmask, 1)` guard) in this window.
 - **`efvs_q*` provenance**: on inactive cells the dumped `efvs_q*` columns
   are stale (the last values computed while the cell was active) — the tests
   feed them as-is and the guard must zero the outputs, exactly as the
   Fortran's `active_cell` branch does.
-- **`f_ground = 1` everywhere** on gris20 in this window, so the
+- **`f_ground = 1` everywhere**: on all 128 exit rows and on all 32
+  marine-margin exit rows of the reference run, so the
   `beta_internal = f_ground·beta_raw` weighting is pinned only in its
-  saturated branch; the subgrid floatation weighting itself
-  (F90:595-630) is not exercised by this data window.
+  saturated branch; the subgrid floatation weighting itself (F90:595-630) is
+  not exercised by this data window.  The `cism_velo_marine_exit.csv` /
+  `cism_velo_marine_pass.csv` boundary (the first `dump_marine_cells = 8`
+  cells with initial ice over a marine bed, topg < eus) was added precisely
+  to look for partially grounded vertices (f_ground < 1): none exist in this
+  run, so the marine tests pin the fully grounded marine-bed configuration
+  instead, and the f_ground < 1 branch stays documented, not exercised.
 - The reference run's velocities are in **solver-internal m/yr** (the
   `scale_output` pass runs after the exit trace); all pinned numbers are in
   those units.
@@ -195,7 +258,9 @@ so 1e-5 leaves >16× margin.
 
 Couple `DivaGeometry` + `DivaIntegrals` + `DivaVelocity` (+ `BasalTraction`)
 into the top-level `eqesm.esm`: implement the 2-D DIVA matrix solve
-(`glissade_velo_higher_solve`'s Picard loop), the vertex staggers
-(`glissade_stagger` of the per-level `omega_k`, `theta`, `F`), and the
-`effecpress` staggering, then test against full-model simulations with
-`earthsciintegrator` time stepping.
+(`glissade_velo_higher_solve`'s Picard loop) and the `effecpress`
+staggering, then test against full-model simulations with
+`earthsciintegrator` time stepping.  The vertex staggers implemented here
+(`cism_stagger_masked_mean`) move to the field-level assembly by feeding the
+neighbor cells' computed integrals through the grid stencil instead of the
+dump columns.

@@ -272,6 +272,57 @@ next iteration's accepted `beta_eff` (worst chain deviation 6.0e-7 over the
 128 rows); `cism_instrument.json`'s `dump_files` registry gains the
 `cism_velo_nbr.csv` entry with this commit.
 
+
+## 4e. Vertex-stagger + marine-margin rerun (2026-11-09, stage-2 lane row 7)
+
+The stage-2 lane's second round implements the vertex staggers as expression
+templates and pins the beta chain exactly:
+
+- `cism_stagger_masked_mean`: the ice-masked 4-cell mean
+  `Σ mask·var / max(Σ mask, 1)` of glissade_stagger with stagger_margin = 1
+  (glissade_grid_operators.F90:69-157, masked branch F90:135-148, formula
+  F90:141-144, init F90:123), one expression template in `cism_templates.esm`,
+  applied by `DivaIntegrals` to `omega` (scalar) and per velocity level to
+  `omega_k` (the two stagger calls of glissade_velo_higher.F90:2549-2552 and
+  F90:2561-2564).  θ and F are NOT staggered in CISM
+  (glissade_slope_angle_staggered computes them directly at the vertices from
+  the plain `z_mean` gradient, glissade_grid_operators.F90:1482+ and
+  glissade_velo_higher.F90:2174-2193) — documented deviation, see
+  `stage2/README-cism-velo.md`.
+- New `cism_velo_stag.csv` boundary: per traced cell, the 4
+  `ice_plus_land_mask_*` and the per-level `omega_k_sw/se/nw/ne_001..011` of
+  the NE-corner stencil (glissade_velo_higher.F90:1532-1537 masks).
+- New `cism_velo_marine_exit.csv` / `cism_velo_marine_pass.csv` boundary: the
+  first `dump_marine_cells = 8` cells with initial ice over a marine bed
+  (topg < eus), solve-exit rows (full DIVA row) + per-iteration calcbeta rows
+  (with the `f_ground` column the basal trace lacks), to look for partially
+  grounded vertices.  (First build wrote both row kinds to one file from two
+  units — `status='replace'` truncated and interleaved; fixed by splitting
+  into two files, rebuild, rerun.)
+- Beta-chain root cause and fix: the dumped `beta_internal` is the accepted
+  calcbeta pass's `f_ground·β` (the single `cism_basal_traction.csv` row with
+  β == beta_internal, velo_iter 38 of 39 on all 128 exit rows; its bed/N equal
+  the exit row's topg−eus/effecpress_stag exactly).  Feeding BasalTraction
+  that pass's (u, v, bed, N) makes the chain exact (rel 0.0), so the stage-2
+  assertions tighten from rel 1e-5 to rel 1e-12 (except dusrf/taud at 1e-11,
+  the dump round-trip of ~1800 m elevation differences).
+
+Runs (case rebuilt with the new dump module; all COMPLETED exit 0:0):
+12277039 dump-off (refresh run_ref_dumpoff), 12279575 dump-on (first build),
+12279827 dump-off (refresh after the marine-file fix), 12279959 dump-on
+(FINAL).  The 7 pre-existing CSVs are byte-identical to the 2026-11-05
+baseline across the rebuild, and `compare_cism.py` PASSes the FINAL dump-on
+against the refreshed run_ref_dumpoff (bit-identical modulo metadata).
+Validation: `extract_cism_velo_test_rows.py` PASS on all 128 exit rows + all
+32 marine exit rows (masked staggers ≤2.2e-16, chain rel 0.0, marine
+f_ground = 1.0 everywhere — no partially grounded vertex exists in this
+window, so the f_ground < 1 branch stays documented, not exercised).
+`stage2/cism_velo.esm` now has 17 tests / 175 assertions (whole suite
+2701P/0F/0E, up from 2662P).  Fork changes UNCOMMITTED at all three levels
+(source_cism on top of 38fe2d4e, wrapper 2a8316d, superproject db624ec,
+branch instrument/cism-dumps, not pushed); worktree commit on
+`wt/cism-velo3` 6884c43+.
+
 ## 5. Risks
 
 - **gland20.input_c150415.nc is a 2015-era file** — if CISM 3.0 rejects it

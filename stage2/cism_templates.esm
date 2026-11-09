@@ -902,6 +902,77 @@
      }
     ]
    }
+  },
+  "cism_stagger_masked_mean": {
+   "description": "The ice-masked 4-cell mean of a cell-centered field at a grid vertex, matching CISM's glissade_stagger with stagger_margin = 1 (glissade_grid_operators.F90:69-157; masked branch at F90:135-148, formula at F90:141-144). The staggered vertex (i,j) is the NE corner of cell (i,j), so its four neighboring cells are SW = (i,j), SE = (i+1,j), NW = (i,j+1), NE = (i+1,j+1) (F90:141-143); each cell contributes mask*var to the numerator and mask to the denominator, and where all four masks are 0 the vertex takes the 0 to which stagvar is initialized (F90:123), so the Fortran guard 'if (summask > 0) stagvar = sumvar/summask' (F90:144) collapses algebraically to sumvar/max(summask, 1) because the masks are 0/1 and sumvar = 0 whenever summask = 0. DivaVelocity applies this template to the cell-centered omega/omega_k with the ice_plus_land_mask of glissade_velo_higher.F90:1532-1537 at the staggered-grid calls of glissade_velo_higher.F90:2549-2552 (depth-integrated solve) and F90:2561-2564 (per level k). theta and F are NOT staggered in CISM: glissade_slope_angle_staggered computes them directly at the vertices from the plain vertex gradient of z_mean (glissade_grid_operators.F90:1482+, with the separate center/vertex calls of glissade_velo_higher.F90:2174-2193). With stagger_margin = 0 the same stencil reduces to the plain 4-cell mean of F90:125-133.",
+   "params": [
+    "var_sw",
+    "var_se",
+    "var_nw",
+    "var_ne",
+    "mask_sw",
+    "mask_se",
+    "mask_nw",
+    "mask_ne"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "mask_sw",
+         "var_sw"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "mask_se",
+         "var_se"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "mask_nw",
+         "var_nw"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "mask_ne",
+         "var_ne"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "max",
+      "args": [
+       {
+        "op": "+",
+        "args": [
+         "mask_sw",
+         "mask_se",
+         "mask_nw",
+         "mask_ne"
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     }
+    ]
+   }
   }
   }
 }
