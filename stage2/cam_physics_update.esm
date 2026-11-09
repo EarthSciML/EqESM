@@ -11266,19 +11266,6 @@
        "variable": "q_after",
        "time": 0.0,
        "coords": {
-        "lev": 17,
-        "cnst": 12
-       },
-       "expected": 1.0000000000000001e-36,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "q_after",
-       "time": 0.0,
-       "coords": {
         "lev": 1,
         "cnst": 16
        },
@@ -14040,78 +14027,6 @@
       ]
      },
      "assertions": [
-      {
-       "variable": "T_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 1
-       },
-       "expected": 302.50018402846086,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "zm_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 1
-       },
-       "expected": 67.42042714235896,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "s_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 1
-       },
-       "expected": 313269.7372896834,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "T_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 8
-       },
-       "expected": 289.10919950914854,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "zm_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 8
-       },
-       "expected": 1704.3888573775894,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
-      {
-       "variable": "s_after",
-       "time": 0.0,
-       "coords": {
-        "lev": 8
-       },
-       "expected": 315868.992944037,
-       "tolerance": {
-        "rel": 1e-12,
-        "abs": 0.0
-       }
-      },
       {
        "variable": "zm_after",
        "time": 0.0,

@@ -312,14 +312,15 @@ def seq_of(st, rows):
 
 def copy_check(variable, coords, expected, o):
     """The review rule: every assertion must be able to fail.  Skip the
-    assertion when the expected value equals the overridden input it derives
-    from (the law left that point unchanged)."""
+    assertion when the expected value is within the assertion tolerance
+    (rel 1e-12) of the overridden input it derives from: the law left that
+    point unchanged, or changed it by less than the test can resolve."""
     if variable == "q_after":
         inp = o["q"][coords["lev"] - 1][coords["cnst"] - 1]
     else:
         inp = o[{"T_after": "T", "u_after": "u", "v_after": "v",
                  "zm_after": "zm", "s_after": "s"}[variable]][coords["lev"] - 1]
-    return expected == inp
+    return abs(expected - inp) <= 1e-12 * abs(expected)
 
 
 def physics_tests(rows, qrows, pk, qk, corder):

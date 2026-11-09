@@ -133,7 +133,7 @@ around the whole integral).
   `dry_air_species = ''` and there are no subcolumns (air_composition.
   F90:354), documented on the variables.
 
-## Tests (169 assertions, rel 1e-12, `time_span {0,0}`)
+## Tests (162 assertions, rel 1e-12, `time_span {0,0}`)
 
 Eight tests pin the law at six call sites plus the tend accumulation over
 the whole tphysbc phase, all from `stage1/dumps/cam/cam_phys_tend.csv`,
@@ -143,14 +143,14 @@ the whole tphysbc phase, all from `stage1/dumps/cam/cam_phys_tend.csv`,
 |---|---|---|
 | `convect_deep_step18` | 36 | the full law (ls/lu/lv + 9 dumped constituents) at proc zm_conv_tend, incl. the CLDLIQ/CLDICE pair zeroing, the number clamp and the geopotential; step 18, a ZM-active step |
 | `convect_deep_step40` | 37 | the same at step 40 (steps 1-17, 24-39, 41-48 are ZM-inactive with all-zero ptends and are not pinned) |
-| `clubb_macmic1_step1` | 33 | the first CLUBB substep (macmic_it 1 of 3, ptend pre-scaled by 1/3), incl. the chem gases |
-| `microp_macmic1_step1` | 18 | the first MG2 substep (ls only), incl. the aerosol floors |
+| `clubb_macmic1_step1` | 32 | the first CLUBB substep (macmic_it 1 of 3, ptend pre-scaled by 1/3), incl. the chem gases |
+| `microp_macmic1_step1` | 12 | the first MG2 substep (ls only), incl. the aerosol floors |
 | `aero_calcsize_step1` | 8 | the q-only site: the num_a1 1e-5 floor (9.588e-6 → 1e-5) and the 1e-36 mass floors |
 | `radiation_step1` | 15 | ls-only site, the last tphysbc call (T/zm/s chained to aoa_tracers) |
 | `vdiff_step1` | 13 | lu/lv/ls + all 34 constituents at the single active level (dump lev 32) |
 | `tend_accumulation_bc_step18` (TendAccumulation) | 9 | dudt/dvdt/dtdt over the 15 consecutive tphysbc calls as a multi-site sum vs the cam_tend_total.csv phase=bc row |
 
-Suite status: `./esm test stage2/` runs **2831P/0F/0E** — the 169
+Suite status: `./esm test stage2/` runs **2824P/0F/0E** — the 162
 physics_update assertions (rel 1e-12) on top of the 2662-assertion stage-2
 baseline (was 3234P with the old 572-assertion generator-built file).
 
@@ -229,7 +229,7 @@ mutually consistent with the law.
 
 `stage1/analysis/extract_cam_physics_update_pins.py` re-verifies the whole
 law against every dump row and emits the numeric `parameter_overrides` +
-`assertions` of the tests (8 tests, 169 assertions) as JSON fragments; the
+`assertions` of the tests (8 tests, 162 assertions) as JSON fragments; the
 fragments are pasted into the hand-authored tests blocks of
 `cam_physics_update.esm` — the model body (variables, equations, index
 sets, templates) is hand-authored in the `.esm` file itself, and the
