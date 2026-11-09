@@ -795,6 +795,62 @@
      }
     }
    }
+  },
+  "sw_optical_depth": {
+   "description": "The cumulative optical depth of the water column at interface i, tau(n,i) = sum_{j<i} opacity(n,j)*h(j) with tau(n,1) = 0 at the surface, for each penetrating band n (MOM_opacity.F90: the per-layer optical depth opt_depth = h*opacity of absorbRemainingSW :748-750 and sumSWoverBands :980-982, accumulated down the column). This is the discrete, measure-weighted Riemann-sum form of the Beer-Lambert optical-depth integral tau(z) = int_0^z opacity dz' (esm-spec 4.3.1: a cumulative integral is spelled by multiplying the per-cell measure into the faq body; the integral op is not used because it is a unit-measure mean over an axis, spec 4.2). The consuming component applies the template once per thickness field it needs: the h passed to absorbRemainingSW for the heating path and the pre-flux h of the sumSWoverBands/KPP buoyancy-flux path (MOM_forcing_type.F90:1102, thickness_to_dz) for the netPen path; the index-set names band/iface/layer are bound at the application site.",
+   "params": [
+    "opacity",
+    "h"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "b",
+     "i"
+    ],
+    "ranges": {
+     "b": {
+      "from": "band"
+     },
+     "i": {
+      "from": "iface"
+     },
+     "j": {
+      "from": "layer"
+     }
+    },
+    "filter": {
+     "op": "<",
+     "args": [
+      "j",
+      "i"
+     ]
+    },
+    "expr": {
+     "op": "*",
+     "args": [
+      {
+       "op": "index",
+       "args": [
+        "opacity",
+        "b",
+        "j"
+       ]
+      },
+      {
+       "op": "index",
+       "args": [
+        "h",
+        "j"
+       ]
+      }
+     ]
+    },
+    "args": [
+     "opacity",
+     "h"
+    ]
+   }
   }
  }
 }
