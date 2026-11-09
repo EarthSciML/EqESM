@@ -34,6 +34,9 @@ PVER = 32
 TOL = {"rel": 1e-12}
 TOL0 = {"rel": 1e-12, "abs": 1e-24}
 ABS0 = 1e-24
+CITE = (" Tuples extracted and dump-verified by "
+        "stage1/analysis/extract_cam_zm_tests.py and materialized by "
+        "stage1/analysis/inject_cam_zm_tests.py.")
 
 ZERO_FAIL = ("ntsnprd = rprd work2 - evpsnow - snowmlt is a three-term "
              "composite whose zero requires all three branch states: "
@@ -142,7 +145,8 @@ def make_q1q2_tests():
                 f"and the subcloud level lev 32 (= maxg = pver, the "
                 f"subcloud branch of F90:2611-2619); dl at the two detraining "
                 f"levels 15-16. The k > maxg copy-down of F90:2620-2622 "
-                f"cannot fire (maxg = pver on all dumped columns)."),
+                f"cannot fire (maxg = pver on all dumped columns)."
+                f"{CITE}"),
             "time_span": {"start": 0.0, "end": 0.0},
             "parameter_overrides": ov,
             "assertions": assertions})
@@ -282,7 +286,7 @@ def make_evap_tests():
                            if abs(d['prec_evap']) < ABS0 else TOL})
         tests.append({
             "id": f"s{st}_g1",
-            "description": intro + note + melt,
+            "description": intro + note + melt + CITE,
             "time_span": {"start": 0.0, "end": 0.0},
             "parameter_overrides": ov,
             "assertions": assertions})

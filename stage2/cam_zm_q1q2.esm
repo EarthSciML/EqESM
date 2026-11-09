@@ -615,7 +615,7 @@
    "tests": [
     {
      "id": "s18_g1",
-     "description": "Step 18, g = 1 column (cam_zm.csv step 18 rows lev 1..32 with cam_zm_scal.csv step 18; jt = 15, maxg = 32, dsubcld = 14.0268 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns).",
+     "description": "Step 18, g = 1 column (cam_zm.csv step 18 rows lev 1..32 with cam_zm_scal.csv step 18; jt = 15, maxg = 32, dsubcld = 14.0268 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1150,7 +1150,7 @@
     },
     {
      "id": "s40_g1",
-     "description": "Step 40, g = 1 column (cam_zm.csv step 40 rows lev 1..32 with cam_zm_scal.csv step 40; jt = 15, maxg = 32, dsubcld = 14.0608 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns).",
+     "description": "Step 40, g = 1 column (cam_zm.csv step 40 rows lev 1..32 with cam_zm_scal.csv step 40; jt = 15, maxg = 32, dsubcld = 14.0608 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
@@ -1685,7 +1685,7 @@
     },
     {
      "id": "s48_g1",
-     "description": "Step 48, g = 1 column (cam_zm.csv step 48 rows lev 1..32 with cam_zm_scal.csv step 48; jt = 15, maxg = 32, dsubcld = 14.015 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns).",
+     "description": "Step 48, g = 1 column (cam_zm.csv step 48 rows lev 1..32 with cam_zm_scal.csv step 48; jt = 15, maxg = 32, dsubcld = 14.015 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
      "time_span": {
       "start": 0.0,
       "end": 0.0
