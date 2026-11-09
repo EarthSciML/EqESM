@@ -1519,3 +1519,19 @@ closure) + 56 (vertdiff) + ~19 (cism_velo net) − 16 (JRA reader).
   `frequency` (P1D vs 2920 records/yr = 3-hourly); M9 land→river needs a
   CLM runoff dump (spec in README-m9-clm-mosart.md); clm-soilfluxes
   `t_grnd0` follow-up.
+
+### 2026-11-09 (cont.): 10 new tasks submitted (user go-ahead)
+
+`cam-rad-optics` (stage 2 from the RRTMG dumps), `cam-zm-dump2` (owns CAM
+fork: ZM parcel internals), `clm-twostream`, `clm-canopy-veg` (stage 2
+from the veg dumps), `clm-runoff-instrument` (owns CLM fork: M9 part A
+runoff dumps), `esd-transport-layers` (ESD branch `cice-transport-layers`,
+not pushed), `mom6-kpp-integrals` (prefix sums → ESD cumulative
+integrals, assertions unchanged), `esm-pr-cism` (EarthSciModels branch
+`cism`, not pushed), `m9-ocn-flux` (gated), `janitor-1109` (stagthck,
+JRA frequency, ZM closure dz). Fork ownership: CAM cam-zm-dump2, CLM
+clm-runoff-instrument, CMEPS cmeps-prep-atm2, MOM6
+mom6-dynamics-instrument, CICE cice-itd-ridge. 18 agent jobs queued or
+running. Expected append conflicts: `clm_templates.esm` (twostream,
+canopy-veg), `cam_templates.esm` (rad-optics, zm-evap2),
+`README-cam-zm-parcel.md`/`cam_zm_*` (zm-dump2, janitor).
