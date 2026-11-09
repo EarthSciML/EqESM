@@ -1173,6 +1173,208 @@
      "cappa"
     ]
    }
-  }
+  },
+  "constituent_update": {
+   "description": "The constituent clamp step of physics_update (physics_types.F90:313-334), applied to the raw updated mixing ratio qraw = q + win*ptend_q*dt computed ONCE by the caller as a named intermediate (the Fortran's `state%q = state%q + ptend%q*dt` is written in both branches of the clamp, F90:315-329). Where the constituent's tendency flag lq is set, either the qneg3 floor qclamp = max(qraw, qmin) over the whole column (qneg_module qneg3, qmin the per-constituent floor of chemistry.F90: Q = 1e-12, chem gases and aerosol mass species = 1e-36, num_a1..4 = 1e-5, CLDLIQ/CLDICE/RAINQM/SNOWQM = 0) or, for the number-concentration species NUMICE/NUMLIQ/NUMRAI/NUMSNO (which qneg3 must NOT touch, F90:320-322), the windowed min/max clamp qclamp = min(max(qraw, 1e-12), 1e10) (F90:325-329; windowed because the Fortran's k loop runs top_level..bot_level). lq = 0 short-circuits to q unchanged (the whole block is inside `if(ptend%lq(m))`, F90:314), and win is the [top_level, bot_level] indicator of the caller. All four literals are the Fortran's: the 1e-12 and 1e10 number-concentration bounds (F90:327-328, in mixing-ratio units) and the caller-supplied qmin.",
+   "params": [
+    "qraw",
+    "lq",
+    "qmin",
+    "num_clamp",
+    "win"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     "lq",
+     {
+      "op": "ifelse",
+      "args": [
+       "num_clamp",
+       {
+        "op": "ifelse",
+        "args": [
+         "win",
+         {
+          "op": "min",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 10000000000.0,
+            "units": "kg/kg"
+           },
+           {
+            "op": "max",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1e-12,
+              "units": "kg/kg"
+             },
+             "qraw"
+            ]
+           }
+          ]
+         },
+         "qraw"
+        ]
+       },
+       {
+        "op": "max",
+        "args": [
+         "qraw",
+         "qmin"
+        ]
+       }
+      ]
+     },
+     "qraw"
+    ]
+   }
+  },
+  "state_cnst_min_nz_mask": {
+   "description": "The zeroing predicate of the state_cnst_min_nz utility called by physics_update for CLDLIQ/CLDICE at the convect_deep / zm_conv_tend sites (physics_types.F90:353-375, 467-492): where the POST-clamp constituent value qclamped is below lim, the mass value is zeroed together with its paired number concentration. The template computes only the mask (cld_min_nz and qclamped < lim); the caller applies it as q_after = ifelse(mask, 0, qclamped) to the mass constituent and to the paired number constituent (NUMLIQ for CLDLIQ, NUMICE for CLDICE). This run's calls use lim = 1e-36 (the cldlim_names branch, F90:361-362, 372-373); the PERGRO 1e-12 branch (F90:357-359, 368-370) is not compiled in this build. cld_min_nz is the caller's effective flag: 1 only where the site's ptend%name is in cldlim_names and ptend%lq of the mass constituent is set, i.e. this run only at the convect_deep site (proc zm_conv_tend).",
+   "params": [
+    "qclamped",
+    "cld_min_nz",
+    "lim"
+   ],
+   "body": {
+    "op": "and",
+    "args": [
+     "cld_min_nz",
+     {
+      "op": "<",
+      "args": [
+       "qclamped",
+       "lim"
+      ]
+     }
+    ]
+   }
+  },
+  "virtual_temperature_factor": {
+   "description": "The virtual-temperature factor tvfac = Tv/T of the CAM hydrostatic geopotential (geopotential_temp.F90:133-207, the generalized virtual temperature of Lauritzen et al. 2018, doi:10.1029/2017MS001257): tvfac = (1 + (zvir + 1)*q_Q*qfac) * sum_dry, with qfac = 1/(1 - q_wet_sum) the wet-to-dry mixing-ratio conversion factor (F90:135-156: qfac = 1 - sum of thermodynamically active water mixing ratios, then inverted) and sum_dry = 1/(1 + qfac*q_wet_sum) the dry-air fraction of the moist air (F90:160-180: sum of dry water mixing ratios q_wet_sum*qfac, inverted). q_wet_sum is the sum of the thermodynamically active water species (this run, water_species_in_air = Q, CLDLIQ, CLDICE, RAINQM, SNOWQM with dry_air_species = ''); q_Q is the specific humidity (constituent 1); zvir = rh2o/rair - 1 (SHR_CONST_ZVIR). The Fortran computes qfac and sum_dry as full column arrays before the tvfac line; the template folds the two divisions into the factor they feed.",
+   "params": [
+    "q_Q",
+    "q_wet_sum",
+    "zvir"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "*",
+        "args": [
+         {
+          "op": "+",
+          "args": [
+           "zvir",
+           {
+            "op": "const",
+            "args": [],
+            "value": 1.0,
+            "units": "1"
+           }
+          ]
+         },
+         {
+          "op": "*",
+          "args": [
+           "q_Q",
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               "q_wet_sum"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "/",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "/",
+            "args": [
+             {
+              "op": "const",
+              "args": [],
+              "value": 1.0,
+              "units": "1"
+             },
+             {
+              "op": "-",
+              "args": [
+               {
+                "op": "const",
+                "args": [],
+                "value": 1.0,
+                "units": "1"
+               },
+               "q_wet_sum"
+              ]
+             }
+            ]
+           },
+           "q_wet_sum"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
   }
  }
+}

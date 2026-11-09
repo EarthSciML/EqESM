@@ -11,7 +11,9 @@ lines) against the checks recorded in stage1/runs/cice_instrument.json:
   - EVP momentum final relation uvel=(cca*cc1+ccb*cc2)/ab2,
     vvel=(cca*cc2-ccb*cc1)/ab2 on all 40320 rows,
   - cice_dedd.csv: 27 identity checks per row (delegated to
-    check_cice_dedd.py) plus the dedd structural row counts.
+    check_cice_dedd.py) plus the dedd structural row counts,
+  - cice_ridge.csv + cice_itd.csv: 71 identity checks per row (delegated
+    to check_cice_itd.py) plus the structural row counts.
 
 All identities recompute the same float64 operations in the same order as
 the Fortran, so they hold to round-off; tolerance rtol=1e-12, atol=1e-12.
@@ -51,6 +53,8 @@ EXPECTED = {
     "cice_thermo_flux.csv": 384,
     "cice_budget.csv": 1,
     "cice_dedd.csv": 5760,
+    "cice_ridge.csv": 384,
+    "cice_itd.csv": 384,
 }
 
 def rows_of(name):
@@ -152,6 +156,10 @@ def main():
     # dEdd identity laws (delegated)
     subprocess.run([sys.executable,
                     "stage1/analysis/check_cice_dedd.py"], check=True)
+
+    # ridge + ITD identity laws (delegated)
+    subprocess.run([sys.executable,
+                    "stage1/analysis/check_cice_itd.py"], check=True)
 
 if __name__ == "__main__":
     main()
