@@ -19,6 +19,11 @@ set -uo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 main=/projects/illinois/eng/cee/ctessum/ctessum/code/EqESM
 export ESD_ROOT=${ESD_ROOT:-/projects/illinois/eng/cee/ctessum/ctessum/code/EarthSciDiscretizations}
+# Data-fed parameters (e.g. the JRA55 data_sources on the NCAR inputdata
+# server, ~19 GB for 1958) are downloaded at build into EarthSciIO's cache,
+# whose default root is $TMPDIR (RAM-backed here). Keep it on local disk.
+export ESM_CACHE_DIR=${ESM_CACHE_DIR:-/scratch.local/ctessum/earthsci-esm-cache}
+mkdir -p "$ESM_CACHE_DIR"
 
 esm=./esm
 [ -x "$esm" ] || esm="$repo/esm"
