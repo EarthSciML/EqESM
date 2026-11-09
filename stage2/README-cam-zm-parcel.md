@@ -16,10 +16,9 @@ Both models import the templates by reference
 definition.  The CAPE, dsubcld and dadt integrals lower through the ESD
 rule `integral_lev_whole` (`${ESD_ROOT}/grids/column_nonuniform_1d/
 rules/integral_lev_whole.esm`, binding NLEV = 32) with the consumer's
-free-name layer measure `dz`.  `dz` is the trivial measure 1 in both
-models: in `Parcel` the Fortran d(ln p) increments are written into the
-integrand's own `dz` variable (log(pf_hi/pf_lo)), and in `Closure` the
-two integrals share the one imported rule, whose free name `dz` binds by
+free-name layer measure `dz`.  In `Parcel`, `dz` is the true d(ln p)
+layer measure log(pf_hi/pf_lo) of the CAPE integral; in `Closure` it is
+the trivial measure 1, because the two integrals share the one imported rule, whose free name `dz` binds by
 consumer variable name, so the Fortran layer weight zf_lo − zf_hi of the
 dadt summand is carried in the integrand `dadt_integrand` rather than
 the measure.
@@ -158,9 +157,9 @@ lev (190 assertions):
 
 - **Parcel — 150 assertions** (15 steps × 10): hmn and hsat at lev
   {1, 15, 25, 32} against the dumped columns (cam_zm.csv rows
-  (step, 1, k)); qst at lev {25, 32} against the qsat_hPa replica
-  (DERIVED, cross-pinned by hsat through hsat = cpres·t + grav·z +
-  rl·qst, which inverts to qst = (hsat − cpres·t − grav·z)/rl).
+  (step, 1, k)); qst at lev {25, 32} against the dumped `qs` column of cam_zm.csv
+  (same rows; also cross-pinned by hsat through hsat = cpres·t + grav·z +
+  rl·qst).
 - **Parcel — 10 ent/tv assertions** (5 states × 2): ent at (18,32),
   (18,25), (18,15), (40,32), (48,32) and tv at the same states, against
   the entropy (F90:1489-1513) and virtual-temperature (F90:1088)
