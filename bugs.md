@@ -491,4 +491,3 @@ Format template:
 - **Impact on results:** none (dead code).
 - **Reproduced/corrected in .esm:** not reproduced (omitted from the Jra model in `stage2/cdeps_datm_jra.esm`).
 - **Status:** open (cleanup; suggest removing upstream).
->>>>>>> main
