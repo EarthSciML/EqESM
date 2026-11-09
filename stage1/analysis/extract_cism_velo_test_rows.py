@@ -2,11 +2,14 @@
 """Extract numeric test tuples from the stage-1 CISM DIVA velocity dumps into
 JSON fragments for the hand-authored `tests` blocks of stage2/cism_velo.esm.
 
-The dumps (stage1/dumps/cism/cism_velo.csv, cism_velo_nbr.csv; gitignored,
-living in the main checkout) hold 4 steps x 32 traced cells x (entry, exit)
-rows.  This script first RE-VERIFIES every law the stage-2 models encode
-against all 128 solve-exit rows (failing loudly on any mismatch), then emits,
-for each hand-picked row, the `parameter_overrides` + `assertions` of one
+The dumps (stage1/dumps/cism/cism_velo.csv, cism_velo_nbr.csv,
+cism_velo_stag.csv, cism_basal_traction.csv, cism_velo_marine_exit.csv,
+cism_velo_marine_pass.csv; gitignored, living in the main checkout) hold 4
+steps x 32 traced cells x (entry, exit) rows, the per-iteration basal-traction
+rows of the same 32 vertices, and the 4-step x 8-cell marine-margin boundary.
+This script first RE-VERIFIES every law the stage-2 models encode against all
+128 solve-exit rows (failing loudly on any mismatch), then emits, for each
+hand-picked row, the `parameter_overrides` + `assertions` of one
 `time_span {0,0}` test at full dump precision.
 
 Laws verified here (all on the exit rows, aligned by (cism_step, cell)):
@@ -30,20 +33,32 @@ Laws verified here (all on the exit rows, aligned by (cism_step, cell)):
     omega_k[kn] = mean_p sum_{k'>=kn} sig_mid(k')/efvs_qp(k',p) * dsigma(k') * thck
       (the Goldberg 2011 single integral, F90:5627-5653)
     omega = sum_k 0.5*(omega_k[k] + omega_k[k+1]) * dsigma(k)  (trapezoid, no thck)
-    stag_omega = 4-cell mean of omega (stagger_margin = 1)
+    stag_omega = the ice-masked 4-cell mean of omega (cism_stagger_masked_mean,
+      glissade_stagger with stagger_margin = 1, glissade_grid_operators.F90:
+      135-148; ice_plus_land_mask of glissade_velo_higher.F90:1532-1537) -- on
+      every traced row the 4 masks are 1, so the masked mean equals the plain
+      4-cell mean 0.25*(omega + omega_se + omega_nw + omega_ne) exactly
+    stag_omega_k[k] = the same masked 4-cell mean applied per velocity level to
+      the omega_k of the 4 stencil cells (the per-level stagger of
+      glissade_velo_higher.F90:2561-2564; the dump's omega_k_sw column is
+      cross-checked against the traced cell's own omega_k)
     inactive cells (ice_mask = 0): efvs = omega_k = omega = 0 (the whole
       block lives inside the active_cell guard, F90:5091, and the dumped
       efvs_q of a cell that lost its ice mid-run hold the stale previous-step
       values while efvs/omega/omega_k read 0)
 
   DivaVelocity:
-    beta_internal = f_ground * beta(u_basal, v_basal) -- the pseudo-plastic law
-      of the mounted BasalTraction, evaluated at the EXIT basal velocity.  The
-      dumped beta_internal is the last ACCEPTED calcbeta pass of the Picard
-      loop (its velocity iterate differs from the exit basal velocity by the
-      final Picard correction), so this chain is exact only to ~6e-7 relative
-      -- the script reports the worst chain error over all rows, which is the
-      stated numerical reason for the rel 1e-5 test tolerance.
+    beta_internal = f_ground * beta -- the pseudo-plastic law of the mounted
+      BasalTraction, evaluated at the (u, v, bed, N) of the LAST ACCEPTED
+      calcbeta pass: the dumped beta_internal is the accepted pass's
+      f_ground*beta (rel 0.0 on all 128 rows; the pass is the single
+      cism_basal_traction.csv row whose beta equals beta_internal, velo_iter
+      = 38 of 39 on every row, and its bed/N equal the exit row's topg - eus /
+      effecpress_stag exactly).  The pass velocity iterate differs from the
+      exit basal velocity by the final Picard correction, so feeding the exit
+      velocity instead would leave a ~6e-7 residual; feeding the PASS velocity
+      makes the whole chain exact (rel 0.0 on the law, <= 2.9e-16 downstream)
+      -- the reason the stage-2 tests feed the pass row and assert at 1e-12.
     beta_eff_x = F_x*beta_internal/(F_x + beta_internal*stag_omega*cos(theta_x))
       (and y) -- EXACT given the dumped beta_internal
     uvel_basal = uvel_2d*beta_eff_x/beta_internal (Goldberg eq. 34 recovery)
@@ -51,6 +66,14 @@ Laws verified here (all on the exit rows, aligned by (cism_step, cell)):
     uvel[k] = uvel_basal + btractx*stag_omega_k[k]*cos(theta_x)/F_x, k = 1..10,
       uvel(11) = uvel_basal (stag_omega_k(11) = 0) -- and the same for vvel
       with the y-direction quantities (Goldberg eq. 32 + slope correction)
+
+  Marine-margin boundary (cism_velo_marine_exit.csv / _pass.csv; the first 8
+    cells with initial ice over a marine bed, topg < eus): the same coupled
+    chain runs on the marine rows, with the same matching-pass beta link.  The
+    reference run has NO partially grounded vertices (f_ground = 1 on all 32
+    exit rows and all 32 marine exit rows), so the f_ground < 1 branch of
+    beta_internal = f_ground*beta is not exercised by any dump row; the marine
+    tests pin the fully grounded marine-bed configuration instead.
 
 Usage:
   python3 stage1/analysis/extract_cism_velo_test_rows.py [dumps_dir] > tests_fragments.json
@@ -85,6 +108,9 @@ INTEGRAL_ROWS = [(1, 25, 11), (1, 26, 12), (1, 27, 13), (3, 24, 14)]
 # integrals and the cell-mean viscosity against nonzero inputs.
 INTEGRAL_INACTIVE_ROWS = [(3, 17, 14)]
 VELO_ROWS = [(1, 25, 11), (1, 22, 13), (1, 27, 13), (3, 24, 14)]
+# Marine-margin cells (first dump_marine_cells = 8 cells with initial ice over
+# a marine bed, topg < eus): a thin-bed cell and a deep-bed cell.
+MARINE_ROWS = [(1, 27, 49), (3, 39, 51)]
 
 
 def hybrid_edge_gradient(usrf_w, usrf_e, thck_w, thck_e, ice_w, ice_e, land_w, land_e):
@@ -132,6 +158,15 @@ def rel(a, b):
     return abs(a - b) / abs(b) if b != 0.0 else (0.0 if a == 0.0 else float('inf'))
 
 
+def masked_mean(vals, masks):
+    """The cism_stagger_masked_mean law (glissade_grid_operators.F90:135-148):
+    sum(mask*val)/max(sum(mask), 1), with the vertex stencil cells ordered
+    (sw, se, nw, ne)."""
+    svar = sum(m * v for m, v in zip(masks, vals))
+    smask = sum(masks)
+    return svar / max(smask, 1.0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     default_dir = os.path.join(MAIN, "stage1", "dumps", "cism")
@@ -142,11 +177,21 @@ def main():
 
     _, velo = load(os.path.join(a.dumps_dir, "cism_velo.csv"))
     _, nbr = load(os.path.join(a.dumps_dir, "cism_velo_nbr.csv"))
+    _, stag = load(os.path.join(a.dumps_dir, "cism_velo_stag.csv"))
+    _, bt = load(os.path.join(a.dumps_dir, "cism_basal_traction.csv"))
     ve = {f"{r['cism_step']}_{r['i']}_{r['j']}": r for r in velo if r['phase'] == 'exit'}
     ne = {f"{r['cism_step']}_{r['i']}_{r['j']}": r for r in nbr if r['phase'] == 'exit'}
-    common = sorted(set(ve) & set(ne))
+    se = {f"{r['cism_step']}_{r['i']}_{r['j']}": r for r in stag if r['phase'] == 'exit'}
+    common = sorted(set(ve) & set(ne) & set(se))
     assert len(common) == 128, len(common)
-    print(f"# exit rows: velo {len(ve)}, nbr {len(ne)}, common {len(common)}", file=sys.stderr)
+    print(f"# exit rows: velo {len(ve)}, nbr {len(ne)}, stag {len(se)}, common {len(common)}",
+          file=sys.stderr)
+
+    # per-vertex basal-traction pass rows (all rows are passes; velo_iter 1 is
+    # the effecpress trace and 2..39 the calcbeta iterations)
+    bt_by_cell = {}
+    for r in bt:
+        bt_by_cell.setdefault((r['cism_step'], r['i'], r['j']), []).append(r)
 
     stats = {}
     worst = {}
@@ -165,8 +210,9 @@ def main():
                       file=sys.stderr)
 
     chain_worst = 0.0
+    pass_iter = {}
     for key in common:
-        v, n = ve[key], ne[key]
+        v, n, s = ve[key], ne[key], se[key]
         step, i, j = key.split('_')
         sigma = [n[f'sigma_{k:03d}'] for k in range(1, NZ + 1)]
         dsigma = [sigma[k + 1] - sigma[k] for k in range(NL)]
@@ -189,25 +235,35 @@ def main():
         for kk in range(NZ):
             vals = []
             for p in range(4):
-                s = 0.0
+                ssum = 0.0
                 for k in range(kk, NL):
                     if active:
-                        s += sig_mid[k] / efvs_q[p][k] * dsigma[k] * thck
-                vals.append(s)
+                        ssum += sig_mid[k] / efvs_q[p][k] * dsigma[k] * thck
+                vals.append(ssum)
             omega_k_c.append(0.25 * sum(vals))
         if active:
             for kk in (0, 5, 10):
                 check('omega_k_int', omega_k_c[kk], omega_k[kk], 1e-10)
         else:
             assert all(x == 0.0 for x in omega_k), (key, 'inactive omega_k nonzero')
-            assert v['omega'] == 0.0 if 'omega' in v else True
         # omega trapezoid
         omega_c = sum(0.5 * (omega_k[k] + omega_k[k + 1]) * dsigma[k] for k in range(NL))
         check('omega_trap', omega_c, n['omega'], 1e-12)
-        # stag_omega 4-cell mean
-        check('stag_omega_avg',
-              0.25 * (n['omega_sw'] + n['omega_se'] + n['omega_nw'] + n['omega_ne']),
+        # the stag dump's SW-cell omega_k must be the traced cell's own omega_k
+        ok_sw = [s[f'omega_k_sw_{k:03d}'] for k in range(1, NZ + 1)]
+        for kk in (1, 6, 11):
+            check('stag_omega_k_sw', ok_sw[kk - 1], n[f'omega_k_{kk:03d}'], 1e-12)
+        # masked 4-cell staggers (cism_stagger_masked_mean)
+        masks = [s[f'ice_plus_land_mask_{t}'] for t in ('sw', 'se', 'nw', 'ne')]
+        ok_vals = {t: [s[f'omega_k_{t}_{k:03d}'] for k in range(1, NZ + 1)]
+                   for t in ('sw', 'se', 'nw', 'ne')}
+        check('stag_omega_masked',
+              masked_mean([n['omega'], n['omega_se'], n['omega_nw'], n['omega_ne']], masks),
               n['stag_omega'], 1e-12)
+        for kk in (1, 6, 11):
+            check('stag_omega_k_masked',
+                  masked_mean([ok_vals[t][kk - 1] for t in ('sw', 'se', 'nw', 'ne')], masks),
+                  n[f'stag_omega_k_{kk:03d}'], 1e-12)
 
         # --- DivaGeometry --------------------------------------------------
         c = {}
@@ -250,28 +306,39 @@ def main():
             th = n[f'stag_theta_slope_{tag}']
             Fv = n[f'stag_diva_slope_factor_{tag}']
             be_c = Fv * beta_int / (Fv + beta_int * n['stag_omega'] * math.cos(th))
-            check(f'beta_eff_{tag}', be_c, n[f'beta_eff_{tag}'], 1e-10)
+            check(f'beta_eff_{tag}', be_c, n[f'beta_eff_{tag}'], 1e-12)
         u2d, v2d = v['uvel_2d'], v['vvel_2d']
         u_b, v_b = v['uvel_011'], v['vvel_011']
-        check('uvel_basal_rec', u2d * n['beta_eff_x'] / beta_int, u_b, 1e-10)
-        check('vvel_basal_rec', v2d * n['beta_eff_y'] / beta_int, v_b, 1e-10)
-        check('btractx1', beta_int * u_b, v['btractx'], 1e-10)
-        check('btracty1', beta_int * v_b, v['btracty'], 1e-10)
-        check('btractx2', n['beta_eff_x'] * u2d, v['btractx'], 1e-10)
-        check('btracty2', n['beta_eff_y'] * v2d, v['btracty'], 1e-10)
+        check('uvel_basal_rec', u2d * n['beta_eff_x'] / beta_int, u_b, 1e-12)
+        check('vvel_basal_rec', v2d * n['beta_eff_y'] / beta_int, v_b, 1e-12)
+        check('btractx1', beta_int * u_b, v['btractx'], 1e-12)
+        check('btracty1', beta_int * v_b, v['btracty'], 1e-12)
+        check('btractx2', n['beta_eff_x'] * u2d, v['btractx'], 1e-12)
+        check('btracty2', n['beta_eff_y'] * v2d, v['btracty'], 1e-12)
         for tag, bb, uu in (('x', u_b, 'uvel'), ('y', v_b, 'vvel')):
             th = n[f'stag_theta_slope_{tag}']
             Fv = n[f'stag_diva_slope_factor_{tag}']
             corr = math.cos(th) / Fv
-            bt = v[f'btract{"x" if tag == "x" else "y"}']
+            bt_ = v[f'btract{"x" if tag == "x" else "y"}']
             for kk in range(NZ - 1):
-                check(f'{uu}_profile', bb + bt * n[f'stag_omega_k_{kk + 1:03d}'] * corr,
-                      v[f'{uu}_{kk + 1:03d}'], 1e-9)
-        # beta chain at the exit basal velocity (the approximate link)
-        beta_law = fg * basal_beta(u_b, v_b, v['topg'] - v['eus'], v['effecpress_stag'])
-        chain_worst = max(chain_worst, rel(beta_law, beta_int))
+                check(f'{uu}_profile', bb + bt_ * n[f'stag_omega_k_{kk + 1:03d}'] * corr,
+                      v[f'{uu}_{kk + 1:03d}'], 1e-12)
 
-    print(f"# chain worst rel (law at exit basal velocity vs dumped beta_internal): "
+        # beta chain at the ACCEPTED calcbeta pass (the exact link): the pass
+        # row whose beta equals the dumped beta_internal (f_ground = 1)
+        rows = bt_by_cell[(v['cism_step'], v['i'], v['j'])]
+        hits = [r for r in rows if rel(r['beta'], beta_int) < 1e-14]
+        assert len(hits) == 1, (key, len(hits))
+        p = hits[0]
+        pass_iter[p['velo_iter']] = pass_iter.get(p['velo_iter'], 0) + 1
+        beta_law = fg * basal_beta(p['u'], p['v'], p['bed'], p['N'])
+        chain_worst = max(chain_worst, rel(beta_law, beta_int))
+        check('beta_at_pass', beta_law, beta_int, 1e-12)
+        check('pass_bed', p['bed'], v['topg'] - v['eus'], 1e-12)
+        check('pass_N', p['N'], v['effecpress_stag'], 1e-12)
+
+    print(f"# accepted-pass velo_iter distribution: {dict(pass_iter)}", file=sys.stderr)
+    print(f"# chain worst rel (law at the accepted pass vs dumped beta_internal): "
           f"{chain_worst:.3e}", file=sys.stderr)
     for name in sorted(stats):
         print(f"# {name:16s} {stats[name][0]:4d} checks, worst rel {stats[name][1]:.3e}",
@@ -279,19 +346,67 @@ def main():
     assert fails == 0, f"{fails} law mismatches"
     print("# ALL LAWS VERIFIED on 128 exit rows", file=sys.stderr)
 
-    # ---- emit test fragments ----------------------------------------------
-    def overrides(row, names):
-        return {k: row[k] for k in names}
+    # ---- marine-margin boundary -------------------------------------------
+    me = {}
+    mp = {}
+    try:
+        _, mex = load(os.path.join(a.dumps_dir, "cism_velo_marine_exit.csv"))
+        _, mpas = load(os.path.join(a.dumps_dir, "cism_velo_marine_pass.csv"))
+    except FileNotFoundError:
+        mex, mpas = [], []
+    for r in mex:
+        me[f"{r['cism_step']}_{r['i']}_{r['j']}"] = r
+    for r in mpas:
+        mp.setdefault((r['cism_step'], r['i'], r['j']), []).append(r)
+    if me:
+        print(f"# marine exit rows {len(me)}, pass rows {len(mpas)}", file=sys.stderr)
+        mfg = sorted(set(r['f_ground'] for r in me.values()))
+        print(f"# marine exit f_ground values: {mfg}", file=sys.stderr)
+        for key, m in me.items():
+            rows = mp[(m['cism_step'], m['i'], m['j'])]
+            hits = [r for r in rows if rel(r['f_ground'] * r['beta'], m['beta_internal']) < 1e-14]
+            assert len(hits) == 1, (key, len(hits))
+            p = hits[0]
+            beta_law = m['f_ground'] * basal_beta(p['u'], p['v'], p['bed'], p['N'])
+            assert rel(beta_law, m['beta_internal']) < 1e-12, (key, rel(beta_law, m['beta_internal']))
+    else:
+        print("# marine dumps absent; marine fragments skipped", file=sys.stderr)
 
-    # DivaGeometry fragments
-    out = {"geom": [], "integrals": [], "integrals_inactive": [], "velo": []}
-    for step, i, j in GEOM_ROWS:
-        key = f"{step}_{i}_{j}"
-        v, n = ve[key], ne[key]
+    # ---- emit test fragments ----------------------------------------------
+    out = {"geom": [], "integrals": [], "integrals_inactive": [], "velo": [], "marine": []}
+
+    def sigma_of(n):
+        return [n[f'sigma_{k:03d}'] for k in range(1, NZ + 1)]
+
+    def efvs_of(n):
+        return {p: [n[f'efvs_q{p}_{k:03d}'] for k in range(1, NL + 1)] for p in range(1, 5)}
+
+    def integ_overrides(v, n, s):
+        ov = {"sigma": sigma_of(n)}
+        for p in range(1, 5):
+            ov[f"efvs_q{p}"] = efvs_of(n)[p]
+        ov.update({
+            "thck": v["thck"], "ice_mask": v["ice_mask"],
+            "omega_se": n["omega_se"], "omega_nw": n["omega_nw"], "omega_ne": n["omega_ne"],
+            "ipl_mask_sw": s["ice_plus_land_mask_sw"], "ipl_mask_se": s["ice_plus_land_mask_se"],
+            "ipl_mask_nw": s["ice_plus_land_mask_nw"], "ipl_mask_ne": s["ice_plus_land_mask_ne"],
+            "omega_k_se": [s[f'omega_k_se_{k:03d}'] for k in range(1, NZ + 1)],
+            "omega_k_nw": [s[f'omega_k_nw_{k:03d}'] for k in range(1, NZ + 1)],
+            "omega_k_ne": [s[f'omega_k_ne_{k:03d}'] for k in range(1, NZ + 1)],
+        })
+        return ov
+
+    def geom_overrides(n):
         ov = {}
         for tag in ('sw', 'se', 'nw', 'ne'):
             for q in ('usrf', 'thck', 'ice_mask', 'land_mask'):
                 ov[f'{q}_{tag}'] = n[f'{q}_{tag}']
+        return ov
+
+    # DivaGeometry fragments
+    for step, i, j in GEOM_ROWS:
+        key = f"{step}_{i}_{j}"
+        v, n = ve[key], ne[key]
         src = {"dusrf_dx": n["dusrf_dx"], "dusrf_dy": n["dusrf_dy"], "stagthck": v["stagthck"],
                "taudx": v["taudx"], "taudy": v["taudy"],
                "theta_x": n["stag_theta_slope_x"], "theta_y": n["stag_theta_slope_y"],
@@ -303,7 +418,7 @@ def main():
         tol = {"dusrf_dx": 1e-11, "dusrf_dy": 1e-11, "taudx": 1e-11, "taudy": 1e-11}
         out["geom"].append({
             "id": f"geom_step{step}_cell{i}{j}",
-            "parameter_overrides": ov,
+            "parameter_overrides": geom_overrides(n),
             "assertions": [{"variable": nm, "time": 0.0, "expected": src[nm],
                             "tolerance": {"rel": tol.get(nm, 1e-12)}} for nm in src],
         })
@@ -311,15 +426,7 @@ def main():
     # DivaIntegrals fragments
     for step, i, j in INTEGRAL_ROWS:
         key = f"{step}_{i}_{j}"
-        v, n = ve[key], ne[key]
-        ov = {"sigma": [n[f'sigma_{k:03d}'] for k in range(1, NZ + 1)],
-              "efvs_q1": [n[f'efvs_q1_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q2": [n[f'efvs_q2_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q3": [n[f'efvs_q3_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q4": [n[f'efvs_q4_{k:03d}'] for k in range(1, NL + 1)],
-              "thck": v["thck"], "ice_mask": v["ice_mask"],
-              "omega_se": n["omega_se"], "omega_nw": n["omega_nw"], "omega_ne": n["omega_ne"]}
-        # efvs lives in the nbr dump (cell-centered mean over quad points)
+        v, n, s = ve[key], ne[key], se[key]
         assertions = [
             {"variable": "efvs", "time": 0.0, "expected": n[f'efvs_{k:03d}'],
              "coords": {"lev": k}, "tolerance": {"rel": 1e-12}}
@@ -336,24 +443,25 @@ def main():
             {"variable": "stag_omega", "time": 0.0, "expected": n["stag_omega"],
              "tolerance": {"rel": 1e-12}},
         ]
+        assertions += [
+            {"variable": "stag_omega_k", "time": 0.0, "expected": n[f'stag_omega_k_{k:03d}'],
+             "coords": {"lev_nodes": k}, "tolerance": {"rel": 1e-12}}
+            for k in (1, 6, 11)
+        ]
         out["integrals"].append({
             "id": f"int_step{step}_cell{i}{j}",
-            "parameter_overrides": ov,
+            "parameter_overrides": integ_overrides(v, n, s),
             "assertions": assertions,
         })
     for step, i, j in INTEGRAL_INACTIVE_ROWS:
         key = f"{step}_{i}_{j}"
-        v, n = ve[key], ne[key]
-        ov = {"sigma": [n[f'sigma_{k:03d}'] for k in range(1, NZ + 1)],
-              "efvs_q1": [n[f'efvs_q1_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q2": [n[f'efvs_q2_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q3": [n[f'efvs_q3_{k:03d}'] for k in range(1, NL + 1)],
-              "efvs_q4": [n[f'efvs_q4_{k:03d}'] for k in range(1, NL + 1)],
-              "thck": v["thck"], "ice_mask": v["ice_mask"],
-              "omega_se": n["omega_se"], "omega_nw": n["omega_nw"], "omega_ne": n["omega_ne"]}
+        v, n, s = ve[key], ne[key], se[key]
+        masks = [s[f'ice_plus_land_mask_{t}'] for t in ('sw', 'se', 'nw', 'ne')]
+        ok_vals = {t: [s[f'omega_k_{t}_{k:03d}'] for k in range(1, NZ + 1)]
+                   for t in ('sw', 'se', 'nw', 'ne')}
         out["integrals_inactive"].append({
             "id": f"int_step{step}_cell{i}{j}_inactive",
-            "parameter_overrides": ov,
+            "parameter_overrides": integ_overrides(v, n, s),
             "assertions": [
                 {"variable": "efvs", "time": 0.0, "expected": 0.0,
                  "coords": {"lev": 1}, "tolerance": {"rel": 1e-12}},
@@ -363,37 +471,70 @@ def main():
                  "tolerance": {"rel": 1e-12}},
                 {"variable": "stag_omega", "time": 0.0, "expected": n["stag_omega"],
                  "tolerance": {"rel": 1e-12}},
+                {"variable": "stag_omega_k", "time": 0.0,
+                 "expected": masked_mean([ok_vals[t][0] for t in ('sw', 'se', 'nw', 'ne')], masks),
+                 "coords": {"lev_nodes": 1}, "tolerance": {"rel": 1e-12}},
             ],
         })
 
     # DivaVelocity fragments
     for step, i, j in VELO_ROWS:
         key = f"{step}_{i}_{j}"
-        v, n = ve[key], ne[key]
-        ov = {
-            "BasalTraction.u": v["uvel_011"], "BasalTraction.v": v["vvel_011"],
-            "BasalTraction.bed": v["topg"] - v["eus"], "BasalTraction.N_stag": v["effecpress_stag"],
-            "uvel_2d": v["uvel_2d"], "vvel_2d": v["vvel_2d"],
-            "uvel_basal": v["uvel_011"], "vvel_basal": v["vvel_011"],
-            "f_ground": v["f_ground"],
-            "omega": n["stag_omega"],
-            "stag_omega_k": [n[f'stag_omega_k_{k:03d}'] for k in range(1, NZ + 1)],
-            "theta_x": n["stag_theta_slope_x"], "theta_y": n["stag_theta_slope_y"],
-            "F_x": n["stag_diva_slope_factor_x"], "F_y": n["stag_diva_slope_factor_y"],
-        }
+        v, n, s = ve[key], ne[key], se[key]
+        p = [r for r in bt_by_cell[(v['cism_step'], v['i'], v['j'])]
+             if rel(r['beta'], n['beta_internal']) < 1e-14][0]
+        ov = {"BasalTraction.u": p["u"], "BasalTraction.v": p["v"],
+              "BasalTraction.bed": p["bed"], "BasalTraction.N_stag": p["N"],
+              "uvel_2d": v["uvel_2d"], "vvel_2d": v["vvel_2d"],
+              "uvel_basal": v["uvel_011"], "vvel_basal": v["vvel_011"],
+              "f_ground": v["f_ground"]}
+        ov.update({f"DivaGeometry.{k}": val for k, val in geom_overrides(n).items()})
+        ov.update({f"DivaIntegrals.{k}": val for k, val in integ_overrides(v, n, s).items()})
         src = {"beta_internal": n["beta_internal"], "beta_eff_x": n["beta_eff_x"],
                "beta_eff_y": n["beta_eff_y"], "btractx": v["btractx"], "btracty": v["btracty"],
                "uvel_basal_recovered": v["uvel_011"], "vvel_basal_recovered": v["vvel_011"]}
         assertions = [{"variable": nm, "time": 0.0, "expected": src[nm],
-                       "tolerance": {"rel": 1e-5}} for nm in src]
+                       "tolerance": {"rel": 1e-12}} for nm in src]
         prof_levels = range(1, NZ + 1) if (step, i, j) == (1, 22, 13) else (1, 6, 11)
         for kk in prof_levels:
             assertions.append({"variable": "uvel", "time": 0.0, "expected": v[f'uvel_{kk:03d}'],
-                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-5}})
+                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-12}})
             assertions.append({"variable": "vvel", "time": 0.0, "expected": v[f'vvel_{kk:03d}'],
-                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-5}})
+                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-12}})
         out["velo"].append({"id": f"velo_step{step}_cell{i}{j}",
                             "parameter_overrides": ov, "assertions": assertions})
+
+    # marine fragments (same coupled-chain shape as the velo fragments)
+    for step, i, j in MARINE_ROWS:
+        key = f"{step}_{i}_{j}"
+        if key not in me:
+            print(f"# marine row {key} absent; skipped", file=sys.stderr)
+            continue
+        m = me[key]
+        p = [r for r in mp[(m['cism_step'], m['i'], m['j'])]
+             if rel(r['f_ground'] * r['beta'], m['beta_internal']) < 1e-14][0]
+        n = m  # the marine exit row carries the nbr + stag columns
+        s = m
+        v = m
+        ov = {"BasalTraction.u": p["u"], "BasalTraction.v": p["v"],
+              "BasalTraction.bed": p["bed"], "BasalTraction.N_stag": p["N"],
+              "uvel_2d": v["uvel_2d"], "vvel_2d": v["vvel_2d"],
+              "uvel_basal": v["uvel_011"], "vvel_basal": v["vvel_011"],
+              "f_ground": v["f_ground"]}
+        ov.update({f"DivaGeometry.{k}": val for k, val in geom_overrides(n).items()})
+        ov.update({f"DivaIntegrals.{k}": val for k, val in integ_overrides(v, n, s).items()})
+        src = {"beta_internal": n["beta_internal"], "beta_eff_x": n["beta_eff_x"],
+               "beta_eff_y": n["beta_eff_y"], "btractx": v["btractx"], "btracty": v["btracty"],
+               "uvel_basal_recovered": v["uvel_011"], "vvel_basal_recovered": v["vvel_011"]}
+        assertions = [{"variable": nm, "time": 0.0, "expected": src[nm],
+                       "tolerance": {"rel": 1e-12}} for nm in src]
+        for kk in (1, 6, 11):
+            assertions.append({"variable": "uvel", "time": 0.0, "expected": v[f'uvel_{kk:03d}'],
+                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-12}})
+            assertions.append({"variable": "vvel", "time": 0.0, "expected": v[f'vvel_{kk:03d}'],
+                               "coords": {"lev_nodes": kk}, "tolerance": {"rel": 1e-12}})
+        out["marine"].append({"id": f"marine_step{step}_cell{i}{j}",
+                              "parameter_overrides": ov, "assertions": assertions})
 
     json.dump(out, sys.stdout, indent=1)
 
