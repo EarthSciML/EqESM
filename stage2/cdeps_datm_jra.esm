@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cdeps_datm_jra",
-  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the JRA55 v1.5 forcing with the JRA datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:271-322), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub (0 at night for the coszen streams), the identical law to the CLMNCEP Streams model of cdeps_datm_gswp3.esm but applied here via the factored stream_interp template; (2) Jra - the JRA55 datamode: the exports are direct copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum - no qsat cap in this datamode, the humidity passes through), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v, Sa_dens = pbot/(rdair*tbot*(1+0.608*shum)) with the moisture coefficient 0.608 an UNSUFFIXED single-precision literal (the law uses r4(0.608) = 0.6079999804496765, see bugs.md), the precip split as a step at tbot = TKFRZ (or the prrn/prsn stream passthrough when the streams separate rain and snow), the LY08 albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) with the 0.069/0.011 coefficients likewise UNSUFFIXED single-precision literals (the law uses r4(0.069)/r4(0.011), see bugs.md) with Faxa_swnet = swdn*(1 - avg_alb), and the fixed swdn split 0.28/0.31/0.24/0.17; (3) JRAFiles - the netcdf reader path into the JRA55 v1.5 daily TL319 files (2920 records/yr, model year 1 aligned to data year 1958 as in the C_JRA_t62 case: taxmode = cycle, year_align = 1). The traced-row tests pin the stage-1 dumps of the C_JRA_t62_datm_inst run (datm_jra_streams.csv, datm_jra_exports.csv, cdeps_strdata_streams_jra.csv in stage1/dumps/cdeps/).",
+  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the JRA55 v1.5 forcing with the JRA datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:271-322), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub (0 at night for the coszen streams), the identical law to the CLMNCEP Streams model of cdeps_datm_gswp3.esm but applied here via the factored stream_interp template; (2) Jra - the JRA55 datamode: the exports are direct copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum - no qsat cap in this datamode, the humidity passes through), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v, Sa_dens = pbot/(rdair*tbot*(1+0.608*shum)) with the moisture coefficient 0.608 an UNSUFFIXED single-precision literal (the law uses r4(0.608) = 0.6079999804496765, see bugs.md), the precip split as a step at tbot = TKFRZ (or the prrn/prsn stream passthrough when the streams separate rain and snow), the LY08 albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) with the 0.069/0.011 coefficients likewise UNSUFFIXED single-precision literals (the law uses r4(0.069)/r4(0.011), see bugs.md) with Faxa_swnet = swdn*(1 - avg_alb), and the fixed swdn split 0.28/0.31/0.24/0.17; (3) JRAFiles - the netcdf reader path into the JRA55 v1.5 daily TL319 files (2920 records/yr). The eight data_sources point at the public NCAR CESM inputdata server (https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/) with [year] url templates (the esm 0.7.0 CLI's template syntax for date placeholders, which this CLI expands; the esm-spec {date:...} token form is not expandable by it), temporal blocks matching the archive holdings (1958..2020, P1Y files of P1D records, 2920 per file, time variable 'time') and reference blocks; model year 1 aligns to data year 1958 as in the C_JRA_t62 case (taxmode = cycle, year_align = 1). The JRAFiles model carries no inline test: its raw-record assertions read the 2920-record files (two tests, about 27 min of suite time) and were dropped as a coverage gap (the reader path is exercised downstream by consumers with data access). The traced-row tests pin the stage-1 dumps of the C_JRA_t62_datm_inst run (datm_jra_streams.csv, datm_jra_exports.csv, cdeps_strdata_streams_jra.csv in stage1/dumps/cdeps/).",
   "references": [
    {
     "citation": "JRA55 datamode of the CDEPS data-atmosphere component, ESCOMP/CDEPS cdeps1.0.112, datm/datm_datamode_jra_mod.F90 (the source of the pinned laws)."
@@ -26,7 +26,20 @@
   "JRA_prec": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.prec.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.prec.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -58,7 +71,20 @@
   "JRA_lwdn": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.lwdn.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.lwdn.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -90,7 +116,20 @@
   "JRA_swdn": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.swdn.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.swdn.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -122,7 +161,20 @@
   "JRA_q10": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.q_10.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.q_10.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -154,7 +206,20 @@
   "JRA_slp": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.slp.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.slp.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -186,7 +251,20 @@
   "JRA_t10": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.t_10.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.t_10.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -218,7 +296,20 @@
   "JRA_u10": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.u_10.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.u_10.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -250,7 +341,20 @@
   "JRA_v10": {
    "kind": "grid",
    "source": {
-    "url_template": "file:///projects/illinois/eng/cee/ctessum/ctessum/code/EqESM/stage1/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.v_10.TL319.1958.210504.nc"
+    "url_template": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/JRA.v1.5.v_10.TL319.[year].210504.nc"
+   },
+   "temporal": {
+    "start": "1958-01-01T00:00:00Z",
+    "end": "2020-12-31T23:59:59Z",
+    "file_period": "P1Y",
+    "frequency": "P1D",
+    "records_per_file": 2920,
+    "time_variable": "time"
+   },
+   "reference": {
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "doi": "10.2151/jmsj.2015-001",
+    "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
    "select": {
     "axes": [
@@ -2058,204 +2162,7 @@
     }
    },
    "equations": [],
-   "tests": [
-    {
-     "id": "first_record_cell_00",
-     "description": "Reader path: record 1 (1958-01-01) of every JRA55 source at the fixed cell (lat index 0 = -89.57 deg, lon index 0 = 0 deg), i.e. the raw netcdf values the streams layer interpolates from (JRA.v1.5.*.TL319.1958.210504.nc, file record 1 = time 1.5 h = daily mean of Jan 1).",
-     "time_span": {
-      "start": 0.0,
-      "end": 0.0
-     },
-     "assertions": [
-      {
-       "variable": "prec",
-       "time": 0.0,
-       "expected": 0.0,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "lwdn",
-       "time": 0.0,
-       "expected": 142.08123779296875,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "swdn",
-       "time": 0.0,
-       "expected": 429.0180969238281,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "q_10",
-       "time": 0.0,
-       "expected": 0.0007607339648529887,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "slp",
-       "time": 0.0,
-       "expected": 101335.5703125,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "t_10",
-       "time": 0.0,
-       "expected": 253.23672485351562,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "u_10",
-       "time": 0.0,
-       "expected": -3.1722843647003174,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "v_10",
-       "time": 0.0,
-       "expected": -1.6584659814834595,
-       "coords": {
-        "record": 1
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      }
-     ]
-    },
-    {
-     "id": "last_record_cell_00",
-     "description": "Reader path: record 2920 (1958-12-31, the last daily mean of the year) of every JRA55 source at the fixed cell, pinning the extent metaparameter N_REC = 2920 and the record-count handling of the reader.",
-     "time_span": {
-      "start": 0.0,
-      "end": 0.0
-     },
-     "assertions": [
-      {
-       "variable": "prec",
-       "time": 0.0,
-       "expected": 9.268851499655284e-06,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "lwdn",
-       "time": 0.0,
-       "expected": 145.56158447265625,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "swdn",
-       "time": 0.0,
-       "expected": 417.2540283203125,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "q_10",
-       "time": 0.0,
-       "expected": 0.0008505410514771938,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "slp",
-       "time": 0.0,
-       "expected": 100677.953125,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "t_10",
-       "time": 0.0,
-       "expected": 253.22518920898438,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "u_10",
-       "time": 0.0,
-       "expected": -0.7936095595359802,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      },
-      {
-       "variable": "v_10",
-       "time": 0.0,
-       "expected": -4.310102462768555,
-       "coords": {
-        "record": 2920
-       },
-       "tolerance": {
-        "rel": 1e-12
-       }
-      }
-     ]
-    }
-   ]
+   "tests": []
   }
  }
 }
