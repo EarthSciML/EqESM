@@ -1892,6 +1892,48 @@
      "ofrac"
     ]
    }
+  },
+"land_ice_ocean_weighted_sum": {
+   "description": "Fraction-weighted sum of the land, ice and open-ocean source values of an atmosphere export (the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 applied with the three-source merge lists of med_phases_prep_atm in mediator/med_phases_prep_atm_mod.F90:149-157): (land_value*land_frac + ice_value*ice_frac) + ocean_value*ocean_frac, land term first, matching the source order (complnd, compice, compocn/compmed) of the merge specs of esmFldsExchange_cesm_mod.F90 (the albedo group L875-887/902-914/929-941/956-968, the reference group L988-1002/1014-1029/1045-1063, the flux group L1085-1099/1112-1126/1139-1153/1166-1180/1196-1211/1236-1250 and Sx_t L1267-1279; the ocean sources come from FBMed_ocnalb_a for the So_* albedos and from FBMed_aoflux_a for So_tref/So_u10/So_qref/Faox_*, and So_t of Sx_t from the mapped FBImp(compocn,compatm)). The land weight is mrg_fracname_lnd2atm_state/flux = 'lfrac' for the traced samegrid_atmlnd configuration (an atm-grid lfrac), the ice weight 'ifrac' and the open-ocean weight 'ofrac'. The binary fraction_weighted_sum covers the two-source ocn-export merges; this template covers the three-source atm-export merges, where the F90 accumulation order (lnd, then ice, then ocn) is preserved.",
+   "params": [
+    "land_value",
+    "ice_value",
+    "ocean_value",
+    "land_frac",
+    "ice_frac",
+    "ocean_frac"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "land_value",
+         "land_frac"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "ice_value",
+         "ice_frac"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       "ocean_value",
+       "ocean_frac"
+      ]
+     }
+    ]
+   }
   }
  }
 }
