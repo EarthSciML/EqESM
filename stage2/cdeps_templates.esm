@@ -798,7 +798,7 @@
    }
   },
   "stream_interp": {
-   "description": "The stream time-interpolation law of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391, cdeps1.0.112): the interpolated value is the convex combination of the lower/upper time-bound stream values with the shr_tInterp_getFactors factors, value = flb*lb + fub*ub (linear: flb+fub = 1; nearest/lower/upper: unit vectors), except for the coszen special case where value = lb*cosz/tavCosz by day (the dumped factor flb IS cosz/tavCosz and fub = 0) and 0 at night, i.e. when the true cosz <= 0.001 (the dumped flb is then 0 too; the day flag is 1 by day and 0 at night so the night branch is testable even on a polar-day trace). Shared by every datm datamode; the CLMNCEP component (cdeps_datm_gswp3.esm Streams model) carries the identical inline equation.",
+   "description": "The stream time-interpolation law of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391, cdeps1.0.112): the interpolated value is the convex combination of the lower/upper time-bound stream values with the shr_tInterp_getFactors factors, value = flb*lb + fub*ub (linear: flb+fub = 1; nearest/lower/upper: unit vectors), except for the coszen special case where value = lb*cosz/tavCosz by day (the dumped factor flb IS cosz/tavCosz and fub = 0) and 0 at night, i.e. when the true cosz <= 0.001 (the dumped flb is then 0 too; the day flag is 1 by day and 0 at night so the night branch is testable even on a polar-day trace). Shared by every datm datamode; applied by reference in the JRA (cdeps_datm_jra.esm) and CLMNCEP (cdeps_datm_gswp3.esm) Streams models.",
    "params": [
     "lb",
     "ub",
