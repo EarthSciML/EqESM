@@ -669,12 +669,6 @@
      "default": 333700.0,
      "description": "Latent heat of fusion latice = SHR_CONST_LATICE (shr_const_mod.F90:34), [J/kg]; dump constant latice"
     },
-    "tmelt": {
-     "type": "parameter",
-     "units": "K",
-     "default": 273.15,
-     "description": "Freezing temperature tmelt = tfreez = SHR_CONST_TKFRZ (shr_const_mod.F90:41), passed by zm_conv_intr.F90:671-679, [K]; dump constant tfreez"
-    },
     "cpres": {
      "type": "parameter",
      "units": "J/(kg*K)",
@@ -1117,7 +1111,12 @@
         "op": ">",
         "args": [
          "t1",
-         "tmelt"
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "tmelt",
+          "bindings": {}
+         }
         ]
        },
        {
@@ -1139,7 +1138,12 @@
         "op": ">",
         "args": [
          "t1",
-         "tmelt"
+         {
+          "op": "apply_expression_template",
+          "args": [],
+          "name": "tmelt",
+          "bindings": {}
+         }
         ]
        },
        {
@@ -1767,7 +1771,6 @@
       "gravit": 9.80616,
       "latvap": 2501000.0,
       "latice": 333700.0,
-      "tmelt": 273.15,
       "cpres": 1004.64,
       "ke": 5e-06,
       "deltat": 1800.0
@@ -2324,7 +2327,6 @@
       "gravit": 9.80616,
       "latvap": 2501000.0,
       "latice": 333700.0,
-      "tmelt": 273.15,
       "cpres": 1004.64,
       "ke": 5e-06,
       "deltat": 1800.0
@@ -2859,7 +2861,6 @@
       "gravit": 9.80616,
       "latvap": 2501000.0,
       "latice": 333700.0,
-      "tmelt": 273.15,
       "cpres": 1004.64,
       "ke": 5e-06,
       "deltat": 1800.0
@@ -3413,7 +3414,6 @@
       "gravit": 9.80616,
       "latvap": 2501000.0,
       "latice": 333700.0,
-      "tmelt": 273.15,
       "cpres": 1004.64,
       "ke": 5e-06,
       "deltat": 1800.0
