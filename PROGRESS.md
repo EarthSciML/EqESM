@@ -1447,3 +1447,73 @@ Streams via `stream_interp`), `esm-pr-clm-soil` (EarthSciModels branch
 `clm-soil`, not pushed). Fork ownership now: CAM cam-rad-instrument, CLM
 clm-veg-instrument, CMEPS cmeps-prep-atm, MOM6/CISM/CICE the three above.
 18 agent jobs queued or running.
+
+## Lane round 2026-11-09 (manager review of 15 finished runs)
+
+Four independent read-only review agents checked the 11 code branches,
+spot-checking pins against the dumps; the manager reviewed the stage-1,
+docs and cdeps branches directly and acted on all verdicts. Suite on main
+`7a27615`: job **12284981** (`.work/suite-7a27615/suite.log`, worktree
+`../EqESM-suite-7a27615`) — pending. Rough expectation from the branch
+counts: 2662 + 162 (physics_update, replacing 572 old) + 190 (zm parcel/
+closure) + 56 (vertdiff) + ~19 (cism_velo net) − 16 (JRA reader).
+
+- **Merged (8):** `clm-veg-instrument` (eee5c6e; CLM vegetated-patch
+  stage-1 dumps, clm afbae49dd / fork ba8941f, restart 292/292 identical;
+  CTSM_LANE.md W2d section, conflict with the W3→W4 rename resolved by
+  hand), `cam-rad-instrument` (73c0782; 8 RRTMG CSVs, run 12255018, heating
+  = flux divergence to 3e-16; cam 81922142), `m9-clm-mosart` (ec94fe0;
+  gate **not feasible**: the CLM lane dumps no runoff fields — README holds
+  the exact dump spec for both sides), `cam-physics-update3` (ee8b58e; all
+  send-back items done; manager dropped 7 pins within 1e-12 of their
+  override, made the extractor's copy check tolerance-aware, and restored
+  8 cam_templates literals the worker's JSON round-trip had respelled),
+  `cam-zm-parcel2` (e8af3f2; manager relabelled 15 qst pins as dump-sourced
+  — they equal the `qs` column — and fixed the README dz wording),
+  `mom6-vertdiff` (0364523; diffusion as a PDE on ESD
+  `varcoeff_face_laplacian_lev_flux_bc`, backward-Euler operator pinned;
+  manager dropped 4 deep-layer pins at rel 1e-3/abs 2e-8), `cism-velo3`
+  (c2d4d55; `cism_stagger_masked_mean`, beta chain exact at 1e-12, marine
+  dumps, fork 3d214b4; manager dropped 20 lev-11 pins — bed uvel/vvel equal
+  the basal overrides, omega_k/stag_omega_k ≡ 0 — and refreshed stale
+  metadata), `cdeps-jra-portable` (3445f04; JRA data_sources on the NCAR
+  server with `[year]` templates — the esm 0.7.0 reader does not expand
+  `{date:%Y}`; reader tests dropped; GSWP3 via `stream_interp`).
+- **Suite environment:** the JRA sources make `esm test` download ~19 GB
+  into EarthSciIO's cache, default root `$TMPDIR` (RAM). `tools/esm-suite.sh`
+  now exports `ESM_CACHE_DIR=/scratch.local/ctessum/earthsci-esm-cache`.
+- **Sent back (6, submitted):** `cam-zm-evap2` (q/s flux-divergence and
+  subcloud blocks repeated; share estbl via the library; tmelt reuse;
+  commit tuple scripts), `cice-dedd4` (duplicate/wrapper fresnel templates,
+  inline interface_refk, mask template, 16 unfailable pins),
+  `cice-tracer-transport2` (per-assertion fitted tolerances ≥ the whole
+  entry→exit change in 99/105 pins → failable uniform-tracer and t = 0
+  divergence pins; factoring; Tsfcn guard), `mom6-shortwave2` (τ as ESD
+  cumulative integral; I_Habs bug entry numbers wrong — sumSWoverBands
+  runs with dt = 1), `mom6-frazil-bflux2` (no-formation outcome written as
+  equations, ~half the pins unfailable; column sums/p_top as integrals),
+  `cmeps-prep-atm2` (continue: build/run/verify, stage 2).
+- **Workers writing into the main checkout:** cmeps-prep-atm wrote all its
+  files into `$M` and ended after 2.5 h "waiting on the background build"
+  (moved to its branch as ff7746f); clm-veg/cam-rad left identical copies
+  of committed files; mom6-vertdiff wrote then reverted;
+  cice-itd-ridge committed 58f3a44 on main. New shared rules block
+  `.slurm-agents/prompts/_rules-2026-11-09.md` adds "work only in your
+  worktree / never commit on main", "one law, one template" (dedupe before
+  appending), tolerance-aware copy checks, and ESM_CACHE_DIR.
+- **esm-pr-clm-soil:** EarthSciModels branch `clm-soil` (8e66171, worktree
+  `../EarthSciModels-wt-clm-soil`, PR_DESCRIPTION.md ready): bareground/
+  soiltemp/soilfluxes + a 35-template clm_templates subset (psixhu_unstable
+  inlined from cmeps), Rust 335P/0F/0E. Python gate 260E is the known
+  array-override runner bug. Not pushed — awaiting user decision.
+- **Still running:** `mom6-dynamics-instrument`, `cice-itd-ridge` (their
+  uncommitted lane-doc edits are in the main checkout; leave them).
+- **Next:** read suite 12284981; review the 6 follow-ups and the 2 running
+  jobs; open tasks — an ESD `transport_flux_divergence` variant over
+  [i,j,ncat,layer] (removes CICE's 12 per-layer unknowns); lane-wide MOM6
+  conversion of faq prefix sums (kpp `z_inter`, `pRef`, frazil `p_top`) to
+  ESD cumulative integrals; CISM `stagthck` via `cism_stagger_masked_mean`
+  with unit masks; ZM closure `dz` as the true layer measure; JRA temporal
+  `frequency` (P1D vs 2920 records/yr = 3-hourly); M9 land→river needs a
+  CLM runoff dump (spec in README-m9-clm-mosart.md); clm-soilfluxes
+  `t_grnd0` follow-up.
