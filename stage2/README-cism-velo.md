@@ -34,7 +34,7 @@ and `stage1/runs/cism_instrument.json`.
 
 | File | Contents |
 |---|---|
-| `cism_velo.esm` | the three pointwise components `DivaGeometry`, `DivaIntegrals`, `DivaVelocity` (17 tests, 175 assertions), plus the top-level mount of `BasalTraction` and the seven `variable_map` edges feeding `DivaVelocity` from the mounted/upstream components |
+| `cism_velo.esm` | the three pointwise components `DivaGeometry`, `DivaIntegrals`, `DivaVelocity` (17 tests, 155 assertions), plus the top-level mount of `BasalTraction` and the seven `variable_map` edges feeding `DivaVelocity` from the mounted/upstream components |
 | `cism_velo_discretization.esm` | local ESD-format σ-column rules: `NLAYERS = 10`, `lev`/`lev_nodes`, the `cism_sigma_measure` / `cism_sigma_midpoint` templates, and the `integral_lev_whole` / `integral_lev_nodes_cumulative_to_top` rules imported by reference from `EarthSciDiscretizations` with `NLEV = NLAYERS` |
 | `cism_templates.esm` (lines 376–742 + `cism_stagger_masked_mean` at the end) | the DIVA expression templates `cism_hybrid_edge_gradient`, `cism_vertex_gradient`, `cism_driving_stress`, `cism_theta_slope_x`, `cism_diva_slope_factor`, `cism_beta_eff`, and the vertex stagger `cism_stagger_masked_mean` |
 | `cism_basal.esm` | the mounted `BasalTraction` (pseudo-plastic law, its own 2P/0F tests live in that file) |
@@ -193,7 +193,10 @@ The laws:
 
 ## Testing
 
-`./esm test stage2/cism_velo.esm` runs 17 tests / 175 assertions
+`./esm test stage2/cism_velo.esm` runs 17 tests / 155 assertions
+(manager review 2026-11-09 removed 20 lev_nodes = 11 pins the extractor
+still emits: uvel/vvel at the bed equal the uvel_basal/vvel_basal overrides,
+and omega_k/stag_omega_k there are identically 0)
 (whole suite: 2662P/0F/0E, esm 0.7.0; `./esm units --check` clean apart from
 the pre-existing BasalTraction fractional-exponent notices).  Pinned rows
 (from the 128 exit rows of the 2026-11-09 dumps; all tuples at full dump
