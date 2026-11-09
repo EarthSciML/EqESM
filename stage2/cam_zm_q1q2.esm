@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cam_zm_q1q2",
-  "description": "Stage-2 implementation of the CAM Zhang-McFarlane deep-convection temperature and moisture tendencies q1q2_pjr (stage 2 of the EqESM project; instrumented cam6_4_212 fork of the SCAM ARM97_4scam run, dump window steps 18-23 and 40-48): the pointwise laws of zm_convr.F90:2584-2622 evaluated on the dumped convr state (the q1q2_pjr call of zm_convr.F90:718-724, inside the gathered-column loop; all dumped columns of the window are g = 1, jt = 15, maxg = 32 = pver). The tendencies: emc = -cme (the net condensation cu - evp of cldprp, F90:2586-2587), dqdt = emc + div(mu(qu - qhat) + md(qd - qhat))/dp (F90:2596-2601), dsdt = -rl/cp emc + div(mu(su - shat) + md(sd - shat))/dp (F90:2589-2594), and dl = du qcde(k+1) (F90:2603-2604) over the convection layer k = jt..pver-1, with the subcloud replacement at k = maxg: (1/dsubcld)(-mu(qu - qhat) - md(qd - qhat)) and the temperature analogue (F90:2611-2619), and the copy-down dqdt(k) = dqdt(k-1), dsdt(k) = dsdt(k-1) for k > maxg (F90:2620-2622). The four flux terms of each tendency are four applications of the shared law zm_mass_flux_excess (mu (x - xhat), cam_templates.esm) at the k and k+1 neighbors; the k+1 gather is clamped to min(k+1, PVER) and the piecewise mask (ifelse on the level index k against the scalar parameters jt and maxg) selects the flux form for jt <= k < maxg, the subcloud value (gathered at index maxg) for k >= maxg, and zero above jt; the masked branches of the dumped column are all zero anyway (mu = 0 above jt on the dump, so the flux form vanishes there; the copy-down never fires because maxg = pver on every dumped column). Levels are the CAM convention, lev 1 = model top, lev 32 = surface, exactly as dumped (no reversal). The dumped cme/mu/md/du/qu/su/qd/sd/qhat/shat/qcde/pdel enter as parameters; dqdt/dsdt/dlf are unknowns pinned against the dump rows. Tests at steps 18, 40 and 48 pin the tendencies at the convection top (lev 15 = jt), the downdraft region (lev 17), a deep level (lev 25) and the subcloud level (lev 32), and dl at the two detraining levels 15-16 where du > 0.",
+  "description": "Stage-2 implementation of the CAM Zhang-McFarlane deep-convection temperature and moisture tendencies q1q2_pjr (stage 2 of the EqESM project; instrumented cam6_4_212 fork of the SCAM ARM97_4scam run, dump window steps 18-23 and 40-48): the pointwise laws of zm_convr.F90:2584-2622 evaluated on the dumped convr state (the q1q2_pjr call of zm_convr.F90:718-724, inside the gathered-column loop; all dumped columns of the window are g = 1, jt = 15, maxg = 32 = pver). The tendencies: emc = -cme (the net condensation cu - evp of cldprp, F90:2586-2587), dqdt = emc + div(mu(qu - qhat) + md(qd - qhat))/dp (F90:2596-2601), dsdt = -rl/cp emc + div(mu(su - shat) + md(sd - shat))/dp (F90:2589-2594), and dl = du qcde(k+1) (F90:2603-2604) over the convection layer k = jt..pver-1, with the subcloud replacement at k = maxg: (1/dsubcld)(-mu(qu - qhat) - md(qd - qhat)) and the temperature analogue (F90:2611-2619), and the copy-down dqdt(k) = dqdt(k-1), dsdt(k) = dsdt(k-1) for k > maxg (F90:2620-2622). The flux divergence of each tendency is one application of the shared template zm_flux_divergence (cam_templates.esm, (F[min(k+1, PVER)] - F[k])/dp[k] of the layer-centered plume flux F = zm_flux = mu (x - xhat) + md (x - xhat), itself two applications of zm_mass_flux_excess) and the subcloud tendency is one application of zm_subcloud_tendency (-F[k]/dsubcld), both invoked once for q and once for s; the k+1 gather is clamped to min(k+1, PVER) and the piecewise mask (ifelse on the level index k against the scalar parameters jt and maxg) selects the flux form for jt <= k < maxg, the subcloud value (gathered at index maxg) for k >= maxg, and zero above jt; the masked branches of the dumped column are all zero anyway (mu = 0 above jt on the dump, so the flux form vanishes there; the copy-down never fires because maxg = pver on every dumped column). Levels are the CAM convention, lev 1 = model top, lev 32 = surface, exactly as dumped (no reversal). The dumped cme/mu/md/du/qu/su/qd/sd/qhat/shat/qcde/pdel enter as parameters; dqdt/dsdt/dlf are unknowns pinned against the dump rows. Tests at steps 18, 40 and 48 pin the tendencies at the convection top (lev 15 = jt), the downdraft region (lev 17), a deep level (lev 25) and the subcloud level (lev 32), and dl at the two detraining levels 15-16 where du > 0.",
   "license": "MIT",
   "tags": [
    "eqesm:stage2",
@@ -199,7 +199,7 @@
      ],
      "units": "kg/(kg*s)",
      "default": 0.0,
-     "description": "Moisture flux divergence (mu(qu - qhat) + md(qd - qhat))/dp of the q1q2 dqdt law (zm_convr.F90:2596-2601), [kg/kg/s]"
+     "description": "Moisture flux divergence of the q1q2 dqdt law (zm_convr.F90:2596-2601), one application of the zm_flux_divergence template for the q species, (F[min(k+1, PVER)] - F[k])/dp[k] with F = zm_flux(mu, qu, md, qd, qhat), [kg/kg/s]"
     },
     "fd_s": {
      "type": "unknown",
@@ -208,7 +208,7 @@
      ],
      "units": "K/s",
      "default": 0.0,
-     "description": "Dry static energy flux divergence (mu(su - shat) + md(sd - shat))/dp of the q1q2 dsdt law (zm_convr.F90:2589-2594), [K/s]"
+     "description": "Dry static energy flux divergence of the q1q2 dsdt law (zm_convr.F90:2589-2594), one application of the zm_flux_divergence template for the s species, (F[min(k+1, PVER)] - F[k])/dp[k] with F = zm_flux(mu, su, md, sd, shat), [K/s]"
     },
     "sub_dqdt": {
      "type": "unknown",
@@ -217,7 +217,7 @@
      ],
      "units": "kg/(kg*s)",
      "default": 0.0,
-     "description": "Subcloud moisture tendency (1/dsubcld)(-mu(qu - qhat) - md(qd - qhat)) of zm_convr.F90:2616-2619, evaluated on every level and gathered at index maxg by the dqdt mask, [kg/kg/s]"
+     "description": "Subcloud moisture tendency of zm_convr.F90:2616-2619, one application of the zm_subcloud_tendency template for the q species, (1/dsubcld)(-F[k]) with F = zm_flux(mu, qu, md, qd, qhat), evaluated on every level and gathered at index maxg by the dqdt mask, [kg/kg/s]"
     },
     "sub_dsdt": {
      "type": "unknown",
@@ -226,7 +226,7 @@
      ],
      "units": "K/s",
      "default": 0.0,
-     "description": "Subcloud temperature tendency (1/dsubcld)(-mu(su - shat) - md(sd - shat)) of zm_convr.F90:2612-2615, gathered at index maxg by the dsdt mask, [K/s]"
+     "description": "Subcloud temperature tendency of zm_convr.F90:2612-2615, one application of the zm_subcloud_tendency template for the s species, (1/dsubcld)(-F[k]) with F = zm_flux(mu, su, md, sd, shat), gathered at index maxg by the dsdt mask, [K/s]"
     },
     "dqdt": {
      "type": "unknown",
@@ -290,688 +290,68 @@
     {
      "lhs": "fd_q",
      "rhs": {
-      "op": "faq",
-      "output_idx": [
-       "k"
-      ],
-      "args": [
-       "mu",
-       "md",
-       "qu",
-       "qd",
-       "qhat",
-       "dp"
-      ],
-      "ranges": {
-       "k": {
-        "from": "lev"
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "zm_flux_divergence",
+       "bindings": {
+        "mu": "mu",
+        "xu": "qu",
+        "md": "md",
+        "xd": "qd",
+        "xhat": "qhat",
+        "dp": "dp",
+        "pver": "PVER"
        }
-      },
-      "expr": {
-       "op": "/",
-       "args": [
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "+",
-           "args": [
-            {
-             "op": "-",
-             "args": [
-              {
-               "op": "apply_expression_template",
-               "args": [],
-               "name": "zm_mass_flux_excess",
-               "bindings": {
-                "mu": {
-                 "op": "index",
-                 "args": [
-                  "mu",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                },
-                "x": {
-                 "op": "index",
-                 "args": [
-                  "qu",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                },
-                "xhat": {
-                 "op": "index",
-                 "args": [
-                  "qhat",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                }
-               }
-              },
-              {
-               "op": "apply_expression_template",
-               "args": [],
-               "name": "zm_mass_flux_excess",
-               "bindings": {
-                "mu": {
-                 "op": "index",
-                 "args": [
-                  "mu",
-                  "k"
-                 ]
-                },
-                "x": {
-                 "op": "index",
-                 "args": [
-                  "qu",
-                  "k"
-                 ]
-                },
-                "xhat": {
-                 "op": "index",
-                 "args": [
-                  "qhat",
-                  "k"
-                 ]
-                }
-               }
-              }
-             ]
-            },
-            {
-             "op": "apply_expression_template",
-             "args": [],
-             "name": "zm_mass_flux_excess",
-             "bindings": {
-              "mu": {
-               "op": "index",
-               "args": [
-                "md",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              },
-              "x": {
-               "op": "index",
-               "args": [
-                "qd",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              },
-              "xhat": {
-               "op": "index",
-               "args": [
-                "qhat",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              }
-             }
-            }
-           ]
-          },
-          {
-           "op": "apply_expression_template",
-           "args": [],
-           "name": "zm_mass_flux_excess",
-           "bindings": {
-            "mu": {
-             "op": "index",
-             "args": [
-              "md",
-              "k"
-             ]
-            },
-            "x": {
-             "op": "index",
-             "args": [
-              "qd",
-              "k"
-             ]
-            },
-            "xhat": {
-             "op": "index",
-             "args": [
-              "qhat",
-              "k"
-             ]
-            }
-           }
-          }
-         ]
-        },
-        {
-         "op": "index",
-         "args": [
-          "dp",
-          "k"
-         ]
-        }
-       ]
       }
-     }
     },
     {
      "lhs": "fd_s",
      "rhs": {
-      "op": "faq",
-      "output_idx": [
-       "k"
-      ],
-      "args": [
-       "mu",
-       "md",
-       "su",
-       "sd",
-       "shat",
-       "dp"
-      ],
-      "ranges": {
-       "k": {
-        "from": "lev"
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "zm_flux_divergence",
+       "bindings": {
+        "mu": "mu",
+        "xu": "su",
+        "md": "md",
+        "xd": "sd",
+        "xhat": "shat",
+        "dp": "dp",
+        "pver": "PVER"
        }
-      },
-      "expr": {
-       "op": "/",
-       "args": [
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "+",
-           "args": [
-            {
-             "op": "-",
-             "args": [
-              {
-               "op": "apply_expression_template",
-               "args": [],
-               "name": "zm_mass_flux_excess",
-               "bindings": {
-                "mu": {
-                 "op": "index",
-                 "args": [
-                  "mu",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                },
-                "x": {
-                 "op": "index",
-                 "args": [
-                  "su",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                },
-                "xhat": {
-                 "op": "index",
-                 "args": [
-                  "shat",
-                  {
-                   "op": "min",
-                   "args": [
-                    {
-                     "op": "+",
-                     "args": [
-                      "k",
-                      1
-                     ]
-                    },
-                    "PVER"
-                   ]
-                  }
-                 ]
-                }
-               }
-              },
-              {
-               "op": "apply_expression_template",
-               "args": [],
-               "name": "zm_mass_flux_excess",
-               "bindings": {
-                "mu": {
-                 "op": "index",
-                 "args": [
-                  "mu",
-                  "k"
-                 ]
-                },
-                "x": {
-                 "op": "index",
-                 "args": [
-                  "su",
-                  "k"
-                 ]
-                },
-                "xhat": {
-                 "op": "index",
-                 "args": [
-                  "shat",
-                  "k"
-                 ]
-                }
-               }
-              }
-             ]
-            },
-            {
-             "op": "apply_expression_template",
-             "args": [],
-             "name": "zm_mass_flux_excess",
-             "bindings": {
-              "mu": {
-               "op": "index",
-               "args": [
-                "md",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              },
-              "x": {
-               "op": "index",
-               "args": [
-                "sd",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              },
-              "xhat": {
-               "op": "index",
-               "args": [
-                "shat",
-                {
-                 "op": "min",
-                 "args": [
-                  {
-                   "op": "+",
-                   "args": [
-                    "k",
-                    1
-                   ]
-                  },
-                  "PVER"
-                 ]
-                }
-               ]
-              }
-             }
-            }
-           ]
-          },
-          {
-           "op": "apply_expression_template",
-           "args": [],
-           "name": "zm_mass_flux_excess",
-           "bindings": {
-            "mu": {
-             "op": "index",
-             "args": [
-              "md",
-              "k"
-             ]
-            },
-            "x": {
-             "op": "index",
-             "args": [
-              "sd",
-              "k"
-             ]
-            },
-            "xhat": {
-             "op": "index",
-             "args": [
-              "shat",
-              "k"
-             ]
-            }
-           }
-          }
-         ]
-        },
-        {
-         "op": "index",
-         "args": [
-          "dp",
-          "k"
-         ]
-        }
-       ]
       }
-     }
     },
     {
      "lhs": "sub_dqdt",
      "rhs": {
-      "op": "faq",
-      "output_idx": [
-       "k"
-      ],
-      "args": [
-       "mu",
-       "md",
-       "qu",
-       "qd",
-       "qhat"
-      ],
-      "ranges": {
-       "k": {
-        "from": "lev"
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "zm_subcloud_tendency",
+       "bindings": {
+        "mu": "mu",
+        "xu": "qu",
+        "md": "md",
+        "xd": "qd",
+        "xhat": "qhat",
+        "dsubcld": "dsubcld"
        }
-      },
-      "expr": {
-       "op": "*",
-       "args": [
-        {
-         "op": "/",
-         "args": [
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          },
-          "dsubcld"
-         ]
-        },
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "*",
-           "args": [
-            {
-             "op": "const",
-             "args": [],
-             "value": -1.0,
-             "units": "1"
-            },
-            {
-             "op": "apply_expression_template",
-             "args": [],
-             "name": "zm_mass_flux_excess",
-             "bindings": {
-              "mu": {
-               "op": "index",
-               "args": [
-                "mu",
-                "k"
-               ]
-              },
-              "x": {
-               "op": "index",
-               "args": [
-                "qu",
-                "k"
-               ]
-              },
-              "xhat": {
-               "op": "index",
-               "args": [
-                "qhat",
-                "k"
-               ]
-              }
-             }
-            }
-           ]
-          },
-          {
-           "op": "apply_expression_template",
-           "args": [],
-           "name": "zm_mass_flux_excess",
-           "bindings": {
-            "mu": {
-             "op": "index",
-             "args": [
-              "md",
-              "k"
-             ]
-            },
-            "x": {
-             "op": "index",
-             "args": [
-              "qd",
-              "k"
-             ]
-            },
-            "xhat": {
-             "op": "index",
-             "args": [
-              "qhat",
-              "k"
-             ]
-            }
-           }
-          }
-         ]
-        }
-       ]
       }
-     }
     },
     {
      "lhs": "sub_dsdt",
      "rhs": {
-      "op": "faq",
-      "output_idx": [
-       "k"
-      ],
-      "args": [
-       "mu",
-       "md",
-       "su",
-       "sd",
-       "shat"
-      ],
-      "ranges": {
-       "k": {
-        "from": "lev"
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "zm_subcloud_tendency",
+       "bindings": {
+        "mu": "mu",
+        "xu": "su",
+        "md": "md",
+        "xd": "sd",
+        "xhat": "shat",
+        "dsubcld": "dsubcld"
        }
-      },
-      "expr": {
-       "op": "*",
-       "args": [
-        {
-         "op": "/",
-         "args": [
-          {
-           "op": "const",
-           "args": [],
-           "value": 1.0,
-           "units": "1"
-          },
-          "dsubcld"
-         ]
-        },
-        {
-         "op": "-",
-         "args": [
-          {
-           "op": "*",
-           "args": [
-            {
-             "op": "const",
-             "args": [],
-             "value": -1.0,
-             "units": "1"
-            },
-            {
-             "op": "apply_expression_template",
-             "args": [],
-             "name": "zm_mass_flux_excess",
-             "bindings": {
-              "mu": {
-               "op": "index",
-               "args": [
-                "mu",
-                "k"
-               ]
-              },
-              "x": {
-               "op": "index",
-               "args": [
-                "su",
-                "k"
-               ]
-              },
-              "xhat": {
-               "op": "index",
-               "args": [
-                "shat",
-                "k"
-               ]
-              }
-             }
-            }
-           ]
-          },
-          {
-           "op": "apply_expression_template",
-           "args": [],
-           "name": "zm_mass_flux_excess",
-           "bindings": {
-            "mu": {
-             "op": "index",
-             "args": [
-              "md",
-              "k"
-             ]
-            },
-            "x": {
-             "op": "index",
-             "args": [
-              "sd",
-              "k"
-             ]
-            },
-            "xhat": {
-             "op": "index",
-             "args": [
-              "shat",
-              "k"
-             ]
-            }
-           }
-          }
-         ]
-        }
-       ]
       }
-     }
     },
     {
      "lhs": "dqdt",

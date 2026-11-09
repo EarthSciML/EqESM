@@ -1494,6 +1494,332 @@
      }
     ]
    }
+  },
+  "zm_flux": {
+   "description": "Layer-centered total plume mass flux F = mu (xu - xhat) + md (xd - xhat) of q1q2_pjr (zm_convr.F90:2589-2601, 2612-2619): the updraft mass flux mu times the updraft excess over the environment plus the downdraft mass flux md times the downdraft excess. The flux divergence of each q1q2 tendency is (F[min(k+1, pver)] - F[k])/dp[k] (zm_flux_divergence) and the subcloud tendency is -F[k]/dsubcld (zm_subcloud_tendency); both are applications of this law at the k and k+1 neighbors.",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_mass_flux_excess",
+      "bindings": {
+       "mu": "mu",
+       "x": "xu",
+       "xhat": "xhat"
+      }
+     },
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_mass_flux_excess",
+      "bindings": {
+       "mu": "md",
+       "x": "xd",
+       "xhat": "xhat"
+      }
+     }
+    ]
+   }
+  },
+  "zm_flux_divergence": {
+   "description": "Vertical divergence of the ZM plume mass flux in the pressure coordinate, (F[min(k+1, pver)] - F[k])/dp[k] with F = zm_flux the layer-centered plume flux (zm_convr.F90:2589-2601, the four flux terms of each q1q2 tendency): the flux at the level below (index k+1, clamped to the surface level min(k+1, pver)) minus the flux at level k, divided by the layer pressure thickness dp[k] (dp = 0.01 pdel). Applied once for moisture (fd_q, xu = qu, xd = qd, xhat = qhat) and once for dry static energy (fd_s, xu = su, xd = sd, xhat = shat).",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat",
+    "dp",
+    "pver"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
+    "args": [
+     "mu",
+     "xu",
+     "md",
+     "xd",
+     "xhat",
+     "dp"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "/",
+     "args": [
+      {
+       "op": "-",
+       "args": [
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          }
+         }
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            "k"
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            "k"
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            "k"
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            "k"
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            "k"
+           ]
+          }
+         }
+        }
+       ]
+      },
+      {
+       "op": "index",
+       "args": [
+        "dp",
+        "k"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "zm_subcloud_tendency": {
+   "description": "Subcloud tendency of q1q2_pjr, (1/dsubcld)(-F[k]) with F = zm_flux the layer-centered plume flux (zm_convr.F90:2612-2619): the negative of the plume flux at level k divided by the subcloud layer thickness dsubcld, gathered at index maxg by the tendency masks. Applied once for moisture (sub_dqdt, xu = qu, xd = qd, xhat = qhat) and once for dry static energy (sub_dsdt, xu = su, xd = sd, xhat = shat).",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat",
+    "dsubcld"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
+    "args": [
+     "mu",
+     "xu",
+     "md",
+     "xd",
+     "xhat"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "*",
+     "args": [
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": 1.0,
+         "units": "1"
+        },
+        "dsubcld"
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": -1.0,
+         "units": "1"
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            "k"
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            "k"
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            "k"
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            "k"
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            "k"
+           ]
+          }
+         }
+        }
+       ]
+      }
+     ]
+    }
+   }
   }
  }
 }
