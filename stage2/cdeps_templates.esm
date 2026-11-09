@@ -796,6 +796,198 @@
      }
     ]
    }
+  },
+  "stream_interp": {
+   "description": "The stream time-interpolation law of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391, cdeps1.0.112): the interpolated value is the convex combination of the lower/upper time-bound stream values with the shr_tInterp_getFactors factors, value = flb*lb + fub*ub (linear: flb+fub = 1; nearest/lower/upper: unit vectors), except for the coszen special case where value = lb*cosz/tavCosz by day (the dumped factor flb IS cosz/tavCosz and fub = 0) and 0 at night, i.e. when the true cosz <= 0.001 (the dumped flb is then 0 too; the day flag is 1 by day and 0 at night so the night branch is testable even on a polar-day trace). Shared by every datm datamode; applied by reference in the JRA (cdeps_datm_jra.esm) and CLMNCEP (cdeps_datm_gswp3.esm) Streams models.",
+   "params": [
+    "lb",
+    "ub",
+    "flb",
+    "fub",
+    "day"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "==",
+      "args": [
+       "day",
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     },
+     {
+      "op": "+",
+      "args": [
+       {
+        "op": "*",
+        "args": [
+         "flb",
+         "lb"
+        ]
+       },
+       {
+        "op": "*",
+        "args": [
+         "fub",
+         "ub"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "density_jra": {
+   "description": "Air density Sa_dens = pbot/(rdair*tbot*(1 + qcoef*shum)) of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:292) with rdair = 287.0423113650487 J/kg/K = SHR_CONST_RDAIR = SHR_CONST_AVOGAD*SHR_CONST_BOLTZ/SHR_CONST_MWDAIR (share/shr_const_mod.F90) and qcoef = 0.6079999804496765, the JRA55 moisture coefficient: the Fortran writes 0.608 as an UNSUFFIXED literal (default real = single precision), so the law actually uses the r4-rounded value r4(0.608) = 0.607999980449676513671875 (see bugs.md; even the exact r8 0.608 differs from r4(0.608) in the 8th decimal, and the exact eps1/eps ratio 0.607717... differs in the 4th decimal, so this is a distinct law from the CLMNCEP density template). tbot [K], pbot [Pa], shum [kg/kg], density [kg/m3].",
+   "params": [
+    "pbot",
+    "tbot",
+    "shum"
+   ],
+   "body": {
+    "op": "/",
+    "args": [
+     "pbot",
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 287.0423113650487,
+        "units": "J/(kg*K)"
+       },
+       "tbot",
+       {
+        "op": "+",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 0.6079999804496765,
+            "units": "1"
+           },
+           "shum"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "rain_frac_jra": {
+   "description": "The JRA55 rain fraction of the combined-precip split (datm/datm_datamode_jra_mod.F90:301-307): when the streams do not separate rain and snow, the whole precip falls as rain above the freezing point and as snow below it - a step function rain_frac = 1 when tbot >= TKFRZ else 0 (the CLMNCEP rain_snow_frac template is the smooth ramp of shr_precip_mod, a different law). Applied as Faxa_rainl = prec*rain_frac, Faxa_snowl = prec*(1 - rain_frac). The separates-rain-snow stream configuration (strm_Faxa_prrn/prsn present) bypasses this split entirely (F90:297-299).",
+   "params": [
+    "tbot"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": "<",
+      "args": [
+       "tbot",
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "tkfrz",
+        "bindings": {}
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 1.0,
+      "units": "1"
+     }
+    ]
+   }
+  },
+  "jra_albedo": {
+   "description": "The LY08 latitudinally-varying albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:317, Large & Yeager 2008), with degtorad = SHR_CONST_PI/180.0 (F90:62, SHR_CONST_PI = 3.14159265358979323846); lat [deg] is the model-mesh latitude yc. The 0.069 and 0.011 coefficients are UNSUFFIXED literals in the Fortran (default real = single precision), so the law uses the r4-rounded values 0.0689999982714653 and 0.010999999940395355 (see bugs.md). The net shortwave is then Faxa_swnet = swdn*(1 - avg_alb) (F90:318).",
+   "params": [
+    "lat"
+   ],
+   "body": {
+    "op": "-",
+    "args": [
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0689999982714653,
+      "units": "1"
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.010999999940395355,
+        "units": "1"
+       },
+       {
+        "op": "cos",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           {
+            "op": "const",
+            "args": [],
+            "value": 2.0,
+            "units": "1"
+           },
+           {
+            "op": "*",
+            "args": [
+             "lat",
+             {
+              "op": "const",
+              "args": [],
+              "value": 0.017453292519943295,
+              "units": "rad/deg"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
   }
  }
 }

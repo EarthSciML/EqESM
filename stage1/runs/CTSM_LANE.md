@@ -109,6 +109,20 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
     (290/292 vars identical, 2 differ only in embedded path strings).
     bugs.md: SoilWaterMovementMod negative-h2osoi_liq print (endrun
     commented out) candidate entry.
+- **W3 — soiltemp dump extension (2026-11-03, lane wt/clm-soiltemp2).**
+  `dump_soiltemp` extended (clm `1c0d375dd` / superproject `687355c`):
+  per-layer tkmg/tkdry/watsat/csol, sabg_lyr_col, fn; per-column nbedrock,
+  frac_sno_fluxes, hs_top_snow, hs_soil, dhsdT, eflx_bot; the `zi` column
+  split into correctly-labelled `zi_top` = zi(j−1) and `zi_bot` = zi(j)
+  (the old column carried the interface *above* layer j — see the
+  clm_instrument.json `w3.zi_labelling_defect`). Rerun in-node `--no-batch`
+  in allocation 12027055 (LID 261103-111900); neutrality re-verified
+  bit-identical vs the I2000Clm60Sp_f19 reference restart (290/292 vars,
+  2 path-string-only diffs). NOTE: the fork checkout is shared with the
+  concurrent clm-surfalbedo lane; their clm `3d7038304` / superproject
+  `527ab5d` commits (surfalbedo albsnd/albsni + soil color + h2osoi_vol_1)
+  are the parents of the soiltemp W3 commits and their clm_dump_mod.F90
+  diff contains both lanes' dump changes.
   - W2c (2026-11-03): surfalbedo dump extension (fork clm `3d7038304` /
     superproject `527ab5d`): `clm_surfalbedo.csv` gained the SNICAR snow
     albedos albsnd/albsni (direct/diffuse, vis/nir), the top-layer
@@ -126,7 +140,42 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
     blend), h2osoi_vol_1 = 0.1505, isoicol = 10, and the shared columns
     bit-identical to the W3 CSVs (the extension is dump-only; the model
     trajectory is unchanged).
-- **W3 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
+  - W2d (2026-11-08): vegetated-patch dumps (fork clm `afbae49dd` on top of
+    `65f12f0d8`, branch `instrument/clm-dumps`; worktree lane
+    `wt/clm-veg-instrument`): new namelist `dump_veg_patches` (default 0),
+    dynamic per-step top-N selection of the most-vegetated patches
+    (qualifying: frac_veg_nosno=1, elai+esai>0, liqcan+snocan>0; ranked by
+    elai+esai then liqcan+snocan then patch index), traced in 4 new CSVs:
+    `clm_canopyflux_veg.csv` (CanopyFluxes vegetated-branch exit: leaf-temp
+    iteration num_iter/det/dele + end-of-routine canopy storage update),
+    `clm_twostream.csv` (TwoStream radiation law; coszen>0 patches;
+    sun/shade vis only), `clm_interception.csv` (interception entry/hyd:
+    fpiliq/fpisnow, throughfall, liqcan/snocan update, fwet/fcansno/fdry),
+    `clm_soilwater.csv` (SoilWater solve entry/exit per selected column).
+    Writer PET chosen once at step 1 by two integer allreduces (max
+    qualifying count, tie-break lowest PET) — on this cold start all PETs
+    tie at nveg=0, so PET 0 writes. Bring-up fixes: (1) the five dump_*
+    namelist vars were never mpi_bcast in control_spmd, so only PET 0 read
+    them and PETs 1..35 returned early from dump_select_veg, deadlocking
+    PET 0's allreduce; (2) shr_mpi_min aliasing fix; (3) dump_twostream was
+    inside `if (use_SSRE)` and never fired; (4) gfortran rebase fix (veg
+    dummies take begp/begc/begg, arrays declared (begp:)/(begc:)/(begg:)).
+    Final rerun in-node (`--no-batch`), LID 261108-072738 (run log
+    /scratch.local/ctessum/clmveg/run_veg_final.log; diagnostic LIDs
+    261108-064127/261108-071237 with markers, reverted). Verified:
+    validator `stage1/analysis/verify_clm_veg_dumps.py` — ALL CHECKS
+    PASSED (selection consistency incl. step-1 cold-start skip (traced
+    steps 2..12), interception laws, canopyflux laws incl. the
+    liqcan(hyd)+(tran-evap)·dtime identity, full TwoStream recomputation
+    vs ctsm60_params xl, soilwater structure; `--existing` 11 old CSVs
+    bit-identical; `--restart` neutrality 292/292 vars, 0 differ).
+    `soilwater_movement_method=1` (moisture_form) in this case: the
+    zengdecker2009 hk loop never runs, so clm_soilwater.csv has entry/exit
+    rows only and the hk-law columns are NaN (documented in
+    `stage2/README-clm-veg.md`; the pre-existing `layer, h2osoi_liq: 182 2
+    -20.878` debug print at SoilWaterMovementMod:1422 and the step-1
+    balance warnings are baseline behavior, identical in both runs).
+- **W4 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
   existing files, plus fixing the 2 invalid files).
 
 ## Risks
