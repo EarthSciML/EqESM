@@ -3050,24 +3050,6 @@
         }
        },
        {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.998,
-        "coords": {
-         "band": 1,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.94,
-        "coords": {
-         "band": 1,
-         "layer": 6
-        }
-       },
-       {
         "variable": "tau",
         "time": 0.0,
         "expected": 23.86980180561326,
@@ -3077,45 +3059,9 @@
         }
        },
        {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.9287,
-        "coords": {
-         "band": 2,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.9400000000000001,
-        "coords": {
-         "band": 2,
-         "layer": 6
-        }
-       },
-       {
         "variable": "tau",
         "time": 0.0,
         "expected": 290.1167183244918,
-        "coords": {
-         "band": 3,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.030499999999999996,
-        "coords": {
-         "band": 3,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.9399999999999998,
         "coords": {
          "band": 3,
          "layer": 6
@@ -3308,45 +3254,6 @@
         "coords": {
          "band": 3,
          "layer": 1
-        }
-       },
-       {
-        "variable": "trndir",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "trntdr",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "trndif",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
         }
        },
        {
@@ -4030,24 +3937,6 @@
         }
        },
        {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.9980000000000001,
-        "coords": {
-         "band": 1,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.9399999999999998,
-        "coords": {
-         "band": 1,
-         "layer": 6
-        }
-       },
-       {
         "variable": "tau",
         "time": 0.0,
         "expected": 6.748992249694011,
@@ -4057,45 +3946,9 @@
         }
        },
        {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.9287,
-        "coords": {
-         "band": 2,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.94,
-        "coords": {
-         "band": 2,
-         "layer": 6
-        }
-       },
-       {
         "variable": "tau",
         "time": 0.0,
         "expected": 82.02814164205628,
-        "coords": {
-         "band": 3,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "w0",
-        "time": 0.0,
-        "expected": 0.030499999999999996,
-        "coords": {
-         "band": 3,
-         "layer": 6
-        }
-       },
-       {
-        "variable": "g",
-        "time": 0.0,
-        "expected": 0.94,
         "coords": {
          "band": 3,
          "layer": 6
@@ -4288,45 +4141,6 @@
         "coords": {
          "band": 3,
          "layer": 5
-        }
-       },
-       {
-        "variable": "trndir",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "trntdr",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
-        }
-       },
-       {
-        "variable": "trndif",
-        "time": 0.0,
-        "expected": 1.0,
-        "coords": {
-         "band": 1,
-         "iface": 1
-        },
-        "tolerance": {
-         "rel": 1e-09,
-         "abs": 0.0
         }
        },
        {
