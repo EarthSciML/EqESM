@@ -228,3 +228,85 @@ are comparable for the solution-neutrality check.
   — a test must reproduce the max over the traced points, which is a
   property of the whole field, not per-point; keep `tbotmax`/`anidrmax`
   columns in the dumps (done).
+
+---
+
+# JRA55 datamode slice (2026-11-05) — C_JRA_t62_datm_inst
+
+Same stream layer, different datamode: DATM%JRA-1p5-2023 with the JRA55
+v1.5 daily TL319 forcing (8 streams: prec, lwdn, swdn, q_10, slp, t_10,
+u_10, v_10 → strm_prec/lwdn/swdn/shum/pslv/tbot/u/v) on the T62 datm mesh
+(grid a%T62_l%null_oi%tx2_3v2, mesh T62_040121_ESMFmesh.nc), compset
+2000_DATM%JRA-1p5-2023_SLND_DICE%SSMI_MOM6_DROF%JRA-1p5-2023_SGLC_SWAV_SESP.
+All streams taxmode=cycle, year_first=1958, year_last=2023, year_align=1
+(model year 1 = data year 1958; the JRA datamode has no climatology
+option), readmode=single, mapalgo=bilinear.
+
+## JRA datamode laws (datm_datamode_jra_mod.F90:271-322) — source of truth
+
+- Copies: Sa_pslv = Sa_pbot = strm_pslv; Sa_tbot = Sa_ptem = strm_tbot;
+  Sa_u/Sa_v = strm_u/strm_v; Sa_shum = strm_shum (NO qsat cap — the JRA
+  datamode has no humidity law); Faxa_swdn/lwdn = strm_swdn/lwdn.
+- Sa_z = 10 m; Sa_u10m/v10m = Sa_u/Sa_v.
+- Sa_dens = pbot/(rdair·tbot·(1 + qcoef·shum)), rdair = SHR_CONST_RDAIR =
+  287.0423113650487, qcoef = **r4(0.608)** = 0.6079999804496765 (see
+  bugs.md: the 0.608 literal is unsuffixed → single precision).
+- Precip split: when the streams separate rain/snow (prrn/prsn present),
+  Faxa_rainl/snowl = strm_prrn/prsn passthrough; otherwise a step:
+  Faxa_rainl = prec, Faxa_snowl = 0 when tbot ≥ TKFRZ, else the reverse.
+  Faxa_rainc = Faxa_snowc = 0 (no convective precip in the datm).
+- Shortwave: Faxa_swvdr/ndr/vdf/ndf = swdn·0.28/0.31/0.24/0.17 (exact
+  _R8 literals); avg_alb = **r4(0.069)** − **r4(0.011)**·cos(2·lat·degtorad)
+  (LY08; the coefficients are unsuffixed → single precision, see bugs.md);
+  Faxa_swnet = swdn·(1 − avg_alb). lat = the model-mesh element latitude
+  yc (ESMF ownedElemCoords of the T62 mesh — verified by a direct ESMF
+  8.9.1 probe to equal the file centerCoords, i.e. the dumped lat column).
+- Dead code: cosfactor/phs_c0/dLWarc computed but never used (bugs.md).
+
+## Instrumentation delta (fork branch instrument/cdeps-dumps)
+
+The datm_dump_mod tag (GSWP3 slice) extended with a `_jra` suffix variant
+and the JRA55-specific columns: datm_jra_streams.csv (strm_* values +
+separates_rain_snow flag) and datm_jra_exports.csv (avg_alb + all
+exports) from datm_datamode_jra_mod.F90 (mainproc arg + allocatable
+avg_alb added), plus the cdeps_strdata_streams_jra.csv tag suffix in
+dshr_strdata_mod.F90. Commits 2de56ba (signature fix), 2c40df2 (JRA
+dumps), adf3f96 (superproject pointer).
+
+## Run (2026-11-05)
+
+Case `C_JRA_t62_datm_inst` (job 12132709, COMPLETED 7:32; earlier
+attempts failed on the SLURM_MEM_* env conflict — fixed with
+`MPI_RUN_COMMAND='env -u SLURM_MEM_PER_CPU -u SLURM_MEM_PER_GPU -u
+SLURM_MEM_PER_NODE srun --mpi=pmix -n 72'`), STOP_N=1 ndays, ATM_NCPL=24,
+TOTALPES=72. user_nl_datm: dump_datm=.true., dump_first_cells=16,
+dump_first_steps=12. user_nl_mom: AUTO_MASKTABLE = False (required on
+this grid — MOM6 init FATALs otherwise; the reference case has it too).
+Dumps: datm_jra_streams.csv (192 rows), datm_jra_exports.csv (192 rows),
+cdeps_strdata_streams_jra.csv (4608 rows) in stage1/dumps/cdeps/; GSWP3
+dumps untouched. **Neutrality: all 5 restart components bit-identical to
+the reference C_JRA_t62 run** (check_datm_neutral.py pattern).
+
+## Stage 2 (worktree branch wt/cdeps-datm-jra)
+
+`stage2/cdeps_datm_jra.esm` + the `stream_interp`/`density_jra`/
+`rain_frac_jra`/`jra_albedo` templates appended to
+`stage2/cdeps_templates.esm`; `stage1/analysis/check_datm_jra_laws.py`
+verifies every dump row to round-off (0 failures). Reader path: the 8
+JRA55 v1.5 TL319 files (2920 daily records, lat ascending from −89.57,
+netcdf3 classic float32) via the esm netcdf reader (CONST sources,
+record 1 = first day of 1958). The r4-literal finding (0.608/0.069/0.011)
+is the reason the albedo/density laws differ from a naive transcription
+at the 2e-8/2e-11 level — the templates and tests carry the r4-rounded
+constants with provenance notes.
+
+## Risks
+
+- The traced 16 points are all on the southernmost T62 row (polar day in
+  January): the coszen night branch is covered only synthetically.
+- Same data_sources caveats as the GSWP3 slice (CONST sources only,
+  cadence owned by the Provider, spatial map out of scope).
+- The JRA files' 2920-record cadence (daily, first record at 1.5 h)
+  makes the reader tests heavier than GSWP3's; if the full `esm test`
+  run stays slow, the JRAFiles tests can be dropped without losing the
+  law coverage (the interpolation laws are pinned by the Streams tests).

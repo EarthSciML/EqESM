@@ -206,46 +206,16 @@
     {
      "lhs": "value",
      "rhs": {
-      "op": "ifelse",
-      "args": [
-       {
-        "op": "==",
-        "args": [
-         "day",
-         {
-          "op": "const",
-          "args": [],
-          "value": 0.0,
-          "units": "1"
-         }
-        ]
-       },
-       {
-        "op": "const",
-        "args": [],
-        "value": 0.0,
-        "units": "1"
-       },
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "*",
-          "args": [
-           "flb",
-           "lb"
-          ]
-         },
-         {
-          "op": "*",
-          "args": [
-           "fub",
-           "ub"
-          ]
-         }
-        ]
-       }
-      ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "stream_interp",
+      "bindings": {
+       "lb": "lb",
+       "ub": "ub",
+       "flb": "flb",
+       "fub": "fub",
+       "day": "day"
+      }
      }
     }
    ],
