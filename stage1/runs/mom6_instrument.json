@@ -83,5 +83,35 @@
       "netMassIn == 0 on all rows (AGGREGATE_FW_FORCING=True); netMassOut -1.6e-5..2.0e-3 m; nonpenSW up to 0.108 degC m; Kd_heat == Kd_salt on every tri row (KPP sets both)",
       "no bugs found in the reference C++/Fortran code during this wave (bugs.md unchanged)"
     ]
+  },
+  "wave_3": {
+    "date": "2026-11-09",
+    "commit": "fork HEAD 8dd0e0e instrument/mom6-dumps: bump mom (fix coradv dump layer-k slices); MOM6 submodule HEAD 4ba241193 (a1360523b continuity/coradv/pgf dynamics dumps, c3519857f extended stencils + K/k shadowing fix, 4ba241193 layer-k slices fix)",
+    "run": {
+      "case": "C_JRA_t62_mom6_dyn_inst (clone of the wave-2 case; same 12 traced cells of PET 0, 12 dynamics steps)",
+      "job_id": "12279005 (first dyn-instrumented run, buggy coradv dump), 12282697 (case.run, COMPLETED 2026-11-09 10:30) + 12282698 (st_archive); fresh start from 0001-01-01 (restarts removed)",
+      "result": "COMPLETED; 12 dump CSVs written (9 originals + continuity/coradv/pgf)",
+      "neutrality": "fixed-binary run bit/value-identical to the wave-2 reference run: mom6_kpp_wide.csv byte-identical (203685403 bytes, 33 PEs, 8164 rows) to the Nov-5 final reference; bflux/diabatic_tri/frazil/sw_abs identical on all overlapping rows vs the w2_test/ Nov-5 copies.  (The mom6_dumps_refrun/ + mom6_dumps_dyninst/ backups in /scratch.local/ctessum were lost when /scratch.local was cleared on a job requeue; the surviving w2_test/ copies served as the diff baseline.)",
+      "dump_bug": "coradv dump passed full 3-D u/v/h/uh/vh/CAu/CAv to 2-D dummies: every written k-row carried layer-1 values of those arrays while per-layer private locals (rv/KE/hArea/q) were correct.  Fixed at MOM_CoriolisAdv.F90:1210 by passing layer-k slices (4ba241193 -> b2e4a9e -> 8dd0e0e).",
+      "aliasing_limitation": "continuity call-3 hin/h_inter alias h (continuity(u_inst, v_inst, h, h, ...)); h is bit-identical between calls 1 and 3, so call-3 convergence identities are tested with the call-1 hin as base (documented, not fixed)"
+    },
+    "dump_files": {
+      "mom6_continuity.csv": "21600 rows (12 cells x 12 steps x 75 layers x calls {1,3}); call 1 = pure PPM layer-flux call (BT_cont), call 3 = BT-adjusted final call; per-row: dyn_step, call, dt, x_first, h_min/h_min_recon, hin/h_out/h_inter, h_inter_jm4..jp3, uh_W/E, vh_S/N, u_W/E, v_S/N, h_W..h_NE, uh_W_1.., edge_ok",
+      "mom6_coradv.csv": "10800 rows (12 x 12 x 75, call 2); per-row: h at 9 stencil cells, u at 6 zonal faces, v at 6 meridional faces, uh/vh at the CAu/CAv rings, Area_h/Area_q, hArea_u/v, Ih_q, dvdx/dudy, rv/av/q at 4 corners, KE/KEx/KEy, CAu/CAv at 4 faces, bound_coriolis, coriolis_scheme=1 (SADOURNY75_ENERGY), ke_scheme=10 (KE_ARAKAWA), grid metrics",
+      "mom6_pgf.csv": "10800 rows (12 x 12 x 75); per-row: p_surf, e_bot, e_sfc, e cross-layer profile, pa_top, rho, GxRho_ref=9.8*1035, I_Rho0=1/1035, Z_ref=0.0, h_neglect=1e-30, H_to_Z=1"
+    },
+    "validation": {
+      "validator": "stage1/analysis/validate_mom6_dyn.py (ALL CHECKS PASSED 2026-11-09 on the fixed run's CSVs)",
+      "continuity": "convergence identities 0/21600 bad (zonal and meridional); reconstruction pins 21600/21600; flux-law pins 7200/7200 (edge_ok only for cells (3,78),(4,78); PET 0 compute domain ends at local j=84)",
+      "coradv": "rv 43200/43200; av 43200/43200; q 43200/43200; dvdx/dudy 43200/43200 (direct pins added 2026-11-09); Ihq_ne 10800/10800; hArea 86400/86400; KE_c 10800/10800; CAu/CAv 43200/43200; grid 54000/54000",
+      "pgf": "e_bot law 32400/32400; e_sfc 144/144; cross-layer 21312/21312; pa_top(k=1) 144/144; constants 4500/4500",
+      "land_mask": "Area_h == 0 (coradv stencil) extended with the h == 0.001 land-thickness fill: 40 land cells",
+      "validator_fixes": "coradv dvdx 'se'/'sw' corners used the wrong v-stencil (fixed to v_se*dyCv_se - v_s*dyCv_s / v_s*dyCv_s - v_sw*dyCv_sw) and CAv_s used the CAv_n uh-stencil (fixed to uh_ws+uh_w / uh_es+uh_e); both validator transcription bugs exposed only once the dump fix made the per-layer data correct"
+    },
+    "notes": [
+      "all fixes in this wave are in the dump instrumentation and the validator; no bugs found in the reference C++/Fortran model code (bugs.md unchanged)",
+      "the continuity call-2 rows are skipped in the dump (STORE_CORIOLIS_ACCEL=True: call 1 is the predictor, call 2 (:888) is the corrector dumped, call 3 the final)",
+      "run 1 (12279005) CSVs retained the buggy coradv rows (backed up, later lost with /scratch.local); the fixed run's CSVs in stage1/dumps/mom6/ are canonical"
+    ]
   }
 }

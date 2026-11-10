@@ -319,3 +319,93 @@ CSVs (eos 11700, kpp 156, kpp_obl 156, sfc_forcing 144 rows).
 Wave-2 stage-2 targets (see `stage2/README-mom6-w2.md`): shortwave
 absorption, frazil formation, boundary flux application, tridiagonal
 mixing, and widened KPP tests (unstable/warm columns).
+
+## Wave-3 results (2026-11-09)
+
+Wave-3 dynamics boundary dumps (continuity, Coriolis/momentum advection,
+pressure gradient force) were added to the fork (`MOM6` submodule HEAD
+4ba241193 = a1360523b dynamics dumps + c3519857f extended stencils +
+4ba241193 layer-k fix; fork HEAD 8dd0e0e, branch `instrument/mom6-dumps`)
+in case `C_JRA_t62_mom6_dyn_inst` (clone of the wave-2 case; same 12
+traced cells of PET 0, 12 dynamics steps × 75 layers):
+
+- **mom6_continuity.csv** (21600 rows = 12 cells × 12 steps × 75 layers ×
+  2 calls; calls 1 and 3 — call 2 is a skipped duplicate in the
+  STORE_CORIOLIS_ACCEL=True configuration): directionally-split PPM
+  thickness advection (MOM_continuity_PPM.F90, FIRST_DIRECTION=x_first,
+  MONOTONIC_CONTINUITY=False, SIMPLE_2ND_PPM=False, UPWIND_1ST=False,
+  VOL_CFL=False).  Call 1 is the pure BT_cont layer-flux call (uh/vh obey
+  the PPM flux law); call 3 is the BT-adjusted final call.  Per-cell
+  columns: hin/h_out, h_inter (zonal-pass intermediate thickness),
+  h_inter_jm4..jp3 (7-cell meridional stencil), uh_W/E, vh_S/N, u/v on
+  the 4 faces, edge_ok, dt, x_first, h_min/h_min_recon
+  (=Angstrom_H/2·Angstrom_H).
+- **mom6_coradv.csv** (10800 rows = 12 × 12 × 75, call 2 only): h/u/v/uh/
+  vh/Area/KE/KEx-KEy/CAu-CAv on the cell stencil (CORIOLIS_SCHEME=
+  SADOURNY75_ENERGY, KE_SCHEME=KE_ARAKAWA, BOUND_CORIOLIS=True,
+  no_slip=False), dvdx/dudy/rv/av/q at the 4 corners, Ih_q, grid metrics.
+- **mom6_pgf.csv** (10800 rows): e_bot from the layer-k rho profile,
+  e_sfc/e cross-layer law, pa_top at k=1 (constants for the reference run:
+  GxRho_ref = 9.8·1035, I_Rho0 = 1/1035, Z_ref = 0.0, h_neglect = 1e-30,
+  H_to_Z = 1).
+
+**Dump bug found and fixed (the only model-side change of the wave):** the
+coradv dump passed the full 3-D arrays `u, v, h, uh, vh, CAu, CAv` to 2-D
+dummy arguments, so every written k-row carried the layer-1 values of
+those arrays while the per-layer private locals (rv, KE, hArea, q) were
+correct — the cross-layer laws for rv/hArea/KE/CAu-CAv failed on exactly
+the aliased columns.  Fixed at the call site (MOM_CoriolisAdv.F90:1210) by
+passing layer-k slices; committed as 4ba241193 (MOM6) → b2e4a9e (mom) →
+8dd0e0e (fork root).  Rebuilt and reran: case.run 12282697, st_archive
+12282698, COMPLETED 2026-11-09 10:30 (fresh start from 0001-01-01, restarts
+removed).
+
+**Not fixed (documented limitation):** the continuity dump's call-3
+`hin`/`h_inter` columns alias the same array as `h` (the call passes
+`continuity(u_inst, v_inst, h, h, ...)`), so call-3 hin is the final h.
+h is bit-identical between calls 1 and 3 (verified), so the call-3
+convergence identities are tested against the call-1 hin as base (bit
+exact, 0 bad); the aliasing is a dump artifact, not a model issue.
+
+**Neutrality re-confirmed after the fix:** the fixed run's 9 original
+CSVs are bit/value-identical to the wave-2 reference run — mom6_kpp_wide
+(203 MB, 33 PEs, 8164 rows) byte-identical to the Nov-5 final reference,
+and bflux/diabatic_tri/frazil/sw_abs identical on all overlapping rows
+(the `w2_test/` Nov-5 copies; the reference-run backups in
+/scratch.local/ctessum/mom6_dumps_refrun/ + mom6_dumps_dyninst/ were lost
+when /scratch.local was cleared on a job requeue — the surviving w2_test/
+copies served as the diff baseline).  eos/kpp/kpp_obl/sfc_forcing are
+written by unchanged dump code in the same bit-identical run.
+
+**Validator fixes (validator-side transcription bugs, found while
+revalidating the fixed data):** the coradv `dvdx` reconstruction used the
+wrong v-stencil at the 'se'/'sw' corners (v_ne·dyCv_ne − v_s·dyCv_s and
+v_se·dyCv_se − v_sw·dyCv_sw; correct is v_se·dyCv_se − v_s·dyCv_s and
+v_s·dyCv_s − v_sw·dyCv_sw — the model's dvdx(I,J) = v(i+1,J)·dyCv(i+1,J) −
+v(i,J)·dyCv(i,J) mapped to the dump's per-cell corner columns), and the
+CAv_s raw used the CAv_n uh-stencil (uh_w+uh_wn / uh_e+uh_en; correct is
+uh_ws+uh_w / uh_es+uh_e for the v-point (i, J−1)).  Both were wrong on
+every row until the dump fix made the per-layer data correct; the fixed
+validator also pins the dump's dvdx/dudy columns directly against the u/v
+stencil (43200/43200).
+
+**Final validation (`stage1/analysis/validate_mom6_dyn.py`, ALL CHECKS
+PASSED on the fixed run's CSVs):** continuity — convergence identities
+0/21600 bad, reconstruction pins 21600/21600, flux-law pins 7200/7200
+(edge_ok cells (3,78),(4,78) only; PET 0's compute domain ends at local
+j=84); coradv — rv 43200/43200, av 43200/43200, q 43200/43200,
+dvdx/dudy 43200/43200, Ihq_ne 10800/10800, hArea 86400/86400, KE_c
+10800/10800, CAu/CAv 43200/43200, grid 54000/54000; pgf — e_bot
+32400/32400, e_sfc 144/144, cross-layer 21312/21312, pa_top(k=1)
+144/144, constants 4500/4500.  Land masks: Area_h == 0 (coradv stencil)
+extended with the h ≡ 0.001 land-thickness fill (40 land cells).  No
+bugs found in the reference C++/Fortran model code during this wave
+(bugs.md unchanged); all fixes were in the dump instrumentation and the
+validator.
+
+Wave-3 stage-2 target (see `stage2/README-mom6-dyn.md`): the continuity
+PDE ∂h/∂t = −∇·(u h) with the directionally-split PPM reconstruction +
+positive limiter as expression templates (PPM templates authored in
+`stage2/mom6_templates.esm`), the C-grid flux-divergence rule (candidate
+EarthSciDiscretizations PR), and the coradv/pgf laws pinned by informative
+points from these dumps.
