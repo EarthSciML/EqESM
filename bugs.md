@@ -422,7 +422,6 @@ Format template:
 - **Status:** open (comment/label inconsistency; needs an upstream decision
   on the intended convention).
 
-
 ## 33. CLM Sturm1997 snow thermal conductivity is evaluated with single-precision literals (missing `_r8` suffix)
 
 - **Location:** `components/clm/src/biogeophys/SoilTemperatureMod.F90:774-778` (Sturm1997 branch of `SoilThermProp`, non-glacier land units; the identical glc branch at :754-758 and the same copy in `LakeFluxesMod.F90:497` / `LakeTemperatureMod.F90:1195` carry the same defect).
@@ -488,21 +487,21 @@ Format template:
 
 ## TBD. MOM6 sumSWoverBands hardcodes a 1000x-wrong min_SW_heat clamp length scale (I_Habs = 1e3*H_to_m)
 
-- **Location:** `components/mom/MOM6/src/parameterizations/vertical/MOM_opacity.F90:950`
-  (`sumSWoverBands`, `I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen`)
-  vs. `:711` (`absorbRemainingSW`, `I_Habs = optics%PenSW_absorb_Invlen`) and
-  `:1211` (`optics%PenSW_absorb_Invlen = 1.0/(PenSW_absorb_minthick +
+- **Location:** `components/mom/MOM6/src/parameterizations/vertical/MOM_opacity.F90:931`
+  (pristine line numbers; :950 in the instrumented fork) (`sumSWoverBands`, `I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen`)
+  vs. `:707` (`absorbRemainingSW`, `I_Habs = optics%PenSW_absorb_Invlen`) and
+  `:1186` (`optics%PenSW_absorb_Invlen = 1.0/(PenSW_absorb_minthick +
   GV%H_subroundoff)`, the setter the commented-out assignment would use).
 - **Description:** the two routines implement the same min_SW_heat clamp
   of `SW_trans`, but `sumSWoverBands` hardcodes `I_Habs = 1e3*GV%H_to_m`
   (1000 m-1 with the run's H_to_m = 1) instead of the optics value
   `PenSW_absorb_Invlen ~= 1 m-1` (PEN_SW_ABSORB_MINTHICK = 1.0 m); the
-  comment on :950 shows the intended expression.  Both routines use the
+  comment on :931 shows the intended expression.  Both routines use the
   same rate threshold `min_SW_heat = optics%PenSW_flux_absorb*dt`
   (default 2.5e-11 degC m s-1; `sumSWoverBands` is called with dt = 1.0,
   MOM_forcing_type.F90:1102, so no dt factor enters), and the zero
   sub-branch `nsw*Pen_SW_bnd <= min_SW_heat*(I_Habs*(h - h_min_heat))`
-  (compare :757 and :989) fires at `nsw*Pen_SW_bnd <= 2.5e-8*(h -
+  (compare :750 and :970) fires at `nsw*Pen_SW_bnd <= 2.5e-8*(h -
   h_min_heat) degC m s-1` in `sumSWoverBands` versus `2.5e-11*(h -
   h_min_heat)` in `absorbRemainingSW` — the hardcoded 1e3 widens the
   zeroed region 1000x.  The effect is not all-zero: `netPen` is a rate
@@ -520,4 +519,3 @@ Format template:
   (stateful recurrence gap of `mom6_shortwave.esm`); the component pins
   the unclamped law exactly as the model computes it.
 - **Status:** open.
-
