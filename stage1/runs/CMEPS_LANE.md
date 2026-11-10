@@ -221,3 +221,73 @@ clamp and dark side (all 288 ocnalb rows are Briegleb day-side with
 flux_albav = use_min_albedo = 0); the import_swpen_by_bands per-band branch
 (SICE exports no Fioi_swpen_* bands); the enthalpy merges (not dumped); the
 prep_atm atmosphere merges (needs a CAM case).
+
+## 2026-11-09: prep_atm atmosphere-export merge dump (F2000climo_f19_inst case)
+
+Third instrumentation round on the same fork (branch `instrument/cmeps-dumps`):
+the `med_phases_prep_atm` lnd/ice/ocn -> atm merges, gated by the new mediator
+attribute `dump_prep_atm` (default .false.). This closes the last
+prep_atm gap of the ocnalb/merge round ("needs a CAM case").
+
+- **Case:** `stage1/cime/cases/F2000climo_f19_inst` (cloned from the reference
+  `F2000climo_f19`; deltas: `user_nl_cpl` dump gating only), CAM6+CLM+CICE+
+  DOCN+MOSART, f19 grid, 6 h run, 12 coupling steps at 1800 s, 36 PEs. Built
+  and run in the agent allocation with `./case.build` + `python3 .case.run`
+  (run 22:28-22:35 local, logs `*.log.12284979.261109-222841.gz`; the
+  `aoflux_grid = ogrid` setting is the case default).
+- **Dump:** `cmeps_prep_atm.csv` (741708 B, 432 rows = 36 traced atm cells x
+  12 steps, fixed cell set every step: n = 1..12, 18, 20, 22, 34, 36, 38, 40,
+  50, 52, 54, 66, 68, 70, 72, 88, 95, 102, 109, 111, 118, 120, 123, 136, 139
+  — the `dump_first_cells = 12` base window plus the per-step partial-ice /
+  partial-land extras, capped at 12 each). Columns: step,ymd,tod,n,gid,lat,lon,
+  lfrac,ifrac,ofrac, then per field the three mapped sources and the merged
+  export (Sl_/Si_/So_/Sx_ for the 4 albedos, tref/u10/qref, the
+  Fall_/Faii_/Faox_/Faxx_ 6 fluxes) and Sl_/Si_/So_/Sx_t, plus the duplicated
+  So_t copy-export column; 67 columns, `es26.17e3`, subnormals flushed.
+- **Root cause found (fork instrumentation bug, bugs.md #38):**
+  `med_dump_prep_atm_active` was gated on the *ogrid* aoflux init flag
+  (`is_init`) and counter (`step`). On this case PET 0's f19 ogrid block is
+  all-land (Antarctica rows first in local order; `So_omask` = 0 everywhere on
+  PET 0), the ogrid init bails ("WARNING: no masked cells traced" in ocn.log),
+  `is_init` stays .false., and the prep_atm dump never fired — silently (no
+  rows, no error). Fixed (cmeps submodule `17eef08f`, fork pointer `ea48423`):
+  the atm-export dump gets its own counters `step3`/`ymd3`/`tod3`, advanced by
+  `med_dump_prep_atm_tick` from the mediator clock inside
+  `med_phases_prep_atm_dump`; `med_dump_prep_atm_active` gates on
+  `is_init3`/`step3`. A second latent crash fixed in the same pass:
+  `med_dump_init_agrid` (first exercised by this dump) called `ESMF_MeshGet`
+  on unallocated `elementIDs`/`elementCoords` — it now queries `elementCount`
+  first, then allocates.
+- **Validation** (`stage1/analysis/validate_cmeps_prep_atm_dump.py`):
+  **all 14 merge groups reproduce to worst relative error <= 2.9e-16 over
+  all 432 rows** (0 NaN anywhere; the spval 1e30 land sources on the 20
+  lfrac = 0 cells — 240 spval-like values per Sl_*/Fall_* column — are
+  checked as spval, not NaN, and are inert at weight 0); `lfrac+ifrac+ofrac
+  == 1` (tol 1e-12) everywhere; `So_t_export == So_t` everywhere (the copy
+  law of esmFldsExchange L1282-1285); regime counts 252 partial-ice / 180
+  open-ocean / 168 partial-land rows; the base window n = 1..12 present in
+  every step and the (n, gid) pairing stable across steps. `RESULT: prep_atm
+  PASS`.
+- **Neutrality:** `cpl.r` / `cice.r` / `docn.r` md5-identical to the
+  reference F2000climo_f19 run (b9a9f0e229d2fd94b97244f2f9879690 /
+  dc5e470490799c48bda968fb62b6d850 / 0e5c32030dc324addbe661e3273df90d);
+  `cam.r`/`clm2.r`/`mosart.r` differ only in the filename variables (cpath,
+  hrestpath, nhfil, op_field1/2, locfnh, locfnhr) and the caseid/case_title/
+  history attributes — the dump code changes nothing when enabled.
+- **Existing dump md5s preserved:** cmeps_aoflux.csv 6c2428e5…, cmeps_
+  aoflux_wide.csv 166a90fc…, cmeps_merge.csv 7ca39ed3…, cmeps_ocnalb.csv
+  cef4d00d… (untouched by this case).
+- **Ogrid aoflux dump skipped by design:** `cmeps_aoflux_f2000.csv` produces
+  nothing for this case (PET 0 has no masked ogrid cells); a cross-PE
+  redesign of the traced-cell selection is out of scope (the aoflux laws are
+  pinned by the C_JRA_t62 lane).
+- **Stage-2 handoff (this round):** `stage2/cmeps_prep_atm.esm` (model
+  `AtmMerge`, 15 equations — the 14 merged exports as `fraction_weighted_sum`
+  composed twice in the Fortran accumulation order plus the `So_t` copy
+  export — importing the shared template by reference; 5 tests x 15
+  assertions pinning the fraction regimes fully-land / open-ocean /
+  partial-ice / mixed three-fraction, plus the last-step mixed cell with the
+  dark-side albedo 1.0 sources) and `stage2/README-cmeps-prep-atm.md`.
+  Whole stage2 suite **2737P/0F/0E** under `./esm test stage2/` (ESD_ROOT set;
+  the worktree's starting commit 5726a2d ran 2662P/0F/0E — this lane adds
+  exactly its 75 assertions) at `rel 1e-12`, `time_span {0,0}`.

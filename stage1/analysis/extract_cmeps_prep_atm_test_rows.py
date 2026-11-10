@@ -15,14 +15,34 @@ import sys
 
 # hand-picked rows: (step, n, id, description) exercising the merge
 # laws and the traced-cell selection.  The dump's n is the PET-0 local
-# atm-grid index; rows are chosen after inspecting the dump so that
-# the fraction regimes (open-ocean, partial-ice, partial-land,
-# fully-iced) and the step range are all pinned.
+# atm-grid index (1-based); rows are chosen after inspecting the dump
+# so that the fraction regimes (fully-land, open-ocean, partial-ice,
+# mixed three-fraction) and the step range are all pinned:
+#   (1, 1)  fully land        lfrac = 1            (Sl only; Si/So spval)
+#   (1, 5)  open ocean        ofrac = 1            (So only; Sl/Si spval)
+#   (1, 2)  partial ice       ifrac = 0.99875      (Si + So, Sl spval)
+#   (1, 6)  mixed             lfrac/ifrac/ofrac all nonzero (all sources valid)
+#   (12, 6) the same mixed cell at the last coupling step
 ROWS = [
-    (1, 0, 'step1_first_cell',
-     'the first traced cell (step 1, n = 0, the base first-N selection)'),
-    (12, 0, 'step12_first_cell',
-     'the first traced cell at the last coupling step'),
+    (1, 1, 'step1_fully_land',
+     'the fully-land traced cell (lfrac = 1): the merge reduces to the '
+     'land source with the spval ice/ocean sources at weight 0'),
+    (1, 5, 'step1_open_ocean',
+     'the open-ocean traced cell (ofrac = 1): the merge reduces to the '
+     'ocean source with the spval land/ice sources at weight 0'),
+    (1, 2, 'step1_partial_ice',
+     'the partial-ice traced cell (ifrac = 0.99875, ofrac = 0.00125): '
+     'the two-source ice + ocean merge with the spval land source at '
+     'weight 0'),
+    (1, 6, 'step1_mixed',
+     'the mixed three-fraction traced cell (lfrac = 0.0753, ifrac = '
+     '0.6206, ofrac = 0.3041): the full three-way merge with every '
+     'source valid'),
+    (12, 6, 'step12_mixed',
+     'the same mixed cell at the last coupling step (the fractions '
+     'drifted: lfrac = 0.0753, ifrac = 0.6228, ofrac = 0.3019; the '
+     '05:30 local-time albedo sources are the dark-side 1.0 from all '
+     'three sources, and the merge still sums to 1.0)'),
 ]
 
 # the model's parameter (source) columns, in the .esm variable order
@@ -84,13 +104,14 @@ def main(path):
             'description': (
                 'Instantaneous pin of the fraction-weighted atmosphere '
                 'exports of med_phases_prep_atm (mediator/'
-                'med_phases_prep_atm_mod.F90:149-157, the med_merge '
+                'med_phases_prep_atm_mod.F90:156-166, the med_merge '
                 'accumulation dp = dp + src*weight of med_merge_mod.F90:'
                 '405-412 with the merge lists of esmFldsExchange_cesm_mod.'
-                'F90, and the So_t copy export of L1282; the traced '
+                'F90, and the So_t copy export of L1282-1285; the traced '
                 'F2000climo_f19_inst run: component_computes_enthalpy_flux '
-                '= none, mrg_fracname_lnd2atm_state/flux = lfrac, '
-                'samegrid_atmlnd) from stage1/dumps/cmeps/%s row (step %s, '
+                '= none, mrg_fracname_lnd2atm_state/flux = lfrac '
+                '(med_internalstate_mod.F90:289-290), samegrid_atmlnd) '
+                'from stage1/dumps/cmeps/%s row (step %s, '
                 'atm cell n = %s, lat %s, lon %s): %s. time_span {0,0} '
                 'evaluates the pointwise laws at the dumped inputs; every '
                 'merged export is asserted at full dump precision (rel '

@@ -186,24 +186,31 @@ def main(path):
     n_ice = int((arr['ifrac'] == 1).sum())
     print(f'    partial-ice rows: {n_partial_ice}, open-ocean rows: {n_open}, '
           f'fully-iced rows: {n_ice}, partial-land rows: {n_partial_lnd}')
-    print(f'    every step traces the first dump_first_cells cells '
-          f'(n = 0..{min(len(c) for c in cps.values()) - 1} in every step): '
-          f'{bool(all(set(range(12)).issubset(set(c)) for c in cps.values()))}')
+    print(f'    every step traces the base dump_first_cells window '
+          f'(n = 1..12 present in every step; {min(len(c) for c in cps.values())} '
+          f'cells/step): '
+          f'{bool(all(set(range(1, 13)).issubset(set(c)) for c in cps.values()))}')
     # the So_t export is a copy of the So_t source (esmFldsExchange L1282)
     print(f'    So_t export == So_t source (copy) everywhere: '
           f'{bool(np.all(arr["So_t_exp"] == arr["So_t"]))}')
     n_partial_sel = int(((arr['ifrac'] > 0) & (arr['ifrac'] < 1)).sum()) + \
         int(((arr['lfrac'] > 0) & (arr['lfrac'] < 1)).sum())
+    per_step_trig = all(
+        ((a['ifrac'] > 0) & (a['ifrac'] < 1)).any() or
+        ((a['lfrac'] > 0) & (a['lfrac'] < 1)).any()
+        for s in cps
+        for a in [{c: arr[c][arr['step'] == s] for c in arr}])
     print(f'    at least one partial-ice or partial-land row per step (selection trigger): '
-          f'{bool(all(((a["ifrac"] > 0) & (a["ifrac"] < 1)).any() or
-                      ((a["lfrac"] > 0) & (a["lfrac"] < 1)).any()
-                      for s in cps for a in [arr[arr["step"] == s]]))} '
-          f'({n_partial_sel} such rows total)')
+          f'{bool(per_step_trig)} ({n_partial_sel} such rows total)')
     # lat/lon sanity on the atm grid (f19: -90..90, -180..180)
     print(f'    lat range {arr["lat"].min():.4f}..{arr["lat"].max():.4f}, '
           f'lon range {arr["lon"].min():.4f}..{arr["lon"].max():.4f}')
-    print(f'    gid == n + 1 (contiguous atm cells on PET 0): '
-          f'{bool(np.all(arr["gid"] == arr["n"] + 1))}')
+    # the same traced cells are traced every step (the per-step extras
+    # are picked from the same PET-0 local set, so the (n,gid) pairing
+    # is stable across steps)
+    meta = {(int(n), int(g)) for n, g in zip(arr['n'], arr['gid'])}
+    print(f'    distinct (n, gid) pairs across all steps: {len(meta)} '
+          f'(cells {len(cells)}; a stable pairing means {len(meta) == len(cells)})')
 
     ok = all(w < 1e-11 for w in worst.values())
     print()
