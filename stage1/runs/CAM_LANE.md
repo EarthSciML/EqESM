@@ -125,8 +125,10 @@ inactive site per 16 steps; the q file was unaffected). Fixed by writing
 - `src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90` — the convr dump
   call at the end of `zm_convr_run` (gated by `lengath > 0`; passes the
   routine-local working arrays, buoyan_dilute outputs and constants).
-- ZM parcel-ascent dump (added 2026-11-09, atmos_phys `73b65b2`, cam
-  `12ddc27e`, cam pointer `87edceff`, EqESM-cesm-cam pointer `0c71776`):
+- ZM parcel-ascent dump (added 2026-11-09, atmos_phys `1a070a2`, cam
+  `3c98a27c`, EqESM-cesm-cam pointer `738b40d`; the 18-column layout was
+  dumped from uncommitted edits on top of `73b65b2`/`87edceff`/`0c71776`,
+  committed by the manager on 2026-11-10):
   `zm_convr.F90` `buoyan_dilute`/`parcel_dilute` pass the parcel arrays
   (tmix/qsmix/qtmix/smix/xsh2o/qtot/ds_xsh2o/ds_freeze/qtp/sp/mp/tpv/
   buoy) through to `zm_convr_run`, which calls the new
@@ -415,9 +417,10 @@ tmix/qsmix/qtmix/smix (the entraining parcel), xsh2o/qtot/ds_xsh2o/
 ds_freeze (rainout + freezing), qtp/sp/mp (entrainment sums, per-level
 `intent(out)` accumulation — numerically identical to the original
 (ncol) locals), tpv/buoy, plus per-column pl/plge600/capeten_1..5/
-lelten_1..5.  Fork hashes: atmos_phys `73b65b2`, cam `12ddc27e` (cam
-pointer `87edceff`), EqESM-cesm-cam pointer `0c71776` (branch
-instrument/cam-dumps).
+lelten_1..5.  Fork hashes: atmos_phys `1a070a2`, cam `3c98a27c`, EqESM-cesm-cam
+pointer `738b40d` (branch instrument/cam-dumps; the earlier
+`73b65b2`/`87edceff`/`0c71776` lack the ds_xsh2o/ds_freeze/qtp/sp/mp
+columns).
 
 - **launch level (k = maxi = 32 = pver):** qtmix == qtot == qtp0 == q
   and smix == sp0 == entropy(t,p,q) bit-exact; tmix is the ientropy
