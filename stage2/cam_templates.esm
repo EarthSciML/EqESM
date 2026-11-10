@@ -2,8 +2,9 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cam_templates",
-  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the estbl table itself lives in cam_wv_saturation.esm as a function_tables entry, generated from svp_trans at T = 127.16..377.16 K); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, factored into the shared pcf_transition_poly(tc) template, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The repeated temperature constants are named as zero-parameter constant-fragment templates applied with empty bindings: tmelt = TKFRZ = 273.15 K, tboil = TBOIL = 373.16 K, ttrice = TTRICE = 20 K (TKTRIP = 273.16 K stays inline in goff_gratch_ice). The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. The library also carries (e) the two cam_export laws of the surface-exchange slice (camsrfexch.F90:496, 503): density_dry_air = p/(rair t) and exner_function = (p_surf/p)^cappa, both generic in their physical constants (rair, cappa taken as template parameters and bound by the caller to the named parameters of CamOutExport); and (f) the four laws of the vertical-diffusion slice (diffusion_solver.F90): interface_diffusivity = kv*dpidz_sq (the coef_q_diff of the z-coordinate finite-volume flux form, F90:524-528, 952), surface_layer_source (the g*F/dz[1] lowest-layer injection of a surface flux F, F90:440), surface_stress_coefficient = ksrftms + max(tau/ws, ksrfmin) (the implicit-surface-stress drag, F90:232-239) and wind_damping_rate = -g*ksrf/dz[1] in the lowest layer, 0 elsewhere (F90:274-285), all consumed by cam_vertical_diffusion.esm. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
+  "description": "Expression-template library for the CAM6 physics (stage 2 of the EqESM project): the pointwise saturation-thermodynamics laws of the wv_saturation/wv_sat_methods modules (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 and wv_sat_methods.F90 of the instrumented cam6_4_212 fork), transcribed exactly for use by the stage-2 CAM components (cam_wv_saturation.esm, cam_rayleigh_friction.esm, cam_energy_fixer.esm). The library carries (a) the Goff-Gratch saturation vapor pressures goff_gratch_water and goff_gratch_ice (wv_sat_methods.F90:569-580 and 611-620, the esatw/esati branch of svp_water/svp_ice); (b) the mixed-phase weight ice_weight (wv_sat_methods.F90:494-498 and wv_saturation.F90:555-562) and the blended svp_trans (wv_sat_methods.F90:479-513) that generates the tabulated estbl of wv_saturation.F90:191-254 (the lookup law estbl_es0 and its estbl_tmax = 375.16 K clamp live here as templates; the 251-knot table data itself is declared by each consuming document's function_tables block - cam_wv_saturation.esm and cam_zm_evap.esm - because the CLI resolves table_lookup only against the declaring document); (c) the saturation specific humidity svp_to_qsat = epsilo es / (p - omeps es), unity when saturated (wv_sat_methods.F90:185-197); and (d) the latent-heat laws of calc_hltalt (wv_saturation.F90:521-573): hltalt_no_ip (no-ice-phase branch), hltalt_mixed (the full law, adding the ice-phase weight times LATICE) and tterm_transition (the pcf(5) polynomial of the water-minus-ice es correction, factored into the shared pcf_transition_poly(tc) template, Horner-evaluated in the Fortran order and divided by ttrice). Constants are SHR_CONST_* values (shr_const_mod.F90:24-55): LATVAP = 2.501e6 J/kg, LATICE = 3.337e5 J/kg, TKFRZ = 273.15 K, and the wv_saturation locals TBOIL = 373.16 K, TKTRIP = 273.16 K, TTRICE = 20 K, PCF = [5.04469588506e-01, -5.47288442819e+00, -3.67471858735e-01, -8.95963532403e-03, -7.78053686625e-05]. The repeated temperature constants are named as zero-parameter constant-fragment templates applied with empty bindings: tmelt = TKFRZ = 273.15 K, tboil = TBOIL = 373.16 K, ttrice = TTRICE = 20 K (TKTRIP = 273.16 K stays inline in goff_gratch_ice). The Goff-Gratch curve-fit coefficients are dimensionless (the fit as written is dimensionally incoherent: a log10 of an hPa-valued number, exponentiated and scaled by 100); the x100 hPa-to-Pa factor carries the Pa dimension so the analytic laws read as Pa. The library also carries (e) the two cam_export laws of the surface-exchange slice (camsrfexch.F90:496, 503): density_dry_air = p/(rair t) and exner_function = (p_surf/p)^cappa, both generic in their physical constants (rair, cappa taken as template parameters and bound by the caller to the named parameters of CamOutExport); and (f) the four laws of the vertical-diffusion slice (diffusion_solver.F90): interface_diffusivity = kv*dpidz_sq (the coef_q_diff of the z-coordinate finite-volume flux form, F90:524-528, 952), surface_layer_source (the g*F/dz[1] lowest-layer injection of a surface flux F, F90:440), surface_stress_coefficient = ksrftms + max(tau/ws, ksrfmin) (the implicit-surface-stress drag, F90:232-239) and wind_damping_rate = -g*ksrf/dz[1] in the lowest layer, 0 elsewhere (F90:274-285), all consumed by cam_vertical_diffusion.esm. All laws are pointwise; tests of the analytic branch structure live in the SvpTransLaw model of cam_wv_saturation.esm, pinned to the stage-1 qsat dumps (stage1/dumps/cam/cam_qsat.csv) through the estbl table they generate."
  },
+
  "expression_templates": {
   "ice_weight": {
    "description": "Mixed-phase weight of calc_hltalt (wv_saturation.F90:555-562) and svp_trans (wv_sat_methods.F90:494-498): weight = min(1, max(0, (tmelt - t)/ttrice)), the clamp form of the Fortran's three-branch if (weight = 1 below tmelt - ttrice, 0 at and above tmelt, linear between). The clamp is bit-identical to the branches: (tmelt - t)/ttrice equals 1 exactly at t = tmelt - ttrice and 0 at t = tmelt, is positive below tmelt and negative above, so the outer min/max select the constant branches exactly where the Fortran does. tmelt and ttrice are the tmelt/ttrice constant-fragment templates (TKFRZ = 273.15 K, TTRICE = 20 K).",
@@ -1374,6 +1375,486 @@
       ]
      }
     ]
+   }
+  },
+  "zm_mass_flux_excess": {
+   "description": "Mass-flux-weighted excess of the ZM plume properties used by q1q2_pjr (zm_convr.F90:2590-2601, 2612-2619): g = mu (x - xhat), the plume mass flux mu times the excess of the plume value x over the environmental value xhat at the same level. The four flux terms of each q1q2 tendency are four applications of this law at the k and k+1 neighbors (the cam_zm_q1q2 model applies it with index operands inside its level faq); the subcloud tendency is the negative sum of two applications divided by dsubcld (F90:2612-2619).",
+   "params": [
+    "mu",
+    "x",
+    "xhat"
+   ],
+   "body": {
+    "op": "*",
+    "args": [
+     "mu",
+     {
+      "op": "-",
+      "args": [
+       "x",
+       "xhat"
+      ]
+     }
+    ]
+   }
+  },
+  "zm_evap_flux_step": {
+   "description": "Per-level step of the top-down precipitation-flux integral of zm_conv_evap_run (zm_conv_evap.F90:219-224): flx_hi = max(flx_lo + prod pdel / gravit, 0). The precipitation flux is the vertical integral of the net production: the interface value flx_lo plus the layer contribution prod pdel / gravit (the integral of the production over the layer mass pdel/gravit), accumulated top-down; the max is the roundoff guard of F90:222-224, which fires on 4 of the 480 dumped levels of this lane by up to 3.0e-19 kg/m2/s. The cam_zm_evap model pins this per-level step with the accumulated flx_lo taken from the dump because the CLI rejects the coupled top-down recurrence: the evaporation at a level depends on the flux entering it, which is the integral of production-minus-evaporation above it (observed dependency cycle, esm-spec 4.9.6). Applied once for the rain flux (ntprprd) and once for the snow flux (ntsnprd).",
+   "params": [
+    "flx_lo",
+    "prod",
+    "pdel",
+    "gravit"
+   ],
+   "body": {
+    "op": "max",
+    "args": [
+     {
+      "op": "+",
+      "args": [
+       "flx_lo",
+       {
+        "op": "/",
+        "args": [
+         {
+          "op": "*",
+          "args": [
+           "prod",
+           "pdel"
+          ]
+         },
+         "gravit"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "kg/(m^2*s)"
+     }
+    ]
+   }
+  },
+  "zm_evap_snow_frac": {
+   "description": "Snow fraction of the precipitation flux entering a layer, clamped to [0, 1] (zm_conv_evap.F90:186-192 and 205-209, the work1 expressions): w = min(max(0, flxsnow / flxprec), 1) when flxprec > 0, else 0 (the flxprec = 0 guard of F90:190-192 prevents a 0/0). Applied twice in the evap chain: with flxsntm, the snow flux after melting (F90:186-192), the share of evaporated rain that is snow evaporation; and with flxsnow, the snow flux into the layer (F90:205-209), the lower bound of the net-snow-production phase fraction work2 = max(fsnow_conv, work1).",
+   "params": [
+    "flxprec",
+    "flxsnow"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">",
+      "args": [
+       "flxprec",
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "kg/(m^2*s)"
+       }
+      ]
+     },
+     {
+      "op": "min",
+      "args": [
+       {
+        "op": "max",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 0.0,
+          "units": "1"
+         },
+         {
+          "op": "/",
+          "args": [
+           "flxsnow",
+           "flxprec"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "1"
+     }
+    ]
+   }
+  },
+  "zm_flux": {
+   "description": "Layer-centered total plume mass flux F = mu (xu - xhat) + md (xd - xhat) of q1q2_pjr (zm_convr.F90:2589-2601, 2612-2619): the updraft mass flux mu times the updraft excess over the environment plus the downdraft mass flux md times the downdraft excess. The flux divergence of each q1q2 tendency is (F[min(k+1, pver)] - F[k])/dp[k] (zm_flux_divergence) and the subcloud tendency is -F[k]/dsubcld (zm_subcloud_tendency); both are applications of this law at the k and k+1 neighbors.",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_mass_flux_excess",
+      "bindings": {
+       "mu": "mu",
+       "x": "xu",
+       "xhat": "xhat"
+      }
+     },
+     {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_mass_flux_excess",
+      "bindings": {
+       "mu": "md",
+       "x": "xd",
+       "xhat": "xhat"
+      }
+     }
+    ]
+   }
+  },
+  "zm_flux_divergence": {
+   "description": "Vertical divergence of the ZM plume mass flux in the pressure coordinate, (F[min(k+1, pver)] - F[k])/dp[k] with F = zm_flux the layer-centered plume flux (zm_convr.F90:2589-2601, the four flux terms of each q1q2 tendency): the flux at the level below (index k+1, clamped to the surface level min(k+1, pver)) minus the flux at level k, divided by the layer pressure thickness dp[k] (dp = 0.01 pdel). Applied once for moisture (fd_q, xu = qu, xd = qd, xhat = qhat) and once for dry static energy (fd_s, xu = su, xd = sd, xhat = shat).",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat",
+    "dp",
+    "pver"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
+    "args": [
+     "mu",
+     "xu",
+     "md",
+     "xd",
+     "xhat",
+     "dp"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "/",
+     "args": [
+      {
+       "op": "-",
+       "args": [
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            {
+             "op": "min",
+             "args": [
+              {
+               "op": "+",
+               "args": [
+                "k",
+                1
+               ]
+              },
+              "pver"
+             ]
+            }
+           ]
+          }
+         }
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            "k"
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            "k"
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            "k"
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            "k"
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            "k"
+           ]
+          }
+         }
+        }
+       ]
+      },
+      {
+       "op": "index",
+       "args": [
+        "dp",
+        "k"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "zm_subcloud_tendency": {
+   "description": "Subcloud tendency of q1q2_pjr, (1/dsubcld)(-F[k]) with F = zm_flux the layer-centered plume flux (zm_convr.F90:2612-2619): the negative of the plume flux at level k divided by the subcloud layer thickness dsubcld, gathered at index maxg by the tendency masks. Applied once for moisture (sub_dqdt, xu = qu, xd = qd, xhat = qhat) and once for dry static energy (sub_dsdt, xu = su, xd = sd, xhat = shat).",
+   "params": [
+    "mu",
+    "xu",
+    "md",
+    "xd",
+    "xhat",
+    "dsubcld"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "k"
+    ],
+    "args": [
+     "mu",
+     "xu",
+     "md",
+     "xd",
+     "xhat"
+    ],
+    "ranges": {
+     "k": {
+      "from": "lev"
+     }
+    },
+    "expr": {
+     "op": "*",
+     "args": [
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": 1.0,
+         "units": "1"
+        },
+        "dsubcld"
+       ]
+      },
+      {
+       "op": "*",
+       "args": [
+        {
+         "op": "const",
+         "args": [],
+         "value": -1.0,
+         "units": "1"
+        },
+        {
+         "op": "apply_expression_template",
+         "args": [],
+         "name": "zm_flux",
+         "bindings": {
+          "mu": {
+           "op": "index",
+           "args": [
+            "mu",
+            "k"
+           ]
+          },
+          "xu": {
+           "op": "index",
+           "args": [
+            "xu",
+            "k"
+           ]
+          },
+          "md": {
+           "op": "index",
+           "args": [
+            "md",
+            "k"
+           ]
+          },
+          "xd": {
+           "op": "index",
+           "args": [
+            "xd",
+            "k"
+           ]
+          },
+          "xhat": {
+           "op": "index",
+           "args": [
+            "xhat",
+            "k"
+           ]
+          }
+         }
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "estbl_tmax": {
+   "description": "The upper clamp of the estbl saturation-vapor-pressure lookup: tmax = 375.16 K (wv_saturation.F90:96, the public module parameter; estblf clamps T to it at wv_saturation.F90:388, so the 251st table knot at 377.16 K is unreachable). Zero-parameter constant-fragment template applied with empty bindings.",
+   "params": [],
+   "body": {
+    "op": "const",
+    "args": [],
+    "value": 375.16,
+    "units": "K"
+   }
+  },
+  "estbl_es0": {
+   "description": "The saturation vapor pressure of the estbl table lookup, es0 = estbl[min(T, tmax)]: the linear interpolation of the estbl function table on the clamped temperature min(T, tmax), with estbl_tmax the wv_saturation.F90:96 clamp (estblf of wv_saturation.F90:388) and the table's own flat out-of-bounds clamps. The table itself must be declared by the CONSUMING document's function_tables block (the CLI resolves table_lookup only against the declaring document - importing the table from a library or a mounted subsystem fails with [table_lookup_unknown_table], see README-cam-zm-evap.md), so cam_wv_saturation.esm and cam_zm_evap.esm each carry the identical data copy and both call this single law: WvSaturation binds T to its T, ZMevap to its layer temperature t1; the saturation mixing ratio is then svp_to_qsat(es0, p) in both callers.",
+   "params": [
+    "T"
+   ],
+   "body": {
+    "op": "table_lookup",
+    "table": "estbl",
+    "axes": {
+     "T": {
+      "op": "min",
+      "args": [
+       "T",
+       {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "estbl_tmax",
+        "bindings": {}
+       }
+      ]
+     }
+    },
+    "args": []
    }
   }
  }

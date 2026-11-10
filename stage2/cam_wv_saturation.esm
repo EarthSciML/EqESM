@@ -2,8 +2,9 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cam_wv_saturation",
-  "description": "CAM6 saturation specific humidity qsat (stage 2 of the EqESM project): the pointwise qsat law of wv_saturation.F90 (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 of the instrumented cam6_4_212 fork) exactly as the SCAM dump window evaluates it, and the Goff-Gratch analytic laws that generate its vapor-pressure table. Two models: WvSaturation carries the run's law - es = estblf(T) from the estbl function table below (the 251-entry Goff-Gratch mixed-phase SVP table of wv_sat_init, wv_saturation.F90:191-254, generated from svp_trans of wv_sat_methods.F90:479-513 at T = 127.16..377.16 K), then qs = svp_to_qsat(es, p) and es = min(es, p) (svp_to_qsat of wv_sat_methods.F90:185-197), then the deriv_outputs chain (wv_saturation.F90:656-686): hltalt and tterm from calc_hltalt (F90:521-573, the mixed-phase branch; see cam_templates.esm), desdt = hltalt es / (rh2o t^2) + tterm, dqsdt = qs p desdt / (es (p - omeps es)) (0 when saturated), gam = dqsdt hltalt / cpair - the dumped gam (dqsdT) of qsat_line (F90:739-784). SvpTransLaw pins the analytic generation formula itself (goff_gratch_water/ice and the svp_trans blend of cam_templates.esm). The table lookup is CAM's estblf (F90:378-393): linear interpolation on t_tmp = clamp(T - tmin, 0, tmax - tmin) with flat clamps both ends (represented here as table_lookup with interpolation linear / out_of_bounds clamp on min(T, tmax); the esm blend t_i + w (t_i+1 - t_i) differs from the Fortran (1 - w) t_i + w t_i+1 by at most 1 ulp). Tests are pinned to stage1/dumps/cam/cam_qsat.csv rows (step, phase, lev cited per test; es/qs/gam expected values are the dumped ones; hltalt/tterm are the Fortran-formula values from the stage-1 validator's python replica, which reproduces the dump to 1.8e-12 Pa on es), at rel 1e-12. Constants: rh2o = RWV = AVOGAD BOLTZ / MWWV = 461.5046398201599 J/(kg K), epsilo = MWWV/MWDAIR = 0.6219705862045155, omeps = 1 - epsilo = 0.3780294137954845, cpair = 1.00464e3 J/(kg K) (shr_const_mod.F90:24-55); tmin = 127.16 K, tmax = 375.16 K (wv_saturation.F90:95-96). Coverage note: the dump window spans T = 208.7..302.5 K, p = 364..92383 Pa, both phases, with pure-ice (T < 253.15), transition (253.15-273.15) and water (>= 273.15) branches all exercised; the saturated branches (p - es <= 0, qs = 1, dqsdt = 0) and the estblf clamps are not exercised by the dump and are pinned only by the law structure."
+  "description": "CAM6 saturation specific humidity qsat (stage 2 of the EqESM project): the pointwise qsat law of wv_saturation.F90 (components/cam/src/atmos_phys/to_be_ccppized/wv_saturation.F90 of the instrumented cam6_4_212 fork) exactly as the SCAM dump window evaluates it, and the Goff-Gratch analytic laws that generate its vapor-pressure table. Two models: WvSaturation carries the run's law - es = estblf(T) from the estbl function table declared in this document (the 251-entry Goff-Gratch mixed-phase SVP table of wv_sat_init, wv_saturation.F90:191-254, generated from svp_trans of wv_sat_methods.F90:479-513 at T = 127.16..377.16 K), looked up by one application of the shared estbl_es0 template of cam_templates.esm (clamped to tmax = 375.16 K; cam_zm_evap.esm applies the same single law to its own identical table copy - the CLI resolves table_lookup only against the declaring document, see README-cam-zm-evap.md), then qs = svp_to_qsat(es, p) and es = min(es, p) (svp_to_qsat of wv_sat_methods.F90:185-197), then the deriv_outputs chain (wv_saturation.F90:656-686): hltalt and tterm from calc_hltalt (F90:521-573, the mixed-phase branch; see cam_templates.esm), desdt = hltalt es / (rh2o t^2) + tterm, dqsdt = qs p desdt / (es (p - omeps es)) (0 when saturated), gam = dqsdt hltalt / cpair - the dumped gam (dqsdT) of qsat_line (F90:739-784). SvpTransLaw pins the analytic generation formula itself (goff_gratch_water/ice and the svp_trans blend of cam_templates.esm). The table lookup is CAM's estblf (F90:378-393): linear interpolation on t_tmp = clamp(T - tmin, 0, tmax - tmin) with flat clamps both ends (represented as table_lookup with interpolation linear / out_of_bounds clamp on min(T, tmax); the esm blend t_i + w (t_i+1 - t_i) differs from the Fortran (1 - w) t_i + w t_i+1 by at most 1 ulp). Tests are pinned to stage1/dumps/cam/cam_qsat.csv rows (step, phase, lev cited per test; es/qs/gam expected values are the dumped ones; hltalt/tterm are the Fortran-formula values from the stage-1 validator's python replica, which reproduces the dump to 1.8e-12 Pa on es), at rel 1e-12. Constants: rh2o = RWV = AVOGAD BOLTZ / MWWV = 461.5046398201599 J/(kg K), epsilo = MWWV/MWDAIR = 0.6219705862045155, omeps = 1 - epsilo = 0.3780294137954845, cpair = 1.00464e3 J/(kg K) (shr_const_mod.F90:24-55); tmin = 127.16 K, tmax = 375.16 K (wv_saturation.F90:95-96). Coverage note: the dump window spans T = 208.7..302.5 K, p = 364..92383 Pa, both phases, with pure-ice (T < 253.15), transition (253.15-273.15) and water (>= 273.15) branches all exercised; the saturated branches (p - es <= 0, qs = 1, dqsdt = 0) and the estblf clamps are not exercised by the dump and are pinned only by the law structure."
  },
+
  "function_tables": {
   "estbl": {
    "description": "estbl, the Goff-Gratch mixed-phase saturation vapor pressure table of wv_sat_init (wv_saturation.F90:100-101, 191-254): plenest = ceiling(tmax - tmin) + 2 = 251 entries at T = tmin + (i - 1), i = 1..251, tmin = 127.16 K (so knots 127.16..377.16 K; the 251st knot is never reachable through estblf because T is clamped to tmax = 375.16 K, giving max index 250). Values are svp_trans(T) (wv_sat_methods.F90:479-513) evaluated in double precision - the mixed-phase blend weight es_ice + (1 - weight) es_water over the 20 K band below tmelt, Goff-Gratch formulas of wv_sat_methods.F90:569-580 (water) and 611-620 (ice). Generated from the CAM formulas by the stage-1 validator's python replica, which reproduces the dumped estblf outputs to 1.8e-12 Pa; the first/last knots are also pinned by the SvpTransLaw tests. Interpolation is estblf's: linear on t_tmp = clamp(T - tmin, 0, tmax - tmin), flat clamps at both ends.",
@@ -588,23 +589,12 @@
     {
      "lhs": "es0",
      "rhs": {
-      "op": "table_lookup",
-      "table": "estbl",
-      "axes": {
-       "T": {
-        "op": "min",
-        "args": [
-         "T",
-         {
-          "op": "const",
-          "args": [],
-          "value": 375.16,
-          "units": "K"
-         }
-        ]
-       }
-      },
-      "args": []
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "estbl_es0",
+      "bindings": {
+       "T": "T"
+      }
      }
     },
     {

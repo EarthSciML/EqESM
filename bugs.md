@@ -484,3 +484,11 @@ Format template:
 - **Impact on results:** none (dead code).
 - **Reproduced/corrected in .esm:** not reproduced (omitted from the Jra model in `stage2/cdeps_datm_jra.esm`).
 - **Status:** open (cleanup; suggest removing upstream).
+
+## 38. ZM: zm_conv_evap_run ignores ke_lnd and landfrac (kemask = ke unconditionally)
+
+- **Location:** `components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_conv_evap.F90:160` (`kemask = ke`); `ke_lnd` and `landfrac` are declared `intent(in)` (F90:23, 25, 50, 55) but never referenced in the body. The caller (`physics/cam/zm_conv_intr.F90:671-679`) passes `zmconv_ke` and `zmconv_ke_lnd` and the land fraction, so the namelist option `zmconv_ke_lnd` is wired through but has no effect.
+- **Description:** upstream CAM6.4's ZM evaporation applies one evaporation coefficient to all columns (`kemask = ke`), despite the code carrying the `ke_lnd`/`landfrac` arguments. (The CESM2-era intent was presumably `kemask = ke_lnd` over land, the analog of the cldprp `c0_lnd`/`c0_ocn` split, but the branch was never completed.)
+- **Impact on results:** none in the reference run — all dumped columns of the SCAM window are ocean g = 1 columns, so the distinction is unobservable in the dumps; the esm model transcribes the code as written (one coefficient `ke`, dumped 5e-6).
+- **Reproduced/corrected in .esm:** `stage2/cam_zm_evap.esm` (ZMevap) reproduces the code as written; the `ke` variable documents the dead arguments. Verified identical in the vanilla CESM checkout (fork-vs-vanilla diff empty — not an instrumentation artifact).
+- **Status:** open (dead arguments; the zmconv_ke_lnd namelist option has no effect on the simulation).

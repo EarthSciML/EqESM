@@ -1,0 +1,2224 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cam_zm_q1q2",
+  "description": "Stage-2 implementation of the CAM Zhang-McFarlane deep-convection temperature and moisture tendencies q1q2_pjr (stage 2 of the EqESM project; instrumented cam6_4_212 fork of the SCAM ARM97_4scam run, dump window steps 18-23 and 40-48): the pointwise laws of zm_convr.F90:2584-2622 evaluated on the dumped convr state (the q1q2_pjr call of zm_convr.F90:718-724, inside the gathered-column loop; all dumped columns of the window are g = 1, jt = 15, maxg = 32 = pver). The tendencies: emc = -cme (the net condensation cu - evp of cldprp, F90:2586-2587), dqdt = emc + div(mu(qu - qhat) + md(qd - qhat))/dp (F90:2596-2601), dsdt = -rl/cp emc + div(mu(su - shat) + md(sd - shat))/dp (F90:2589-2594), and dl = du qcde(k+1) (F90:2603-2604) over the convection layer k = jt..pver-1, with the subcloud replacement at k = maxg: (1/dsubcld)(-mu(qu - qhat) - md(qd - qhat)) and the temperature analogue (F90:2611-2619), and the copy-down dqdt(k) = dqdt(k-1), dsdt(k) = dsdt(k-1) for k > maxg (F90:2620-2622). The flux divergence of each tendency is one application of the shared template zm_flux_divergence (cam_templates.esm, (F[min(k+1, PVER)] - F[k])/dp[k] of the layer-centered plume flux F = zm_flux = mu (x - xhat) + md (x - xhat), itself two applications of zm_mass_flux_excess) and the subcloud tendency is one application of zm_subcloud_tendency (-F[k]/dsubcld), both invoked once for q and once for s; the k+1 gather is clamped to min(k+1, PVER) and the piecewise mask (ifelse on the level index k against the scalar parameters jt and maxg) selects the flux form for jt <= k < maxg, the subcloud value (gathered at index maxg) for k >= maxg, and zero above jt; the masked branches of the dumped column are all zero anyway (mu = 0 above jt on the dump, so the flux form vanishes there; the copy-down never fires because maxg = pver on every dumped column). Levels are the CAM convention, lev 1 = model top, lev 32 = surface, exactly as dumped (no reversal). The dumped cme/mu/md/du/qu/su/qd/sd/qhat/shat/qcde/pdel enter as parameters; dqdt/dsdt/dlf are unknowns pinned against the dump rows. Tests at steps 18, 40 and 48 pin the tendencies at the convection top (lev 15 = jt), the downdraft region (lev 17), a deep level (lev 25) and the subcloud level (lev 32), and dl at the two detraining levels 15-16 where du > 0.",
+  "license": "MIT",
+  "tags": [
+   "eqesm:stage2",
+   "model:convection",
+   "cam:zm"
+  ],
+  "references": [
+   {
+    "citation": "CAM6.4 (cam6_4_212, Zhang-McFarlane deep convection), components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90, subroutine q1q2_pjr (F90:2520-2628), called from zm_convr_run at F90:718-724."
+   }
+  ]
+ },
+ "metaparameters": {
+  "PVER": {
+   "type": "integer",
+   "default": 32,
+   "description": "Number of model levels (pver = 32 in the SCAM run; the dump's pver)."
+  }
+ },
+ "index_sets": {
+  "lev": {
+   "kind": "interval",
+   "size": "PVER"
+  }
+ },
+ "models": {
+  "ZMq1q2": {
+   "expression_template_imports": [
+    {
+     "ref": "./cam_templates.esm"
+    }
+   ],
+   "variables": {
+    "cme": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Net condensation rate of cldprp, cme = cu - evp (the dumped cmeg column; the q1q2_pjr emc = -cu + evp of zm_convr.F90:2586-2587), [kg/kg/s]"
+    },
+    "mu": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "hPa/s",
+     "default": 0.0,
+     "description": "Updraft mass flux after the mb scaling of zm_convr.F90:702-704, [hPa/s] (mb = hPa); dump column mu"
+    },
+    "md": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "hPa/s",
+     "default": 0.0,
+     "description": "Downdraft mass flux after the mb scaling, [hPa/s] (mb = hPa); dump column md"
+    },
+    "du": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "1/s",
+     "default": 0.0,
+     "description": "Updraft detrainment, dumped in its final 1/s units (the mu-continuity identity of the stage-1 validator, mu(k) - mu(k+1) = (eu(k) - du(k)) dp(k) with dp in mb, holds with eu/du in 1/s); the dl = du qcde(k+1) law of F90:2603 then has mixing-ratio tendency units; dump column du"
+    },
+    "qu": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Updraft specific humidity, [kg/kg]; dump column qu"
+    },
+    "su": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "K",
+     "default": 0.0,
+     "description": "Updraft dry static energy, [K]; dump column su"
+    },
+    "qd": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Downdraft specific humidity, [kg/kg]; dump column qd"
+    },
+    "sd": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "K",
+     "default": 0.0,
+     "description": "Downdraft dry static energy, [K]; dump column sd"
+    },
+    "qhat": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Environmental specific humidity of the plume-mixing state, [kg/kg]; dump column qhat"
+    },
+    "shat": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "K",
+     "default": 0.0,
+     "description": "Environmental dry static energy of the plume-mixing state, [K]; dump column shat"
+    },
+    "qcde": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "Detrained condensate qldeg, the ql argument of q1q2_pjr (zm_convr.F90:723), [kg/kg]; dump column qcde"
+    },
+    "pdel": {
+     "type": "parameter",
+     "shape": [
+      "lev"
+     ],
+     "units": "Pa",
+     "default": 0.0,
+     "description": "Layer pressure thickness, [Pa]; dump column pdel; the q1q2 pressure measure dp = 0.01 pdel in mb (zm_convr.F90:717)"
+    },
+    "jt": {
+     "type": "parameter",
+     "units": "1",
+     "default": 15,
+     "description": "Top level index of the convection layer jt (the ktm of the single-column gathered loop; zm_convr.F90:2583), = 15 on all dumped columns; dump column jt"
+    },
+    "maxg": {
+     "type": "parameter",
+     "units": "1",
+     "default": 32,
+     "description": "Subcloud top level index maxg (the kbm of the single-column loop, zm_convr.F90:2607), = 32 = pver on all dumped columns so the k > maxg copy-down of F90:2620-2622 never fires in this window; dump column maxg"
+    },
+    "dsubcld": {
+     "type": "parameter",
+     "units": "hPa",
+     "default": 0.0,
+     "description": "Subcloud-layer pressure thickness dsubcld = sum of dp over the subcloud layers (zm_convr.F90:600), [hPa] (mb = hPa); dump column dsubcld"
+    },
+    "rl": {
+     "type": "parameter",
+     "units": "J/kg",
+     "default": 2501000.0,
+     "description": "Latent heat of vaporization rl = SHR_CONST_LATVAP (shr_const_mod.F90:31), [J/kg]; dump constant rl"
+    },
+    "cpres": {
+     "type": "parameter",
+     "units": "J/(kg*K)",
+     "default": 1004.64,
+     "description": "Dry-air heat capacity cp = SHR_CONST_CPDAIR (shr_const_mod.F90:36), [J/(kg*K)]; dump constant cpres"
+    },
+    "dp": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "hPa",
+     "default": 0.0,
+     "description": "Layer pressure thickness in mb (hPa), dp = 0.01 pdel (zm_convr.F90:717), the denominator of the flux-divergence terms, [hPa]"
+    },
+    "emc": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Net condensation emc = -cu + evp = -cme (zm_convr.F90:2586-2587), [kg/kg/s]"
+    },
+    "fd_q": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Moisture flux divergence of the q1q2 dqdt law (zm_convr.F90:2596-2601), one application of the zm_flux_divergence template for the q species, (F[min(k+1, PVER)] - F[k])/dp[k] with F = zm_flux(mu, qu, md, qd, qhat), [kg/kg/s]"
+    },
+    "fd_s": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "K/s",
+     "default": 0.0,
+     "description": "Dry static energy flux divergence of the q1q2 dsdt law (zm_convr.F90:2589-2594), one application of the zm_flux_divergence template for the s species, (F[min(k+1, PVER)] - F[k])/dp[k] with F = zm_flux(mu, su, md, sd, shat), [K/s]"
+    },
+    "sub_dqdt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Subcloud moisture tendency of zm_convr.F90:2616-2619, one application of the zm_subcloud_tendency template for the q species, (1/dsubcld)(-F[k]) with F = zm_flux(mu, qu, md, qd, qhat), evaluated on every level and gathered at index maxg by the dqdt mask, [kg/kg/s]"
+    },
+    "sub_dsdt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "K/s",
+     "default": 0.0,
+     "description": "Subcloud temperature tendency of zm_convr.F90:2612-2615, one application of the zm_subcloud_tendency template for the s species, (1/dsubcld)(-F[k]) with F = zm_flux(mu, su, md, sd, shat), gathered at index maxg by the dsdt mask, [K/s]"
+    },
+    "dqdt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Moisture tendency: emc + fd_q for jt <= k < maxg, sub_dqdt(maxg) for k >= maxg, 0 above jt (zm_convr.F90:2596-2601, 2616-2622), [kg/kg/s]; dump column dqdt"
+    },
+    "dsdt": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "K/s",
+     "default": 0.0,
+     "description": "Temperature tendency: -rl/cp emc + fd_s for jt <= k < maxg, sub_dsdt(maxg) for k >= maxg, 0 above jt (zm_convr.F90:2589-2594, 2612-2622), [K/s]; dump column dsdt"
+    },
+    "dlf": {
+     "type": "unknown",
+     "shape": [
+      "lev"
+     ],
+     "units": "kg/(kg*s)",
+     "default": 0.0,
+     "description": "Detrained condensate tendency dl = du qcde(k+1) for jt <= k <= pver-1, 0 elsewhere (zm_convr.F90:2603-2604; the k = pver value is out of the Fortran loop and pinned to 0), [kg/kg/s]; dump column dlf"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "dp",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.01,
+        "units": "hPa/Pa"
+       },
+       "pdel"
+      ]
+     }
+    },
+    {
+     "lhs": "emc",
+     "rhs": {
+      "op": "*",
+      "args": [
+       {
+        "op": "const",
+        "args": [],
+        "value": -1.0,
+        "units": "1"
+       },
+       "cme"
+      ]
+     }
+    },
+    {
+     "lhs": "fd_q",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_flux_divergence",
+      "bindings": {
+       "mu": "mu",
+       "xu": "qu",
+       "md": "md",
+       "xd": "qd",
+       "xhat": "qhat",
+       "dp": "dp",
+       "pver": "PVER"
+      }
+     }
+    },
+    {
+     "lhs": "fd_s",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_flux_divergence",
+      "bindings": {
+       "mu": "mu",
+       "xu": "su",
+       "md": "md",
+       "xd": "sd",
+       "xhat": "shat",
+       "dp": "dp",
+       "pver": "PVER"
+      }
+     }
+    },
+    {
+     "lhs": "sub_dqdt",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_subcloud_tendency",
+      "bindings": {
+       "mu": "mu",
+       "xu": "qu",
+       "md": "md",
+       "xd": "qd",
+       "xhat": "qhat",
+       "dsubcld": "dsubcld"
+      }
+     }
+    },
+    {
+     "lhs": "sub_dsdt",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "zm_subcloud_tendency",
+      "bindings": {
+       "mu": "mu",
+       "xu": "su",
+       "md": "md",
+       "xd": "sd",
+       "xhat": "shat",
+       "dsubcld": "dsubcld"
+      }
+     }
+    },
+    {
+     "lhs": "dqdt",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "args": [
+       "emc",
+       "fd_q",
+       "sub_dqdt"
+      ],
+      "ranges": {
+       "k": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">=",
+         "args": [
+          "k",
+          "maxg"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "sub_dqdt",
+          "maxg"
+         ]
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">=",
+           "args": [
+            "k",
+            "jt"
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "emc",
+              "k"
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "fd_q",
+              "k"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "const",
+           "args": [],
+           "value": 0.0,
+           "units": "kg/(kg*s)"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "dsdt",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "args": [
+       "emc",
+       "fd_s",
+       "sub_dsdt"
+      ],
+      "ranges": {
+       "k": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">=",
+         "args": [
+          "k",
+          "maxg"
+         ]
+        },
+        {
+         "op": "index",
+         "args": [
+          "sub_dsdt",
+          "maxg"
+         ]
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">=",
+           "args": [
+            "k",
+            "jt"
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "/",
+               "args": [
+                {
+                 "op": "*",
+                 "args": [
+                  {
+                   "op": "const",
+                   "args": [],
+                   "value": -1.0,
+                   "units": "1"
+                  },
+                  "rl"
+                 ]
+                },
+                "cpres"
+               ]
+              },
+              {
+               "op": "index",
+               "args": [
+                "emc",
+                "k"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "fd_s",
+              "k"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "const",
+           "args": [],
+           "value": 0.0,
+           "units": "K/s"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "lhs": "dlf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "k"
+      ],
+      "args": [
+       "du",
+       "qcde"
+      ],
+      "ranges": {
+       "k": {
+        "from": "lev"
+       }
+      },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        {
+         "op": ">=",
+         "args": [
+          "k",
+          "jt"
+         ]
+        },
+        {
+         "op": "ifelse",
+         "args": [
+          {
+           "op": ">=",
+           "args": [
+            "k",
+            "PVER"
+           ]
+          },
+          {
+           "op": "const",
+           "args": [],
+           "value": 0.0,
+           "units": "kg/(kg*s)"
+          },
+          {
+           "op": "*",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "du",
+              "k"
+             ]
+            },
+            {
+             "op": "index",
+             "args": [
+              "qcde",
+              {
+               "op": "min",
+               "args": [
+                {
+                 "op": "+",
+                 "args": [
+                  "k",
+                  1
+                 ]
+                },
+                "PVER"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "const",
+         "args": [],
+         "value": 0.0,
+         "units": "kg/(kg*s)"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "tests": [
+    {
+     "id": "s18_g1",
+     "description": "Step 18, g = 1 column (cam_zm.csv step 18 rows lev 1..32 with cam_zm_scal.csv step 18; jt = 15, maxg = 32, dsubcld = 14.0268 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "cme": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2.732516408607399e-10,
+       5.382050254389941e-10,
+       8.049868340496714e-10,
+       9.85818574122165e-10,
+       1.0284801737048366e-09,
+       8.974825616651558e-10,
+       7.7331640550637e-10,
+       6.570606980518168e-10,
+       5.591513671896469e-10,
+       4.2525247106705384e-10,
+       4.1450244481802104e-10,
+       2.727077219584409e-10,
+       1.210284236736102e-10,
+       -3.5611484075052504e-10,
+       -4.1228355302974973e-10,
+       -5.525514164500257e-10,
+       0.0
+      ],
+      "mu": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       4.5601408970723693e-05,
+       7.108700377391497e-05,
+       6.421133947817087e-05,
+       5.781325211558258e-05,
+       5.191556737228527e-05,
+       4.651658672023363e-05,
+       4.161721187114383e-05,
+       3.778732393614679e-05,
+       3.494160455782891e-05,
+       3.290451669376672e-05,
+       3.15619464666969e-05,
+       3.084249581792425e-05,
+       3.0202070004650934e-05,
+       2.963638770807873e-05,
+       2.914208935268156e-05,
+       2.871620158489488e-05,
+       2.835633293693655e-05
+      ],
+      "md": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       -2.160857259293122e-06,
+       -2.5549944141085023e-06,
+       -3.077180047784028e-06,
+       -3.778312349934897e-06,
+       -4.734656348083657e-06,
+       -6.0567302289388224e-06,
+       -7.613016988174517e-06,
+       -9.263580009576582e-06,
+       -1.0841931921780396e-05,
+       -1.2134974358837563e-05,
+       -1.293242934166445e-05,
+       -1.3714579831952649e-05,
+       -1.4469404118956189e-05,
+       -1.5183818768216548e-05,
+       -1.5844632302917384e-05,
+       -1.6438637321092897e-05
+      ],
+      "du": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.5616349485016088e-06,
+       9.565546709145876e-07,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "qu": [
+       1.1229078062109587e-08,
+       1.061244360292124e-08,
+       1.0310850481875767e-08,
+       1.016230809783829e-08,
+       1.0106136815963177e-08,
+       1.0081888734819481e-08,
+       1.0065592069821086e-08,
+       1.0051279582337537e-08,
+       1.0041740084643665e-08,
+       2.2818220005037954e-08,
+       1.1535937167036489e-07,
+       8.308480358048786e-06,
+       1.1904357986575238e-05,
+       1.549409851743249e-05,
+       2.2826562139170426e-05,
+       0.00015068268116575506,
+       0.00028519182447883635,
+       0.0006583989194924025,
+       0.0014094078612936882,
+       0.0026695519073279346,
+       0.004516639503242808,
+       0.006836383982139067,
+       0.009279008199038458,
+       0.011458978851435538,
+       0.013187619490945409,
+       0.014409917382236806,
+       0.015195576243636648,
+       0.01581329910016416,
+       0.016283194418117583,
+       0.01638765145355161,
+       0.016472118863128316,
+       0.016530797032283887
+      ],
+      "su": [
+       632.4213191001481,
+       566.8771583705687,
+       518.5021826859723,
+       480.04350727190604,
+       453.0653448024702,
+       436.0351677111841,
+       422.4158661073699,
+       409.38128958016597,
+       397.0773347257198,
+       386.77526312454387,
+       377.9987535481499,
+       361.13156744171863,
+       351.60930788265864,
+       343.2352506753606,
+       308.6324247728486,
+       341.4003247547115,
+       338.6386430114435,
+       338.3334893959353,
+       337.1972092749858,
+       334.99315639507256,
+       331.57636293120476,
+       327.2827494868538,
+       322.72265688976387,
+       318.5341873894371,
+       315.0251078940499,
+       312.5538111856495,
+       310.92594707330176,
+       309.6787270841635,
+       308.75136714348224,
+       308.69495174107294,
+       308.65387382797843,
+       308.63242477284865
+      ],
+      "qd": [
+       1.1229078062109587e-08,
+       1.061244360292124e-08,
+       1.0310850481875767e-08,
+       1.016230809783829e-08,
+       1.0106136815963177e-08,
+       1.0081888734819481e-08,
+       1.0065592069821086e-08,
+       1.0051279582337537e-08,
+       1.0041740084643665e-08,
+       2.2818220005037954e-08,
+       1.1535937167036489e-07,
+       8.308480358048786e-06,
+       1.1904357986575238e-05,
+       1.549409851743249e-05,
+       2.2826562139170426e-05,
+       3.774369500271524e-05,
+       0.00019485222944114097,
+       0.0004451084949486577,
+       0.0009405107157393327,
+       0.001759370622165551,
+       0.0029442194661026045,
+       0.004404517011970991,
+       0.005971668105003532,
+       0.007485210703787782,
+       0.008806279336772457,
+       0.009714979432539404,
+       0.01031386286874906,
+       0.010796825296766592,
+       0.011255989874518034,
+       0.011687179251729574,
+       0.012126903412514359,
+       0.012660806408109026
+      ],
+      "sd": [
+       632.4213191001481,
+       566.8771583705687,
+       518.5021826859723,
+       480.04350727190604,
+       453.0653448024702,
+       436.0351677111841,
+       422.4158661073699,
+       409.38128958016597,
+       397.0773347257198,
+       386.77526312454387,
+       377.9987535481499,
+       361.13156744171863,
+       351.60930788265864,
+       343.2352506753606,
+       337.3425899483516,
+       334.61411972913606,
+       334.2230060519676,
+       333.41700989325386,
+       331.9836893581618,
+       329.60518121386383,
+       326.14549842901573,
+       321.80354441743026,
+       317.1927211583263,
+       313.1676907712524,
+       310.2325903386086,
+       308.211590036,
+       306.84212182010003,
+       305.78430014713746,
+       304.833319743003,
+       303.9682378905474,
+       303.08291966288135,
+       301.9911271196488
+      ],
+      "qhat": [
+       1.1229078062109587e-08,
+       1.061244360292124e-08,
+       1.0310850481875767e-08,
+       1.016230809783829e-08,
+       1.0106136815963177e-08,
+       1.0081888734819481e-08,
+       1.007373600836538e-08,
+       1.0058432431792834e-08,
+       1.0046508323811134e-08,
+       1.4720467161336404e-08,
+       4.6094262862910844e-08,
+       5.00336640226909e-07,
+       9.891814452861858e-06,
+       1.3541910299718945e-05,
+       1.868917432921178e-05,
+       2.9045285793402467e-05,
+       4.859330230023037e-05,
+       8.61663307839267e-05,
+       0.0001758003204212083,
+       0.0003798511744048938,
+       0.000812110220134139,
+       0.0017019851558184628,
+       0.0032571355127253934,
+       0.005795301782623708,
+       0.007559954972004103,
+       0.008006520107977737,
+       0.008453631721940691,
+       0.00910987223407852,
+       0.009808801963591098,
+       0.010403376708343598,
+       0.011250614796229267,
+       0.013930715533648734
+      ],
+      "shat": [
+       632.4213191001481,
+       566.8771583705687,
+       518.5021826859723,
+       480.04350727190604,
+       453.0653448024702,
+       436.0351677111841,
+       429.15349000379666,
+       415.8304889156267,
+       403.1667363642394,
+       391.8811644417681,
+       382.3534345190572,
+       369.436842300106,
+       356.32803016769407,
+       347.38863776383903,
+       340.27191320945616,
+       335.9746618556638,
+       333.9874806439596,
+       333.2051734683836,
+       332.4299897306081,
+       330.949546713209,
+       328.5797781622406,
+       325.2472485902429,
+       321.18840720931763,
+       317.5115333565933,
+       315.4881728087091,
+       314.4535479101086,
+       313.64848543537244,
+       312.9922723802687,
+       312.3786612281661,
+       311.7708592304533,
+       310.90366682452,
+       309.23556679455834
+      ],
+      "qcde": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       7.114691748210251e-06,
+       1.0540658633490621e-05,
+       1.953912007043794e-05,
+       3.0224018072322644e-05,
+       4.0617908292625975e-05,
+       4.714689533699378e-05,
+       5.5071184215632727e-05,
+       6.121907786271822e-05,
+       6.474573263617879e-05,
+       6.391715008502143e-05,
+       7.274077746813982e-05,
+       5.899413179038028e-05,
+       4.299440852258899e-05,
+       8.582977663026669e-21,
+       6.321420151777021e-20,
+       4.1647790599388623e-19,
+       0.0
+      ],
+      "pdel": [
+       277.64523713626426,
+       512.6255618793708,
+       839.7369732119973,
+       1117.9358634668708,
+       953.8325754879452,
+       784.1497738740336,
+       912.6000198193282,
+       1055.9998558804919,
+       1390.0920888300066,
+       1423.9624467569672,
+       1675.2170468706076,
+       1970.822347353322,
+       2318.581227758279,
+       2727.6968395051313,
+       2920.106841517495,
+       3435.4055077786743,
+       4041.6830238067096,
+       4755.09738573736,
+       5594.97785750979,
+       6584.036533027117,
+       7751.341612890242,
+       7762.912348862453,
+       7141.438609229207,
+       6042.3527020156735,
+       4493.190887330713,
+       2602.165879594154,
+       2442.651521244884,
+       2263.664635123606,
+       2065.4172523665065,
+       1849.3828732324769,
+       1618.3135452913791,
+       1402.6758404182465
+      ],
+      "jt": 15,
+      "maxg": 32,
+      "dsubcld": 14.026758404182464,
+      "rl": 2501000.0,
+      "cpres": 1004.64
+     },
+     "assertions": [
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": 1.8995320765817368e-10,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -6.009503261627893e-11,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -2.091798641650968e-10,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -6.744562746282985e-09,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 8.472904801941481e-06,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 1.3058514154887021e-06,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 4.809450677052699e-07,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": -7.270804664612111e-06,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 1.1110551281821137e-11,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 1.0082716250381627e-11,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "s40_g1",
+     "description": "Step 40, g = 1 column (cam_zm.csv step 40 rows lev 1..32 with cam_zm_scal.csv step 40; jt = 15, maxg = 32, dsubcld = 14.0608 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "cme": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       5.052580734813945e-09,
+       9.981169311322937e-09,
+       1.5098695058555398e-08,
+       1.840700141814657e-08,
+       1.8709403524522286e-08,
+       1.577323038675242e-08,
+       1.3008451619422275e-08,
+       1.0623168876165677e-08,
+       8.22118877809925e-09,
+       5.619650397639748e-09,
+       5.094444311169346e-09,
+       2.7042812573315512e-09,
+       1.7796622506549766e-09,
+       1.7633645079227526e-09,
+       -9.223577096626827e-09,
+       -1.036135695011884e-08,
+       0.0
+      ],
+      "mu": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0007944506320775235,
+       0.0012554074987249843,
+       0.0011062628575068737,
+       0.0009711869312766224,
+       0.0008499690401335026,
+       0.0007420460906288029,
+       0.0006468961253330596,
+       0.0005745375604590115,
+       0.0005220289224506443,
+       0.00048519587579403214,
+       0.0004612628657879239,
+       0.0004485304747330038,
+       0.0004372467382967513,
+       0.0004273226421722594,
+       0.0004186916879537954,
+       0.00041129557007579695,
+       0.0004050724760105692
+      ],
+      "md": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       -2.4799725825352367e-05,
+       -3.035165359127568e-05,
+       -3.806455597828501e-05,
+       -4.8994740454604924e-05,
+       -6.481655164847745e-05,
+       -8.815019461655836e-05,
+       -0.00011743799118846658,
+       -0.00015030683792312269,
+       -0.00018318047926597323,
+       -0.00021105788302795412,
+       -0.00022867306702815195,
+       -0.0002462570208336401,
+       -0.00026349987141216497,
+       -0.00028004370385604756,
+       -0.00029551300911402547,
+       -0.0003095562434285744
+      ],
+      "du": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       2.7210088327369797e-05,
+       1.821021194648465e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "qu": [
+       1.274149044366558e-08,
+       1.136618054081766e-08,
+       1.0692230683706016e-08,
+       1.0361204127205173e-08,
+       1.0236076322333277e-08,
+       1.01820725507807e-08,
+       1.0145810903859222e-08,
+       1.0113988290962739e-08,
+       1.0092771823440373e-08,
+       2.2869991349500752e-08,
+       1.1386341634170829e-07,
+       8.747520566146072e-06,
+       1.2905222174095652e-05,
+       1.6691925750931595e-05,
+       3.411827281219203e-05,
+       0.00017338562194151857,
+       0.00030336502578648665,
+       0.000701937413480261,
+       0.0015330520082201325,
+       0.0029603004024168697,
+       0.005054422383293318,
+       0.007656750144036053,
+       0.010348206654349306,
+       0.012729936732303557,
+       0.014694718888378333,
+       0.016101106609997855,
+       0.01697396049683654,
+       0.01765388259496056,
+       0.018268450515397848,
+       0.01886113881250128,
+       0.018970468030722897,
+       0.019029511554300247
+      ],
+      "su": [
+       636.8465680027095,
+       569.3342184808241,
+       520.0456865653028,
+       481.124665336431,
+       453.861116264216,
+       436.6241420567962,
+       422.8800271044729,
+       409.72033797067945,
+       397.3106204845616,
+       386.9178553474404,
+       378.05641744374896,
+       360.8541998488857,
+       351.36604480557344,
+       308.8991943587611,
+       308.8991943587611,
+       343.64713450374586,
+       339.86599833035115,
+       339.9142406719703,
+       339.0756513392895,
+       337.0181948052222,
+       333.60212599716937,
+       329.23887020743587,
+       324.5860262476745,
+       320.3010163429774,
+       316.72988986907035,
+       314.225923184038,
+       312.59087726125256,
+       311.352864839547,
+       310.1790745127461,
+       308.97137011460046,
+       308.91777543268887,
+       308.8991943587611
+      ],
+      "qd": [
+       1.274149044366558e-08,
+       1.136618054081766e-08,
+       1.0692230683706016e-08,
+       1.0361204127205173e-08,
+       1.0236076322333277e-08,
+       1.01820725507807e-08,
+       1.0145810903859222e-08,
+       1.0113988290962739e-08,
+       1.0092771823440373e-08,
+       2.2869991349500752e-08,
+       1.1386341634170829e-07,
+       8.747520566146072e-06,
+       1.2905222174095652e-05,
+       1.6691925750931595e-05,
+       3.411827281219203e-05,
+       5.439310112159109e-05,
+       0.00018871820287385245,
+       0.000426356178818662,
+       0.0009002496595107344,
+       0.0016966083811940967,
+       0.0028773918064762777,
+       0.004390497631410878,
+       0.006079177492923747,
+       0.007737656932904688,
+       0.009046076139398253,
+       0.009902292191868733,
+       0.010471822280537722,
+       0.01095890538454492,
+       0.011498881635432952,
+       0.0120832814804828,
+       0.012698188490741759,
+       0.013351779016136598
+      ],
+      "sd": [
+       636.8465680027095,
+       569.3342184808241,
+       520.0456865653028,
+       481.124665336431,
+       453.861116264216,
+       436.6241420567962,
+       422.8800271044729,
+       409.72033797067945,
+       397.3106204845616,
+       386.9178553474404,
+       378.05641744374896,
+       360.8541998488857,
+       351.36604480557344,
+       342.98861816333135,
+       337.3563179923083,
+       334.28657155649535,
+       333.9521760720607,
+       333.0828573517465,
+       331.63377848962693,
+       329.32337676096955,
+       326.01384537963855,
+       321.88384961410367,
+       317.48782211627673,
+       313.6608143013205,
+       310.70484616597776,
+       308.68807260381413,
+       307.4259642266428,
+       306.4800994976661,
+       305.5418506054821,
+       304.589186725286,
+       303.53479060843006,
+       302.48110578677773
+      ],
+      "qhat": [
+       1.274149044366558e-08,
+       1.136618054081766e-08,
+       1.0692230683706016e-08,
+       1.0361204127205173e-08,
+       1.0236076322333277e-08,
+       1.01820725507807e-08,
+       1.016392016567405e-08,
+       1.0129882935857324e-08,
+       1.010337263165658e-08,
+       1.4777353186528703e-08,
+       4.5936966681269935e-08,
+       5.008605025368122e-07,
+       1.0558260424797866e-05,
+       1.4636549343689907e-05,
+       2.3363465977492083e-05,
+       4.269098259727589e-05,
+       7.360795953977756e-05,
+       0.00013717125255286442,
+       0.00026470039128156773,
+       0.0005505182727961537,
+       0.0011991912900898335,
+       0.002481183327699262,
+       0.0044402550580546875,
+       0.006567223791449643,
+       0.007377060148123102,
+       0.007865189839919311,
+       0.008694926127327429,
+       0.009780253344588655,
+       0.011154357592937635,
+       0.012336746815003642,
+       0.013888479147564754,
+       0.016929366620827006
+      ],
+      "shat": [
+       636.8465680027095,
+       569.3342184808241,
+       520.0456865653028,
+       481.124665336431,
+       453.861116264216,
+       436.6241420567962,
+       429.67882127209185,
+       416.23084712419643,
+       403.45186813150434,
+       392.068327247293,
+       382.45291860463146,
+       369.32180202770746,
+       356.0679872889599,
+       347.1436391347004,
+       340.15692535413916,
+       335.81676799219065,
+       333.4655093595521,
+       332.49677545795277,
+       331.8911958409208,
+       330.71796098109706,
+       328.5752242867691,
+       325.36508805542957,
+       321.3679278173017,
+       317.84204578725536,
+       315.9792385186556,
+       315.11562581207295,
+       314.6114003122392,
+       314.1789038683307,
+       313.470023264251,
+       312.4815663720173,
+       311.03771787792414,
+       309.26161349096213
+      ],
+      "qcde": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       7.539788645220878e-06,
+       1.0973022630977365e-05,
+       2.0991388632602566e-05,
+       3.294578950000904e-05,
+       4.402222589051702e-05,
+       5.050207057442197e-05,
+       5.823068406076485e-05,
+       6.443669457337691e-05,
+       6.719090227132117e-05,
+       6.561047543754781e-05,
+       7.339753097002731e-05,
+       6.038293923901411e-05,
+       6.215238030365971e-05,
+       6.215929066509209e-05,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pdel": [
+       277.64523755617836,
+       512.6255622657557,
+       839.7369735322565,
+       1117.9358636892239,
+       953.8325756118858,
+       784.1497739525927,
+       912.6000198925359,
+       1055.9998559467122,
+       1390.0920889009456,
+       1423.962446830688,
+       1675.2170443645578,
+       1970.8232126311448,
+       2318.5835483731444,
+       2727.7001085626484,
+       2919.6914854495703,
+       3434.934548103635,
+       4041.2193388030128,
+       4754.691563146553,
+       5594.767303590378,
+       6584.767344631258,
+       7754.796727795461,
+       7769.8145877762945,
+       7149.530022160025,
+       6041.20986549122,
+       4490.956991876542,
+       2601.9708961034203,
+       2443.3191729906316,
+       2265.497198242271,
+       2068.8360612243405,
+       1853.0114895154043,
+       1623.4514229510232,
+       1406.075597432721
+      ],
+      "jt": 15,
+      "maxg": 32,
+      "dsubcld": 14.06075597432721,
+      "rl": 2501000.0,
+      "cpres": 1004.64
+     },
+     "assertions": [
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": 3.556212680470584e-09,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -1.8049601717823505e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -2.853884214338947e-09,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -1.392653063037991e-07,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.00021306496441509586,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 2.8923734261430863e-05,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 5.435316048006528e-06,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": -0.00013883623908813146,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 2.0515831500615995e-10,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 1.9982106780367045e-10,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    },
+    {
+     "id": "s48_g1",
+     "description": "Step 48, g = 1 column (cam_zm.csv step 48 rows lev 1..32 with cam_zm_scal.csv step 48; jt = 15, maxg = 32, dsubcld = 14.015 mb): the q1q2_pjr tendencies of zm_convr.F90:2584-2622 pinned at the convection top lev 15 (= jt, where du > 0 so dl is active), the downdraft region lev 17, a deep level lev 25 and the subcloud level lev 32 (= maxg = pver, the subcloud branch of F90:2611-2619); dl at the two detraining levels 15-16. The k > maxg copy-down of F90:2620-2622 cannot fire (maxg = pver on all dumped columns). Tuples extracted and dump-verified by stage1/analysis/extract_cam_zm_tests.py and materialized by stage1/analysis/inject_cam_zm_tests.py.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "cme": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       4.474459184407563e-09,
+       9.415743831997994e-09,
+       1.4279185230596095e-08,
+       1.759897077024374e-08,
+       1.811686329547559e-08,
+       1.567991051252415e-08,
+       1.3200628870627172e-08,
+       1.055511944231609e-08,
+       7.911114393753553e-09,
+       5.5210877876353945e-09,
+       5.0996721472293824e-09,
+       2.850182332923842e-09,
+       2.1221299885729643e-09,
+       6.035458538229607e-09,
+       -9.068361300079773e-09,
+       -1.1188194638878202e-08,
+       0.0
+      ],
+      "mu": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0005670056798616236,
+       0.001220927535804194,
+       0.0010876439239143854,
+       0.0009656919858205062,
+       0.00085491396709612,
+       0.0007551085572531095,
+       0.0006659749331778377,
+       0.0005972599793577367,
+       0.0005467429220015426,
+       0.0005110272784201665,
+       0.0004876950676004923,
+       0.00047524026053916206,
+       0.0004641795312145982,
+       0.0004544335251896417,
+       0.0004459423158746171,
+       0.00043865187935909663,
+       0.00043250526977512826
+      ],
+      "md": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       -3.214152195039027e-05,
+       -3.875316445387755e-05,
+       -4.773374917995495e-05,
+       -6.016243422642716e-05,
+       -7.767434991505349e-05,
+       -0.00010276409101513517,
+       -0.00013341600994031503,
+       -0.0001670757475384431,
+       -0.00020007397821520187,
+       -0.00022762382563316387,
+       -0.0002448546053171361,
+       -0.0002619275952369305,
+       -0.0002785545037734325,
+       -0.00029440969330487866,
+       -0.0003091593978897772,
+       -0.00032249462297759095
+      ],
+      "du": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1.9472191369290934e-05,
+       2.3342911516949686e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "qu": [
+       1.3298167527750368e-08,
+       1.1642610480093786e-08,
+       1.0831793605404521e-08,
+       1.043386355591715e-08,
+       1.0283481705745125e-08,
+       1.021858377103925e-08,
+       1.0175027262691308e-08,
+       1.0136817967097644e-08,
+       1.0111338927741061e-08,
+       2.2888701310857122e-08,
+       1.1421531662867727e-07,
+       8.875465045413164e-06,
+       1.3058092110326444e-05,
+       1.670580546219737e-05,
+       5.9613579921024376e-05,
+       0.0002078248833523985,
+       0.00030692954051880967,
+       0.0006891688381815405,
+       0.0014733230360562805,
+       0.002814309269762358,
+       0.004770767135976294,
+       0.007216534015567638,
+       0.009762767819572107,
+       0.012005197121065597,
+       0.013819649468536609,
+       0.015105853598128379,
+       0.01591384060853694,
+       0.016546923146326477,
+       0.017124206230385332,
+       0.01785395825120442,
+       0.017929034540179654,
+       0.017961943533147017
+      ],
+      "su": [
+       640.2136016292322,
+       571.3139339168333,
+       521.3193908305773,
+       481.9887359832065,
+       454.4571441351777,
+       437.0377732840408,
+       423.18559642799556,
+       409.9297817079039,
+       397.44731045985003,
+       387.0001386661873,
+       378.0974488450295,
+       360.7381049848922,
+       351.31037216991956,
+       342.9564765054623,
+       307.4412103153823,
+       344.5357862053274,
+       339.27290729218095,
+       339.13906836906153,
+       338.189517439474,
+       336.0669428525021,
+       332.66320425810073,
+       328.29616221820146,
+       323.5855712673883,
+       319.2534854629774,
+       315.7315540750747,
+       313.26046113262294,
+       311.63849839316475,
+       310.3841240203441,
+       309.1838008808297,
+       307.5316752023938,
+       307.4705555657333,
+       307.4412103153823
+      ],
+      "qd": [
+       1.3298167527750368e-08,
+       1.1642610480093786e-08,
+       1.0831793605404521e-08,
+       1.043386355591715e-08,
+       1.0283481705745125e-08,
+       1.021858377103925e-08,
+       1.0175027262691308e-08,
+       1.0136817967097644e-08,
+       1.0111338927741061e-08,
+       2.2888701310857122e-08,
+       1.1421531662867727e-07,
+       8.875465045413164e-06,
+       1.3058092110326444e-05,
+       1.670580546219737e-05,
+       5.9613579921024376e-05,
+       7.553394523563386e-05,
+       0.00021480181137119292,
+       0.0004717641553333233,
+       0.0009698001804093572,
+       0.0017971314955947779,
+       0.0030011972017631237,
+       0.004513574710178827,
+       0.00617129949345906,
+       0.007813573419507197,
+       0.00913585691841079,
+       0.010034132979172203,
+       0.010631148334310616,
+       0.011146366200433501,
+       0.011706536861243151,
+       0.012290214905277055,
+       0.012882507794926818,
+       0.013557400130701293
+      ],
+      "sd": [
+       640.2136016292322,
+       571.3139339168333,
+       521.3193908305773,
+       481.9887359832065,
+       454.4571441351777,
+       437.0377732840408,
+       423.18559642799556,
+       409.9297817079039,
+       397.44731045985003,
+       387.0001386661873,
+       378.0974488450295,
+       360.7381049848922,
+       351.31037216991956,
+       342.9564765054623,
+       340.14171608599423,
+       335.29308180948817,
+       334.9463815654156,
+       333.94549411974396,
+       332.2909787351724,
+       329.7706344874935,
+       326.2616824654031,
+       321.9946805320387,
+       317.61029404570263,
+       313.80073056866956,
+       310.7811279652214,
+       308.70639335315025,
+       307.3833042279303,
+       306.3554000732215,
+       305.34480966857745,
+       304.359437099067,
+       303.336043818098,
+       302.1933956653646
+      ],
+      "qhat": [
+       1.3298167527750368e-08,
+       1.1642610480093786e-08,
+       1.0831793605404521e-08,
+       1.043386355591715e-08,
+       1.0283481705745125e-08,
+       1.021858377103925e-08,
+       1.0196774507625222e-08,
+       1.0155898655946654e-08,
+       1.0124067760329207e-08,
+       1.4798005626315383e-08,
+       4.601330754986303e-08,
+       5.036561518943283e-07,
+       1.0698945009149674e-05,
+       1.4732483123116678e-05,
+       2.9526171679708157e-05,
+       6.694687802966829e-05,
+       9.236506564235973e-05,
+       0.0001632658229502188,
+       0.0003395126051676388,
+       0.0006902744578390098,
+       0.0014248944873800071,
+       0.002717806328952176,
+       0.004584138806339395,
+       0.006579298272154863,
+       0.007553526892256668,
+       0.008210894786906535,
+       0.009054268972873633,
+       0.01019767630517306,
+       0.01163658137911977,
+       0.01285959349975806,
+       0.014415326225261859,
+       0.01673285804975718
+      ],
+      "shat": [
+       640.2136016292322,
+       571.3139339168333,
+       521.3193908305773,
+       481.9887359832065,
+       454.4571441351777,
+       437.0377732840408,
+       430.0373271318851,
+       416.4873804702418,
+       403.6242145014339,
+       392.1773448807061,
+       382.514262198796,
+       369.2818061536263,
+       355.9826284598271,
+       347.0999167635355,
+       341.54523013455673,
+       337.7057967932392,
+       334.18348190463587,
+       332.6934219793074,
+       331.778353692506,
+       330.35365453780923,
+       327.948370513239,
+       324.7905691152696,
+       321.3245768043251,
+       318.1371841218777,
+       316.0586193334079,
+       314.9601636170793,
+       314.3015273412077,
+       313.6795564777089,
+       312.80699834157974,
+       311.74899659786126,
+       310.37077512053776,
+       308.23468107190604
+      ],
+      "qcde": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       9.210433672608275e-06,
+       1.0704504243135486e-05,
+       2.0378051456171477e-05,
+       3.206894668756606e-05,
+       4.3079637259167045e-05,
+       5.019632777116667e-05,
+       5.822688847636455e-05,
+       6.323168835913524e-05,
+       6.475422730181312e-05,
+       6.387209489591795e-05,
+       7.240779739149798e-05,
+       6.136004254305954e-05,
+       6.648099541195771e-05,
+       8.645706550422967e-05,
+       2.916704893343107e-19,
+       1.928809827477961e-18,
+       0.0
+      ],
+      "pdel": [
+       277.6452377107371,
+       512.6255624074607,
+       839.7369736494525,
+       1117.9358637704524,
+       953.8325756571026,
+       784.149773981223,
+       912.6000199191986,
+       1055.9998559708204,
+       1390.0920889267557,
+       1423.96244685733,
+       1675.217044954067,
+       1970.823464789332,
+       2318.5839028194914,
+       2727.700144760903,
+       2911.8740110362355,
+       3425.707000118848,
+       4030.3139207471418,
+       4742.070185402725,
+       5580.1822491147805,
+       6568.201411607789,
+       7735.600341894021,
+       7750.334187210396,
+       7130.185579316465,
+       6024.969852620847,
+       4480.329943122393,
+       2595.831902408115,
+       2437.6081167905745,
+       2260.4337274332797,
+       2064.2579408317483,
+       1849.0297546500824,
+       1619.8512607670448,
+       1401.4990249387895
+      ],
+      "jt": 15,
+      "maxg": 32,
+      "dsubcld": 14.014990249387894,
+      "rl": 2501000.0,
+      "cpres": 1004.64
+     },
+     "assertions": [
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": 2.743203479368189e-09,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -1.922343412499691e-09,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -4.1361797843485045e-09,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dqdt",
+       "time": 0.0,
+       "expected": -1.1099929613046237e-07,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 0.00013299486088241223,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 4.261339688229459e-05,
+       "coords": {
+        "lev": 17
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": 7.178458062648244e-06,
+       "coords": {
+        "lev": 25
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dsdt",
+       "time": 0.0,
+       "expected": -0.00011452749857915375,
+       "coords": {
+        "lev": 32
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 1.7934732706718945e-10,
+       "coords": {
+        "lev": 15
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      },
+      {
+       "variable": "dlf",
+       "time": 0.0,
+       "expected": 2.4987429538032414e-10,
+       "coords": {
+        "lev": 16
+       },
+       "tolerance": {
+        "rel": 1e-12
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
