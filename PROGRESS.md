@@ -1550,7 +1550,8 @@ read-only review agents checked the 16 EqESM code branches (spot-checking
 pins against the dumps); the manager reviewed esm-pr-cism and the stranded
 run directly and acted on all verdicts. Suite on the merged main `58dfe88`:
 job **12313678** (`.work/suite-58dfe88/suite.log`, worktree
-`../EqESM-suite-58dfe88`) — pending.
+`../EqESM-suite-58dfe88`) — **3805P/0F/0E**, validate-failures=0,
+units-issues=0.
 
 - **Merged (10):** `cam-zm-evap2` (7cf9e32; bug #38 ke_lnd ignored),
   `cam-rad-optics` (d1c5d60; RRTMG optics, McICA, solin, qrs/qrl as flux
@@ -1606,6 +1607,6 @@ job **12313678** (`.work/suite-58dfe88/suite.log`, worktree
   `stable_blend`); (2) copy-through outputs still pinned (`lhs =
   <override>`); (3) stage-1 records/fork edits left uncommitted
   (mom6-dynamics, cam-zm-dump2). New prompts state (1) and (2) explicitly.
-- **Next:** read suite 12313678; review the 7 jobs as they finish; user
+- **Next:** review the 7 jobs as they finish; user
   decisions: push ESD `cice-transport-layers` and EarthSciModels `cism`
   (after a stagthck refresh), cancel job 12269264.
