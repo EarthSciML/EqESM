@@ -79,9 +79,9 @@
    "body": {"op": "*", "args": [-1.0, "sucsat", {"op": "^", "args": ["s", {"op": "-", "args": ["bsw"]}]}]}
   },
   "canopy_intercept_liq": {
-   "description": "Canopy liquid-interception fraction fpiliq [1] (CLM5 default, use_clm5_fpi = .false.): CanopyHydrologyMod.F90:538. fpiliq = 0.25*(1 - exp(-0.5*(elai+esai))).",
-   "params": ["elai", "esai"],
-   "body": {"op": "*", "args": [0.25, {"op": "-", "args": [1.0, {"op": "exp", "args": [{"op": "*", "args": [-0.5, {"op": "+", "args": ["elai", "esai"]}]}]}]}]}
+   "description": "Canopy liquid-interception fraction fpiliq [1], the use_clm5_fpi = .true. branch (the CLM5/CTSM default; this lane's case sets use_clm5_fpi = .true. in user_nl_clm): CanopyHydrologyMod.F90:538. fpiliq = interception_fraction*tanh(elai+esai). Corrected from the .false. branch (0.25*(1 - exp(-0.5*(elai+esai)))) which the vegetated-patch dumps show is not the law of this run (clm_interception.csv qflx_intercepted_liq = forc_rain*tanh(elai+esai) to round-off on all 101 intercepting rows).",
+   "params": ["interception_fraction", "elai", "esai"],
+   "body": {"op": "*", "args": ["interception_fraction", {"op": "tanh", "args": [{"op": "+", "args": ["elai", "esai"]}]}]}
   },
   "canopy_intercept_snow": {
    "description": "Canopy snow-interception fraction fpisnow [1]: CanopyHydrologyMod.F90:541. fpisnow = 1 - exp(-0.5*(elai+esai)).",
