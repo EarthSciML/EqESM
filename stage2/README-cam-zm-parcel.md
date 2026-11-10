@@ -96,8 +96,8 @@ measure), `dadt` (an `integral`), `mb`.
 - `dsubcld` = Σ dp over k ≥ mx (F90:597-603), written in its telescoped
   **closed form** `dsubcld = pf_hi(pver) − pf_lo(mx)`, the
   interface-pressure difference over the subcloud layer: dp(k) =
-  pf_lo(k) − pf_hi(k) with pf_hi(k) = pf_lo(k+1) on the interface grid,
-  so the sum collapses exactly and needs no integral rule or measure.
+  pf_hi(k) − pf_lo(k) with pf_hi(k) = pf_lo(k+1) on the interface grid,
+  so the sum collapses up to round-off and needs no integral rule or measure.
   With mx = 32 = pver it is the single layer thickness dp(32), pinned
   to the dumped column (worst rel 8.3e-15 on the 15 rows;
   14.026758 hPa on step 18, the pf_hi(32) − pf_lo(32) difference of the
