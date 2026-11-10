@@ -178,7 +178,7 @@ cice 425c1db = dump rows, 9e504f1 pointer; wrapper 7cdffa2).
 
 ### Dumps (both land in stage1/dumps/cice/, 32 traced cells x 12 steps)
 
-- `cice_ridge.csv` (156 cols): the ridge law
+- `cice_ridge.csv` (164 cols): the ridge law
   (`icepack_mechred.F90` ridge_ice + ridge_shift, armed/drained in
   `ice_step_mod.F90` step_dyn_ridge): inputs rdg_conv/rdg_shear/Tf; the
   first-iteration ridge_prep rates closing_net/opning/divu_adv; ridge_itd
@@ -187,7 +187,7 @@ cice 425c1db = dump rows, 9e504f1 pointer; wrapper 7cdffa2).
   virdgn + totals ardg1/ardg2/virdg; the n=1 redistribution fractions
   aredistn/vredistn; rafting araftn/vraftn; entry/exit state + energies;
   msnow_mlt/esnow_mlt/mpond; niter; hin_max_0..4. niter = 1 on all rows.
-- `cice_itd.csv` (136 cols): the linear remap (`icepack_therm_itd.F90`
+- `cice_itd.csv` (144 cols): the linear remap (`icepack_therm_itd.F90`
   linear_itd + shift_ice, armed/drained in step_therm2): pre-thermo and
   pre-ITD entry states; hicen_init/hicen/dhicen; hbnew_0..5; the
   per-category linear fits g0/g1/hL/hR + remap_flag (= 1 on all rows);
