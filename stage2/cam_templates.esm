@@ -1856,6 +1856,163 @@
     },
     "args": []
    }
+  },
+  "guarded_ratio": {
+   "description": "Guarded ratio of the RRTMG shortwave cloud-optics conversion (radsw.F90:437-475): ratio = x/y when y > 0, else fallback. The three solver-input ratios share the one branch structure: ssa = tau_w/tau with fallback 1 (tau = 0 -> ssa = 1), asm = tau_w_g/tau_w and fsfc = tau_w_f/tau_w with fallback 0 (tau_w = 0 -> 0). The Fortran guards the denominator with max(y, 1e-80) instead of branching, but the two are identical whenever y <= 0 selects the fallback (x/max(y,1e-80) is never evaluated in the else branch) and the max is vacuous for y > 0 (every dump ratio y > 1e-80; the stage-1 validator verifies ssa = tau_w/tau, asm = tau_w_g/tau_w, fsfc = tau_w_f/tau_w to rel 1e-12 where the denominators are positive).",
+   "params": [
+    "x",
+    "y",
+    "fallback"
+   ],
+   "body": {
+    "op": "ifelse",
+    "args": [
+     {
+      "op": ">",
+      "args": [
+       "y",
+       {
+        "op": "const",
+        "args": [],
+        "value": 0.0,
+        "units": "1"
+       }
+      ]
+     },
+     {
+      "op": "/",
+      "args": [
+       "x",
+       "y"
+      ]
+     },
+     "fallback"
+    ]
+   }
+  },
+  "edge_shift": {
+   "description": "The shared-edge law of the RRTMG state construction (rrtmg_state.F90:141-144, 110-120): the upper interface of RRTMG layer k is the lower interface of layer k+1, so hi(k) = lo(k+1) for k = 1..n-1 and hi(n) = the surface boundary value sfc, written as a per-k gather over the index set kset. Used for the pressure edges (pint_hi from pint_lo, with the surface pressure r_state%pintmb(num_rrtmg_levs+1) = pstate%pint(pverp), F90:158-159) and the temperature edges (T_ifc_hi from T_ifc_lo, with the surface interface temperature tint(pverp) from the surface upwelling flux, F90:110-120).",
+   "params": [
+    "lo",
+    "sfc",
+    "n",
+    "kset"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "kk"
+    ],
+    "args": [],
+    "ranges": {
+     "kk": {
+      "from": "kset"
+     }
+    },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "<=",
+       "args": [
+        "kk",
+        "n"
+       ]
+      },
+      {
+       "op": "index",
+       "args": [
+        "lo",
+        {
+         "op": "+",
+         "args": [
+          "kk",
+          1
+         ]
+        }
+       ]
+      },
+      "sfc"
+     ]
+    }
+   }
+  },
+  "band_gather": {
+   "description": "Gather of a per-band (band x lev) optics field to the McICA g-point axis: out[g, k] = x[band_of[g], k] over the g-point and level index sets named by the gset/lset template parameters (the SW and LW models bind them to their own gpt axes, ngptsw = 112 and ngptlw = 140). band_of is the fixed RRTMG k-distribution band->g-point map (rrtmg_sw_init.f90:266-280, counts 6,12,8,8,10,10,2,10,8,6,6,8,6,12; rrtmg_lw_init.f90:308, counts 10,12,16,14,16,8,12,8,12,6,8,8,4,2,2,2), declared as a [gpt]-shaped parameter in the consuming models.",
+   "params": [
+    "x",
+    "band_of",
+    "gset",
+    "lset"
+   ],
+   "body": {
+    "op": "faq",
+    "output_idx": [
+     "g",
+     "k"
+    ],
+    "args": [],
+    "ranges": {
+     "g": {
+      "from": "gset"
+     },
+     "k": {
+      "from": "lset"
+     }
+    },
+    "expr": {
+     "op": "index",
+     "args": [
+      "x",
+      {
+       "op": "index",
+       "args": [
+        "band_of",
+        "g"
+       ]
+      },
+      "k"
+     ]
+    }
+   }
+  },
+  "mcica_subcolumn": {
+   "description": "The McICA subcolumn cloud-optics masking (mcica_subcol_gen_sw.f90:439-444, mcica_subcol_gen_lw.f90:408-416): where the stochastic subcolumn is cloudy (cld_sto = 1) the subcolumn optics equal the in-cloud band value x, where clear (cld_sto = 0) they equal the fill value: out = cld_sto*x + (1 - cld_sto)*fill. The solver boundary fills tauc_sto/asmc_sto/fsfc_sto with 0 and ssac_sto with 1 (the clear-sky single-scattering albedo). cld_sto is the RNG output of the deterministic McICA generator (permuteseed 1 SW / 150 LW, single column) and is an input to the consuming models.",
+   "params": [
+    "x",
+    "cld_sto",
+    "fill"
+   ],
+   "body": {
+    "op": "+",
+    "args": [
+     {
+      "op": "*",
+      "args": [
+       "cld_sto",
+       "x"
+      ]
+     },
+     {
+      "op": "*",
+      "args": [
+       {
+        "op": "-",
+        "args": [
+         {
+          "op": "const",
+          "args": [],
+          "value": 1.0,
+          "units": "1"
+         },
+         "cld_sto"
+        ]
+       },
+       "fill"
+      ]
+     }
+    ]
+   }
   }
  }
 }
