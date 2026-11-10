@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "mom6_shortwave",
-  "description": "Stage-2 implementation of the MOM6 penetrating shortwave absorption (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps; in this MOM6 version the two routines live in MOM_opacity.F90: absorbRemainingSW :602-869, which heats the water column by the Beer-Lambert decay of the penetrating bands, and sumSWoverBands :894-1041, which accumulates the penetrating shortwave for the KPP buoyancy-flux path; the per-band surface split penSW_bnd = sw_pen_band*dt/(RHO_0*C_P) is extractFluxes1d of MOM_forcing_type.F90:619; run configuration C_JRA_t62_mom6_inst: OPACITY_SCHEME=OHLMANN_03 (chlorophyll-driven opacity_from_chl :247-479), N_SW_BANDS=2, RHO_0=1035 kg m-3, C_P=3992 J kg-1 K-1, all unit rescale factors 1.0). The component is written as math, not as the Fortran's loop: the optical depth at interface i is the measure-weighted cumulative sum tau(n,i) = sum_{j<i} opacity(n,j)*h(j), spelled with the sw_optical_depth expression template of ./mom6_templates.esm (an exp-of-prefix-sum form of the Beer-Lambert integral int_0^z opacity dz', esm-spec 4.3.1), applied once per thickness field the model uses: h = h_after (the post-flux thickness the heating path sees, absorbRemainingSW :748-750) for OD and once more with h = h_buoy = h_before (the pre-flux thickness of the KPP buoyancy path, thickness_to_dz via MOM_forcing_type.F90:1102) for OD_buoy. The remaining penetrating SW after layer k is pen_sw_rem(n,k) = penSW_bnd(n)*exp(-tau(n,k+1)) (absorbRemainingSW :752-753, 760-766), the layer heating is dT(k) = sum_n penSW_bnd(n)*exp(-tau(n,k))*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), and the interface net penetrating flux is netPen(i) = sum_n penSW_bnd(n)*exp(-tau_buoy(n,i))/dt (sumSWoverBands :1000-1004). Coverage gap (see README-mom6-shortwave.md): absorbRemainingSW's min_SW_heat clamp (PEN_SW_FLUX_ABSORB = 2.5e-11 degC m s-1, PEN_SW_ABSORB_MINTHICK = 1.0 m, answer_date >= 20190101, :711-730) rewrites pen_sw_rem/dT below the layers where nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m; it is a stateful recurrence (the clamped remaining feeds the next layer), so it is not expressed as pure math here and those layers are pinned only via the conservation identity absorbed_total = sum_k dT(k)*h(k) (which the clamp preserves up to the ~1e-24 leftover). State units: sw_pen_band [W m-2], opacity [m-1], h/h_buoy [m], dt [s], penSW_bnd [degC m] (heating per step), OD/OD_buoy dimensionless, pen_sw_rem [degC m], dT [degC], netPen [degC m s-1], absorbed_total [degC m]. Pins: mom6_sw_abs.csv rows (joined to mom6_bflux.csv for h_after/h_before/dt) at rel 1e-12 within the unclamped region, extracted by stage1/analysis/make_mom6_sw_abs_tests.py.",
+  "description": "Stage-2 implementation of the MOM6 penetrating shortwave absorption (MOM6 dev/ncar_260909 @301879336, fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps; in this MOM6 version the two routines live in MOM_opacity.F90: absorbRemainingSW :602-869, which heats the water column by the Beer-Lambert decay of the penetrating bands, and sumSWoverBands :894-1041, which accumulates the penetrating shortwave for the KPP buoyancy-flux path; the per-band surface split penSW_bnd = sw_pen_band*dt/(RHO_0*C_P) is extractFluxes1d of MOM_forcing_type.F90:619; run configuration C_JRA_t62_mom6_inst: OPACITY_SCHEME=OHLMANN_03 (chlorophyll-driven opacity_from_chl :247-479), N_SW_BANDS=2, RHO_0=1035 kg m-3, C_P=3992 J kg-1 K-1, all unit rescale factors 1.0). The component is written as math, not as the Fortran's loop: the optical depth at interface i is the Beer-Lambert integral tau(n,i) = int_0^{z_i} opacity(n,z') dz' of the surface-to-interface water column (esm-spec 4.2), spelled with the ESD integral op and lowered by the local match rules of ./mom6_sw_discretization.esm (the cumulative-from-bottom integral of integral_lev_nodes_cumulative_from_bottom lifted to the [band, layer] integrand, because the imported EarthSciDiscretizations integral rules constrain the integrand to a bare lev-shaped reference); the measure is the per-path layer thickness, h = h_after (the post-flux thickness the heating path sees, absorbRemainingSW :748-750) for OD and h_buoy = h_before (the pre-flux thickness of the KPP buoyancy path, thickness_to_dz via MOM_forcing_type.F90:1102) for OD_buoy, with the surface bounds z_sfc = z_sfc_buoy = 0 m. The per-interface band flux is named once, F_pen(n,i) = penSW_bnd(n)*exp(-tau(n,i)) (and F_pen_buoy from tau_buoy); the remaining penetrating SW after layer k is pen_sw_rem(n,k) = F_pen(n,k+1) (absorbRemainingSW :752-753, 760-766), the layer heating is dT(k) = sum_n F_pen(n,k)*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), and the interface net penetrating flux is netPen(i) = sum_n F_pen_buoy(n,i)/dt (sumSWoverBands :1000-1004). Coverage gap (see README-mom6-shortwave.md): absorbRemainingSW's min_SW_heat clamp (PEN_SW_FLUX_ABSORB = 2.5e-11 degC m s-1, PEN_SW_ABSORB_MINTHICK = 1.0 m, answer_date >= 20190101, :711-730) rewrites pen_sw_rem/dT below the layers where nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m; it is a stateful recurrence (the clamped remaining feeds the next layer), so it is not expressed as pure math here and those layers are pinned only via the conservation identity absorbed_total = sum_k dT(k)*h(k) (which the clamp preserves up to the ~1e-24 leftover). State units: sw_pen_band [W m-2], opacity [m-1], h/h_buoy [m], dt [s], penSW_bnd [degC m] (heating per step), OD/OD_buoy dimensionless, pen_sw_rem [degC m], dT [degC], netPen [degC m s-1], absorbed_total [degC m]. Pins: mom6_sw_abs.csv rows (joined to mom6_bflux.csv for h_after/h_before/dt) at rel 1e-12 within the unclamped region, extracted by stage1/analysis/make_mom6_sw_abs_tests.py.",
   "authors": [
    "EqESM stage 2 (wt/mom6-shortwave)"
   ]
@@ -18,7 +18,13 @@
   },
   "iface": {
    "kind": "interval",
-   "size": "N_IFACE"
+   "size": {
+    "op": "+",
+    "args": [
+     "N_LAYER",
+     1
+    ]
+   }
   }
  },
  "metaparameters": {
@@ -29,17 +35,17 @@
   "N_LAYER": {
    "type": "integer",
    "default": 75
-  },
-  "N_IFACE": {
-   "type": "integer",
-   "default": 76
   }
  },
  "models": {
   "ShortwaveAbsorption": {
    "expression_template_imports": [
     {
-     "ref": "./mom6_templates.esm"
+     "ref": "./mom6_sw_discretization.esm",
+     "bindings": {
+      "NLEV": "N_LAYER",
+      "NBAND": "N_BAND"
+     }
     }
    ],
    "variables": {
@@ -106,6 +112,16 @@
      "units": "degC m",
      "description": "Per-band penetrating shortwave converted to a heating depth per step, penSW_bnd(n) = sw_pen_band(n)*dt/(RHO_0*C_P) (extractFluxes1d, MOM_forcing_type.F90:619), [degC m]"
     },
+    "z_sfc": {
+     "type": "unknown",
+     "units": "m",
+     "description": "Surface coordinate of the heating-path optical-depth integral, z_sfc = 0 m (the lower bound name the sw_optical_depth rule matches), [m]"
+    },
+    "z_sfc_buoy": {
+     "type": "unknown",
+     "units": "m",
+     "description": "Surface coordinate of the buoyancy-path optical-depth integral, z_sfc_buoy = 0 m (the lower bound name the sw_optical_depth_buoy rule matches), [m]"
+    },
     "OD": {
      "type": "unknown",
      "shape": [
@@ -113,7 +129,7 @@
       "iface"
      ],
      "units": "dimensionless",
-     "description": "Cumulative optical depth at interface i along the heating path, tau(n,i) = sum_{j<i} opacity(n,j)*h_after(j) (absorbRemainingSW :748-750), dimensionless"
+     "description": "Cumulative optical depth at interface i along the heating path, the Beer-Lambert integral tau(n,i) = int_0^{z_i} opacity(n,z') dz' with the h_after measure (absorbRemainingSW :748-750), lowered from the ESD integral op by ./mom6_sw_discretization.esm, dimensionless"
     },
     "OD_buoy": {
      "type": "unknown",
@@ -122,7 +138,25 @@
       "iface"
      ],
      "units": "dimensionless",
-     "description": "Cumulative optical depth at interface i along the buoyancy-flux path, tau(n,i) = sum_{j<i} opacity(n,j)*h_before(j) (sumSWoverBands :980-982 with the pre-flux thickness), dimensionless"
+     "description": "Cumulative optical depth at interface i along the buoyancy-flux path, the Beer-Lambert integral tau(n,i) = int_0^{z_i} opacity(n,z') dz' with the h_before measure (sumSWoverBands :980-982 with the pre-flux thickness), dimensionless"
+    },
+    "F_pen": {
+     "type": "unknown",
+     "shape": [
+      "band",
+      "iface"
+     ],
+     "units": "degC m",
+     "description": "Per-interface penetrating shortwave flux of the heating path, F_pen(n,i) = penSW_bnd(n)*exp(-tau(n,i)) (absorbRemainingSW :752-753, 760-766: the flux crossing interface i, the layer-top entry flux for dT and the layer-bottom exit flux for pen_sw_rem), [degC m]"
+    },
+    "F_pen_buoy": {
+     "type": "unknown",
+     "shape": [
+      "band",
+      "iface"
+     ],
+     "units": "degC m",
+     "description": "Per-interface penetrating shortwave flux of the buoyancy-flux path, F_pen_buoy(n,i) = penSW_bnd(n)*exp(-tau_buoy(n,i)) (sumSWoverBands :1000-1004, the pre-flux-thickness profile), [degC m]"
     },
     "pen_sw_rem": {
      "type": "unknown",
@@ -131,7 +165,7 @@
       "layer"
      ],
      "units": "degC m",
-     "description": "Penetrating shortwave remaining at the bottom of layer k, pen_sw_rem(n,k) = penSW_bnd(n)*exp(-tau(n,k+1)) (absorbRemainingSW :752-753, 760-766), [degC m]"
+     "description": "Penetrating shortwave remaining at the bottom of layer k, pen_sw_rem(n,k) = F_pen(n,k+1) (absorbRemainingSW :752-753, 760-766), [degC m]"
     },
     "dT": {
      "type": "unknown",
@@ -139,7 +173,7 @@
       "layer"
      ],
      "units": "degC",
-     "description": "Layer heating by the absorbed shortwave, dT(k) = sum_n penSW_bnd(n)*exp(-tau(n,k))*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), [degC]"
+     "description": "Layer heating by the absorbed shortwave, dT(k) = sum_n F_pen(n,k)*(1 - exp(-opacity(n,k)*h(k)))/h(k) (absorbRemainingSW :775-777, 797-802), [degC]"
     },
     "netPen": {
      "type": "unknown",
@@ -147,7 +181,7 @@
       "iface"
      ],
      "units": "degC m s^-1",
-     "description": "Net penetrating shortwave crossing interface i as a flux, netPen(i) = sum_n penSW_bnd(n)*exp(-tau_buoy(n,i))/dt (sumSWoverBands :1000-1004), [degC m s-1]"
+     "description": "Net penetrating shortwave crossing interface i as a flux, netPen(i) = sum_n F_pen_buoy(n,i)/dt (sumSWoverBands :1000-1004), [degC m s-1]"
     },
     "absorbed_total": {
      "type": "unknown",
@@ -199,43 +233,61 @@
      }
     },
     {
+     "lhs": "z_sfc",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "m"
+     }
+    },
+    {
+     "lhs": "z_sfc_buoy",
+     "rhs": {
+      "op": "const",
+      "args": [],
+      "value": 0.0,
+      "units": "m"
+     }
+    },
+    {
      "lhs": "OD",
      "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "sw_optical_depth",
-      "bindings": {
-       "opacity": "opacity",
-       "h": "h"
-      }
+      "op": "integral",
+      "args": [
+       "opacity"
+      ],
+      "var": "layer",
+      "lower": "z_sfc",
+      "upper": "iface"
      }
     },
     {
      "lhs": "OD_buoy",
      "rhs": {
-      "op": "apply_expression_template",
-      "args": [],
-      "name": "sw_optical_depth",
-      "bindings": {
-       "opacity": "opacity",
-       "h": "h_buoy"
-      }
+      "op": "integral",
+      "args": [
+       "opacity"
+      ],
+      "var": "layer",
+      "lower": "z_sfc_buoy",
+      "upper": "iface"
      }
     },
     {
-     "lhs": "pen_sw_rem",
+     "lhs": "F_pen",
      "rhs": {
       "op": "faq",
       "output_idx": [
        "b",
-       "k"
+       "i"
       ],
       "ranges": {
        "b": {
         "from": "band"
        },
-       "k": {
-        "from": "layer"
+       "i": {
+        "from": "iface"
        }
       },
       "expr": {
@@ -259,13 +311,7 @@
              "args": [
               "OD",
               "b",
-              {
-               "op": "+",
-               "args": [
-                "k",
-                1
-               ]
-              }
+              "i"
              ]
             }
            ]
@@ -277,6 +323,93 @@
       "args": [
        "penSW_bnd",
        "OD"
+      ]
+     }
+    },
+    {
+     "lhs": "F_pen_buoy",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "b",
+       "i"
+      ],
+      "ranges": {
+       "b": {
+        "from": "band"
+       },
+       "i": {
+        "from": "iface"
+       }
+      },
+      "expr": {
+       "op": "*",
+       "args": [
+        {
+         "op": "index",
+         "args": [
+          "penSW_bnd",
+          "b"
+         ]
+        },
+        {
+         "op": "exp",
+         "args": [
+          {
+           "op": "-",
+           "args": [
+            {
+             "op": "index",
+             "args": [
+              "OD_buoy",
+              "b",
+              "i"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "args": [
+       "penSW_bnd",
+       "OD_buoy"
+      ]
+     }
+    },
+    {
+     "lhs": "pen_sw_rem",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [
+       "b",
+       "k"
+      ],
+      "ranges": {
+       "b": {
+        "from": "band"
+       },
+       "k": {
+        "from": "layer"
+       }
+      },
+      "expr": {
+       "op": "index",
+       "args": [
+        "F_pen",
+        "b",
+        {
+         "op": "+",
+         "args": [
+          "k",
+          1
+         ]
+        }
+       ]
+      },
+      "args": [
+       "F_pen"
       ]
      }
     },
@@ -304,32 +437,20 @@
           {
            "op": "index",
            "args": [
-            "penSW_bnd",
-            "b"
-           ]
-          },
-          {
-           "op": "exp",
-           "args": [
-            {
-             "op": "-",
-             "args": [
-              {
-               "op": "index",
-               "args": [
-                "OD",
-                "b",
-                "k"
-               ]
-              }
-             ]
-            }
+            "F_pen",
+            "b",
+            "k"
            ]
           },
           {
            "op": "-",
            "args": [
-            1.0,
+            {
+             "op": "const",
+             "args": [],
+             "value": 1.0,
+             "units": "1"
+            },
             {
              "op": "exp",
              "args": [
@@ -374,8 +495,7 @@
        ]
       },
       "args": [
-       "penSW_bnd",
-       "OD",
+       "F_pen",
        "opacity",
        "h"
       ]
@@ -400,41 +520,19 @@
        "op": "/",
        "args": [
         {
-         "op": "*",
+         "op": "index",
          "args": [
-          {
-           "op": "index",
-           "args": [
-            "penSW_bnd",
-            "b"
-           ]
-          },
-          {
-           "op": "exp",
-           "args": [
-            {
-             "op": "-",
-             "args": [
-              {
-               "op": "index",
-               "args": [
-                "OD_buoy",
-                "b",
-                "i"
-               ]
-              }
-             ]
-            }
-           ]
-          }
+          "F_pen_buoy",
+          "b",
+          "i"
          ]
         },
         "dt"
        ]
       },
       "args": [
-       "penSW_bnd",
-       "OD_buoy"
+       "F_pen_buoy",
+       "dt"
       ]
      }
     },
@@ -475,7 +573,7 @@
      }
     }
    ],
-   "tests":    [
+   "tests": [
     {
      "id": "sw_g3j78_step1_t3600",
      "description": "mom6_sw_abs.csv row (cpl_step 1, tod 3600, gi 3, gj 78, i 7, j 82, lon -285.33333333333337, lat -69.50444906328708) joined to the mom6_bflux.csv row of the same (gi, gj, cpl_step, tod) for h_after/h_before/dt (dt = 3600.0 s).  Pins the unclamped absorbRemainingSW/sumSWoverBands law: pen_sw_rem at the deepest layers where the min_SW_heat clamp has not fired (band1 k20, band2 k7; the clamp rewrites layer k when nsw*pen_sw_rem(n,k) < 2.5e-11*dt degC m, MOM_opacity.F90:711-730, so the pinnable region ends where either band's remaining falls below that floor) plus surface/mid layers, dT at layers 1/3/7 (the deepest layer with BOTH bands still unclamped), netPen at interfaces 1/2/7, and absorbed_total = sum_k dT_k*h_after_k (a derived conservation pin, not a dump column; the clamp only shifts ~1e-24 degC m of the total).  Dump precision is es26.17, so the law pins at rel 1e-12.",

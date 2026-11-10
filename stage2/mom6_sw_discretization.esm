@@ -1,0 +1,105 @@
+{
+ "esm": "1.2.0",
+ "metadata": {
+  "name": "mom6_sw_discretization",
+  "description": "Local EarthSciDiscretizations-format rule pair that lowers the MOM6 penetrating-shortwave optical-depth integrals of the stage-2 mom6_shortwave.esm component (MOM_opacity.F90 of the instrumented MOM6 fork: the per-layer optical depth opt_depth = dz*opacity accumulated down the column, absorbRemainingSW :748-750 and sumSWoverBands :980-982; run C_JRA_t62_mom6_inst, N_SW_BANDS = 2). The law is tau(n,i) = integral from the surface to interface i of opacity(n, z') dz' — the Beer-Lambert optical-depth integral, esm-spec 4.2 — with the layer thickness as the measure. This is the ESD column_nonuniform_1d rule integral_lev_nodes_cumulative_from_bottom (which lowers integral(f, var: lev, lower: z_sfc, upper: lev_nodes) to the exclusive prefix P[k] = sum_{j<k} f[j] dz[j] on interfaces 1..NLEV with the column total at the top interface NLEV+1), lifted to a [band, layer] integrand: the imported integral rules constrain the integrand to a bare lev-shaped reference (esm-spec 9.6.3; the cam_physics_update.esm hydrostatic integrands are named [lev] variables for the same reason), so the per-band opacity needs the local match rules below. Each rule fires on the integral of a [band, layer] field and applies the shared flat faq sw_optical_depth_scan — the per-interface prefix over j < i, so the column total falls out automatically at i = NLEV+1. The scan is written as that flat filter faq rather than the ESD prefix/total makearray pair of integral_lev_nodes_cumulative_from_bottom because lifting the [lev]-shaped stencils per band nests an aggregate inside a faq, which the native compiler refuses (compiler_refused_rule); the column has 75 layers, so the O(NLEV^2) scan is trivial. Free-name contract (resolved in the consuming model, esm-spec 9.6.8): the measure free names h (heating path: the h_after thickness absorbRemainingSW sees) and h_buoy (buoyancy path: the h_before thickness of thickness_to_dz via MOM_forcing_type.F90:1102) and the ground bound names z_sfc / z_sfc_buoy (declared = 0 m in mom6_shortwave.esm); the index-set names band/layer/iface unify with the consuming model's at the import edge.",
+  "license": "MIT",
+  "tags": [
+   "esd:rule",
+   "family:finite_volume",
+   "grid:column_nonuniform_1d",
+   "op:integral",
+   "axes:lev_nodes",
+   "order:2",
+   "stencil_width:1",
+   "bc:none",
+   "spec:9.6.8",
+   "band:lift"
+  ],
+  "references": [
+   {
+    "citation": "MOM6 dev/ncar_260909 @301879336, MOM_opacity.F90: absorbRemainingSW :748-750 and sumSWoverBands :980-982 (the per-layer opt_depth = dz*opacity accumulated down the column); instrumented fork stage1/EqESM-cesm-mom6 branch instrument/mom6-dumps."
+   },
+   {
+    "citation": "EarthSciDiscretizations grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom.esm, the [lev]-integrand cumulative-from-bottom rule this band-lifted pair mirrors."
+   }
+  ]
+ },
+ "metaparameters": {
+  "NLEV": {
+   "type": "integer",
+   "default": 75,
+   "description": "Number of model layers of the optical-depth column (75 in the reference run); the interface count is NLEV + 1 with interface 1 the surface, the column_nonuniform_1d convention."
+  },
+  "NBAND": {
+   "type": "integer",
+   "default": 2,
+   "description": "Number of penetrating shortwave bands (N_SW_BANDS = 2 for the reference run's OHLMANN_03 opacity scheme)."
+  }
+ },
+ "index_sets": {
+  "band": { "kind": "interval", "size": "NBAND" },
+  "layer": { "kind": "interval", "size": "NLEV" },
+  "iface": { "kind": "interval", "size": { "op": "+", "args": ["NLEV", 1] } }
+ },
+ "expression_templates": {
+  "sw_optical_depth_scan": {
+   "description": "Per-interface cumulative optical-depth scan: tau[b,i] = sum_{j<i} f[b,j]*measure[j] for b in band, i in iface — the exclusive prefix of the measure-weighted integrand at each interface (tau[b,1] = 0 at the surface, the column total at i = NLEV+1), the flat filter-faq form of the ESD integral_lev_nodes_cumulative_from_bottom semantics.",
+   "params": ["f", "measure"],
+   "body": {
+    "op": "faq",
+    "output_idx": ["b", "i"],
+    "args": ["f", "measure"],
+    "ranges": {
+     "b": { "from": "band" },
+     "i": { "from": "iface" },
+     "j": { "from": "layer" }
+    },
+    "filter": { "op": "<", "args": ["j", "i"] },
+    "expr": {
+     "op": "*",
+     "args": [
+      { "op": "index", "args": ["f", "b", "j"] },
+      { "op": "index", "args": ["measure", "j"] }
+     ]
+    }
+   }
+  },
+  "sw_optical_depth": {
+   "description": "Lowers the heating-path optical-depth integral OD = integral(opacity, var: layer, lower: z_sfc, upper: iface) — the cumulative-from-bottom integral of the [band, layer] opacity from the surface (z_sfc) to each interface, with the h_after layer thickness as the measure free name h (resolved in the consuming model; mom6_shortwave.esm declares z_sfc = 0 m).",
+   "params": ["f"],
+   "match": {
+    "op": "integral",
+    "args": ["f"],
+    "var": "layer",
+    "lower": "z_sfc",
+    "upper": "iface"
+   },
+   "where": { "f": { "shape": ["band", "layer"] } },
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "sw_optical_depth_scan",
+    "bindings": { "f": "f", "measure": "h" }
+   }
+  },
+  "sw_optical_depth_buoy": {
+   "description": "Lowers the buoyancy-path optical-depth integral OD_buoy = integral(opacity, var: layer, lower: z_sfc_buoy, upper: iface) — the same cumulative-from-bottom integral with the h_before layer thickness as the measure free name h_buoy (the pre-flux thickness of the sumSWoverBands/KPP path, thickness_to_dz via MOM_forcing_type.F90:1102; mom6_shortwave.esm declares z_sfc_buoy = 0 m).",
+   "params": ["f"],
+   "match": {
+    "op": "integral",
+    "args": ["f"],
+    "var": "layer",
+    "lower": "z_sfc_buoy",
+    "upper": "iface"
+   },
+   "where": { "f": { "shape": ["band", "layer"] } },
+   "body": {
+    "op": "apply_expression_template",
+    "args": [],
+    "name": "sw_optical_depth_scan",
+    "bindings": { "f": "f", "measure": "h_buoy" }
+   }
+  }
+ }
+}
