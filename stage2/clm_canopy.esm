@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "clm_canopy",
-  "description": "CTSM/CLM canopy state and flux interface (stage 2 of the EqESM project): the canopy interception/throughfall hydrology of CanopyHydrologyMod.F90 and the pre-flux interface of BiogeophysPreFluxCalcsMod.F90 plus SurfaceHumidityMod.F90, transcribed from ctsm5.4.063 (cesm3.0-alphabranch). CanopyHydrology is CanopyInterceptionAndThroughfall (CanopyHydrologyMod.F90:167) written as the interception fractions fpiliq/fpisnow (:538/:541; 0 outside the interception window so the variables are well-defined, matching the stage-1 dump's effective-coefficient convention), direct throughfall and interception (:544-549), the canopy storage ODEs for liqcan/snocan (the continuous limit of the Fortran's discrete updates: AddInterceptionToCanopy :702-703 with the max(0,.) positivity clamps, RemoveCanfallFromCanopy :835, RemoveSnowUnloading :978), the excess-storage fall fluxes (:755-758, computed only when the patch intercepts, BulkFlux_CanopyExcess :730-741), snow unloading (BulkFlux_SnowUnloading :917-925) and the wet/dry/snow-covered fractions (BulkDiag_FracWet :1120-1195), and the resulting ground fluxes qflx_snow_grnd/qflx_liq_grnd including the drip-irrigation term (SumFlux_FluxesOntoGround :1023, :1063-1067). CanopyFluxInterface is the pre-flux state consumed by CanopyFluxes/BareGroundFluxes/SoilFluxes: SetZ0mDisp (BiogeophysPreFluxCalcsMod.F90:122, ZengWang2007 branch :175-176), CalcInitialTemperatureAndEnergyVars (:225: t_grnd :334-339, emg :348, htvp :354-358, thv :364, emv :397, thm :400), and CalculateSurfaceHumidity (SurfaceHumidityMod.F90:41, vegetated-landunit branch: soilalpha :139-141, the smpmin-clamped soil relative humidity hr :135-138, qsatg_soil/qsatgdT_soil with the supersaturated-window clamp :185-190, qg_soil :191, the snow/h2osfc humidities :194-209, qg :215-216, dqgdT :197-210). All pointwise laws are imported by reference from ./clm_templates.esm. The tests pin the stage-1 CLM dumps (stage1/dumps/clm/): clm_qsat.csv, clm_run_imports.csv, clm_bareground.csv, clm_soilfluxes.csv and clm_canopyflux.csv; see stage2/README-clm.md for the coverage map and the dump defects (t_soisno lower-bound shift in clm_soilfluxes.csv/clm_soiltemp.csv, qsdT/esdT identically 0 in clm_qsat.csv). Reference: stage1/cesm/components/clm/src/biogeophys/.",
+  "description": "CTSM/CLM canopy state and flux interface (stage 2 of the EqESM project): the canopy interception/throughfall hydrology of CanopyHydrologyMod.F90 and the pre-flux interface of BiogeophysPreFluxCalcsMod.F90 plus SurfaceHumidityMod.F90, transcribed from ctsm5.4.063 (cesm3.0-alphabranch). CanopyHydrology is CanopyInterceptionAndThroughfall (CanopyHydrologyMod.F90:167) written as the interception fractions fpiliq/fpisnow (:538/:541; 0 outside the interception window so the variables are well-defined, matching the stage-1 dump's effective-coefficient convention), direct throughfall and interception (:544-549), the canopy storage ODEs for liqcan/snocan (the continuous limit of the Fortran's discrete updates: AddInterceptionToCanopy :702-703 with the max(0,.) positivity clamps, RemoveCanfallFromCanopy :835, RemoveSnowUnloading :978), the excess-storage fall fluxes (:755-758, computed only when the patch intercepts, BulkFlux_CanopyExcess :730-741), snow unloading (BulkFlux_SnowUnloading :917-925) and the wet/dry/snow-covered fractions (BulkDiag_FracWet :1120-1195), and the resulting ground fluxes qflx_snow_grnd/qflx_liq_grnd including the drip-irrigation term (SumFlux_FluxesOntoGround :1023, :1063-1067). CanopyFluxInterface is the pre-flux state consumed by CanopyFluxes/BareGroundFluxes/SoilFluxes: SetZ0mDisp (BiogeophysPreFluxCalcsMod.F90:122, ZengWang2007 branch :175-176), CalcInitialTemperatureAndEnergyVars (:225: t_grnd :334-339, emg :348, htvp :354-358, thv :364, emv :397, thm :400), and CalculateSurfaceHumidity (SurfaceHumidityMod.F90:41, vegetated-landunit branch: soilalpha :139-141, the smpmin-clamped soil relative humidity hr :135-138, qsatg_soil/qsatgdT_soil with the supersaturated-window clamp :185-190, qg_soil :191, the snow/h2osfc humidities :194-209, qg :215-216, dqgdT :197-210). All pointwise laws are imported by reference from ./clm_templates.esm. The tests pin the stage-1 CLM dumps (stage1/dumps/clm/): clm_qsat.csv, clm_run_imports.csv, clm_bareground.csv, clm_soilfluxes.csv, clm_canopyflux.csv and, since the vegetated-patch dump merge (eee5c6e), the vegetated rows of clm_interception.csv (interception/throughfall fluxes with the use_clm5_fpi = .true. tanh law, the liqcan storage ODE, the wet/dry fractions and liqcanmx at saturation) and of clm_canopyflux_veg.csv (the end-of-CanopyFluxes storage update, pinned in stage2/clm_canopy_storage.esm against the same-step interception hyd rows); see stage2/README-clm-veg.md for the vegetated coverage map and stage2/README-clm.md for the dump defects (t_soisno lower-bound shift in clm_soilfluxes.csv/clm_soiltemp.csv, qsdT/esdT identically 0 in clm_qsat.csv). Reference: stage1/cesm/components/clm/src/biogeophys/.",
   "license": "MIT"
  },
  "index_sets": {
@@ -22,7 +22,7 @@
     "qflx_liq_above_canopy": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "liquid water input above the canopy = forc_rain + qflx_irrig_sprinkler (SumFlux_TopOfCanopyInputs, CanopyHydrologyMod.F90:438-476), [mm/s]"},
     "forc_snow_patch": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "atmospheric snowfall at patch level (CanopyHydrologyMod.F90:203,248-255), [mm/s]"},
     "check_point": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "1 when the patch intercepts precipitation: frac_veg_nosno == 1 and (forc_snow + qflx_liq_above_canopy) > 0 (CanopyHydrologyMod.F90:531-532), [-]"},
-    "fpiliq": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "effective liquid interception coefficient, 0 outside the interception window (CanopyHydrologyMod.F90:538; the stage-1 dump normalizes the coefficient to 1 - throughfall/input, 0 when there is no input), [-]"},
+    "fpiliq": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "effective liquid interception coefficient, 0 outside the interception window (CanopyHydrologyMod.F90:538 with use_clm5_fpi = .true.: fpiliq = interception_fraction*tanh(elai+esai); the stage-1 dump normalizes the coefficient to 1 - throughfall/input, 0 when there is no input), [-]"},
     "fpisnow": {"type": "unknown", "shape": ["patch"], "units": "1", "description": "effective snow interception coefficient, 0 outside the interception window (CanopyHydrologyMod.F90:541; dump-normalized as fpiliq), [-]"},
     "qflx_through_snow": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy throughfall of snow (CanopyHydrologyMod.F90:544,560), [mm/s]"},
     "qflx_through_liq": {"type": "unknown", "shape": ["patch"], "units": "mm/s", "description": "canopy throughfall of liquid (CanopyHydrologyMod.F90:545,561), [mm/s]"},
@@ -51,6 +51,7 @@
     "elai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided leaf area index with burying by snow, [-]"},
     "esai": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "one-sided stem area index with burying by snow, [-]"},
     "frac_veg_nosno": {"type": "parameter", "shape": ["patch"], "units": "1", "default": 0.0, "description": "fraction of vegetation not covered by snow (0 or 1), [-]"},
+    "interception_fraction": {"type": "parameter", "units": "1", "default": 1.0, "description": "canopy liquid-interception fraction scale (ctsm60_params.c260518.nc interception_fraction = 1.0; CanopyHydrologyMod.F90:538, use_clm5_fpi = .true.), [-]"},
     "liq_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 0.1, "description": "liqcanmx per unit lai+sai (ctsm60_params.c260518.nc liq_canopy_storage_scalar = 0.1; CanopyHydrologyMod.F90:755), [mm]"},
     "snow_canopy_storage_scalar": {"type": "parameter", "units": "mm", "default": 6.0, "description": "snocanmx per unit lai+sai (ctsm60_params.c260518.nc snow_canopy_storage_scalar = 6.0; CanopyHydrologyMod.F90:757), [mm]"},
     "maximum_leaf_wetted_fraction": {"type": "parameter", "units": "1", "default": 0.05, "description": "maximum fwet (ctsm60_params.c260518.nc maximum_leaf_wetted_fraction = 0.05; CanopyHydrologyMod.F90:1161), [-]"},
@@ -70,7 +71,7 @@
      1.0, 0.0]}},
     {"lhs": "fpiliq", "rhs": {"op": "ifelse", "args": [
      {"op": ">", "args": ["check_point", 0.5]},
-     {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_liq", "bindings": {"elai": "elai", "esai": "esai"}},
+     {"op": "apply_expression_template", "args": [], "name": "canopy_intercept_liq", "bindings": {"interception_fraction": "interception_fraction", "elai": "elai", "esai": "esai"}},
      0.0]}},
     {"lhs": "fpisnow", "rhs": {"op": "ifelse", "args": [
      {"op": ">", "args": ["check_point", 0.5]},
@@ -287,6 +288,138 @@
       {"variable": "fwet", "time": 0.0, "expected": 5.00000000000000028e-02, "coords": {"patch": 1}},
       {"variable": "fdry", "time": 0.0, "expected": 7.95831903171989596e-01, "coords": {"patch": 1}},
       {"variable": "fcansno", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_interception_veg_step2_p135",
+     "description": "Vegetated interception pin against clm_interception.csv (hyd stage, step 2, patch 135, column 47, PFT 5): a vegetated patch (frac_veg_nosno = 1) receiving forc_rain = 1.89341119432430324e-04 mm/s with no snow. check_point = 1, so the interception branch runs: fpiliq = interception_fraction*tanh(elai+esai) with interception_fraction = 1.0 (ctsm60_params.c260518.nc; the use_clm5_fpi = .true. branch of CanopyHydrologyMod.F90:538, pinned here against the dump's qflx_intercepted_liq/qflx_through_liq = forc_rain*(1-fpiliq) :548-549,:544-545 — the dump satisfies the tanh law on all 101 intercepting rows and rules out the .false. branch 0.25*(1-exp(-0.5*L)) that clm_templates.esm carried before this lane's fix), qflx_intercepted_liq = 1.89315313404831966e-04, qflx_through_liq = 2.58060275983710218e-08, and the storage/fraction diagnostics at the hyd state (liqcan = 4.79688823539371534e-01 mm): h2ocan = liqcan+snocan (:1215), vegt = frac_veg_nosno*(elai+esai) (:1173), liqcanmx = liq_canopy_storage_scalar*(elai+esai) (:755) and snocanmx (:757) (both derived, not dump columns), fwet = 0.05 exactly — the dump hyd liqcan saturates at liqcanmx (the discrete min clamp of AddInterceptionToCanopy/CanopyExcess: the hyd row equals the derived liqcanmx to round-off), so this row pins the saturation value, and fdry = (1-fwet)*elai/(elai+esai) = 8.22612592095047779e-01 (:1182).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_rain": [1.89341119432430324e-04],
+      "forc_snow": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [1.0],
+      "elai": [4.15366385821838335e+00],
+      "esai": [6.43224377175331541e-01]
+     },
+     "initial_conditions": {
+      "liqcan": [4.79688823539371534e-01],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "fpiliq", "time": 0.0, "expected": 9.99863706163374721e-01, "coords": {"patch": 1}},
+      {"variable": "qflx_intercepted_liq", "time": 0.0, "expected": 1.89315313404831966e-04, "coords": {"patch": 1}},
+      {"variable": "qflx_through_liq", "time": 0.0, "expected": 2.58060275983710218e-08, "coords": {"patch": 1}},
+      {"variable": "h2ocan", "time": 0.0, "expected": 4.79688823539371534e-01, "coords": {"patch": 1}},
+      {"variable": "vegt", "time": 0.0, "expected": 4.79688823539371523e+00, "coords": {"patch": 1}},
+      {"variable": "liqcanmx", "time": 0.0, "expected": 4.79688823539371534e-01, "coords": {"patch": 1}},
+      {"variable": "snocanmx", "time": 0.0, "expected": 2.87813294123622896e+01, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 0.0, "expected": 5.00000000000000028e-02, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 0.0, "expected": 8.22612592095047779e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_interception_veg_step7_p714",
+     "description": "Vegetated interception pin against clm_interception.csv (hyd stage, step 7, patch 714, PFT 11): a sparser canopy (elai = 4.65163157786295489e+00, esai = 1.27498861867630625e-01) at light rain (forc_rain = 1.92779215340180724e-06 mm/s). check_point = 1: qflx_intercepted_liq = forc_rain*tanh(elai+esai) = 1.92751990860980017e-06 and qflx_through_liq = 1.92779215340180724e-06 - intercepted = 2.72244792007207026e-10 (:544-549). The fraction pins are at unsaturated storage: the raw fwet law (h2ocan/(vegt*liq_canopy_storage_scalar))^0.666666666666 evaluates to 3.84636409077007344e-02, below maximum_leaf_wetted_fraction = 0.05, so fwet reproduces the dump exactly without the clamp (BulkDiag_FracWet :1170-1171), and fdry = (1-fwet)*elai/(elai+esai) = 9.35884246647441076e-01 (:1182). liqcanmx = liq_canopy_storage_scalar*(elai+esai) = 4.77913043973058560e-01 (derived; the hyd liqcan = 3.6e-03 mm is far below it).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_rain": [1.92779215340180724e-06],
+      "forc_snow": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [1.0],
+      "elai": [4.65163157786295489e+00],
+      "esai": [1.27498861867630625e-01]
+     },
+     "initial_conditions": {
+      "liqcan": [3.60515939843166064e-03],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qflx_intercepted_liq", "time": 0.0, "expected": 1.92751990860980017e-06, "coords": {"patch": 1}},
+      {"variable": "qflx_through_liq", "time": 0.0, "expected": 2.72244792007207026e-10, "coords": {"patch": 1}},
+      {"variable": "liqcanmx", "time": 0.0, "expected": 4.77913043973058560e-01, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 0.0, "expected": 3.84636409077007344e-02, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 0.0, "expected": 9.35884246647441076e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_interception_veg_step2_p250",
+     "description": "Vegetated fraction pin against clm_interception.csv (hyd stage, step 2, patch 250, PFT 11): a canopy holding liqcan = 4.72394872796912460e-03 mm at a step with no precipitation (forc_rain = forc_snow = 0, so check_point = 0 and the interception fluxes are identically 0; the storage state is set via initial_conditions). The fwet law is pinned just below its clamp: (h2ocan/(vegt*liq_canopy_storage_scalar))^0.666666666666 = 4.39578536641769546e-02, the largest unsaturated fwet of the 49 such hyd rows (maximum_leaf_wetted_fraction = 0.05 not binding, BulkDiag_FracWet :1170-1171), and fdry = (1-fwet)*elai/(elai+esai) = 8.32414895559038026e-01 (:1182).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_rain": [0.0],
+      "forc_snow": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [1.0],
+      "elai": [4.46285998480591317e+00],
+      "esai": [6.62807829925657677e-01]
+     },
+     "initial_conditions": {
+      "liqcan": [4.72394872796912460e-03],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "h2ocan", "time": 0.0, "expected": 4.72394872796912460e-03, "coords": {"patch": 1}},
+      {"variable": "vegt", "time": 0.0, "expected": 5.12566781473157107e+00, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 0.0, "expected": 4.39578536641769546e-02, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 0.0, "expected": 8.32414895559038026e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_interception_veg_ode_step3_p223",
+     "description": "One-step continuous-ODE trace against clm_interception.csv (step 3, patch 223, PFT 11): the ent row carries liqcan = 1.92907138599710676e-05 mm and the hyd row liqcan = 2.51041905837461185e-03 mm with forc_rain = 1.38423607352693211e-06 mm/s. The step is unsaturated (hyd liqcan is far below liqcanmx = 4.60686639460564207e-01), so the excess-fall flux qflx_liqcanfall = max((liqcan-liqcanmx)/dtime, 0) (BulkFlux_CanopyExcess :755-756) is identically 0 throughout and d(liqcan)/dt = qflx_intercepted_liq = forc_rain*tanh(elai+esai) is constant: integrating over the 1800 s step reproduces the hyd-row storage exactly (liqcan = ent + dtime*intercepted, matching the Fortran's discrete update UpdateState_AddInterceptionToCanopy :702-703 to round-off). Also pins the instantaneous interception/throughfall split (qflx_intercepted_liq = 1.38396019139702268e-06, qflx_through_liq = 2.75882129909404707e-10) and the fractions at the hyd state with fwet unsaturated: fwet = 3.09666151894810657e-02 (:1170-1171), fdry = 8.31890961593044653e-01 (:1182).",
+     "time_span": {"start": 0.0, "end": 1800.0},
+     "parameter_overrides": {
+      "forc_rain": [1.38423607352693211e-06],
+      "forc_snow": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [1.0],
+      "elai": [3.95487975441480266e+00],
+      "esai": [6.51986640190839073e-01],
+      "dtime": 1800.0
+     },
+     "initial_conditions": {
+      "liqcan": [1.92907138599710676e-05],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "qflx_intercepted_liq", "time": 0.0, "expected": 1.38396019139702268e-06, "coords": {"patch": 1}},
+      {"variable": "qflx_through_liq", "time": 0.0, "expected": 2.75882129909404707e-10, "coords": {"patch": 1}},
+      {"variable": "liqcan", "time": 1800.0, "expected": 2.51041905837461185e-03, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 1800.0, "expected": 3.09666151894810657e-02, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 1800.0, "expected": 8.31890961593044653e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_interception_veg_step12_p264",
+     "description": "Vegetated fraction pin against clm_interception.csv (hyd stage, step 12, patch 264, PFT 11): the deepest small-storage pin of the lane — liqcan = 1.45005387755099851e-07 mm (h2ocan = liqcan since snocan = 0), no precipitation this step. The raw fwet law evaluates to 4.54614156817437299e-05 (BulkDiag_FracWet :1170, far below the 0.05 clamp), pinning the (h2ocan/(vegt*liq_canopy_storage_scalar))^0.666666666666 power law at a 1e-7-mm argument, and fdry = (1-fwet)*elai/(elai+esai) = 8.54940075018725709e-01 (:1182).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "forc_rain": [0.0],
+      "forc_snow": [0.0],
+      "qflx_irrig_sprinkler": [0.0],
+      "qflx_irrig_drip": [0.0],
+      "frac_veg_nosno": [1.0],
+      "elai": [4.04459578154258459e+00],
+      "esai": [6.86042103696227090e-01]
+     },
+     "initial_conditions": {
+      "liqcan": [1.45005387755099851e-07],
+      "snocan": [0.0]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "h2ocan", "time": 0.0, "expected": 1.45005387755099851e-07, "coords": {"patch": 1}},
+      {"variable": "fwet", "time": 0.0, "expected": 4.54614156817437299e-05, "coords": {"patch": 1}},
+      {"variable": "fdry", "time": 0.0, "expected": 8.54940075018725709e-01, "coords": {"patch": 1}}
      ]
     }
    ]

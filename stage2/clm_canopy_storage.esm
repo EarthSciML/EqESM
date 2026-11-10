@@ -1,0 +1,153 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "clm_canopy_storage",
+  "description": "CTSM/CLM end-of-CanopyFluxes canopy-storage update (stage 2 of the EqESM project): the dew-accumulation update of CanopyFluxesMod.F90:1615-1643 (ctsm5.4.063, cesm3.0-alphabranch), applied once per model step after the leaf-temperature iteration has produced t_veg and the fluxes qflx_tran_veg/qflx_evap_veg: above freezing (t_veg > tfrz) liqcan gains (tran - evap)*dtime with the max(0, .) positivity clamp and, when the evaporation demand (evap - tran)*dtime exceeds the post-hydrology liqcan (all liquid evaporated), the remainder is taken from snocan; below freezing the roles of liqcan/snocan are swapped (the below-freezing branch mirrors :1629-1635 with the all-snow-evaporated transfer at :1632-1634; note the Fortran does not clamp the transferred liqcan there). Afterwards truncate_small_values (NumericsMod.F90:50-99) zeroes snocan values below custom_rel_epsilon = 1e-10 relative to the pre-update snocan (the call at :1640-1643). The inputs liqcan_hyd/snocan_hyd are the storage after the same step's interception hydrology (the hyd rows of stage1/dumps/clm/clm_interception.csv; the vegetated dump shows the step order CanopyHydrology -> CanopyFluxes, so the clm_canopyflux_veg.csv rows carry the post-update storage). The leaf-temperature iteration itself (num_iter/det/dele, CanopyFluxesMod.F90:1305-1370,1440-1458) is a Newton loop and out of scope; see stage2/README-clm-canopy-veg.md. The tests pin the vegetated-patch dumps (stage1/dumps/clm/): clm_interception.csv hyd rows (inputs) against clm_canopyflux_veg.csv (outputs), including the validator's p=135 step-2 example (0.48338 = 0.47969 + (0 - (-2.05e-6))*1800).",
+  "license": "MIT"
+ },
+ "index_sets": {
+  "patch": {"kind": "interval", "size": "N_PATCH"}
+ },
+ "metaparameters": {
+  "N_PATCH": {"type": "integer", "default": 1, "description": "number of patches in the stage-2 skeleton (one patch; the full model runs the clump-local begp:endp arrays), [-]"}
+ },
+ "models": {
+  "CanopyStorageUpdate": {
+   "variables": {
+    "liqcan": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "canopy liquid water storage after the end-of-CanopyFluxes update (CanopyFluxesMod.F90:1618-1635), [mm]"},
+    "snocan": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "canopy snow water storage after the end-of-CanopyFluxes update, truncated by truncate_small_values (CanopyFluxesMod.F90:1615-1643, NumericsMod.F90:50-99), [mm]"},
+    "snocan_raw": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "canopy snow storage before the truncate_small_values pass (CanopyFluxesMod.F90:1618-1635), [mm]"},
+    "tran_net": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "canopy storage change from transpiration minus evaporation (qflx_tran_veg - qflx_evap_veg)*dtime (CanopyFluxesMod.F90:1620), [mm]"},
+    "evap_net": {"type": "unknown", "shape": ["patch"], "units": "mm", "description": "canopy evaporation demand (qflx_evap_veg - qflx_tran_veg)*dtime, compared against the storage in the all-evaporated branch (CanopyFluxesMod.F90:1619), [mm]"},
+    "liqcan_hyd": {"type": "parameter", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy liquid storage after the same step's interception hydrology, before CanopyFluxes (the hyd rows of clm_interception.csv), [mm]"},
+    "snocan_hyd": {"type": "parameter", "shape": ["patch"], "units": "mm", "default": 0.0, "description": "canopy snow storage after the same step's interception hydrology, before CanopyFluxes (also the truncate_small_values baseline, saved at CanopyFluxesMod.F90:1615), [mm]"},
+    "qflx_tran_veg": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "canopy transpiration flux from the CanopyFluxes iteration (clm_canopyflux_veg.csv), [mm/s]"},
+    "qflx_evap_veg": {"type": "parameter", "shape": ["patch"], "units": "mm/s", "default": 0.0, "description": "canopy evaporation flux from the CanopyFluxes iteration; negative when the canopy condenses (clm_canopyflux_veg.csv), [mm/s]"},
+    "t_veg": {"type": "parameter", "shape": ["patch"], "units": "K", "default": 273.15, "description": "leaf temperature after the CanopyFluxes iteration (clm_canopyflux_veg.csv), [K]"},
+    "dtime": {"type": "parameter", "units": "s", "default": 1800.0, "description": "land model time step (get_step_size_real), [s]"},
+    "tfrz": {"type": "parameter", "units": "K", "default": 273.15, "description": "freezing point of water (clm_varcon tfrz = SHR_CONST_TKFRZ), [K]"},
+    "rel_epsilon": {"type": "parameter", "units": "1", "default": 1e-10, "description": "custom_rel_epsilon of the truncate_small_values call (CanopyFluxesMod.F90:1640-1643; NumericsMod.F90:50-99 zeroes |data| < rel_epsilon*|baseline|), [-]"}
+   },
+   "equations": [
+    {"lhs": "tran_net", "rhs": {"op": "*", "args": [{"op": "-", "args": ["qflx_tran_veg", "qflx_evap_veg"]}, "dtime"]}},
+    {"lhs": "evap_net", "rhs": {"op": "*", "args": [{"op": "-", "args": ["qflx_evap_veg", "qflx_tran_veg"]}, "dtime"]}},
+    {"lhs": "liqcan", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["t_veg", "tfrz"]},
+     {"op": "max", "args": [0.0, {"op": "+", "args": ["liqcan_hyd", "tran_net"]}]},
+     {"op": "ifelse", "args": [
+      {"op": ">", "args": ["evap_net", "snocan_hyd"]},
+      {"op": "+", "args": ["liqcan_hyd", "snocan_hyd", "tran_net"]},
+      "liqcan_hyd"]}]}},
+    {"lhs": "snocan_raw", "rhs": {"op": "ifelse", "args": [
+     {"op": ">", "args": ["t_veg", "tfrz"]},
+     {"op": "ifelse", "args": [
+      {"op": ">", "args": ["evap_net", "liqcan_hyd"]},
+      {"op": "max", "args": [0.0, {"op": "+", "args": ["snocan_hyd", "liqcan_hyd", "tran_net"]}]},
+      "snocan_hyd"]},
+     {"op": "max", "args": [0.0, {"op": "+", "args": ["snocan_hyd", "tran_net"]}]}]}},
+    {"lhs": "snocan", "rhs": {"op": "ifelse", "args": [
+     {"op": "<", "args": [{"op": "abs", "args": ["snocan_raw"]}, {"op": "*", "args": ["rel_epsilon", {"op": "abs", "args": ["snocan_hyd"]}]}]},
+     0.0, "snocan_raw"]}}
+   ],
+   "tests": [
+    {
+     "id": "clm_canopy_storage_update_step2_p135",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 2, patch 135) with the same-step interception hyd row of clm_interception.csv as input: liqcan_hyd = 4.79688823539371534e-01 mm, snocan_hyd = 0, and the CanopyFluxes row carries t_veg = 2.92444582522476480e+02 K (above tfrz), qflx_tran_veg = 0 and qflx_evap_veg = -2.05113675902565682e-06 mm/s (negative evaporation = canopy condensation), so tran_net = (0 - (-2.05113675902565682e-06))*1800 = +3.69204616624618223e-03 mm and liqcan = liqcan_hyd + tran_net = 4.83380869705617722e-01 mm exactly as dumped (the validator's p=135 step-2 example: 0.48338 = 0.47969 + (0 - (-2.05e-6))*1800; CanopyFluxesMod.F90:1618-1621). The all-evaporated branch does not bind (evap_net = -3.69e-03 < liqcan_hyd), so snocan stays at snocan_hyd = 0 — an assertion that fails if the branch logic is inverted or the transfer formula is applied unconditionally.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [4.79688823539371534e-01],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [0.0],
+      "qflx_evap_veg": [-2.05113675902565682e-06],
+      "t_veg": [2.92444582522476480e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 4.83380869705617722e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_storage_update_step2_p198",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 2, patch 198) with the same-step interception hyd row as input: liqcan_hyd = 4.17199351295416299e-01 mm, qflx_tran_veg = 5.28268736936828026e-05 and qflx_evap_veg = 1.15211111100754890e-04 mm/s, so tran_net = -1.12291627332729751e-01 mm and liqcan = max(0, liqcan_hyd + tran_net) = 3.04907723962686561e-01 mm exactly as dumped (CanopyFluxesMod.F90:1620-1621). The evaporation demand evap_net = +1.12291627332729751e-01 mm does not exhaust liqcan_hyd, so snocan is unchanged at 0 (the branch condition at :1619).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [4.17199351295416299e-01],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [5.28268736936828026e-05],
+      "qflx_evap_veg": [1.15211111100754890e-04],
+      "t_veg": [3.02959700166225446e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 3.04907723962686561e-01, "coords": {"patch": 1}},
+      {"variable": "snocan", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_storage_update_step2_p50",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 2, patch 50) with the same-step interception hyd row as input: liqcan_hyd = 1.74837004243220753e-02 mm, qflx_tran_veg = 2.42182640703261705e-05 and qflx_evap_veg = 3.39314309727273245e-05 mm/s. The step sits exactly on the all-liquid-evaporated boundary: evap_net = (evap-tran)*1800 = 1.74837004243220788e-02 mm is 1 ulp above liqcan_hyd, so the :1619 branch is taken (all liquid evaporated) and liqcan = max(0, liqcan_hyd + tran_net) = max(0, -3.469446951953614e-18) = 0 exactly as dumped — this pins the max(0, .) positivity clamp at :1621 to the last bit of the f64 arithmetic (the dump's liqcan is exactly 0.0). snocan = 0 either way (snocan_hyd = 0 and the transfer max(0, snocan_hyd + liqcan_hyd + tran_net) = max(0, -3.47e-18) = 0, :1620).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [1.74837004243220753e-02],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [2.42182640703261705e-05],
+      "qflx_evap_veg": [3.39314309727273245e-05],
+      "t_veg": [2.89605667553987985e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_storage_update_step7_p714",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 7, patch 714) with the same-step interception hyd row as input: liqcan_hyd = 3.60515939843166064e-03 mm, qflx_tran_veg = 1.91256441428405981e-04 and qflx_evap_veg = 1.93259307760868020e-04 mm/s. Again at the all-liquid-evaporated boundary: evap_net = 3.60515939843166974e-03 mm exceeds liqcan_hyd by 9e-18 (1 ulp), so the :1619 branch is taken and liqcan = max(0, liqcan_hyd + tran_net) = max(0, -9.107298248878237e-18) = 0 exactly as dumped — the second independent pin of the max(0, .) clamp and of the razor-edge branch condition (CanopyFluxesMod.F90:1619-1621).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [3.60515939843166064e-03],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [1.91256441428405981e-04],
+      "qflx_evap_veg": [1.93259307760868020e-04],
+      "t_veg": [3.06283103074565986e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 0.0, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_storage_update_step3_p155",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 3, patch 155) with the same-step interception hyd row as input: liqcan_hyd = 4.49381657583243610e-01 mm (saturated at liqcanmx), qflx_tran_veg = 1.06888638021577591e-07 and qflx_evap_veg = 3.52937818269559519e-06 mm/s: tran_net = -6.16048118041323187e-03 mm, well short of exhausting liqcan_hyd (evap_net = 6.16e-03 < 0.449), so liqcan = max(0, liqcan_hyd + tran_net) = 4.43221176402830375e-01 mm exactly as dumped — the evaporation drawdown of a saturated canopy (CanopyFluxesMod.F90:1618-1621).",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [4.49381657583243610e-01],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [1.06888638021577591e-07],
+      "qflx_evap_veg": [3.52937818269559519e-06],
+      "t_veg": [2.96325889138317507e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 4.43221176402830375e-01, "coords": {"patch": 1}}
+     ]
+    },
+    {
+     "id": "clm_canopy_storage_update_step12_p264",
+     "description": "End-of-CanopyFluxes storage update against clm_canopyflux_veg.csv (step 12, patch 264) with the same-step interception hyd row as input: the smallest-storage pin of the lane — liqcan_hyd = 1.45005387755099851e-07 mm, qflx_tran_veg = 9.67369038112983360e-07 and qflx_evap_veg = 9.67390630463219811e-07 mm/s, tran_net = -3.88662304256123104e-08 mm (evap_net = 3.9e-08 < liqcan_hyd, the :1619 branch does not bind), so liqcan = max(0, liqcan_hyd + tran_net) = 1.06139157329487540e-07 mm exactly as dumped (CanopyFluxesMod.F90:1620-1621): a sub-epsilon-relative move of a near-empty canopy reproduced to round-off.",
+     "time_span": {"start": 0.0, "end": 0.0},
+     "parameter_overrides": {
+      "liqcan_hyd": [1.45005387755099851e-07],
+      "snocan_hyd": [0.0],
+      "qflx_tran_veg": [9.67369038112983360e-07],
+      "qflx_evap_veg": [9.67390630463219811e-07],
+      "t_veg": [2.96608920156379043e+02]
+     },
+     "tolerance": {"rel": 1e-12, "abs": 0.0},
+     "assertions": [
+      {"variable": "liqcan", "time": 0.0, "expected": 1.06139157329487540e-07, "coords": {"patch": 1}}
+     ]
+    }
+   ]
+  }
+ }
+}

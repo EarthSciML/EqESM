@@ -492,3 +492,32 @@ Format template:
 - **Impact on results:** none in the reference run — all dumped columns of the SCAM window are ocean g = 1 columns, so the distinction is unobservable in the dumps; the esm model transcribes the code as written (one coefficient `ke`, dumped 5e-6).
 - **Reproduced/corrected in .esm:** `stage2/cam_zm_evap.esm` (ZMevap) reproduces the code as written; the `ke` variable documents the dead arguments. Verified identical in the vanilla CESM checkout (fork-vs-vanilla diff empty — not an instrumentation artifact).
 - **Status:** open (dead arguments; the zmconv_ke_lnd namelist option has no effect on the simulation).
+
+## 39. CLM CanopyFluxes below-freezing storage transfer lacks the max(0,.) clamp of its above-freezing mirror
+
+- **Location:** `components/clm/src/biogeophys/CanopyFluxesMod.F90:1630` (the
+  all-snow-evaporated branch of the end-of-CanopyFluxes storage update;
+  above-freezing mirror with the clamp at `:1622`).
+- **Description:** in the above-freezing branch, when the evaporation demand
+  exceeds liqcan the remainder is taken from snocan with a positivity clamp —
+  `snocan = max(0, snocan + liqcan + (tran-evap)*dtime)` (`:1622`) — and
+  liqcan itself is clamped by `max(0, ...)` (`:1623`). The below-freezing
+  mirror (`:1628-1634`) instead transfers to liqcan **without any clamp**:
+  `liqcan = liqcan + snocan + (tran-evap)*dtime` (`:1630`), and only the final
+  snocan line is clamped (`:1634`). Since the branch condition only
+  guarantees `(tran-evap)*dtime < -snocan`, the transfer is negative whenever
+  the evaporation demand exceeds the total canopy water liqcan + snocan, and
+  the negative liqcan persists (the `truncate_small_values` call at
+  `:1640-1643` touches only snocan). The stage-1 validator
+  (`stage1/analysis/verify_clm_veg_dumps.py` `check_canopyflux`) silently
+  assumes the clamp (`max(0, liqcan_h + snocan_h + net)`), i.e. it encodes
+  the intended semantics, not the Fortran as written.
+- **Impact on results:** none on the traced data — all 176 vegetated rows
+  have t_veg > tfrz, so the below-freezing branch never runs; potentially
+  negative liqcan on below-freezing patches with sublimation demand
+  exceeding the canopy storage.
+- **Reproduced/corrected in .esm:** `stage2/clm_canopy_storage.esm`
+  transcribes the Fortran as written (the below-freezing transfer at
+  `:1630` without the clamp); the branch is unpinned (see
+  `stage2/README-clm-canopy-veg.md`).
+- **Status:** open (upstream asymmetry; unexercised by this lane's dumps).
