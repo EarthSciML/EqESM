@@ -23,9 +23,12 @@ consumer variable name, so the Fortran layer weight zf_lo − zf_hi of the
 dadt summand is carried in the integrand `dadt_integrand` rather than
 the measure.
 
-Sources: `stage1/dumps/cam/cam_zm.csv` (480 profile rows) and
-`cam_zm_scal.csv` (15 scalar rows, steps 18–23 and 40–48, g = 1) of the
-instrumented cam6_4_212 fork
+Sources: `stage1/dumps/cam/cam_zm.csv` (480 profile rows),
+`cam_zm_scal.csv` (15 scalar rows, steps 18–23 and 40–48, g = 1),
+`cam_zm_parcel.csv` (480 rows: the parcel-ascent internals
+tmix/qsmix/qtmix/smix/xsh2o/qtot/ds_xsh2o/ds_freeze/qtp/sp/mp/tpv/buoy)
+and `cam_zm_parcel_scal.csv` (15 rows: pl/plge600/capeten_1..5/
+lelten_1..5) of the instrumented cam6_4_212 fork
 `components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90`
 (line numbers cited per law below).
 
@@ -42,12 +45,17 @@ Variables/equations: `qst`, `hmn`, `hsat`, `tv`, `tpv`, `buoy`,
   same law is hmn_lev of the parcel_pbl branch, F90:979, and of the hmax
   search, F90:1018).
 - `tv` = t·(1+1.608·q)/(1+q) (F90:1005-1006, 1088); `tpv` =
-  (tp+tpert)·(1+1.608·qstp)/(1+qtot) (F90:1415 launch, 1476 ascent);
-  `buoy` = tpv − tv + tiedke_add for k ≤ maxi (F90:1088-1089).
+  (tp+tpert)·(1+1.608·qstp)/(1+qtot) for msg+1 ≤ k ≤ maxi, else the
+  environmental tv (F90:1415 launch, 1476 ascent; the tpv = tv / buoy = 0
+  initializations of F90:1004-1007 for k ≤ msg — the mask lives in the
+  `zm_parcel_virtual_temperature` template body, bound to the `msg`
+  parameter); `buoy` = tpv − tv + tiedke_add for msg+1 ≤ k ≤ maxi, else 0
+  (F90:1088-1089).
 - `integrand` = rgas·buoy and `dz` = log(pf_hi/pf_lo) (d(ln p)); `cape`
   = max(0, integral) over lel < k ≤ maxi (F90:1124, 1146), lowered by
   `integral_lev_whole` (the measure dz is dimensionless, so the integral
-  is a plain sum of the Fortran log increments).
+  is a plain sum of the Fortran log increments).  The lel < k bound makes
+  the msg+1 lower bound of buoy redundant in the integral (lel ≥ 14).
 - `ent` = the Raymond–Blyth moist entropy (F90:1489-1513): (cpres +
   qtot·cpliq)·log(TK/tfreez) − rgas·log((p−e)/pref) + L·qv/TK −
   qv·rh2o·log(qv/qst), with L = rl − (cpliq−cpwv)·(TK−tfreez),
@@ -67,20 +75,25 @@ zm_qsat_hPa via the declared 100 Pa/hPa constant.
 - `maxi` (the launch level) — the argmax of hmn over k ≥ pblt
   (F90:1018-1020); argmax is not evaluable by the CLI interpreter
   (probed), so maxi is a parameter pinned by the dump column.
-- `tp`, `qstp`, `tl`, `lcl`, `pl` and `qtot` = new_q — outputs of the
-  **ientropy ascent solve** (F90:1517-1632).  The solve is an iterative
-  Brent root-find, not expressible as closed-form laws; tp/qstp are
-  dumped and carried as parameters, and qtot (new_q) is *not* dumped, so
-  `tpv`, `buoy` and `cape` are written laws that cannot be pinned (their
-  inputs tp/qstp are dumped but qtot is not).  qtot defaults to qstp,
-  the sub-saturated branch new_q ≤ qsmix (F90:1473).
+- `tp`, `qstp` and `qtot` = new_q — outputs of the **ientropy ascent
+  solve** (F90:1517-1632).  The solve is an iterative Brent root-find,
+  not expressible as closed-form laws, so its outputs are dumped and
+  carried as parameters (cam_zm_parcel.csv columns tp/qstp/qtot), which
+  pins `tpv`, `buoy` and `cape` against the dumped values.  qtot
+  defaults to the step-18 profile (the step-18 test runs on the
+  defaults); the dumped qtot is 0 below msg+1 = 6, where the parcel
+  loops never run.  The other solve outputs (tl, lcl) are not dumped
+  and are unused by `Parcel`.
 - `lel` — with num_cin = 1 on all dumped rows, the candidate selection
   (F90:1136-1140) collapses to lel = lelten(1), so lel is a parameter
-  (the dumped column); lelten itself is not dumped.
+  (the dumped column).  The collapse is verified against the dumped
+  capeten/lelten columns of cam_zm_parcel_scal.csv: cape =
+  capeten(1) and lel = lelten(1) on every active row.
 - `landfrac` is not read: lparcel_pbl = F in this lane (the parcel_pbl
   branch, F90:960-1030, is unused — no hmn_lev/maxi coupling needed).
-- The `pl ≥ 600` gate (F90:1079-1080) is omitted: pl is not dumped and
-  is uniformly true on the active rows (cape > capelmt).
+- The `pl ≥ 600` gate (F90:1079-1080) is omitted: pl is dumped
+  (768–830 mb on the active rows, cam_zm_parcel_scal.csv) and plge600 =
+  T on all of them, so the gate never fires.
 
 ## Model `Closure` (closure + dsubcld)
 
@@ -153,24 +166,32 @@ mb equals the dumped mb); lel/lcl/jt/mx enter as dumped parameters
 ## Tests
 
 All tests `time_span {0,0}`, rel 1e-12, citing dump file, step, g and
-lev (190 assertions):
+lev (280 assertions):
 
-- **Parcel — 150 assertions** (15 steps × 10): hmn and hsat at lev
+- **Parcel — 240 assertions** (15 steps × 16): hmn and hsat at lev
   {1, 15, 25, 32} against the dumped columns (cam_zm.csv rows
-  (step, 1, k)); qst at lev {25, 32} against the dumped `qs` column of cam_zm.csv
-  (same rows; also cross-pinned by hsat through hsat = cpres·t + grav·z +
-  rl·qst).
+  (step, 1, k)); qst at lev {25, 32} against the dumped `qs` column of
+  cam_zm.csv (same rows; also cross-pinned by hsat through hsat =
+  cpres·t + grav·z + rl·qst); tpv at lev {25, 32} and buoy at lev
+  {15, 18, 25} against the dumped cam_zm_parcel.csv columns; cape
+  against the dumped cape of cam_zm_scal.csv (== capeten_1 of
+  cam_zm_parcel_scal.csv under the num_cin = 1 collapse, verified).
+  Every test overrides the 9 profile arrays T/q/z/p/tp/qstp/qtot/
+  pf_hi/pf_lo and the scalars maxi/lel (the step-18 values equal the
+  model defaults, so the default run *is* the step-18 state).
 - **Parcel — 10 ent/tv assertions** (5 states × 2): ent at (18,32),
-  (18,25), (18,15), (40,32), (48,32) and tv at the same states, against
+  (18,25), (18,15), (40,26), (48,32) and tv at the same states, against
   the entropy (F90:1489-1513) and virtual-temperature (F90:1088)
   replicas (DERIVED — not dump columns).
 - **Closure — 30 assertions** (15 steps × 2): dsubcld (exact) and mb
   (worst rel 2.5e-16) against the dumped columns, from the NORMALIZED
-  fluxes dump/mb.  The step-18 test runs on the model defaults (every
-  step-18 profile equals a default, so the default run *is* the step-18
-  state); the other steps override all 24 profile/scalar arrays.
+  fluxes dump/mb.  The step-18 test runs on the model defaults; the
+  other steps override 20 profile arrays (qg/tg/pg/sg/tpg/qstpg/qu/su/
+  qd/sd/qhat/shat/ql/pdel/zf_lo/zf_hi/mu/md/mc/du) and 6 scalars
+  (cape/tl/lel/lcl/jt/mx).
 
-Data volume: 15 columns × 32 levels; the dump window spans cape
+Data volume: 15 steps × 32 levels per profile array; the dump window
+spans cape
 94–594 J/kg, lel 14/15, lcl 25/26/27, jt 15, mx 32.
 
 ## Numeric tuple provenance
@@ -184,29 +205,32 @@ blocks of the two .esm files from the tuples, in the exact
 json.dumps(indent=1) format the region was originally written in, so
 `git diff` shows only test-block changes.  The tuples script also
 *verifies* every law replica against the dump before writing the
-tuples: worst rel |mb| 2.5e-16, |dsubcld|, |hmn|, |hsat| 0.0 (run with
-`ZM_DUMP_DIR`/`ZM_TUPLE_DIR` env overrides; default output
+tuples: worst rel |mb| 2.5e-16, |dsubcld|, |hmn|, |hsat|, |tpv|,
+|buoy|, |cape| 0.0; the pl reconstruction (from the dumped pf_hi/pf_lo
+interface pressures) is exact to worst |pl| 5.7e-3 mb and the ientropy
+launch root reproduces the dumped tmix to worst |tmix − root| 1.5e-4 K
+(run with `ZM_DUMP_DIR`/`ZM_TUPLE_DIR` env overrides; default output
 `scratch/zm_tuples/tuples.json`, gitignored).
 
 ## Coverage gaps / notes
 
-- **The parcel ascent is not expressible**: the ientropy Brent solve
-  (F90:1517-1632) fixes tp, qstp, tl, lcl, pl; `tp`, `qstp`, `tl`,
-  `lcl`, `pl` are parameters (tp/qstp dumped).  The per-level closed-form
-  laws are transcribed and pinned separately.
-- **new_q (qtot), xsh2o, tmix, qsmix are not dumped**, so `tpv`, `buoy`
-  and `cape` are written but unpinned: their qtot input defaults to
-  qstp (the sub-saturated branch new_q ≤ qsmix, F90:1473).  Similarly
-  capeten/lelten are not dumped, so the num_cin selection is pinned only
-  through the collapsed lel parameter.
+- **The parcel ascent solve is not expressible**: the ientropy Brent
+  solve (F90:1517-1632) fixes tp, qstp, tl, lcl, pl and the internal
+  tmix/qsmix/xsh2o.  `tp`, `qstp`, `qtot` are dumped and carried as
+  parameters (pinning tpv/buoy/cape); `tl` and `lcl` are not dumped and
+  are unused by `Parcel`.  The solve's internals tmix/qsmix/xsh2o are
+  dumped and verified against the stage-1 replicas (launch root
+  |tmix − root| ≤ 1.5e-4 K, the ascent recurrences bit-exact), but the
+  iterative solve itself remains unexpressed.  The per-level
+  closed-form laws are transcribed and pinned separately.
 - **argmax (maxi) and the Brent root-find are not evaluable** by the
   CLI interpreter (probed); `maxi` is a parameter (dump column; the
   qstp = q(mx) launch law is carried via qstp_launch, a definition).
-- pl ≥ 600 gate (F90:1079-1080) omitted (pl not dumped; uniformly true
-  on the active rows); landfrac unused (lparcel_pbl = F); mumax limit
+- pl ≥ 600 gate (F90:1079-1080) omitted (pl dumped 768–830 mb, plge600
+  = T on all rows); landfrac unused (lparcel_pbl = F); mumax limit
   (F90:675-690) and the msg loop bound omitted (inactive on all 15
-  rows); zg/qs omitted (unread); num_cin = 1 collapse (lel =
-  lelten(1)); beta = 0 (F90:2433) collapses the ql weights to ql(k+1).
+  rows); zg/qs omitted (unread); beta = 0 (F90:2433) collapses the ql
+  weights to ql(k+1).
 - The Fortran's `dtldt` (F90:2407-2410) and entropy (F90:1489-1513)
   take logs of dimensioned values; the .esm laws use the numerically
   identical dimensionless ratios (t(mx)/1K, eb/1hPa, TK/tfreez,
