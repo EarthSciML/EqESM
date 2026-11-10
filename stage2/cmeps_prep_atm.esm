@@ -914,11 +914,6 @@
        "variable": "Sx_t",
        "time": 0.0,
        "expected": 246.68776341316945
-      },
-      {
-       "variable": "So_t_export",
-       "time": 0.0,
-       "expected": 273.15
       }
      ]
     },
@@ -1048,11 +1043,6 @@
       },
       {
        "variable": "Sx_t",
-       "time": 0.0,
-       "expected": 273.26555306298997
-      },
-      {
-       "variable": "So_t_export",
        "time": 0.0,
        "expected": 273.26555306298997
       }
@@ -1186,11 +1176,6 @@
        "variable": "Sx_t",
        "time": 0.0,
        "expected": 238.77263674024854
-      },
-      {
-       "variable": "So_t_export",
-       "time": 0.0,
-       "expected": 271.3500000476837
       }
      ]
     },
@@ -1322,11 +1307,6 @@
        "variable": "Sx_t",
        "time": 0.0,
        "expected": 271.0947577600789
-      },
-      {
-       "variable": "So_t_export",
-       "time": 0.0,
-       "expected": 272.62171796053667
       }
      ]
     },
@@ -1458,11 +1438,6 @@
        "variable": "Sx_t",
        "time": 0.0,
        "expected": 271.94137728427603
-      },
-      {
-       "variable": "So_t_export",
-       "time": 0.0,
-       "expected": 272.61218622133373
       }
      ]
     }

@@ -291,3 +291,13 @@ prep_atm gap of the ocnalb/merge round ("needs a CAM case").
   Whole stage2 suite **2737P/0F/0E** under `./esm test stage2/` (ESD_ROOT set;
   the worktree's starting commit 5726a2d ran 2662P/0F/0E — this lane adds
   exactly its 75 assertions) at `rel 1e-12`, `time_span {0,0}`.
+
+### Instrumentation note (moved from bugs.md by the manager, 2026-11-10: a fork-only defect that never corrupted data)
+
+**CMEPS dump instrumentation: prep_atm trace gated on the ogrid aoflux init flag, which never fires on an all-land PET 0**
+
+- **Location:** fork instrumentation only — `components/cmeps/cesm/flux_atmocn/med_dump_mod.F90` (`med_dump_prep_atm_active` / `med_dump_init_agrid` / the `step3`/`ymd3`/`tod3` counters) with the call site in `mediator/med_phases_prep_atm_mod.F90` (`med_phases_prep_atm_dump`).
+- **Description:** the original prep_atm dump gate reused the ogrid aoflux traced-cell state: `med_dump_prep_atm_active` required the ogrid init flag `is_init` and the ogrid counter `step` (set by `med_dump_init_ogrid` when the ogrid block of PET 0 has masked cells). On the F2000climo_f19_inst case PET 0's f19 ogrid block is all-land (the Antarctica rows come first in the local element order, `So_omask` = 0 everywhere on PET 0), so the ogrid init bails ("WARNING: no masked cells traced" in ocn.log), `is_init` stays `.false.` and the prep_atm dump is permanently gated off — a silent instrumentation failure (empty dump, no error). Second latent bug found while fixing: `med_dump_init_agrid` (first exercised by this dump) called `ESMF_MeshGet` on unallocated `elementIDs`/`elementCoords` (the ogrid path allocates first), a segfault on first execution.
+- **Impact on results:** none on the model — dump code only; without the fix the prep_atm trace simply never fires on any case whose PET 0 has no masked ogrid cells (any f19/F-case PET-0 decomposition that starts on Antarctica), and the agrid init crashes whenever the prep_atm dump IS enabled.
+- **Reproduced/corrected in .esm:** n/a (fork-only). Patched in the fork (cmeps submodule `17eef08f`, pointer `ea48423`): the atm-export dump gets its own counters `step3`/`ymd3`/`tod3`; `med_dump_prep_atm_tick` advances them from the mediator clock (called from `med_phases_prep_atm_dump`), `med_dump_prep_atm_active` gates on `is_init3`/`step3`, and the writer emits `step3`/`ymd3`/`tod3`; `med_dump_init_agrid` queries `elementCount` before allocating the mesh query arrays.
+- **Status:** patched locally (fork); benign in pristine code (no dump code upstream).
