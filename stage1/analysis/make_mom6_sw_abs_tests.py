@@ -26,15 +26,18 @@ and is left as a documented gap):
                           (surface split of extractFluxes1d,
                            MOM_forcing_type.F90:619, with the run's
                            RHO_0 = 1035 kg m-3, C_P = 3992 J kg-1 K-1)
-  OD(n,i)             = sum_{j<i} opacity(n,j) * h(j)   (h = h_after;
-                           the sw_optical_depth template, exp-of-prefix-sum
-                           Beer-Lambert optical depth)
+  OD(n,i)             = int_0^{z_i} opacity(n,z') dz'   (the ESD integral
+                           op, lowered by the mom6_sw_discretization.esm
+                           rules to the prefix sum_{j<i} opacity(n,j)*h(j)
+                           with the h = h_after measure)
   OD_buoy(n,i)        = same with h = h_before (pre-flux thickness of the
                            sumSWoverBands / KPP buoyancy path)
-  pen_sw_rem(n,k)     = penSW_bnd(n) * exp(-OD(n,k+1))
-  dT(k)               = sum_n penSW_bnd(n) * exp(-OD(n,k))
+  F_pen(n,i)          = penSW_bnd(n) * exp(-OD(n,i))    (named once)
+  F_pen_buoy(n,i)     = penSW_bnd(n) * exp(-OD_buoy(n,i))
+  pen_sw_rem(n,k)     = F_pen(n,k+1)
+  dT(k)               = sum_n F_pen(n,k)
                           * (1 - exp(-opacity(n,k)*h(k))) / h(k)
-  netPen(i)           = sum_n penSW_bnd(n) * exp(-OD_buoy(n,i)) / dt
+  netPen(i)           = sum_n F_pen_buoy(n,i) / dt
   absorbed_total      = sum_k dT(k) * h(k)   (derived conservation pin:
                            not a dump column -- sum of the dumped dT_k *
                            h_after_k; equals sum_n penSW_bnd(n) up to the
