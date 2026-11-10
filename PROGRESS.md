@@ -1542,3 +1542,70 @@ PR **#47** `data_models/cdeps` (ctessum-claude:cdeps-datm, cd58a9c) and PR
 **#48** `land_surface/clm` (ctessum-claude:clm-soil, 8e66171), bodies from
 the worktrees' PR_DESCRIPTION.md. Open upstream PRs from this project now:
 #33 mosart-routing, #37 cice, #44 clmu-verify2, #47 cdeps, #48 clm-soil.
+
+## Lane round 2026-11-10 (manager review of 18 finished runs)
+
+Suite on main `7a27615` (job 12284981): **3073P/0F/0E**. Four independent
+read-only review agents checked the 16 EqESM code branches (spot-checking
+pins against the dumps); the manager reviewed esm-pr-cism and the stranded
+run directly and acted on all verdicts. Suite on the merged main `58dfe88`:
+job **12313678** (`.work/suite-58dfe88/suite.log`, worktree
+`../EqESM-suite-58dfe88`) — pending.
+
+- **Merged (10):** `cam-zm-evap2` (7cf9e32; bug #38 ke_lnd ignored),
+  `cam-rad-optics` (d1c5d60; RRTMG optics, McICA, solin, qrs/qrl as flux
+  divergence; the tests caught fsds/flut index bugs; manager dropped 6
+  identically-zero cfc22/ccl4 pins but kept the index-pick pins a reviewer
+  flagged, since such pins fail on a wrong index; cam_templates conflict
+  with evap2 resolved by template union), `cam-zm-dump2` (2c436d1 + pointer
+  330d5e2: the 18-column `cam_zm_parcel.csv` was dumped from **uncommitted**
+  fork edits; manager committed them — atmos_phys 1a070a2, cam 3c98a27c,
+  EqESM-cesm-cam 738b40d — and fixed the lane records), `janitor-1109`
+  (9eab70d; dp sign wording fixed), `cice-dedd4` (6a13490; manager dropped
+  18 more copy/boundary pins), `clm-canopy-veg` (8418210; bug #39),
+  `clm-runoff-instrument` (0e0d9be; M9 part A runoff dumps; canyon_hwr
+  "bug" dropped — standard CLM NaN init), `cmeps-prep-atm2` (37c6db8;
+  5 So_t_export pins dropped; fork-only gating note moved to
+  CMEPS_LANE.md), `mom6-kpp-integrals` (b6cb454), `mom6-shortwave2`
+  (298f6c9; bug #40 with pristine line numbers).
+- **Partial (3):** `m9-ocn-flux` (58dfe88: gate README + verifier only;
+  the .esm files were script-assembled, restated the 86 AoFlux couplings
+  and fitted areacor), `mom6-dynamics-instrument` (4c69bbd: stage-1
+  records it had left uncommitted in the main checkout; stage 2 is not a
+  PDE — neighbour stencils are parameters — duplicates ESD face-flux
+  rules, unfailable integrated pins), `esd-transport-layers` (ESD branch
+  `cice-transport-layers` good, not pushed; its EqESM probe 737fa0b
+  rejected). `cice-itd-ridge`: stage 1 was already on main (58f3a44); stage
+  2 lost (below).
+- **esm-pr-cism:** EarthSciModels branch `cism` (fa61fe5, worktree
+  `../EarthSciModels-wt-cism`, PR_DESCRIPTION.md ready): 9 CISM files + 2
+  marked EqIce temp copies, Rust 380P/0F/0E; not pushed. Predates
+  janitor-1109's stagthck change (refresh before pushing).
+- **Stranded run:** `cice-itd-ridge` was requeued 3× by the yield watcher,
+  then its session died when a single write of the whole `cice_itd.esm`
+  hit the model's 32,768-token output cap (cice-dedd2 hit the same once).
+  The shared rules block now says to write ≤ ~400 lines per tool call.
+  Slurm job 12269264 (`st_archive.C_JRA_t62_mom6_dyn_inst`, from the mom6
+  dynamics case) can never run (DependencyNeverSatisfied); the manager's
+  scancel was blocked by the permission classifier — the user should
+  cancel it.
+- **Bugs:** #38 (CAM ZM ke_lnd), #39 (CLM below-freezing storage clamp),
+  #40 (MOM6 I_Habs) numbered at merge.
+- **Submitted (7):** `cice-itd-ridge2` (stage 2 in small edits),
+  `cice-tracer-transport3` (≈45 informative pins, restore remap_35,
+  template-seam check after merging dedd4), `clm-twostream2`
+  (direct/diffuse index, one d-law, stable_blend), `mom6-frazil-bflux3`
+  (merge local main, shared mom6_column_discretization.esm, drop input
+  copies), `mom6-dynamics2` (h[i,j,k] PDE on ESD rules, owns MOM6 fork for
+  small stage-1 items), `m9-ocn-flux2` (hand-written, AoFlux by
+  reference), `janitor-1110` (dEdd generator copy check + unused templates,
+  CLM evap_net, mcica via stable_blend, ZM closure via
+  zm_subcloud_tendency, tpv template pointwise).
+- **Recurring worker problems:** (1) "one law, one template" is not checked
+  across lane libraries (blend law duplicated in cam/clm vs cmeps
+  `stable_blend`); (2) copy-through outputs still pinned (`lhs =
+  <override>`); (3) stage-1 records/fork edits left uncommitted
+  (mom6-dynamics, cam-zm-dump2). New prompts state (1) and (2) explicitly.
+- **Next:** read suite 12313678; review the 7 jobs as they finish; user
+  decisions: push ESD `cice-transport-layers` and EarthSciModels `cism`
+  (after a stagthck refresh), cancel job 12269264.
