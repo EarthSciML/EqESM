@@ -1607,6 +1607,12 @@ units-issues=0.
   `stable_blend`); (2) copy-through outputs still pinned (`lhs =
   <override>`); (3) stage-1 records/fork edits left uncommitted
   (mom6-dynamics, cam-zm-dump2). New prompts state (1) and (2) explicitly.
-- **Next:** review the 7 jobs as they finish; user
-  decisions: push ESD `cice-transport-layers` and EarthSciModels `cism`
-  (after a stagthck refresh), cancel job 12269264.
+- **Pushed (user go-ahead, 2026-11-10):** EarthSciModels `cism` →
+  ctessum-claude/EarthSciModels (88b3adf; manager refreshed cism_velo.esm +
+  README with janitor-1109's stagthck change; strip-compare vs stage2:
+  velo/transport/cap/templates identical, basal/flowlaw/thermo differ only
+  in the EqIce temp-copy import paths) and ESD `cice-transport-layers` →
+  ctessum-claude/EarthSciDiscretizations.jl (e609764). No PRs opened yet
+  (PR_DESCRIPTION.md in both worktrees).
+- **Next:** review the 7 jobs as they finish; open the cism/ESD PRs when
+  the user says so; cancel job 12269264 (user).
