@@ -146,9 +146,9 @@ fork commit `dccc7bbb9` (superproject `1664928`):
    ("\*\*\*\*\*\*\*\*" in the first data row). Fix: lnd2atm builds
    `col_gidx_grc(begc:endc) = gindex_grc(col%gridcell(begc:endc))` as a temp.
 
-Plus one benign CLM quirk logged to `bugs.md`: `lun%canyon_hwr` is never
-initialized for non-urban landunits (NaN in the dump; never read by
-`set_c2l_scale` for non-urban, so harmless).
+Note: `lun%canyon_hwr` is NaN for non-urban landunits — CLM's standard
+NaN initialization (`LandunitType.F90:107`), never read by
+`set_c2l_scale` for non-urban columns, so not a bug.
 
 ## Status
 
