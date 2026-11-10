@@ -253,9 +253,7 @@
       "time": 0.0,"coords": {"k": 1},"expected": 1.6405861776941014e-08,"tolerance": {"rel": 1e-12}},
       {"variable": "h2ovmr","time": 0.0,"coords": {"k": 17},"expected": 5.8239754483220504e-05,
       "tolerance": {"rel": 1e-12}},{"variable": "h2ovmr","time": 0.0,"coords": {"k": 33},
-      "expected": 0.019599615382322758,"tolerance": {"rel": 1e-12}},{"variable": "cfc22vmr","time": 0.0,
-      "coords": {"k": 17},"expected": 0.0,"tolerance": {"rel": 1e-12}},{"variable": "ccl4vmr","time": 0.0,
-      "coords": {"k": 17},"expected": 0.0,"tolerance": {"rel": 1e-12}}
+      "expected": 0.019599615382322758,"tolerance": {"rel": 1e-12}}
      ]
     },
    {
@@ -305,10 +303,7 @@
       {"variable": "h2ovmr","time": 0.0,"coords": {"k": 1},"expected": 2.0597123430283422e-08,
       "tolerance": {"rel": 1e-12}},{"variable": "h2ovmr","time": 0.0,"coords": {"k": 17},
       "expected": 9.143164518406585e-05,"tolerance": {"rel": 1e-12}},{"variable": "h2ovmr","time": 0.0,
-      "coords": {"k": 33},"expected": 0.03042924421381179,"tolerance": {"rel": 1e-12}},
-      {"variable": "cfc22vmr","time": 0.0,"coords": {"k": 17},"expected": 0.0,
-      "tolerance": {"rel": 1e-12}},{"variable": "ccl4vmr","time": 0.0,"coords": {"k": 17},"expected": 0.0,
-      "tolerance": {"rel": 1e-12}}
+      "coords": {"k": 33},"expected": 0.03042924421381179,"tolerance": {"rel": 1e-12}}
      ]
     },
    {
@@ -358,10 +353,7 @@
       {"variable": "h2ovmr","time": 0.0,"coords": {"k": 1},"expected": 2.1268439203791525e-08,
       "tolerance": {"rel": 1e-12}},{"variable": "h2ovmr","time": 0.0,"coords": {"k": 17},
       "expected": 0.00012154983012558242,"tolerance": {"rel": 1e-12}},{"variable": "h2ovmr","time": 0.0,
-      "coords": {"k": 33},"expected": 0.02938665955418163,"tolerance": {"rel": 1e-12}},
-      {"variable": "cfc22vmr","time": 0.0,"coords": {"k": 17},"expected": 0.0,
-      "tolerance": {"rel": 1e-12}},{"variable": "ccl4vmr","time": 0.0,"coords": {"k": 17},"expected": 0.0,
-      "tolerance": {"rel": 1e-12}}
+      "coords": {"k": 33},"expected": 0.02938665955418163,"tolerance": {"rel": 1e-12}}
      ]
     }
    ]
