@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cism_velo",
-  "description": "Stage-2 implementation of the pointwise laws of the CISM DIVA velocity solve (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20, which_ho_approx = HO_APPROX_DIVA = 4, which_ho_gradient = 0, margin = 1, assemble_taud = 1, diva_slope_correction = .true., which_ho_babc = 3, max_slope = 0.5, thck_gradient_ramp = 50 m, thklim = 1 m, upn = 11, nquad = 4): three pointwise components covering the DIVA column laws of glissade_velo_higher_solve, leaving the 2-D finite-element matrix solve, the vertex staggers, and the Picard iteration itself to the stage-3 assembly (stage2/README-cism-velo.md): (a) DivaGeometry - the vertex geometry of the driving stress and the slope correction: the hybrid-margin surface gradient dusrf_dx/dy of the NE-corner vertex from the four-cell stencil (glissade_grid_operators.F90 surface_elevation_gradient, HO_GRADIENT_MARGIN_HYBRID, F90:999-1079, with the max_slope clamp F90:1234-1252), the 4-cell mean staggered thickness stagthck, the driving stress taudx = -rhoi*grav*stagthck*dusrf_dx (load_vector_gravity, HO_ASSEMBLE_TAUD_LOCAL, F90:4353-4384), the slope angle of the DIVA correction theta_x = atan(|dz_dx|) from the PLAIN vertex gradient of z_mean = usrf - thck/2 (glissade_slope_angle_staggered, F90:1510, with slope_mask = 1 everywhere) and the slope factor F = cos^2(theta) + 4 sin^2(theta) (F90:2189-2193), plus the bwat = 0 effective-pressure identity effecpress_stag = rhoi*g*stagthck pinned at the same stencil; (b) DivaIntegrals - the Goldberg (2011) vertical integrals of the sigma column (compute_integrals_diva, F90:5570-5696): omega_k as the interface-to-bed cumulative integral of sig_mid*thck*(mean over the nquad quadrature points of 1/efvs_qp) and omega as the trapezoid sigma integral of omega_k (no thck factor), both written as ESD integral operators lowered by the local EarthSciDiscretizations-format rules of ./cism_velo_discretization.esm (the imported column_nonuniform_1d rules integral_lev_nodes_cumulative_to_top and integral_lev_whole, the exact stencil of the Fortran loops), with the cell-centered efvs (the arithmetic mean of the quad-point viscosities, F90:5266-5272; the Fortran computes the integral at each quad point and averages, NOT the integral of the averaged viscosity, F90:5578-5583), the staggered stag_omega (the 4-cell mean of omega with stagger_margin = 1; the other three cells' omega enter as inputs because only the traced cell's efvs_q is dumped), and the active-cell guard (the whole block sits inside the active_cell test of the element loop, F90:5091: ice-free cells keep efvs = omega_k = omega = 0 even when the dumped efvs_q inputs are stale nonzero values from a previous step); (c) DivaVelocity - the basal friction, traction and 3-D recovery chain: the pseudo-plastic beta of the mounted BasalTraction (./cism_basal.esm, which_ho_babc = 3) evaluated at the basal velocity, beta_internal = f_ground*beta (the calcbeta f_ground weighting, glissade_basal_traction.F90:595-630; f_ground = 1 on every traced row), the effective basal friction beta_eff = F*beta/(F + beta*omega*cos(theta)) (F90:2589-2601, Goldberg 2011 eq. 40-41 with the May 2025 slope correction), the basal traction btractx = beta_internal*uvel_basal (= beta_eff*uvel_2d, F90:3874, 5780), the basal-velocity recovery uvel_basal = uvel_2d*beta_eff/beta_internal (Goldberg eq. 34, F90:5800-5801) and the 3-D velocity profile uvel[k] = uvel_basal + btractx*stag_omega_k[k]*cos(theta)/F (Goldberg eq. 32 with the slope correction, F90:5935-5936). Deferred to stage 3 (documented in stage2/README-cism-velo.md): the 2-D finite-element assembly and the Picard iteration of the solve itself, the effective-pressure cell-to-vertex stagger (N_stag enters as a dumped input; the effecpress_stag = rhoi*g*stagthck identity of the bwat = 0 run is pinned in the DivaGeometry tests). The dumped beta_internal is the last ACCEPTED calcbeta pass of accel_picard (the cism_basal_traction.csv row whose beta equals beta_internal); the tests feed BasalTraction that pass's u/v/bed/N, which makes the beta chain exact, so every law is pinned at rel 1e-12 (dusrf/taud at 1e-11, the ~1800 m elevation dump round-trip). Tests pin the laws against the cism_velo.csv / cism_velo_nbr.csv exit rows (4 steps x 32 traced cells, solver-internal m/yr and Pa yr units; scale_output has not yet run).",
+  "description": "Stage-2 implementation of the pointwise laws of the CISM DIVA velocity solve (stage 2 of the EqESM project; CISM = cismwrap_3_00_002 / cism_main_3.00.002 as built in CESM cesm3.0-alphabranch, reference run T1850Gg/f09_g17_gris20, which_ho_approx = HO_APPROX_DIVA = 4, which_ho_gradient = 0, margin = 1, assemble_taud = 1, diva_slope_correction = .true., which_ho_babc = 3, max_slope = 0.5, thck_gradient_ramp = 50 m, thklim = 1 m, upn = 11, nquad = 4): three pointwise components covering the DIVA column laws of glissade_velo_higher_solve, leaving the 2-D finite-element matrix solve, the vertex staggers, and the Picard iteration itself to the stage-3 assembly (stage2/README-cism-velo.md): (a) DivaGeometry - the vertex geometry of the driving stress and the slope correction: the hybrid-margin surface gradient dusrf_dx/dy of the NE-corner vertex from the four-cell stencil (glissade_grid_operators.F90 surface_elevation_gradient, HO_GRADIENT_MARGIN_HYBRID, F90:999-1079, with the max_slope clamp F90:1234-1252), the staggered thickness stagthck (the stagger_margin = 0 plain 4-cell mean, cism_stagger_masked_mean with unit masks), the driving stress taudx = -rhoi*grav*stagthck*dusrf_dx (load_vector_gravity, HO_ASSEMBLE_TAUD_LOCAL, F90:4353-4384), the slope angle of the DIVA correction theta_x = atan(|dz_dx|) from the PLAIN vertex gradient of z_mean = usrf - thck/2 (glissade_slope_angle_staggered, F90:1510, with slope_mask = 1 everywhere) and the slope factor F = cos^2(theta) + 4 sin^2(theta) (F90:2189-2193), plus the bwat = 0 effective-pressure identity effecpress_stag = rhoi*g*stagthck pinned at the same stencil; (b) DivaIntegrals - the Goldberg (2011) vertical integrals of the sigma column (compute_integrals_diva, F90:5570-5696): omega_k as the interface-to-bed cumulative integral of sig_mid*thck*(mean over the nquad quadrature points of 1/efvs_qp) and omega as the trapezoid sigma integral of omega_k (no thck factor), both written as ESD integral operators lowered by the local EarthSciDiscretizations-format rules of ./cism_velo_discretization.esm (the imported column_nonuniform_1d rules integral_lev_nodes_cumulative_to_top and integral_lev_whole, the exact stencil of the Fortran loops), with the cell-centered efvs (the arithmetic mean of the quad-point viscosities, F90:5266-5272; the Fortran computes the integral at each quad point and averages, NOT the integral of the averaged viscosity, F90:5578-5583), the staggered stag_omega (the 4-cell mean of omega with stagger_margin = 1; the other three cells' omega enter as inputs because only the traced cell's efvs_q is dumped), and the active-cell guard (the whole block sits inside the active_cell test of the element loop, F90:5091: ice-free cells keep efvs = omega_k = omega = 0 even when the dumped efvs_q inputs are stale nonzero values from a previous step); (c) DivaVelocity - the basal friction, traction and 3-D recovery chain: the pseudo-plastic beta of the mounted BasalTraction (./cism_basal.esm, which_ho_babc = 3) evaluated at the basal velocity, beta_internal = f_ground*beta (the calcbeta f_ground weighting, glissade_basal_traction.F90:595-630; f_ground = 1 on every traced row), the effective basal friction beta_eff = F*beta/(F + beta*omega*cos(theta)) (F90:2589-2601, Goldberg 2011 eq. 40-41 with the May 2025 slope correction), the basal traction btractx = beta_internal*uvel_basal (= beta_eff*uvel_2d, F90:3874, 5780), the basal-velocity recovery uvel_basal = uvel_2d*beta_eff/beta_internal (Goldberg eq. 34, F90:5800-5801) and the 3-D velocity profile uvel[k] = uvel_basal + btractx*stag_omega_k[k]*cos(theta)/F (Goldberg eq. 32 with the slope correction, F90:5935-5936). Deferred to stage 3 (documented in stage2/README-cism-velo.md): the 2-D finite-element assembly and the Picard iteration of the solve itself, the effective-pressure cell-to-vertex stagger (N_stag enters as a dumped input; the effecpress_stag = rhoi*g*stagthck identity of the bwat = 0 run is pinned in the DivaGeometry tests). The dumped beta_internal is the last ACCEPTED calcbeta pass of accel_picard (the cism_basal_traction.csv row whose beta equals beta_internal); the tests feed BasalTraction that pass's u/v/bed/N, which makes the beta chain exact, so every law is pinned at rel 1e-12 (dusrf/taud at 1e-11, the ~1800 m elevation dump round-trip). Tests pin the laws against the cism_velo.csv / cism_velo_nbr.csv exit rows (4 steps x 32 traced cells, solver-internal m/yr and Pa yr units; scale_output has not yet run).",
   "license": "MIT",
   "tags": [
    "eqesm:stage2",
@@ -241,7 +241,7 @@
     "stagthck": {
      "type": "unknown",
      "units": "m",
-     "description": "staggered ice thickness at the vertex: the plain 4-cell mean of thck (glissade_stagger, stagger_margin = 0, grid_operators.F90:125-133; the dumped stagthck column)"
+     "description": "staggered ice thickness at the vertex: the plain 4-cell mean of thck, the stagger_margin = 0 case of glissade_stagger (grid_operators.F90:125-133) applied here as cism_stagger_masked_mean with unit masks (the four-cell stencil of F90:141-143 with mask = 1, so the masked mean collapses to the plain mean; the dumped stagthck column)"
     },
     "taudx": {
      "type": "unknown",
@@ -596,29 +596,39 @@
     {
      "lhs": "stagthck",
      "rhs": {
-      "op": "*",
-      "args": [
-       0.25,
-       {
-        "op": "+",
-        "args": [
-         "thck_sw",
-         {
-          "op": "+",
-          "args": [
-           "thck_se",
-           {
-            "op": "+",
-            "args": [
-             "thck_nw",
-             "thck_ne"
-            ]
-           }
-          ]
-         }
-        ]
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "cism_stagger_masked_mean",
+      "bindings": {
+       "var_sw": "thck_sw",
+       "var_se": "thck_se",
+       "var_nw": "thck_nw",
+       "var_ne": "thck_ne",
+       "mask_sw": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "mask_se": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "mask_nw": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "mask_ne": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
        }
-      ]
+      }
      }
     },
     {
