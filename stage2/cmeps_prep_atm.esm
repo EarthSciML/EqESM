@@ -1,0 +1,1447 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cmeps_prep_atm",
+  "description": "CMEPS atmosphere-import merge component (stage 2 of the EqESM project): the fraction-weighted merges of the land/ice/ocean fields onto the atm grid in med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge_auto of med_merge_mod.F90:405-412 with the merge specs of esmFldsExchange_cesm_mod.F90), transcribed exactly with the fraction_weighted_sum expression template of ./cmeps_templates.esm imported by reference. The traced configuration (the F2000climo_f19_inst case of the instrumented CMEPS run 12284979, stage1/dumps/cmeps/cmeps_prep_atm.csv, 432 rows = 36 traced atm cells x 12 coupling steps): the cesm coupling mode with samegrid_atmlnd = .true. and component_computes_enthalpy_flux = none; every lnd2atm export is a three-source merge weighted by the FBFrac(compatm) fractions lfrac/ifrac/ofrac (the land weight is mrg_fracname_lnd2atm_state = 'lfrac' of med_internalstate_mod.F90:289-290, the ice/ocean weights are the 'ifrac'/'ofrac' strings of the addmrg specs), and the So_t copy export of L1282-1285 is the unweighted mrg_type = 'copy'. The merge lists: Sx_avsdr L875-887, Sx_avsdf L902-914, Sx_anidr L929-941, Sx_anidf L956-968, Sx_tref L988-1002, Sx_u10 L1015-1029, Sx_qref L1046-1062 (the bulk blank-suffix branch of the water_bulk_or_tracers split; the traced run is bulk), Faxx_taux L1085-1099, Faxx_tauy L1112-1126, Faxx_lat L1139-1153, Faxx_sen L1166-1180, Faxx_evap L1197-1211, Faxx_lwup L1236-1250, Sx_t L1267-1279. The dump carries each source field mapped to the atm grid and the merged export, so each test pins one cell/step at full dump precision: the traced cells are the first dump_first_cells = 12 atm cells of PET 0 (local element order, the Antarctica row block of the f19 grid) unioned with the per-step partial-ice (0 < ifrac < 1) and partial-land (0 < lfrac < 1) cells (36 distinct cells); the pinned rows cover the fraction regimes fully-land (lfrac = 1), open-ocean (ofrac = 1), partial-ice (ifrac = 0.99875) and the mixed three-fraction cell (atm cell n = 6, all weights nonzero, every source valid), plus the same mixed cell at the last step where the 05:30 local-time albedo sources are the dark-side 1.0. Sources on zero-fraction cells carry the CMEPS spval 1e30 (e.g. Sl_* on the ocean/ice cells) or 0.0 (Si_* of the ice-free Antarctica rows) - both inert at weight 0 (0.0*1e30 = 0.0 exactly, no NaN), which the tests pin implicitly. Each merge reproduces the Fortran accumulation order exactly: dp = 0 + Sl*lfrac, dp = dp + Si*ifrac, dp = dp + So*ofrac (med_merge_mod.F90:405-412), i.e. fraction_weighted_sum applied twice: the land+ice pair weighted by lfrac/ifrac first (the inner application), then the open-ocean source weighted by ofrac added on top (the outer application with the identity ice_frac = 1.0, which multiplies exactly)."
+ },
+ "models": {
+  "AtmMerge": {
+   "expression_template_imports": [
+    {
+     "ref": "./cmeps_templates.esm"
+    }
+   ],
+   "variables": {
+    "lfrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 1.0,
+     "description": "land fraction of the atm grid cell (FBFrac(compatm) lfrac), the land weight of every lnd2atm merge (mrg_fracname_lnd2atm_state = 'lfrac' of med_internalstate_mod.F90:289-290), [-]"
+    },
+    "ifrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "ice fraction of the atm grid cell (FBFrac(compatm) ifrac), the ice weight of every lnd2atm merge (the 'ifrac' of the addmrg specs), [-]"
+    },
+    "ofrac": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "open-ocean fraction of the atm grid cell (FBFrac(compatm) ofrac), the ocean weight of every lnd2atm merge (the 'ofrac' of the addmrg specs), [-]"
+    },
+    "Sl_avsdr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "direct visible land albedo mapped to the atm grid (FBImp(complnd,compatm) Sl_avsdr, addmap_from with map_fracname_lnd2atm), the land source of the Sx_avsdr merge of L875-887, [-]"
+    },
+    "Si_avsdr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "direct visible ice albedo mapped to the atm grid (FBImp(compice,compatm) Si_avsdr, addmap_from with 'ifrac'), the ice source of the Sx_avsdr merge of L875-887, [-]"
+    },
+    "So_avsdr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.09966715565870835,
+     "description": "direct visible ocean albedo of the ocnalb phase mapped to the atm grid (FBMed_ocnalb_a So_avsdr, addmap_ocnalb), the ocean source of the Sx_avsdr merge of L875-887, [-]"
+    },
+    "Sl_avsdf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "diffuse visible land albedo mapped to the atm grid (FBImp(complnd,compatm) Sl_avsdf), the land source of the Sx_avsdf merge of L902-914, [-]"
+    },
+    "Si_avsdf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "diffuse visible ice albedo mapped to the atm grid (FBImp(compice,compatm) Si_avsdf), the ice source of the Sx_avsdf merge of L902-914, [-]"
+    },
+    "So_avsdf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.09966715565870835,
+     "description": "diffuse visible ocean albedo of the ocnalb phase mapped to the atm grid (FBMed_ocnalb_a So_avsdf), the ocean source of the Sx_avsdf merge of L902-914, [-]"
+    },
+    "Sl_anidr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "direct near-infrared land albedo mapped to the atm grid (FBImp(complnd,compatm) Sl_anidr), the land source of the Sx_anidr merge of L929-941, [-]"
+    },
+    "Si_anidr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "direct near-infrared ice albedo mapped to the atm grid (FBImp(compice,compatm) Si_anidr), the ice source of the Sx_anidr merge of L929-941, [-]"
+    },
+    "So_anidr": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.09966715565870835,
+     "description": "direct near-infrared ocean albedo of the ocnalb phase mapped to the atm grid (FBMed_ocnalb_a So_anidr), the ocean source of the Sx_anidr merge of L929-941, [-]"
+    },
+    "Sl_anidf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "diffuse near-infrared land albedo mapped to the atm grid (FBImp(complnd,compatm) Sl_anidf), the land source of the Sx_anidf merge of L956-968, [-]"
+    },
+    "Si_anidf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.0,
+     "description": "diffuse near-infrared ice albedo mapped to the atm grid (FBImp(compice,compatm) Si_anidf), the ice source of the Sx_anidf merge of L956-968, [-]"
+    },
+    "So_anidf": {
+     "type": "parameter",
+     "units": "1",
+     "default": 0.09966715565870835,
+     "description": "diffuse near-infrared ocean albedo of the ocnalb phase mapped to the atm grid (FBMed_ocnalb_a So_anidf), the ocean source of the Sx_anidf merge of L956-968, [-]"
+    },
+    "Sl_tref": {
+     "type": "parameter",
+     "units": "K",
+     "default": 246.68776341316945,
+     "description": "reference-height land temperature mapped to the atm grid (FBImp(complnd,compatm) Sl_tref), the land source of the Sx_tref merge of L988-1002, [K]"
+    },
+    "Si_tref": {
+     "type": "parameter",
+     "units": "K",
+     "default": 0.0,
+     "description": "reference-height ice temperature mapped to the atm grid (FBImp(compice,compatm) Si_tref), the ice source of the Sx_tref merge of L988-1002, [K]"
+    },
+    "So_tref": {
+     "type": "parameter",
+     "units": "K",
+     "default": 273.15,
+     "description": "reference-height ocean temperature mapped to the atm grid (FBImp(compocn,compatm) So_tref), the ocean source of the Sx_tref merge of L988-1002, [K]"
+    },
+    "Sl_u10": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "10-m land wind speed mapped to the atm grid (FBImp(complnd,compatm) Sl_u10), the land source of the Sx_u10 merge of L1015-1029, [m/s]"
+    },
+    "Si_u10": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "10-m ice wind speed mapped to the atm grid (FBImp(compice,compatm) Si_u10), the ice source of the Sx_u10 merge of L1015-1029, [m/s]"
+    },
+    "So_u10": {
+     "type": "parameter",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "10-m ocean wind speed mapped to the atm grid (FBImp(compocn,compatm) So_u10), the ocean source of the Sx_u10 merge of L1015-1029, [m/s]"
+    },
+    "Sl_qref": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "reference-height land specific humidity mapped to the atm grid (FBImp(complnd,compatm) Sl_qref, the bulk blank-suffix branch), the land source of the Sx_qref merge of L1046-1062, [kg/kg]"
+    },
+    "Si_qref": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "reference-height ice specific humidity mapped to the atm grid (FBImp(compice,compatm) Si_qref), the ice source of the Sx_qref merge of L1046-1062, [kg/kg]"
+    },
+    "So_qref": {
+     "type": "parameter",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "reference-height ocean specific humidity mapped to the atm grid (FBImp(compocn,compatm) So_qref), the ocean source of the Sx_qref merge of L1046-1062, [kg/kg]"
+    },
+    "Fall_taux": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "zonal surface stress over land mapped to the atm grid (FBImp(complnd,compatm) Fall_taux), the land source of the Faxx_taux merge of L1085-1099 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [N/m2]"
+    },
+    "Faii_taux": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "zonal surface stress over ice mapped to the atm grid (FBImp(compice,compatm) Faii_taux), the ice source of the Faxx_taux merge of L1085-1099, [N/m2]"
+    },
+    "Faox_taux": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "zonal surface stress of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_taux, addmap_aoflux; on the ogrid aoflux_grid of the traced run the ogrid values are mapped to the atm grid first), the ocean source of the Faxx_taux merge of L1085-1099, [N/m2]"
+    },
+    "Fall_tauy": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "meridional surface stress over land mapped to the atm grid (FBImp(complnd,compatm) Fall_tauy), the land source of the Faxx_tauy merge of L1112-1126 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [N/m2]"
+    },
+    "Faii_tauy": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "meridional surface stress over ice mapped to the atm grid (FBImp(compice,compatm) Faii_tauy), the ice source of the Faxx_tauy merge of L1112-1126, [N/m2]"
+    },
+    "Faox_tauy": {
+     "type": "parameter",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "meridional surface stress of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_tauy), the ocean source of the Faxx_tauy merge of L1112-1126, [N/m2]"
+    },
+    "Fall_lat": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "latent heat flux over land mapped to the atm grid (FBImp(complnd,compatm) Fall_lat), the land source of the Faxx_lat merge of L1139-1153 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [W/m2]"
+    },
+    "Faii_lat": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "latent heat flux over ice mapped to the atm grid (FBImp(compice,compatm) Faii_lat), the ice source of the Faxx_lat merge of L1139-1153, [W/m2]"
+    },
+    "Faox_lat": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "latent heat flux of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_lat), the ocean source of the Faxx_lat merge of L1139-1153, [W/m2]"
+    },
+    "Fall_sen": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "sensible heat flux over land mapped to the atm grid (FBImp(complnd,compatm) Fall_sen), the land source of the Faxx_sen merge of L1166-1180 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [W/m2]"
+    },
+    "Faii_sen": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "sensible heat flux over ice mapped to the atm grid (FBImp(compice,compatm) Faii_sen), the ice source of the Faxx_sen merge of L1166-1180, [W/m2]"
+    },
+    "Faox_sen": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "sensible heat flux of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_sen), the ocean source of the Faxx_sen merge of L1166-1180, [W/m2]"
+    },
+    "Fall_evap": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "evaporation over land mapped to the atm grid (FBImp(complnd,compatm) Fall_evap, the bulk blank-suffix branch), the land source of the Faxx_evap merge of L1197-1211 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [kg/m2/s]"
+    },
+    "Faii_evap": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "evaporation over ice mapped to the atm grid (FBImp(compice,compatm) Faii_evap), the ice source of the Faxx_evap merge of L1197-1211, [kg/m2/s]"
+    },
+    "Faox_evap": {
+     "type": "parameter",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "evaporation of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_evap), the ocean source of the Faxx_evap merge of L1197-1211, [kg/m2/s]"
+    },
+    "Fall_lwup": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "upwelling longwave over land mapped to the atm grid (FBImp(complnd,compatm) Fall_lwup), the land source of the Faxx_lwup merge of L1236-1250 (weighted by mrg_fracname_lnd2atm_flux = 'lfrac'), [W/m2]"
+    },
+    "Faii_lwup": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "upwelling longwave over ice mapped to the atm grid (FBImp(compice,compatm) Faii_lwup), the ice source of the Faxx_lwup merge of L1236-1250, [W/m2]"
+    },
+    "Faox_lwup": {
+     "type": "parameter",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "upwelling longwave of the aoflux phase mapped to the atm grid (FBMed_aoflux_a Faox_lwup), the ocean source of the Faxx_lwup merge of L1236-1250, [W/m2]"
+    },
+    "Sl_t": {
+     "type": "parameter",
+     "units": "K",
+     "default": 246.68776341316945,
+     "description": "land surface temperature mapped to the atm grid (FBImp(complnd,compatm) Sl_t), the land source of the Sx_t merge of L1267-1279, [K]"
+    },
+    "Si_t": {
+     "type": "parameter",
+     "units": "K",
+     "default": 0.0,
+     "description": "ice surface temperature mapped to the atm grid (FBImp(compice,compatm) Si_t), the ice source of the Sx_t merge of L1267-1279, [K]"
+    },
+    "So_t": {
+     "type": "parameter",
+     "units": "K",
+     "default": 273.15,
+     "description": "ocean surface temperature mapped to the atm grid (FBImp(compocn,compatm) So_t), the ocean source of the Sx_t merge of L1267-1279 and the source of the So_t copy export of L1282-1285, [K]"
+    },
+    "Sx_avsdr": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "direct visible albedo on the atm grid (the med_merge_auto output, L875-887): Sl_avsdr*lfrac + Si_avsdr*ifrac + So_avsdr*ofrac, [-]"
+    },
+    "Sx_avsdf": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "diffuse visible albedo on the atm grid (L902-914): Sl_avsdf*lfrac + Si_avsdf*ifrac + So_avsdf*ofrac, [-]"
+    },
+    "Sx_anidr": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "direct near-infrared albedo on the atm grid (L929-941): Sl_anidr*lfrac + Si_anidr*ifrac + So_anidr*ofrac, [-]"
+    },
+    "Sx_anidf": {
+     "type": "unknown",
+     "units": "1",
+     "default": 0.9804567541467244,
+     "description": "diffuse near-infrared albedo on the atm grid (L956-968): Sl_anidf*lfrac + Si_anidf*ifrac + So_anidf*ofrac, [-]"
+    },
+    "Sx_tref": {
+     "type": "unknown",
+     "units": "K",
+     "default": 246.68776341316945,
+     "description": "reference-height temperature on the atm grid (L988-1002): Sl_tref*lfrac + Si_tref*ifrac + So_tref*ofrac, [K]"
+    },
+    "Sx_u10": {
+     "type": "unknown",
+     "units": "m/s",
+     "default": 0.0,
+     "description": "10-m wind speed on the atm grid (L1015-1029): Sl_u10*lfrac + Si_u10*ifrac + So_u10*ofrac, [m/s]"
+    },
+    "Sx_qref": {
+     "type": "unknown",
+     "units": "kg/kg",
+     "default": 0.0,
+     "description": "reference-height specific humidity on the atm grid (L1046-1062): Sl_qref*lfrac + Si_qref*ifrac + So_qref*ofrac, [kg/kg]"
+    },
+    "Faxx_taux": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "zonal surface stress on the atm grid (L1085-1099): Fall_taux*lfrac + Faii_taux*ifrac + Faox_taux*ofrac, [N/m2]"
+    },
+    "Faxx_tauy": {
+     "type": "unknown",
+     "units": "N/m^2",
+     "default": 0.0,
+     "description": "meridional surface stress on the atm grid (L1112-1126): Fall_tauy*lfrac + Faii_tauy*ifrac + Faox_tauy*ofrac, [N/m2]"
+    },
+    "Faxx_lat": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "latent heat flux on the atm grid (L1139-1153): Fall_lat*lfrac + Faii_lat*ifrac + Faox_lat*ofrac, [W/m2]"
+    },
+    "Faxx_sen": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "sensible heat flux on the atm grid (L1166-1180): Fall_sen*lfrac + Faii_sen*ifrac + Faox_sen*ofrac, [W/m2]"
+    },
+    "Faxx_evap": {
+     "type": "unknown",
+     "units": "kg/m^2/s",
+     "default": 0.0,
+     "description": "evaporation on the atm grid (L1197-1211): Fall_evap*lfrac + Faii_evap*ifrac + Faox_evap*ofrac, [kg/m2/s]"
+    },
+    "Faxx_lwup": {
+     "type": "unknown",
+     "units": "W/m^2",
+     "default": 0.0,
+     "description": "upwelling longwave on the atm grid (L1236-1250): Fall_lwup*lfrac + Faii_lwup*ifrac + Faox_lwup*ofrac, [W/m2]"
+    },
+    "Sx_t": {
+     "type": "unknown",
+     "units": "K",
+     "default": 246.68776341316945,
+     "description": "surface temperature on the atm grid (L1267-1279): Sl_t*lfrac + Si_t*ifrac + So_t*ofrac, [K]"
+    },
+    "So_t_export": {
+     "type": "unknown",
+     "units": "K",
+     "default": 273.15,
+     "description": "the So_t copy export of L1282-1285 (addmrg_to with mrg_type = 'copy', the unweighted ocean surface temperature passed through to the atm), named So_t_export here to distinguish it from the So_t source parameter (the dump carries both columns), [K]"
+    }
+   },
+   "equations": [
+    {
+     "lhs": "Sx_avsdr",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_avsdr",
+         "open_value": "Si_avsdr",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_avsdr",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_avsdf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_avsdf",
+         "open_value": "Si_avsdf",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_avsdf",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_anidr",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_anidr",
+         "open_value": "Si_anidr",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_anidr",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_anidf",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_anidf",
+         "open_value": "Si_anidf",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_anidf",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_tref",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_tref",
+         "open_value": "Si_tref",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_tref",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_u10",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_u10",
+         "open_value": "Si_u10",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_u10",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_qref",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_qref",
+         "open_value": "Si_qref",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_qref",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_taux",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_taux",
+         "open_value": "Faii_taux",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_taux",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_tauy",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_tauy",
+         "open_value": "Faii_tauy",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_tauy",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_lat",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_lat",
+         "open_value": "Faii_lat",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_lat",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_sen",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_sen",
+         "open_value": "Faii_sen",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_sen",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_evap",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_evap",
+         "open_value": "Faii_evap",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_evap",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Faxx_lwup",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Fall_lwup",
+         "open_value": "Faii_lwup",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "Faox_lwup",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "Sx_t",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "fraction_weighted_sum",
+      "bindings": {
+       "ice_value": {
+        "op": "apply_expression_template",
+        "args": [],
+        "name": "fraction_weighted_sum",
+        "bindings": {
+         "ice_value": "Sl_t",
+         "open_value": "Si_t",
+         "ice_frac": "lfrac",
+         "open_frac": "ifrac"
+        }
+       },
+       "open_value": "So_t",
+       "ice_frac": {
+        "op": "const",
+        "args": [],
+        "value": 1.0,
+        "units": "1"
+       },
+       "open_frac": "ofrac"
+      }
+     }
+    },
+    {
+     "lhs": "So_t_export",
+     "rhs": "So_t"
+    }
+   ],
+   "tests": [
+    {
+     "id": "step1_fully_land",
+     "description": "Instantaneous pin of the fraction-weighted atmosphere exports of med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 with the merge lists of esmFldsExchange_cesm_mod.F90, and the So_t copy export of L1282-1285; the traced F2000climo_f19_inst run: component_computes_enthalpy_flux = none, mrg_fracname_lnd2atm_state/flux = lfrac (med_internalstate_mod.F90:289-290), samegrid_atmlnd) from stage1/dumps/cmeps/cmeps_prep_atm.csv row (step 1, atm cell n =      1, lat  -9.00000000000000000E+001, lon   0.00000000000000000E+000): the fully-land traced cell (lfrac = 1): the merge reduces to the land source with the spval ice/ocean sources at weight 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every merged export is asserted at full dump precision (rel 1e-12), so a wrong weight, a wrong source, a wrong association or a wrong fraction all fail.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lfrac": 1.0,
+      "ifrac": 0.0,
+      "ofrac": 0.0,
+      "Sl_avsdr": 0.9804567541467244,
+      "Si_avsdr": 0.0,
+      "So_avsdr": 0.09966715565870835,
+      "Sl_avsdf": 0.9755695220296852,
+      "Si_avsdf": 0.0,
+      "So_avsdf": 0.06,
+      "Sl_anidr": 0.6778686904637125,
+      "Si_anidr": 0.0,
+      "So_anidr": 0.09966715565870835,
+      "Sl_anidf": 0.7429629278661762,
+      "Si_anidf": 0.0,
+      "So_anidf": 0.06,
+      "Sl_tref": 246.98283930637498,
+      "Si_tref": 0.0,
+      "So_tref": 0.0,
+      "Sl_u10": 5.943268856490734,
+      "Si_u10": 0.0,
+      "So_u10": 0.0,
+      "Sl_qref": 0.0005183937957895424,
+      "Si_qref": 0.0,
+      "So_qref": 0.0,
+      "Fall_taux": -0.019539692829077106,
+      "Faii_taux": 0.0,
+      "Faox_taux": 0.0,
+      "Fall_tauy": -0.09315401205814856,
+      "Faii_tauy": 0.0,
+      "Faox_tauy": 0.0,
+      "Fall_lat": -0.26882280822346133,
+      "Faii_lat": 0.0,
+      "Faox_lat": 0.0,
+      "Fall_sen": -23.96575061110464,
+      "Faii_sen": 0.0,
+      "Faox_sen": 0.0,
+      "Fall_evap": -9.483289527056173e-08,
+      "Faii_evap": 0.0,
+      "Faox_evap": 0.0,
+      "Fall_lwup": -209.97785204045067,
+      "Faii_lwup": 0.0,
+      "Faox_lwup": 0.0,
+      "Sl_t": 246.68776341316945,
+      "Si_t": 0.0,
+      "So_t": 273.15
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Sx_avsdr",
+       "time": 0.0,
+       "expected": 0.9804567541467244
+      },
+      {
+       "variable": "Sx_avsdf",
+       "time": 0.0,
+       "expected": 0.9755695220296852
+      },
+      {
+       "variable": "Sx_anidr",
+       "time": 0.0,
+       "expected": 0.6778686904637125
+      },
+      {
+       "variable": "Sx_anidf",
+       "time": 0.0,
+       "expected": 0.7429629278661762
+      },
+      {
+       "variable": "Sx_tref",
+       "time": 0.0,
+       "expected": 246.98283930637498
+      },
+      {
+       "variable": "Sx_u10",
+       "time": 0.0,
+       "expected": 5.943268856490734
+      },
+      {
+       "variable": "Sx_qref",
+       "time": 0.0,
+       "expected": 0.0005183937957895424
+      },
+      {
+       "variable": "Faxx_taux",
+       "time": 0.0,
+       "expected": -0.019539692829077106
+      },
+      {
+       "variable": "Faxx_tauy",
+       "time": 0.0,
+       "expected": -0.09315401205814856
+      },
+      {
+       "variable": "Faxx_lat",
+       "time": 0.0,
+       "expected": -0.26882280822346133
+      },
+      {
+       "variable": "Faxx_sen",
+       "time": 0.0,
+       "expected": -23.96575061110464
+      },
+      {
+       "variable": "Faxx_evap",
+       "time": 0.0,
+       "expected": -9.483289527056173e-08
+      },
+      {
+       "variable": "Faxx_lwup",
+       "time": 0.0,
+       "expected": -209.97785204045067
+      },
+      {
+       "variable": "Sx_t",
+       "time": 0.0,
+       "expected": 246.68776341316945
+      }
+     ]
+    },
+    {
+     "id": "step1_open_ocean",
+     "description": "Instantaneous pin of the fraction-weighted atmosphere exports of med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 with the merge lists of esmFldsExchange_cesm_mod.F90, and the So_t copy export of L1282-1285; the traced F2000climo_f19_inst run: component_computes_enthalpy_flux = none, mrg_fracname_lnd2atm_state/flux = lfrac (med_internalstate_mod.F90:289-290), samegrid_atmlnd) from stage1/dumps/cmeps/cmeps_prep_atm.csv row (step 1, atm cell n =      5, lat  -6.34736842105264003E+001, lon   0.00000000000000000E+000): the open-ocean traced cell (ofrac = 1): the merge reduces to the ocean source with the spval land/ice sources at weight 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every merged export is asserted at full dump precision (rel 1e-12), so a wrong weight, a wrong source, a wrong association or a wrong fraction all fail.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lfrac": 0.0,
+      "ifrac": 0.0,
+      "ofrac": 1.0,
+      "Sl_avsdr": 1e+30,
+      "Si_avsdr": 0.0,
+      "So_avsdr": 1.0,
+      "Sl_avsdf": 1e+30,
+      "Si_avsdf": 0.0,
+      "So_avsdf": 1.0,
+      "Sl_anidr": 1e+30,
+      "Si_anidr": 0.0,
+      "So_anidr": 1.0,
+      "Sl_anidf": 1e+30,
+      "Si_anidf": 0.0,
+      "So_anidf": 1.0,
+      "Sl_tref": 1e+30,
+      "Si_tref": 0.0,
+      "So_tref": 272.66411610047646,
+      "Sl_u10": 0.0,
+      "Si_u10": 0.0,
+      "So_u10": 4.24834335970857,
+      "Sl_qref": 1e+30,
+      "Si_qref": 0.0,
+      "So_qref": 0.0037831809981524233,
+      "Fall_taux": 1e+30,
+      "Faii_taux": 0.0,
+      "Faox_taux": -0.022420797414577844,
+      "Fall_tauy": 1e+30,
+      "Faii_tauy": 0.0,
+      "Faox_tauy": -0.009973618545501464,
+      "Fall_lat": 1e+30,
+      "Faii_lat": 0.0,
+      "Faox_lat": -1.6506417215484759,
+      "Fall_sen": 1e+30,
+      "Faii_sen": 0.0,
+      "Faox_sen": -3.921748511418287,
+      "Fall_evap": 1e+30,
+      "Faii_evap": 0.0,
+      "Faox_evap": -6.599926915427732e-07,
+      "Fall_lwup": 1e+30,
+      "Faii_lwup": 0.0,
+      "Faox_lwup": -316.17142502367506,
+      "Sl_t": 1e+30,
+      "Si_t": 0.0,
+      "So_t": 273.26555306298997
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Sx_avsdr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_avsdf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_tref",
+       "time": 0.0,
+       "expected": 272.66411610047646
+      },
+      {
+       "variable": "Sx_u10",
+       "time": 0.0,
+       "expected": 4.24834335970857
+      },
+      {
+       "variable": "Sx_qref",
+       "time": 0.0,
+       "expected": 0.0037831809981524233
+      },
+      {
+       "variable": "Faxx_taux",
+       "time": 0.0,
+       "expected": -0.022420797414577844
+      },
+      {
+       "variable": "Faxx_tauy",
+       "time": 0.0,
+       "expected": -0.009973618545501464
+      },
+      {
+       "variable": "Faxx_lat",
+       "time": 0.0,
+       "expected": -1.6506417215484759
+      },
+      {
+       "variable": "Faxx_sen",
+       "time": 0.0,
+       "expected": -3.921748511418287
+      },
+      {
+       "variable": "Faxx_evap",
+       "time": 0.0,
+       "expected": -6.599926915427732e-07
+      },
+      {
+       "variable": "Faxx_lwup",
+       "time": 0.0,
+       "expected": -316.17142502367506
+      },
+      {
+       "variable": "Sx_t",
+       "time": 0.0,
+       "expected": 273.26555306298997
+      }
+     ]
+    },
+    {
+     "id": "step1_partial_ice",
+     "description": "Instantaneous pin of the fraction-weighted atmosphere exports of med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 with the merge lists of esmFldsExchange_cesm_mod.F90, and the So_t copy export of L1282-1285; the traced F2000climo_f19_inst run: component_computes_enthalpy_flux = none, mrg_fracname_lnd2atm_state/flux = lfrac (med_internalstate_mod.F90:289-290), samegrid_atmlnd) from stage1/dumps/cmeps/cmeps_prep_atm.csv row (step 1, atm cell n =      2, lat   9.00000000000000000E+001, lon   1.80000000000000000E+002): the partial-ice traced cell (ifrac = 0.99875, ofrac = 0.00125): the two-source ice + ocean merge with the spval land source at weight 0. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every merged export is asserted at full dump precision (rel 1e-12), so a wrong weight, a wrong source, a wrong association or a wrong fraction all fail.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lfrac": 0.0,
+      "ifrac": 0.9987516951977566,
+      "ofrac": 0.0012483048022433607,
+      "Sl_avsdr": 1e+30,
+      "Si_avsdr": 1.0,
+      "So_avsdr": 1.0,
+      "Sl_avsdf": 1e+30,
+      "Si_avsdf": 1.0,
+      "So_avsdf": 1.0,
+      "Sl_anidr": 1e+30,
+      "Si_anidr": 1.0,
+      "So_anidr": 1.0,
+      "Sl_anidf": 1e+30,
+      "Si_anidf": 1.0,
+      "So_anidf": 1.0,
+      "Sl_tref": 1e+30,
+      "Si_tref": 234.5654288425803,
+      "So_tref": 238.397383030533,
+      "Sl_u10": 0.0,
+      "Si_u10": 5.030009164380146,
+      "So_u10": 9.907298183922858,
+      "Sl_qref": 1e+30,
+      "Si_qref": 9.40075596952686e-05,
+      "So_qref": 0.0003408110195645926,
+      "Fall_taux": 1e+30,
+      "Faii_taux": 0.005984701759009835,
+      "Faox_taux": 0.008334356110521373,
+      "Fall_tauy": 1e+30,
+      "Faii_tauy": -0.06189437112525378,
+      "Faox_tauy": -0.08619472631498074,
+      "Fall_lat": 1e+30,
+      "Faii_lat": -0.33825936558698216,
+      "Faox_lat": -166.2697266636732,
+      "Fall_sen": 1e+30,
+      "Faii_sen": -47.06584494183996,
+      "Faox_sen": -720.8635611844888,
+      "Fall_evap": 1e+30,
+      "Faii_evap": -1.1727337878855786e-07,
+      "Faox_evap": -6.64812981462108e-05,
+      "Fall_lwup": 1e+30,
+      "Faii_lwup": -181.47576605187953,
+      "Faox_lwup": -307.39893806497685,
+      "Sl_t": 1e+30,
+      "Si_t": 238.731919433578,
+      "So_t": 271.3500000476837
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Sx_avsdr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_avsdf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_tref",
+       "time": 0.0,
+       "expected": 234.5702122893951
+      },
+      {
+       "variable": "Sx_u10",
+       "time": 0.0,
+       "expected": 5.036097507685169
+      },
+      {
+       "variable": "Sx_qref",
+       "time": 0.0,
+       "expected": 9.431564563943376e-05
+      },
+      {
+       "variable": "Faxx_taux",
+       "time": 0.0,
+       "expected": 0.005987634843820439
+      },
+      {
+       "variable": "Faxx_tauy",
+       "time": 0.0,
+       "expected": -0.06192470537533334
+      },
+      {
+       "variable": "Faxx_lat",
+       "time": 0.0,
+       "expected": -0.5453924130584703
+      },
+      {
+       "variable": "Faxx_sen",
+       "time": 0.0,
+       "expected": -47.906949866766276
+      },
+      {
+       "variable": "Faxx_evap",
+       "time": 0.0,
+       "expected": -2.0011590960192835e-07
+      },
+      {
+       "variable": "Faxx_lwup",
+       "time": 0.0,
+       "expected": -181.6329565522172
+      },
+      {
+       "variable": "Sx_t",
+       "time": 0.0,
+       "expected": 238.77263674024854
+      }
+     ]
+    },
+    {
+     "id": "step1_mixed",
+     "description": "Instantaneous pin of the fraction-weighted atmosphere exports of med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 with the merge lists of esmFldsExchange_cesm_mod.F90, and the So_t copy export of L1282-1285; the traced F2000climo_f19_inst run: component_computes_enthalpy_flux = none, mrg_fracname_lnd2atm_state/flux = lfrac (med_internalstate_mod.F90:289-290), samegrid_atmlnd) from stage1/dumps/cmeps/cmeps_prep_atm.csv row (step 1, atm cell n =      6, lat   6.34736842105262014E+001, lon   1.80000000000000000E+002): the mixed three-fraction traced cell (lfrac = 0.0753, ifrac = 0.6206, ofrac = 0.3041): the full three-way merge with every source valid. time_span {0,0} evaluates the pointwise laws at the dumped inputs; every merged export is asserted at full dump precision (rel 1e-12), so a wrong weight, a wrong source, a wrong association or a wrong fraction all fail.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lfrac": 0.07530921142519809,
+      "ifrac": 0.6206143427717847,
+      "ofrac": 0.3040764458030172,
+      "Sl_avsdr": 0.978884893007096,
+      "Si_avsdr": 0.8682352941766054,
+      "So_avsdr": 0.3808954528682573,
+      "Sl_avsdf": 0.9614875002128407,
+      "Si_avsdf": 0.7591457036076781,
+      "So_avsdf": 0.06,
+      "Sl_anidr": 0.6983653466915632,
+      "Si_anidr": 0.6240367638013548,
+      "So_anidr": 0.3808954528682573,
+      "Sl_anidf": 0.6905643828225505,
+      "Si_anidf": 0.45215948066788153,
+      "So_anidf": 0.06,
+      "Sl_tref": 270.64580792999055,
+      "Si_tref": 270.905944089629,
+      "So_tref": 271.2161367922508,
+      "Sl_u10": 14.344578146895033,
+      "Si_u10": 15.181914156792013,
+      "So_u10": 15.567900910925633,
+      "Sl_qref": 0.002828736131982326,
+      "Si_qref": 0.0028476845357583934,
+      "So_qref": 0.002935723326140064,
+      "Fall_taux": 0.12192295576979009,
+      "Faii_taux": 0.09778982166526547,
+      "Faox_taux": 0.09448288943015783,
+      "Fall_tauy": 0.5979263398704066,
+      "Faii_tauy": 0.4795742506053963,
+      "Faox_tauy": 0.4633566164851176,
+      "Fall_lat": -7.251864553511986,
+      "Faii_lat": -22.316128370565927,
+      "Faox_lat": -44.420192232219776,
+      "Fall_sen": 16.797982072840565,
+      "Faii_sen": 14.506516121521344,
+      "Faox_sen": -41.37558195138727,
+      "Fall_evap": -2.558247628853842e-06,
+      "Faii_evap": -7.866553541206077e-06,
+      "Faox_evap": -1.7760972503886356e-05,
+      "Fall_lwup": -302.7045723663335,
+      "Faii_lwup": -303.0475727437787,
+      "Faox_lwup": -313.202240274736,
+      "Sl_t": 270.30805061820536,
+      "Si_t": 270.442071690415,
+      "So_t": 272.62171796053667
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Sx_avsdr",
+       "time": 0.0,
+       "expected": 0.7283796613657954
+      },
+      {
+       "variable": "Sx_avsdf",
+       "time": 0.0,
+       "expected": 0.5617901640968983
+      },
+      {
+       "variable": "Sx_anidr",
+       "time": 0.0,
+       "expected": 0.5557008451087463
+      },
+      {
+       "variable": "Sx_anidf",
+       "time": 0.0,
+       "expected": 0.3508671047796047
+      },
+      {
+       "variable": "Sx_tref",
+       "time": 0.0,
+       "expected": 270.9806757351107
+      },
+      {
+       "variable": "Sx_u10",
+       "time": 0.0,
+       "expected": 15.236224522512744
+      },
+      {
+       "variable": "Sx_qref",
+       "time": 0.0,
+       "expected": 0.002873028068884307
+      },
+      {
+       "variable": "Faxx_taux",
+       "time": 0.0,
+       "expected": 0.09860170876333282
+      },
+      {
+       "variable": "Faxx_tauy",
+       "time": 0.0,
+       "expected": 0.48355585257584077
+      },
+      {
+       "variable": "Faxx_lat",
+       "time": 0.0,
+       "expected": -27.902975718657068
+      },
+      {
+       "variable": "Faxx_sen",
+       "time": 0.0,
+       "expected": -2.3133451507027996
+      },
+      {
+       "variable": "Faxx_evap",
+       "time": 0.0,
+       "expected": -1.0475448960400909e-05
+      },
+      {
+       "variable": "Faxx_lwup",
+       "time": 0.0,
+       "expected": -306.10953686695956
+      },
+      {
+       "variable": "Sx_t",
+       "time": 0.0,
+       "expected": 271.0947577600789
+      }
+     ]
+    },
+    {
+     "id": "step12_mixed",
+     "description": "Instantaneous pin of the fraction-weighted atmosphere exports of med_phases_prep_atm (mediator/med_phases_prep_atm_mod.F90:156-166, the med_merge accumulation dp = dp + src*weight of med_merge_mod.F90:405-412 with the merge lists of esmFldsExchange_cesm_mod.F90, and the So_t copy export of L1282-1285; the traced F2000climo_f19_inst run: component_computes_enthalpy_flux = none, mrg_fracname_lnd2atm_state/flux = lfrac (med_internalstate_mod.F90:289-290), samegrid_atmlnd) from stage1/dumps/cmeps/cmeps_prep_atm.csv row (step 12, atm cell n =      6, lat   6.34736842105262014E+001, lon   1.80000000000000000E+002): the same mixed cell at the last coupling step (the fractions drifted: lfrac = 0.0753, ifrac = 0.6228, ofrac = 0.3019; the 05:30 local-time albedo sources are the dark-side 1.0 from all three sources, and the merge still sums to 1.0). time_span {0,0} evaluates the pointwise laws at the dumped inputs; every merged export is asserted at full dump precision (rel 1e-12), so a wrong weight, a wrong source, a wrong association or a wrong fraction all fail.",
+     "time_span": {
+      "start": 0.0,
+      "end": 0.0
+     },
+     "parameter_overrides": {
+      "lfrac": 0.07530921142519809,
+      "ifrac": 0.6227892585137926,
+      "ofrac": 0.3019015300610093,
+      "Sl_avsdr": 1.0,
+      "Si_avsdr": 1.0,
+      "So_avsdr": 1.0,
+      "Sl_avsdf": 1.0,
+      "Si_avsdf": 1.0,
+      "So_avsdf": 1.0,
+      "Sl_anidr": 1.0,
+      "Si_anidr": 1.0,
+      "So_anidr": 1.0,
+      "Sl_anidf": 1.0,
+      "Si_anidf": 1.0,
+      "So_anidf": 1.0,
+      "Sl_tref": 272.5323523405873,
+      "Si_tref": 272.65106867105993,
+      "So_tref": 272.84245076488264,
+      "Sl_u10": 13.334121579902478,
+      "Si_u10": 13.37987561913597,
+      "So_u10": 14.34680989491767,
+      "Sl_qref": 0.0031349750662016574,
+      "Si_qref": 0.0031049824119471214,
+      "So_qref": 0.0031724099337039893,
+      "Fall_taux": 0.23521483238718816,
+      "Faii_taux": 0.15674905727080332,
+      "Faox_taux": 0.15716571120815684,
+      "Fall_tauy": 0.5128947639828229,
+      "Faii_tauy": 0.34179719840583356,
+      "Faox_tauy": 0.34270572794324666,
+      "Fall_lat": -11.909246640737802,
+      "Faii_lat": -23.960842558916486,
+      "Faox_lat": -23.415096524124248,
+      "Fall_sen": 31.63498385381557,
+      "Faii_sen": 36.911025374576624,
+      "Faox_sen": 3.4087525284491935,
+      "Fall_evap": -4.2064673853933e-06,
+      "Faii_evap": -8.443045973864596e-06,
+      "Faox_evap": -9.36229369217283e-06,
+      "Fall_lwup": -309.5101336681456,
+      "Faii_lwup": -308.35213735306996,
+      "Faox_lwup": -313.1584403085242,
+      "Sl_t": 271.81470837896796,
+      "Si_t": 271.63151498901743,
+      "So_t": 272.61218622133373
+     },
+     "tolerance": {
+      "rel": 1e-12,
+      "abs": 0.0
+     },
+     "assertions": [
+      {
+       "variable": "Sx_avsdr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_avsdf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidr",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_anidf",
+       "time": 0.0,
+       "expected": 1.0
+      },
+      {
+       "variable": "Sx_tref",
+       "time": 0.0,
+       "expected": 272.69990678478007
+      },
+      {
+       "variable": "Sx_u10",
+       "time": 0.0,
+       "expected": 13.668348855848706
+      },
+      {
+       "variable": "Sx_qref",
+       "time": 0.0,
+       "expected": 0.0031275976070741997
+      },
+      {
+       "variable": "Faxx_taux",
+       "time": 0.0,
+       "expected": 0.16278404137987817
+      },
+      {
+       "variable": "Faxx_tauy",
+       "time": 0.0,
+       "expected": 0.3549567076036584
+      },
+      {
+       "variable": "Faxx_lat",
+       "time": 0.0,
+       "expected": -22.88848481097481
+      },
+      {
+       "variable": "Faxx_sen",
+       "time": 0.0,
+       "expected": 26.39930341543423
+      },
+      {
+       "variable": "Faxx_evap",
+       "time": 0.0,
+       "expected": -8.401514873888292e-06
+      },
+      {
+       "variable": "Faxx_lwup",
+       "time": 0.0,
+       "expected": -309.89037535857994
+      },
+      {
+       "variable": "Sx_t",
+       "time": 0.0,
+       "expected": 271.94137728427603
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
