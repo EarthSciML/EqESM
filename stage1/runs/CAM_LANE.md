@@ -125,6 +125,20 @@ inactive site per 16 steps; the q file was unaffected). Fixed by writing
 - `src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90` — the convr dump
   call at the end of `zm_convr_run` (gated by `lengath > 0`; passes the
   routine-local working arrays, buoyan_dilute outputs and constants).
+- ZM parcel-ascent dump (added 2026-11-09, atmos_phys `73b65b2`, cam
+  `12ddc27e`, cam pointer `87edceff`, EqESM-cesm-cam pointer `0c71776`):
+  `zm_convr.F90` `buoyan_dilute`/`parcel_dilute` pass the parcel arrays
+  (tmix/qsmix/qtmix/smix/xsh2o/qtot/ds_xsh2o/ds_freeze/qtp/sp/mp/tpv/
+  buoy) through to `zm_convr_run`, which calls the new
+  `cam_dump_zm_parcel` (cam_dump_mod.F90; + `dump_i_last` integer-dump
+  helper) next to `cam_dump_zm_convr` — cam_zm_parcel.csv (per level)
+  + cam_zm_parcel_scal.csv (per column: pl/plge600/capeten_1..5/
+  lelten_1..5).  The qtp/sp/mp entrainment sums were changed from
+  (ncol) locals to (ncol,pver) `intent(out)` with per-level storage
+  (numerically identical; verified).  The 5 extra per-level columns
+  (qtp/sp/mp + ds_xsh2o/ds_freeze) close the full identity chain:
+  entrainment recurrences, mixing fractions, and the rainout/freezing
+  entropy budget entropy(tmix,p,qtot) = smix + ds_xsh2o + ds_freeze.
 - `src/control/runtime_opts.F90` — `use cam_dump_mod, only: cam_dump_readnl` +
   call in `read_namelist`.
 - `bld/namelist_files/namelist_definition.xml` — `cam_dump_nml` group
@@ -389,6 +403,83 @@ commits: cam submodule `81922142` (surface-column fix on top of
   restored afterwards; env_batch.xml itself was untouched (it is
   locked).  Recorded here so the next lane knows why the batch script
   differs from the template in gitignored CaseDocs.
+
+### ZM parcel-ascent dump (2026-11-09, interactive re-run 21:59)
+
+`python3 stage1/analysis/validate_cam_zm_parcel_dump.py stage1/dumps/cam`
+— ALL ZM PARCEL DUMP CHECKS PASSED (480 cam_zm_parcel rows + 15
+cam_zm_parcel_scal rows).  The parcel-ascent internals of
+buoyan_dilute/parcel_dilute (zm_convr.F90) are now dumped at the same
+trace point and with the same (step,g[,lev]) keys as cam_zm.csv:
+tmix/qsmix/qtmix/smix (the entraining parcel), xsh2o/qtot/ds_xsh2o/
+ds_freeze (rainout + freezing), qtp/sp/mp (entrainment sums, per-level
+`intent(out)` accumulation — numerically identical to the original
+(ncol) locals), tpv/buoy, plus per-column pl/plge600/capeten_1..5/
+lelten_1..5.  Fork hashes: atmos_phys `73b65b2`, cam `12ddc27e` (cam
+pointer `87edceff`), EqESM-cesm-cam pointer `0c71776` (branch
+instrument/cam-dumps).
+
+- **launch level (k = maxi = 32 = pver):** qtmix == qtot == qtp0 == q
+  and smix == sp0 == entropy(t,p,q) bit-exact; tmix is the ientropy
+  root of entropy(t,p,q) = smix to 1.5e-4 K (Brent tol1 ~= 5.2e-4 K,
+  EPS=3e-8, tol=0.001, zm_convr.F90:1517-1632); qsmix == qsat_GG(tmix)
+  to 4.4e-15 rel; xsh2o/ds_xsh2o/ds_freeze/qtp/sp/mp == 0.
+- **entrainment recurrences (identity):** qtp(k) = qtp(k+1) −
+  dmpdp·dp·qtenv (sp/mp analog) with qtenv/tenv/penv the layer means,
+  senv = entropy(tenv,penv,qtenv), dpdz = −penv·grav/(rgas·tenv),
+  dmpdp = dmpdz/dpdz (F90:1322-1340) — bit-exact for qtp/mp (max
+  6.9e-18), 4.5e-13 for sp; the mixing fractions qtmix = (qtp0+qtp)/
+  (mp0+mp) and smix = (sp0+sp)/(mp0+mp) bit-exact (390 rows).
+- **precip/freezing loop (identity):** the nit_lheat=2 rainout loop
+  (F90:1392-1463, lwmax=1e-3, tscool=0) reconstructed from the dumped
+  smix/qtmix and the final values at k+1: xsh2o = max(0, qtmix−qsmix−
+  lwmax); ds_xsh2o recurrence −cpliq·log(tmix/tfreez)·max(0, xsh2o(k)−
+  xsh2o(k+1)); one-off freezing (latice/tmix)·max(0, qtmix−qsmix−
+  xsh2o) at the first tmix ≤ 273.15 K level and the continual term
+  (latice/tmix)·max(0, qsmix(k+1)−qsmix(k)) above it; then
+  new_s = smix+ds_xsh2o+ds_freeze, new_q = qtmix−xsh2o and the
+  ientropy inversion.  Reconstructed tmix/qsmix/xsh2o/qtot/ds_xsh2o/
+  ds_freeze match the dump to 2.6e-4 K / 2.3e-7 / 8.4e-8 / 8.4e-8 /
+  1.3e-5 / 1.2e-5 (root-tolerance dominated).  Direct rainout entropy
+  identity |entropy(tmix,p,qtot) − (smix+ds_xsh2o+ds_freeze)| ≤ 2.8e-3
+  J/kg/K (Brent bound dS/dT·tol1 ~= 3.3e-3); ds_freeze ≠ 0 only where
+  tmix ≤ 273.15 K (max 9.9 J/kg/K, accumulated over the ~20 cold
+  levels above the lcl); xsh2o ≥ 0.
+- **parcel state chain (identity):** tp == tmix, qtot == qtmix − xsh2o,
+  qstp == min(qtot,qsmix), tpv == (tp+tpert)·(1+1.608·qstp)/(1+qtot)
+  (F90:1411-1477) and buoy == tpv − tv + tiedke_add (F90:1089) — all
+  bit-exact on k = 6..maxi (405 rows); qsmix == qsat_direct(tmix,p) to
+  4.4e-15 rel — the ZM parcel qsat is the DIRECT Goff-Gratch formula
+  (wv_sat_scheme default "GoffGratch", wv_saturation.F90:159), NOT the
+  estblf table of cam_qsat.csv; buoy == 0 and tpv == tv for k ≤ msg = 5.
+- **lcl / pl / tl (identity):** lcl = first saturated level on ascent
+  (reconstructed pre-rainout qsmix: qsmix_pre(lcl) ≤ qtmix(lcl),
+  qsmix_pre(k) > qtmix(k) below); pl = p(lcl+1) − qxskp1/dqxsdp
+  (F90:1356-1361) to 5.7e-3 mb — the dump holds the post-rainout qsmix
+  at the lcl while pl used the pre-rainout value, recovered to the
+  Brent root tolerance via the entropy inversion (tolerance 0.02 mb);
+  plge600 == (pl ≥ 600) ("T" everywhere, pl = 768-830 mb);
+  |entropy(tl, pl, qtlcl) − slcl| ≤ 4.1e-3 J/kg/K (slcl/qtlcl the
+  (k,k+1) interpolation, F90:1361-1367).
+- **CAPE / lel (identity):** lel == lelten_1 = the FIRST k in
+  msg+2..pver with k < lcl where buoy(k+1) > 0 and buoy(k) ≤ 0
+  (F90:1107-1116); capeten_1 == Σ_{k=lelten_1+1..maxi}
+  rgas·buoy·log(pf(k+1)/pf(k)) (F90:1120-1128, pf = dumped pf_lo/pf_hi)
+  bit-exact (max resid 0.0); cape == capeten_1 and capeten_2..5 ==
+  lelten_2..5 == 0 (num_cin = 1); lel ∈ {14,15}, cape 94-594 J/kg.
+- **neutrality re-verified:** h0i bit-identical to the pristine run
+  (compare_cam_hist.py: only case attr + date_written/time_written)
+  and bit-identical to the pre-parcel instrumented run (runs
+  reproducible); ALL 18 pre-existing cam_*.csv byte-identical to the
+  pre-parcel run (backup
+  /scratch.local/ctessum/cam_dump_backup_20261109_pre_parcel/).
+- **queue note:** on 2026-11-09 the ctessum partition was fully
+  allocated again; this time the case was re-run in place interactively
+  (`source stage1/runs/env.sh && env -u SLURM_MEM_PER_NODE -u
+  SLURM_MEM_PER_CPU -u SLURM_MEM_PER_GPU python3 .case.run`) inside
+  the agent's own slurm job 12282180 instead of case.submit (run dir
+  refreshed at 21:59, model ~35 s wall, exit 0).  `.case.run` still
+  carries its restored `#SBATCH --exclusive`.
 
 ## Stage-2 ranking (proposed pinning order)
 
