@@ -484,3 +484,27 @@ Format template:
 - **Impact on results:** none (dead code).
 - **Reproduced/corrected in .esm:** not reproduced (omitted from the Jra model in `stage2/cdeps_datm_jra.esm`).
 - **Status:** open (cleanup; suggest removing upstream).
+
+## TBD. CLM `canyon_hwr` is never initialized for non-urban landunits (uninitialized-memory read at dump time)
+
+- **Location:** `components/clm/src/main/lnd2atmMod.F90` (stage-1 rofliq dump
+  hook, `clm_dump_mod.F90 dump_rofliq_cols`), reading
+  `lun%canyon_hwr(col%landunit(c))`; the variable is only ever assigned for
+  urban landunits (UrbanMod initialization / `InitAllocate`), so every
+  non-urban landunit's `canyon_hwr` is uninitialized heap memory.
+- **Description:** for non-urban columns the dump reads garbage — NaN under
+  this build/run — for `canyon_hwr`. Harmless in the model: `set_c2l_scale`
+  (subgridAveMod.F90:104-165) only reads `canyon_hwr` inside the
+  `lun%urbpoi(l)` branch, so the uninitialized value never feeds physics.
+  The stage-1 dump surfaces it: `clm_rofliq_cols.csv` carries NaN in the
+  `canyon_hwr` column exactly for the non-urban column types (1 soil, 5
+  glacier, 215 lake, 401..410 crop) and finite values for the urban types
+  (71..75), verified 100% consistent across all 1,367,712 rows.
+- **Impact on results:** none (never read by the model); the NaN is a
+  documentation/robustness wart in the dump and would be undefined behavior
+  under a compiler/allocator that does not NaN-fill.
+- **Reproduced/corrected in .esm:** the validator derives the urbanf scale
+  from the column type alone (`ctype ∈ 71..75 ⇒ urban ⇒ canyon_hwr
+  finite`), so the NaN is neither reproduced nor needed.
+- **Status:** open (benign; upstream candidate: initialize `canyon_hwr` to 0
+  for non-urban landunits, e.g. in `InitAllocate`).
