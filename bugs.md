@@ -521,3 +521,38 @@ Format template:
   `:1630` without the clamp); the branch is unpinned (see
   `stage2/README-clm-canopy-veg.md`).
 - **Status:** open (upstream asymmetry; unexercised by this lane's dumps).
+
+## 40. MOM6 sumSWoverBands hardcodes a 1000x-wrong min_SW_heat clamp length scale (I_Habs = 1e3*H_to_m)
+
+- **Location:** `components/mom/MOM6/src/parameterizations/vertical/MOM_opacity.F90:931`
+  (pristine line numbers; :950 in the instrumented fork) (`sumSWoverBands`, `I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen`)
+  vs. `:707` (`absorbRemainingSW`, `I_Habs = optics%PenSW_absorb_Invlen`) and
+  `:1186` (`optics%PenSW_absorb_Invlen = 1.0/(PenSW_absorb_minthick +
+  GV%H_subroundoff)`, the setter the commented-out assignment would use).
+- **Description:** the two routines implement the same min_SW_heat clamp
+  of `SW_trans`, but `sumSWoverBands` hardcodes `I_Habs = 1e3*GV%H_to_m`
+  (1000 m-1 with the run's H_to_m = 1) instead of the optics value
+  `PenSW_absorb_Invlen ~= 1 m-1` (PEN_SW_ABSORB_MINTHICK = 1.0 m); the
+  comment on :931 shows the intended expression.  Both routines use the
+  same rate threshold `min_SW_heat = optics%PenSW_flux_absorb*dt`
+  (default 2.5e-11 degC m s-1; `sumSWoverBands` is called with dt = 1.0,
+  MOM_forcing_type.F90:1102, so no dt factor enters), and the zero
+  sub-branch `nsw*Pen_SW_bnd <= min_SW_heat*(I_Habs*(h - h_min_heat))`
+  (compare :750 and :970) fires at `nsw*Pen_SW_bnd <= 2.5e-8*(h -
+  h_min_heat) degC m s-1` in `sumSWoverBands` versus `2.5e-11*(h -
+  h_min_heat)` in `absorbRemainingSW` — the hardcoded 1e3 widens the
+  zeroed region 1000x.  The effect is not all-zero: `netPen` is a rate
+  and is exactly 0 only below the first clamped interface; in the traced
+  window the dump row (3,78,1,3600) has netPen =
+  1.67196970770381200E-11 degC m s-1 at interface 21 and exactly 0.0 at
+  interfaces 22+, while `absorbRemainingSW` takes its min-branch
+  (SW_trans clipped, not zeroed) 90 times.
+- **Impact on results:** the KPP buoyancy-flux shortwave profile
+  (`netPen`, consumed by MXL_SW) is zeroed slightly shallower than the
+  heating path's remaining SW; the affected values are ~1e-11 degC m s-1
+  and below, i.e. negligible for the mixed layer in this window.  All
+  pinned tests are unaffected (the pins stay above the clamp region).
+- **Reproduced/corrected in .esm:** neither routine's clamp is expressed
+  (stateful recurrence gap of `mom6_shortwave.esm`); the component pins
+  the unclamped law exactly as the model computes it.
+- **Status:** open.
