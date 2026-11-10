@@ -221,64 +221,100 @@
    }
   },
   "zm_parcel_virtual_temperature": {
-   "description": "Parcel virtual temperature tpv = (tp + tpert) (1 + 1.608 qstp)/(1 + qtot) of parcel_dilute (zm_convr.F90:1476, the ascent levels, where qtot = new_q, the parcel total water after rain-out; and 1415, the launch level, where qstp = q and qtot = qstp = q). qtot is a free parameter because new_q is an output of the ientropy solve that is not dumped (see the cam_zm_parcel.esm gap list); at the launch level the law collapses to qtot = qstp.",
+   "description": "Parcel virtual temperature tpv = (tp + tpert) (1 + 1.608 qstp)/(1 + qtot) of parcel_dilute (zm_convr.F90:1476, the ascent levels, where qtot = new_q, the parcel total water after rain-out; and 1415, the launch level, where qstp = q and qtot = qstp = q), for msg+1 <= k <= maxi only (the parcel loops run k = pver..msg+1); elsewhere tpv = tv, the environmental virtual temperature (the F90:1004-1007 initialization, kept by the main buoy loop for k <= msg and by the else branch for k > maxi).  qtot = new_q is dumped (cam_zm_parcel.csv), so tpv is pinned in the consumer.",
    "params": [
     "tp",
     "tpert",
     "qstp",
-    "qtot"
+    "qtot",
+    "tv",
+    "msg",
+    "maxi"
    ],
    "body": {
-    "op": "/",
+    "op": "faq",
+    "output_idx": ["k"],
     "args": [
-     {
-      "op": "*",
-      "args": [
-       {
-        "op": "+",
-        "args": [
-         "tp",
-         "tpert"
-        ]
-       },
-       {
-        "op": "+",
-        "args": [
-         {
-          "op": "const",
-          "args": [],
-          "value": 1.0,
-          "units": "1"
-         },
-         {
-          "op": "*",
-          "args": [
-           {
-            "op": "const",
-            "args": [],
-            "value": 1.608,
-            "units": "1"
-           },
-           "qstp"
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     {
-      "op": "+",
-      "args": [
-       {
-        "op": "const",
-        "args": [],
-        "value": 1.0,
-        "units": "1"
-       },
-       "qtot"
-      ]
-     }
-    ]
+     "tp",
+     "tpert",
+     "qstp",
+     "qtot",
+     "tv",
+     "msg",
+     "maxi"
+    ],
+    "ranges": { "k": { "from": "lev" } },
+    "expr": {
+     "op": "ifelse",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": ">",
+         "args": ["k", "msg"]
+        },
+        {
+         "op": "<=",
+         "args": ["k", "maxi"]
+        }
+       ]
+      },
+      {
+       "op": "/",
+       "args": [
+        {
+         "op": "*",
+         "args": [
+          {
+           "op": "+",
+           "args": [
+            "tp",
+            "tpert"
+           ]
+          },
+          {
+           "op": "+",
+           "args": [
+            {
+             "op": "const",
+             "args": [],
+             "value": 1.0,
+             "units": "1"
+            },
+            {
+             "op": "*",
+             "args": [
+              {
+               "op": "const",
+               "args": [],
+               "value": 1.608,
+               "units": "1"
+              },
+              "qstp"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "+",
+         "args": [
+          {
+           "op": "const",
+           "args": [],
+           "value": 1.0,
+           "units": "1"
+          },
+          "qtot"
+         ]
+        }
+       ]
+      },
+      "tv"
+     ]
+    }
    }
   },
   "zm_rb_entropy": {

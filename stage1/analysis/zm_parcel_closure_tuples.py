@@ -13,17 +13,26 @@ mismatch beyond 1e-12.
 
 Output: writes the tuples used by the test blocks as JSON under the output
 directory (default scratch/zm_tuples of the repo where the script runs):
-  parcel/   per-step full t/q/z/p profiles (dump columns t [K], q [kg/kg],
-            z [m], p [mb] = the hPa working pressure), the launch level maxi,
-            and the expected values at the pinned levels: hmn/hsat at lev
-            {1,15,25,32} (dump columns) and qst at lev {25,32} (DERIVED: the
-            qsat_hPa replica of zm_convr.F90:2634-2649, cross-pinned by hsat);
-            plus the five (step, lev) entropy/virtual-temperature states
-            (DERIVED: the entropy replica of F90:1489-1513 and
-            tv = t (1+1.608 q)/(1+q), F90:1088).  qstp_launch = q(maxi)
-            (parcel_dilute, F90:1414) is NOT emitted: it is a definition
-            (index(q, maxi)), unfailable as a pin, and its Fortran value
-            qstp(maxi) is a dumped parameter input, not a model output.
+  parcel/   per-step full t/q/z/p/tp/qstp/qtot profiles (dump columns t
+            [K], q [kg/kg], z [m], p [mb] = the hPa working pressure,
+            tp/qstp the parcel temperature and saturation specific humidity
+            of the ientropy solve; qtot from cam_zm_parcel.csv, the parcel
+            total water new_q, 0 below msg+1 = 6), the launch level maxi,
+            and the
+            expected values at the pinned levels: hmn/hsat at lev
+            {1,15,25,32} (cam_zm.csv dump columns), qst at lev {25,32}
+            (DERIVED: the qsat_hPa replica of zm_convr.F90:2634-2649,
+            cross-pinned by hsat), tpv at lev {25,32} and buoy at lev
+            {15,18,25} (cam_zm_parcel.csv dump columns), and cape (the
+            dumped cam_zm_scal.csv cape, == capeten_1 of
+            cam_zm_parcel_scal.csv under num_cin = 1); plus the five
+            (step, lev) entropy/virtual-temperature states (DERIVED: the
+            entropy replica of F90:1489-1513 and tv = t (1+1.608 q)/(1+q),
+            F90:1088).  qstp_launch = q(maxi) (parcel_dilute, F90:1414) is
+            NOT emitted: it is a definition (index(q, maxi)), unfailable as
+            a pin, and its Fortran value qstp(maxi) is a dumped parameter
+            input, not a model output.
+
   closure/  per-step scalars (cape, tl, lel, lcl, jt, mx, mb, dsubcld from
             cam_zm_scal.csv) and the 18 closure input profiles at levels
             14..32 (zero outside; the closure reads only k >= lel = 14..15
@@ -38,7 +47,10 @@ directory (default scratch/zm_tuples of the repo where the script runs):
             dp = 0.01*pdel).
 
 Sources: stage1/dumps/cam/cam_zm.csv and cam_zm_scal.csv (480 profile rows,
-15 scalar rows, steps 18-23 and 40-48), the instrumented cam6_4_212 fork
+15 scalar rows, steps 18-23 and 40-48), stage1/dumps/cam/cam_zm_parcel.csv
+(480 rows: the parcel-ascent internals tmix/qsmix/qtmix/smix/xsh2o/qtot/
+ds_xsh2o/ds_freeze/qtp/sp/mp/tpv/buoy) and cam_zm_parcel_scal.csv (15 rows:
+pl/plge600/capeten_1..5/lelten_1..5), and the instrumented cam6_4_212 fork
 components/cam/src/atmos_phys/schemes/zhang_mcfarlane/zm_convr.F90.
 """
 import csv
@@ -60,11 +72,37 @@ def load(fn):
     return cols, rows
 
 
+def invert_entropy(s, p_mb, qtot, rb_entropy):
+    """Brent-free replica of the ientropy inversion (F90:1517-1632): root of
+    rb_entropy(t, p_mb, qtot) = s.  The Fortran Brent solve converges to
+    tol1 ~= 5.2e-4 K; bisection to 1e-9 K reproduces the root well within
+    that bracket, so all reconstructed temperatures match the Fortran ones
+    to the Brent tolerance."""
+    lo, hi = 150.0, 400.0
+    flo = rb_entropy(lo, p_mb, qtot) - s
+    fhi = rb_entropy(hi, p_mb, qtot) - s
+    assert flo * fhi < 0.0, f"invert_entropy: no bracket for s={s}, p={p_mb}, qtot={qtot}"
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        fm = rb_entropy(mid, p_mb, qtot) - s
+        if fm * flo <= 0.0:
+            hi = mid
+        else:
+            lo, flo = mid, fm
+        if hi - lo < 1e-9:
+            break
+    return 0.5 * (lo + hi)
+
+
 def main():
     cols_p, rows_p = load(f"{DUMP}/cam_zm.csv")
     cols_s, rows_s = load(f"{DUMP}/cam_zm_scal.csv")
+    cols_a, rows_a = load(f"{DUMP}/cam_zm_parcel.csv")
+    cols_b, rows_b = load(f"{DUMP}/cam_zm_parcel_scal.csv")
     pi = {c: i for i, c in enumerate(cols_p)}
     si = {c: i for i, c in enumerate(cols_s)}
+    ai = {c: i for i, c in enumerate(cols_a)}
+    bi = {c: i for i, c in enumerate(cols_b)}
 
     C = {}
     for c in ("cpres", "rl", "rgas", "eps1", "tfreez", "grav", "cpliq", "cpwv",
@@ -75,6 +113,10 @@ def main():
     for r in rows_p:
         prof.setdefault((int(r[0]), int(r[3])), {})[int(r[4])] = r
     scal = {(int(r[0]), int(r[3])): r for r in rows_s}
+    pdump = {}
+    for r in rows_a:
+        pdump.setdefault((int(r[0]), int(r[3])), {})[int(r[4])] = r
+    pscal = {(int(r[0]), int(r[3])): r for r in rows_b}
     steps = sorted({int(r[0]) for r in rows_s})
 
     # ---------------- law replicas (zm_convr.F90, double precision) --------
@@ -209,7 +251,9 @@ def main():
 
     # ---------------- verification (all laws vs the dump) ------------------
 
+    pver = 32
     worst_mb = worst_ds = worst_hmn = worst_hsat = 0.0
+    worst_tpv = worst_buoy = worst_cape = worst_pl = worst_tlaunch = 0.0
     for st in steps:
         pr = prof[(st, 1)]
         sr = scal[(st, 1)]
@@ -232,11 +276,80 @@ def main():
                              / max(abs(float(r[pi["hsat"]])), abs(hsat)))
         assert float(pr[mx][pi["qstp"]]) == float(pr[mx][pi["q"]]), \
             f"step {st}: qstp(mx) != q(mx)"
+        # ---- parcel-ascent laws (cam_zm_parcel.csv / cam_zm_parcel_scal.csv)
+        pa = pdump[(st, 1)]
+        brow = pscal[(st, 1)]
+        tpert = float(sr[si["tpert"]])
+        # launch level (F90:1347-1353): qtmix = qtot = q, tmix = ientropy root
+        assert float(pa[mx][ai["qtmix"]]) == float(pr[mx][pi["q"]]), \
+            f"step {st}: qtmix(mx) != q(mx)"
+        assert float(pa[mx][ai["qtot"]]) == float(pr[mx][pi["q"]]), \
+            f"step {st}: qtot(mx) != q(mx)"
+        worst_tlaunch = max(worst_tlaunch, abs(
+            float(pa[mx][ai["tmix"]]) - invert_entropy(
+                float(pa[mx][ai["smix"]]), float(pr[mx][pi["p"]]),
+                float(pa[mx][ai["qtmix"]]), rb_entropy)))
+        # tpv/buoy laws at all levels (F90:1415 launch, 1476 ascent, 1088-1089;
+        # tpv = tv and buoy = 0 below msg+1 = 6 and above mx)
+        for k in range(1, pver + 1):
+            a = pa[k]
+            tpv = float(a[ai["tpv"]]); buoy = float(a[ai["buoy"]])
+            tv = env_tv(float(pr[k][pi["t"]]), float(pr[k][pi["q"]]))
+            if 6 <= k <= mx:
+                tpv_ref = (float(pr[k][pi["tp"]]) + tpert) \
+                    * (1.0 + 1.608 * float(pr[k][pi["qstp"]])) \
+                    / (1.0 + float(a[ai["qtot"]]))
+                worst_tpv = max(worst_tpv, abs(tpv - tpv_ref))
+                worst_buoy = max(worst_buoy, abs(buoy - (tpv - tv + C["tiedke_add"])))
+            else:
+                assert buoy == 0.0, f"step {st} lev {k}: buoy = {buoy} != 0"
+                worst_tpv = max(worst_tpv, abs(tpv - tv))
+        # CAPE integral over the dumped buoy (F90:1169-1178) and the
+        # num_cin = 1 collapse (F90:1180-1194)
+        lelten1 = int(brow[bi["lelten_1"]])
+        cap = 0.0
+        for k in range(lelten1 + 1, mx + 1):
+            cap += C["rgas"] * float(pa[k][ai["buoy"]]) \
+                * math.log(float(pr[k][pi["pf_hi"]]) / float(pr[k][pi["pf_lo"]]))
+        worst_cape = max(worst_cape, abs(cap - float(brow[bi["capeten_1"]])))
+        assert float(sr[si["cape"]]) == float(brow[bi["capeten_1"]]), \
+            f"step {st}: cape != capeten_1"
+        assert int(sr[si["lel"]]) == lelten1, f"step {st}: lel != lelten_1"
+        for n in range(2, 6):
+            assert float(brow[bi[f"capeten_{n}"]]) == 0.0, \
+                f"step {st}: capeten_{n} != 0"
+            assert int(brow[bi[f"lelten_{n}"]]) == 0, \
+                f"step {st}: lelten_{n} != 0"
+        # pl: qtmix-qsmix zero-crossing interpolation (F90:1356-1361) with the
+        # PRE-rainout qsmix at the lcl (entrainment-phase ientropy root; the
+        # dumped qsmix at the lcl is post-loop, though xsh2o(lcl) = 0)
+        lcl = int(sr[si["lcl"]])
+        a_up, p_up = pa[lcl], pr[lcl]
+        a_dn, p_dn = pa[lcl + 1], pr[lcl + 1]
+        qspre = qsat_hPa(invert_entropy(float(a_up[ai["smix"]]),
+                                        float(p_up[pi["p"]]),
+                                        float(a_up[ai["qtmix"]]), rb_entropy),
+                         float(p_up[pi["p"]]))
+        qxsk = float(a_up[ai["qtmix"]]) - qspre
+        qxskp1 = float(a_dn[ai["qtmix"]]) - float(a_dn[ai["qsmix"]])
+        dqxsdp = (qxsk - qxskp1) / (float(p_up[pi["p"]]) - float(p_dn[pi["p"]]))
+        pl_ref = float(p_dn[pi["p"]]) - qxskp1 / dqxsdp
+        pl_dump = float(brow[bi["pl"]])
+        worst_pl = max(worst_pl, abs(pl_dump - pl_ref))
+        assert (brow[bi["plge600"]] == "T") == (pl_dump >= 600.0), \
+            f"step {st}: plge600 mismatch"
     print(f"verification: worst rel |mb| {worst_mb:.2e}, |dsubcld| {worst_ds:.2e}, "
           f"|hmn| {worst_hmn:.2e}, |hsat| {worst_hsat:.2e}")
-    limit = 1e-12
-    if max(worst_mb, worst_ds, worst_hmn, worst_hsat) > limit:
+    print(f"verification: worst |tpv| {worst_tpv:.2e}, |buoy| {worst_buoy:.2e}, "
+          f"|cape| {worst_cape:.2e}, |pl| {worst_pl:.2e} mb, "
+          f"|tmix-launch root| {worst_tlaunch:.2e} K")
+    if max(worst_mb, worst_ds, worst_hmn, worst_hsat) > 1e-12:
         print("FAIL: verification mismatch above 1e-12")
+        sys.exit(1)
+    if max(worst_tpv, worst_buoy) > 1e-9 or worst_cape > 1e-6 \
+            or worst_pl > 0.02 or worst_tlaunch > 1e-3:
+        print("FAIL: parcel-law verification mismatch (tpv/buoy 1e-9, cape 1e-6, "
+              "pl 0.02 mb, launch root 1e-3)")
         sys.exit(1)
 
     # ---------------- tuple extraction -------------------------------------
@@ -249,14 +362,22 @@ def main():
         sr = scal[(st, 1)]
         mx = int(sr[si["maxi"]])
         arr = {c: [float(pr[k][pi[c]]) for k in range(1, pver + 1)]
-               for c in ("t", "q", "z", "p")}
+               for c in ("t", "q", "z", "p", "tp", "qstp", "pf_hi", "pf_lo")}
+        pa = pdump[(st, 1)]
+        arr["qtot"] = [float(pa[k][ai["qtot"]]) for k in range(1, pver + 1)]
         asserts = {}
         for k in (1, 15, 25, 32):
             asserts[f"hmn{k}"] = float(pr[k][pi["hmn"]])
             asserts[f"hsat{k}"] = float(pr[k][pi["hsat"]])
         for k in (25, 32):
             asserts[f"qst{k}"] = qsat_hPa(float(pr[k][pi["t"]]), float(pr[k][pi["p"]]))
-        parcel[str(st)] = dict(overrides=arr, maxi=mx, asserts=asserts)
+        for k in (25, 32):
+            asserts[f"tpv{k}"] = float(pa[k][ai["tpv"]])
+        for k in (15, 18, 25):
+            asserts[f"buoy{k}"] = float(pa[k][ai["buoy"]])
+        asserts["cape"] = float(sr[si["cape"]])
+        parcel[str(st)] = dict(overrides=arr, maxi=mx,
+                               lel=int(sr[si["lel"]]), asserts=asserts)
 
         mb_dump = float(sr[si["mb"]])
         flux_vars = ("mu", "md", "mc", "du")
@@ -292,7 +413,7 @@ def main():
     with open(f"{OUT}/tuples.json", "w") as f:
         json.dump(out, f, indent=1)
     print(f"wrote {OUT}/tuples.json")
-    print(f"parcel: {len(parcel)} steps x 10 asserts + {len(ent_tv)} entropy/tv states; "
+    print(f"parcel: {len(parcel)} steps x 16 asserts + {len(ent_tv)} entropy/tv states; "
           f"closure: {len(closure_tuples)} steps x (dsubcld, mb)")
 
 
