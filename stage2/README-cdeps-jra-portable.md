@@ -27,7 +27,7 @@ with the template `JRA.v1.5.<var>.TL319.[year].210504.nc`, a `temporal`
 block (start 1958-01-01, end 2020-12-31 — the archive's holdings with the
 `.210504` naming, verified by directory listing for all eight variables;
 2021+ files carry different suffixes and are **not** on the server —
-`file_period P1Y`, `frequency P1D`, 2920 records/file, time variable
+`file_period P1Y`, `frequency PT3H`, 2920 records/file, time variable
 `time`, the file's own `hours since 1958-01-01` axis), and a `reference`
 block (Kobayashi et al. 2015, doi:10.2151/jmsj.2015-001, archive URL).
 HTTP 200 verified via `curl -sI` for all eight 1958 files and the listing.
@@ -43,6 +43,26 @@ document at build (extent discovery). The EarthSciModels port's
 form). This document uses the `[year]` form — the one the repo's CLI
 expands — and says so in the metadata description. `[year]` remains
 expandable by the newer EarthSciIO (its `[`-form branch is retained).
+
+### JRA frequency correction (2026-11 review round)
+
+The eight `JRA_*` `data_sources` declared `frequency: "P1D"` next to
+`records_per_file: 2920` — inconsistent (2920 records/yr is 3-hourly in a
+365-day noleap year).  Verified against the local copies under
+`$M/stage1/inputdata/ocn/jra55/v1.5_noleap/`: the `time` variable of
+`JRA.v1.5.lwdn.TL319.1958.210504.nc` runs `hours since 1958-01-01` in
+steps of 3.0 h (1.5, 4.5, 7.5, …; `time_bnds[0] = [0, 3]`), and the file
+history names the source `prra_input4MIPs_atmosphericState_OMIP_
+MRI-JRA55-do-1-5-0` — the 3-hourly JRA-55-do means (Tsujino et al. 2018),
+not daily values.  Corrected `frequency` to `PT3H` in all eight sources,
+and the "daily TL319 files"/"daily mean" wording of the metadata
+descriptions, citations, tags, `N_REC` description and the
+`JRAFiles`-reader descriptions to "3-hourly".  The CDEPS `datm.streams.xml`
+of the C_JRA_t62 case carries no frequency (its `dtlimit = 1.5` guards the
+time-interpolation search only), so the record mapping is driven by the
+file's own time axis and is unchanged; the JRA `Streams`/`Jra` assertions
+still pass at the same values (the reader picks the record by the file
+time axis, which `frequency` never fed).
 
 ### JRAFiles tests removed — coverage gap
 

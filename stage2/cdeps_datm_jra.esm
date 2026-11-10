@@ -2,7 +2,7 @@
  "esm": "1.3.0",
  "metadata": {
   "name": "cdeps_datm_jra",
-  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the JRA55 v1.5 forcing with the JRA datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:271-322), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub (0 at night for the coszen streams), the identical law to the CLMNCEP Streams model of cdeps_datm_gswp3.esm but applied here via the factored stream_interp template; (2) Jra - the JRA55 datamode: the exports are direct copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum - no qsat cap in this datamode, the humidity passes through), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v, Sa_dens = pbot/(rdair*tbot*(1+0.608*shum)) with the moisture coefficient 0.608 an UNSUFFIXED single-precision literal (the law uses r4(0.608) = 0.6079999804496765, see bugs.md), the precip split as a step at tbot = TKFRZ (or the prrn/prsn stream passthrough when the streams separate rain and snow), the LY08 albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) with the 0.069/0.011 coefficients likewise UNSUFFIXED single-precision literals (the law uses r4(0.069)/r4(0.011), see bugs.md) with Faxa_swnet = swdn*(1 - avg_alb), and the fixed swdn split 0.28/0.31/0.24/0.17; (3) JRAFiles - the netcdf reader path into the JRA55 v1.5 daily TL319 files (2920 records/yr). The eight data_sources point at the public NCAR CESM inputdata server (https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/) with [year] url templates (the esm 0.7.0 CLI's template syntax for date placeholders, which this CLI expands; the esm-spec {date:...} token form is not expandable by it), temporal blocks matching the archive holdings (1958..2020, P1Y files of P1D records, 2920 per file, time variable 'time') and reference blocks; model year 1 aligns to data year 1958 as in the C_JRA_t62 case (taxmode = cycle, year_align = 1). The JRAFiles model carries no inline test: its raw-record assertions read the 2920-record files (two tests, about 27 min of suite time) and were dropped as a coverage gap (the reader path is exercised downstream by consumers with data access). The traced-row tests pin the stage-1 dumps of the C_JRA_t62_datm_inst run (datm_jra_streams.csv, datm_jra_exports.csv, cdeps_strdata_streams_jra.csv in stage1/dumps/cdeps/).",
+  "description": "Stage-2 implementation of the CDEPS DATM data-atmosphere component for the JRA55 v1.5 forcing with the JRA datamode (cdeps1.0.112, fork stage1/EqESM-cesm-cdeps branch instrument/cdeps-dumps): the stream time-interpolation laws of shr_strdata_advance (streams/dshr_strdata_mod.F90:1292-1391) and the forcing-derivation laws of datm_datamode_jra_advance (datm/datm_datamode_jra_mod.F90:271-322), with the shared pointwise laws imported from ./cdeps_templates.esm. Three models: (1) Streams - the per-field time interpolation value = flb*lb + fub*ub (0 at night for the coszen streams), the identical law to the CLMNCEP Streams model of cdeps_datm_gswp3.esm but applied here via the factored stream_interp template; (2) Jra - the JRA55 datamode: the exports are direct copies of the stream values (Sa_pslv = Sa_pbot = strm_pslv, Sa_tbot = Sa_ptem = strm_tbot, Sa_u/Sa_v = strm_u/strm_v, Sa_shum = strm_shum - no qsat cap in this datamode, the humidity passes through), Sa_z = 10 m, Sa_u10m/v10m = Sa_u/Sa_v, Sa_dens = pbot/(rdair*tbot*(1+0.608*shum)) with the moisture coefficient 0.608 an UNSUFFIXED single-precision literal (the law uses r4(0.608) = 0.6079999804496765, see bugs.md), the precip split as a step at tbot = TKFRZ (or the prrn/prsn stream passthrough when the streams separate rain and snow), the LY08 albedo avg_alb = 0.069 - 0.011*cos(2*lat*degtorad) with the 0.069/0.011 coefficients likewise UNSUFFIXED single-precision literals (the law uses r4(0.069)/r4(0.011), see bugs.md) with Faxa_swnet = swdn*(1 - avg_alb), and the fixed swdn split 0.28/0.31/0.24/0.17; (3) JRAFiles - the netcdf reader path into the JRA55 v1.5 3-hourly TL319 files (2920 records/yr). The eight data_sources point at the public NCAR CESM inputdata server (https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/) with [year] url templates (the esm 0.7.0 CLI's template syntax for date placeholders, which this CLI expands; the esm-spec {date:...} token form is not expandable by it), temporal blocks matching the archive holdings (1958..2020, P1Y files of PT3H records, 2920 per file, time variable 'time') and reference blocks; model year 1 aligns to data year 1958 as in the C_JRA_t62 case (taxmode = cycle, year_align = 1). The JRAFiles model carries no inline test: its raw-record assertions read the 2920-record files (two tests, about 27 min of suite time) and were dropped as a coverage gap (the reader path is exercised downstream by consumers with data access). The traced-row tests pin the stage-1 dumps of the C_JRA_t62_datm_inst run (datm_jra_streams.csv, datm_jra_exports.csv, cdeps_strdata_streams_jra.csv in stage1/dumps/cdeps/).",
   "references": [
    {
     "citation": "JRA55 datamode of the CDEPS data-atmosphere component, ESCOMP/CDEPS cdeps1.0.112, datm/datm_datamode_jra_mod.F90 (the source of the pinned laws)."
@@ -13,7 +13,7 @@
   "N_REC": {
    "type": "integer",
    "default": 0,
-   "description": "Number of time records the netcdf reader delivers for each JRA55 source (bound by the source's extent at test time; 0 so the document validates standalone). Each JRA.v1.5.*.TL319.1958.210504.nc file carries 2920 daily records."
+   "description": "Number of time records the netcdf reader delivers for each JRA55 source (bound by the source's extent at test time; 0 so the document validates standalone). Each JRA.v1.5.*.TL319.1958.210504.nc file carries 2920 3-hourly records."
   }
  },
  "index_sets": {
@@ -32,12 +32,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -62,10 +62,10 @@
      "datm",
      "forcing",
      "precipitation",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 total precipitation prec [kg m-2 s-1], daily mean, TL319 (640x320), 2920 records of 1958; the Faxa_prec stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 total precipitation prec [kg m-2 s-1], 3-hourly mean, TL319 (640x320), 2920 records of 1958; the Faxa_prec stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_lwdn": {
@@ -77,12 +77,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -107,10 +107,10 @@
      "datm",
      "forcing",
      "longwave",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 downward longwave radiation lwdn [W m-2], daily mean, TL319, 2920 records of 1958; the Faxa_lwdn stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 downward longwave radiation lwdn [W m-2], 3-hourly mean, TL319, 2920 records of 1958; the Faxa_lwdn stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_swdn": {
@@ -122,12 +122,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -152,10 +152,10 @@
      "datm",
      "forcing",
      "shortwave",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 downward shortwave radiation swdn [W m-2], daily mean, TL319, 2920 records of 1958; the Faxa_swdn stream of the C_JRA_t62 reference case (tintalgo coszen)."
+    "description": "JRA55 v1.5 downward shortwave radiation swdn [W m-2], 3-hourly mean, TL319, 2920 records of 1958; the Faxa_swdn stream of the C_JRA_t62 reference case (tintalgo coszen)."
    }
   },
   "JRA_q10": {
@@ -167,12 +167,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -197,10 +197,10 @@
      "datm",
      "forcing",
      "humidity",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 10-m specific humidity q_10 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode), daily mean, TL319, 2920 records of 1958; the Sa_shum stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 10-m specific humidity q_10 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode), 3-hourly mean, TL319, 2920 records of 1958; the Sa_shum stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_slp": {
@@ -212,12 +212,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -242,10 +242,10 @@
      "datm",
      "forcing",
      "pressure",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 sea-level pressure slp [Pa], daily mean, TL319, 2920 records of 1958; the Sa_pslv stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 sea-level pressure slp [Pa], 3-hourly mean, TL319, 2920 records of 1958; the Sa_pslv stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_t10": {
@@ -257,12 +257,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -287,10 +287,10 @@
      "datm",
      "forcing",
      "temperature",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 10-m air temperature t_10 [K], daily mean, TL319, 2920 records of 1958; the Sa_tbot stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 10-m air temperature t_10 [K], 3-hourly mean, TL319, 2920 records of 1958; the Sa_tbot stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_u10": {
@@ -302,12 +302,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -332,10 +332,10 @@
      "datm",
      "forcing",
      "wind",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 10-m zonal wind u_10 [m s-1], daily mean, TL319, 2920 records of 1958; the Sa_u stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 10-m zonal wind u_10 [m s-1], 3-hourly mean, TL319, 2920 records of 1958; the Sa_u stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   },
   "JRA_v10": {
@@ -347,12 +347,12 @@
     "start": "1958-01-01T00:00:00Z",
     "end": "2020-12-31T23:59:59Z",
     "file_period": "P1Y",
-    "frequency": "P1D",
+    "frequency": "PT3H",
     "records_per_file": 2920,
     "time_variable": "time"
    },
    "reference": {
-    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the daily TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
+    "citation": "Kobayashi, S., et al. (2015). The JRA-55 Reanalysis: General Specifications and Basic Characteristics. J. Meteor. Soc. Japan, 93(1), 5-48. The v1.5 update of the 3-hourly TL319 (640x320) surface variables, as archived on the NCAR CESM inputdata server (ocn/jra55/v1.5_noleap, one file per year).",
     "doi": "10.2151/jmsj.2015-001",
     "url": "https://svn-ccsm-inputdata.cgd.ucar.edu/trunk/inputdata/ocn/jra55/v1.5_noleap/"
    },
@@ -377,10 +377,10 @@
      "datm",
      "forcing",
      "wind",
-     "daily",
+     "3-hourly",
      "TL319"
     ],
-    "description": "JRA55 v1.5 10-m meridional wind v_10 [m s-1], daily mean, TL319, 2920 records of 1958; the Sa_v stream of the C_JRA_t62 reference case (tintalgo linear)."
+    "description": "JRA55 v1.5 10-m meridional wind v_10 [m s-1], 3-hourly mean, TL319, 2920 records of 1958; the Sa_v stream of the C_JRA_t62 reference case (tintalgo linear)."
    }
   }
  },
@@ -2053,7 +2053,7 @@
        "file_variable": "prec"
       }
      },
-     "description": "JRA55 v1.5 daily total precipitation at the fixed cell (lat index 0 = -89.57 deg, lon index 0 = 0 deg), all 2920 records of 1958, [kg/m2/s]"
+     "description": "JRA55 v1.5 3-hourly total precipitation at the fixed cell (lat index 0 = -89.57 deg, lon index 0 = 0 deg), all 2920 records of 1958, [kg/m2/s]"
     },
     "lwdn": {
      "type": "parameter",
@@ -2068,7 +2068,7 @@
        "file_variable": "lwdn"
       }
      },
-     "description": "JRA55 v1.5 daily downward longwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
+     "description": "JRA55 v1.5 3-hourly downward longwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
     },
     "swdn": {
      "type": "parameter",
@@ -2083,7 +2083,7 @@
        "file_variable": "swdn"
       }
      },
-     "description": "JRA55 v1.5 daily downward shortwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
+     "description": "JRA55 v1.5 3-hourly downward shortwave radiation at the fixed cell, all 2920 records of 1958, [W/m2]"
     },
     "q_10": {
      "type": "parameter",
@@ -2098,7 +2098,7 @@
        "file_variable": "q_10"
       }
      },
-     "description": "JRA55 v1.5 daily 10-m specific humidity at the fixed cell, all 2920 records of 1958 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode)"
+     "description": "JRA55 v1.5 3-hourly 10-m specific humidity at the fixed cell, all 2920 records of 1958 (file attribute units = '1'; the quantity is specific humidity in kg/kg as consumed by the datamode)"
     },
     "slp": {
      "type": "parameter",
@@ -2113,7 +2113,7 @@
        "file_variable": "slp"
       }
      },
-     "description": "JRA55 v1.5 daily sea-level pressure at the fixed cell, all 2920 records of 1958, [Pa]"
+     "description": "JRA55 v1.5 3-hourly sea-level pressure at the fixed cell, all 2920 records of 1958, [Pa]"
     },
     "t_10": {
      "type": "parameter",
@@ -2128,7 +2128,7 @@
        "file_variable": "t_10"
       }
      },
-     "description": "JRA55 v1.5 daily 10-m air temperature at the fixed cell, all 2920 records of 1958, [K]"
+     "description": "JRA55 v1.5 3-hourly 10-m air temperature at the fixed cell, all 2920 records of 1958, [K]"
     },
     "u_10": {
      "type": "parameter",
@@ -2143,7 +2143,7 @@
        "file_variable": "u_10"
       }
      },
-     "description": "JRA55 v1.5 daily 10-m zonal wind at the fixed cell, all 2920 records of 1958, [m/s]"
+     "description": "JRA55 v1.5 3-hourly 10-m zonal wind at the fixed cell, all 2920 records of 1958, [m/s]"
     },
     "v_10": {
      "type": "parameter",
@@ -2158,7 +2158,7 @@
        "file_variable": "v_10"
       }
      },
-     "description": "JRA55 v1.5 daily 10-m meridional wind at the fixed cell, all 2920 records of 1958, [m/s]"
+     "description": "JRA55 v1.5 3-hourly 10-m meridional wind at the fixed cell, all 2920 records of 1958, [m/s]"
     }
    },
    "equations": [],

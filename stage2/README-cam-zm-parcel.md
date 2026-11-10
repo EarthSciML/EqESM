@@ -13,15 +13,14 @@ decomposition): **buoyan_dilute** (the parcel/CAPE calculation) and
 
 Both models import the templates by reference
 (`expression_template_imports`), so every shared law has a single
-definition.  The CAPE, dsubcld and dadt integrals lower through the ESD
-rule `integral_lev_whole` (`${ESD_ROOT}/grids/column_nonuniform_1d/
+definition.  The CAPE and dadt integrals lower through the ESD rule
+`integral_lev_whole` (`${ESD_ROOT}/grids/column_nonuniform_1d/
 rules/integral_lev_whole.esm`, binding NLEV = 32) with the consumer's
 free-name layer measure `dz`.  In `Parcel`, `dz` is the true d(ln p)
-layer measure log(pf_hi/pf_lo) of the CAPE integral; in `Closure` it is
-the trivial measure 1, because the two integrals share the one imported rule, whose free name `dz` binds by
-consumer variable name, so the Fortran layer weight zf_lo − zf_hi of the
-dadt summand is carried in the integrand `dadt_integrand` rather than
-the measure.
+layer measure log(pf_hi/pf_lo) of the CAPE integral; in `Closure`, `dz`
+is the true height layer measure zf_lo − zf_hi of the dadt integral
+(`dsubcld` is not an integral at all: it is the telescoped closed form
+pf_hi(pver) − pf_lo(mx) of the driver's dp sum, see below).
 
 Sources: `stage1/dumps/cam/cam_zm.csv` (480 profile rows),
 `cam_zm_scal.csv` (15 scalar rows, steps 18–23 and 40–48, g = 1),
@@ -97,23 +96,25 @@ zm_qsat_hPa via the declared 100 Pa/hPa constant.
 
 ## Model `Closure` (closure + dsubcld)
 
-Variables/equations: the dp conversion, `dp_subcld`, `dsubcld` (an
-`integral`), the launch-level extractions t_mx/q_mx/p_mx, `eb`,
-`dtbdt`, `dqbdt`, `debdt`, `dtldt`,
+Variables/equations: the dp conversion, `dsubcld` (the closed form
+pf_hi(pver) − pf_lo(mx)), the launch-level extractions t_mx/q_mx/p_mx,
+`eb`, `dtbdt`, `dqbdt`, `debdt`, `dtldt`,
 `dtmdt_jt`/`dtmdt_mid`/`dtmdt`, `dqmdt_jt`/`dqmdt_mid`/`dqmdt`,
 `thetavp_above`/`thetavp_below`/`thetavp`, `thetavm`, `dqsdtp`,
-`dtpdt`, `dboydt_above`/`dboydt_below`/`dboydt`, `dz`,
-`dadt_integrand`, `dadt` (an `integral`), `mb`.
+`dtpdt`, `dboydt_above`/`dboydt_below`/`dboydt`, `dz` (the dadt
+measure), `dadt` (an `integral`), `mb`.
 
 - `dp` = 0.01·pdel (the README-cam-zm working identity; pdel dumped in
   Pa, dp in hPa).
-- `dsubcld` = Σ dp over k ≥ mx (F90:597-603).  Written as the
-  whole-column integral of the masked thickness `dp_subcld` (dp for
-  k ≥ mx, else 0) under the trivial measure dz = 1 — the ESD rule's
-  free name dz cannot serve two different measures in one model, so the
-  measure is shared and the masks/weights live in the integrands; with
-  mx = 32 = pver the sum collapses to dp(32), pinned exactly
-  (14.026758 hPa = 0.01·pdel(32)).
+- `dsubcld` = Σ dp over k ≥ mx (F90:597-603), written in its telescoped
+  **closed form** `dsubcld = pf_hi(pver) − pf_lo(mx)`, the
+  interface-pressure difference over the subcloud layer: dp(k) =
+  pf_hi(k) − pf_lo(k) with pf_hi(k) = pf_lo(k+1) on the interface grid,
+  so the sum collapses up to round-off and needs no integral rule or measure.
+  With mx = 32 = pver it is the single layer thickness dp(32), pinned
+  to the dumped column (worst rel 8.3e-15 on the 15 rows;
+  14.026758 hPa on step 18, the pf_hi(32) − pf_lo(32) difference of the
+  defaults).
 - Launch-level block (F90:2401-2410): eb = p(mx)·q(mx)/(eps1+q(mx)),
   dtbdt/dqbdt from the mu/md fluxes at mx, debdt =
   eps1·p(mx)/(eps1+q(mx))²·dqbdt, dtldt =
@@ -135,14 +136,13 @@ Variables/equations: the dp conversion, `dp_subcld`, `dsubcld` (an
   tp/(1 + rl/cp·(dqsdtp − qstp/tp))·(dtbdt/t(mx) + rl/cp·(dqbdt/tl −
   q(mx)/tl²·dtldt)) (F90:2460-2462).
 - dboydt above the LCL (F90:2464-2468) and below (F90:2482-2485);
-  `dadt_integrand` = dboydt·(zf_lo − zf_hi), the literal Fortran dadt
-  summand, and `dadt` = integral of it over the active levels lel ≤
-  k < mx (F90:2490-2499; dboydt is zero outside that range, so the
-  whole-column `integral_lev_whole` sum equals the Fortran sum).  The
-  layer weight is in the integrand, not the measure: dz is the trivial
-  measure 1 (both integrals share the one imported rule, whose free name
-  dz binds by consumer variable name), and dadt comes out in
-  m²/(s²·hPa) because the weight carries the m.
+  `dz` = zf_lo − zf_hi (the Fortran layer weight of the summand,
+  F90:2498), and `dadt` = `integral` of dboydt over that height measure
+  on the active levels lel ≤ k < mx (F90:2490-2499; dboydt is zero
+  outside that range, so the whole-column `integral_lev_whole` sum
+  equals the Fortran sum).  The measure is real: the integrand carries
+  only the buoyancy-change rate dboydt [m/(s²·hPa)] and the layer
+  thickness lives in dz [m], so dadt comes out in m²/(s²·hPa).
 - `mb` = max((capelmt − cape)/(tau·dadt), 0), zero when dadt = 0
   (F90:2500-2503: dltaa = −(cape − capelmt), mb = max(dltaa/tau/dadt,
   0)).
@@ -183,12 +183,13 @@ lev (280 assertions):
   (18,25), (18,15), (40,26), (48,32) and tv at the same states, against
   the entropy (F90:1489-1513) and virtual-temperature (F90:1088)
   replicas (DERIVED — not dump columns).
-- **Closure — 30 assertions** (15 steps × 2): dsubcld (exact) and mb
-  (worst rel 2.5e-16) against the dumped columns, from the NORMALIZED
-  fluxes dump/mb.  The step-18 test runs on the model defaults; the
-  other steps override 20 profile arrays (qg/tg/pg/sg/tpg/qstpg/qu/su/
-  qd/sd/qhat/shat/ql/pdel/zf_lo/zf_hi/mu/md/mc/du) and 6 scalars
-  (cape/tl/lel/lcl/jt/mx).
+- **Closure — 30 assertions** (15 steps × 2): dsubcld (worst rel
+  8.3e-15 — the pf_lo/pf_hi es26.17 dump round-trip of the interface
+  difference) and mb (worst rel 2.5e-16) against the dumped columns,
+  from the NORMALIZED fluxes dump/mb.  The step-18 test runs on the
+  model defaults (every step-18 profile equals a default, so the default
+  run *is* the step-18 state); the other steps override all 26
+  profile/scalar arrays.
 
 Data volume: 15 steps × 32 levels per profile array; the dump window
 spans cape
@@ -205,8 +206,8 @@ blocks of the two .esm files from the tuples, in the exact
 json.dumps(indent=1) format the region was originally written in, so
 `git diff` shows only test-block changes.  The tuples script also
 *verifies* every law replica against the dump before writing the
-tuples: worst rel |mb| 2.5e-16, |dsubcld|, |hmn|, |hsat|, |tpv|,
-|buoy|, |cape| 0.0; the pl reconstruction (from the dumped pf_hi/pf_lo
+tuples: worst rel |mb| 2.5e-16, |dsubcld| 0.0, |dsubcld closed form|
+8.3e-15, |hmn|, |hsat|, |tpv|, |buoy|, |cape| 0.0; the pl reconstruction (from the dumped pf_hi/pf_lo
 interface pressures) is exact to worst |pl| 5.7e-3 mb and the ientropy
 launch root reproduces the dumped tmix to worst |tmix − root| 1.5e-4 K
 (run with `ZM_DUMP_DIR`/`ZM_TUPLE_DIR` env overrides; default output

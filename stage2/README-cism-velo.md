@@ -99,8 +99,11 @@ SW/SE/NW/NE cells around it.  Inputs are the four cells' `usrf`, `thck`,
   `F = cos²θ + 4·sin²θ` (F90:2189-2193).  These four are the vertex laws of
   the slope correction and are consumed by `DivaVelocity` through the
   `variable_map` edges `DivaGeometry.theta_x/y, F_x/y → DivaVelocity`.
-- `stagthck = (thck_sw + thck_se + thck_nw + thck_ne)/4` (the 4-cell mean of
-  `glissade_stagger`, `ice_plus_land_mask`).
+- `stagthck = cism_stagger_masked_mean(thck_sw/se/nw/ne, mask = 1)` (the
+  plain 4-cell mean of `glissade_stagger`, `ice_plus_land_mask`; the
+  stagger_margin = 0 case of the shared template, applied with unit masks —
+  the masked stencil of F90:141-144 collapses to the plain mean of
+  F90:125-133).
 - `taudx = −rhoi·g·stagthck·dusrf_dx`, `taudy = −rhoi·g·stagthck·dusrf_dy`
   (`load_vector_gravity`, HO_ASSEMBLE_TAUD_LOCAL, F90:4353-4384).
 - `effecpress_stag = rhoi·g·stagthck` — the `bwat = 0` identity of the

@@ -34,17 +34,22 @@ directory (default scratch/zm_tuples of the repo where the script runs):
             input, not a model output.
 
   closure/  per-step scalars (cape, tl, lel, lcl, jt, mx, mb, dsubcld from
-            cam_zm_scal.csv) and the 18 closure input profiles at levels
+            cam_zm_scal.csv) and the 20 closure input profiles at levels
             14..32 (zero outside; the closure reads only k >= lel = 14..15
             through mx = 32 in this lane): qg/tg/pg/sg/tpg/qstpg/qu/su/qd/sd/
-            qhat/shat/ql/pdel/zf_lo/zf_hi (dump columns; zg and qs are NOT
-            emitted -- the closure body never reads them) and the normalized
-            fluxes mu/md/mc/du (dump value / mb, the form the closure
-            receives: mu/md/mc dimensionless, du 1/hPa; du is read at
+            qhat/shat/ql/pdel/pf_lo/pf_hi/zf_lo/zf_hi (dump columns; zg and qs
+            are NOT emitted -- the closure body never reads them) and the
+            normalized fluxes mu/md/mc/du (dump value / mb, the form the
+            closure receives: mu/md/mc dimensionless, du 1/hPa; du is read at
             jt < k < mx = 16..31, where du(16) is nonzero on every row and
             du(17..31) = 0).  pdel is dumped in Pa and the model converts
             with dp = 0.01 hPa/Pa x pdel (the README-cam-zm working identity
-            dp = 0.01*pdel).
+            dp = 0.01*pdel).  The model's dsubcld is the telescoped closed
+            form pf_hi(pver) - pf_lo(mx) of the driver sum of dp over
+            k >= maxg (zm_convr.F90:622-624), so pf_lo/pf_hi are emitted
+            (dump columns) and the verification checks the closed form
+            against the dump; the emitted pdel still feeds the dtmdt/dqmdt
+            dp divisions.
 
 Sources: stage1/dumps/cam/cam_zm.csv and cam_zm_scal.csv (480 profile rows,
 15 scalar rows, steps 18-23 and 40-48), stage1/dumps/cam/cam_zm_parcel.csv
@@ -172,6 +177,10 @@ def main():
         for k in range(6, pver + 1):
             if k >= mx:
                 dsubcld += 0.01 * A(k, "pdel")
+        # The telescoped closed form of the same sum: dp(k) = pf_lo(k) -
+        # pf_hi(k) and pf_hi(k) = pf_lo(k+1) on the interface grid, so
+        # sum_{k=maxg}^{pver} dp(k) = pf_hi(pver) - pf_lo(maxg) exactly.
+        dsubcld_closed = A(pver, "pf_hi") - A(mx, "pf_lo")
 
         def flx(name, k):
             return A(k, name) / mb_dump
@@ -247,12 +256,12 @@ def main():
             dadt += dboydt[k] * (A(k, "zf_lo") - A(k, "zf_hi"))
         dltaa = -1.0 * (cape - C["capelmt"])
         mb = 0.0 if dadt == 0.0 else max(dltaa / C["tau"] / dadt, 0.0)
-        return dict(dsubcld=dsubcld, mb=mb)
+        return dict(dsubcld=dsubcld, dsubcld_closed=dsubcld_closed, mb=mb)
 
     # ---------------- verification (all laws vs the dump) ------------------
 
     pver = 32
-    worst_mb = worst_ds = worst_hmn = worst_hsat = 0.0
+    worst_mb = worst_ds = worst_dsc = worst_hmn = worst_hsat = 0.0
     worst_tpv = worst_buoy = worst_cape = worst_pl = worst_tlaunch = 0.0
     for st in steps:
         pr = prof[(st, 1)]
@@ -262,6 +271,8 @@ def main():
         ds_dump = float(sr[si["dsubcld"]])
         worst_mb = max(worst_mb, abs(res["mb"] - mb_dump) / max(abs(res["mb"]), abs(mb_dump)))
         worst_ds = max(worst_ds, abs(res["dsubcld"] - ds_dump) / max(abs(ds_dump), 1.0))
+        worst_dsc = max(worst_dsc, abs(res["dsubcld_closed"] - ds_dump)
+                        / max(abs(ds_dump), 1.0))
         mx = int(sr[si["maxi"]])
         for k in (1, 15, 25, 32):
             r = pr[k]
@@ -339,11 +350,13 @@ def main():
         assert (brow[bi["plge600"]] == "T") == (pl_dump >= 600.0), \
             f"step {st}: plge600 mismatch"
     print(f"verification: worst rel |mb| {worst_mb:.2e}, |dsubcld| {worst_ds:.2e}, "
-          f"|hmn| {worst_hmn:.2e}, |hsat| {worst_hsat:.2e}")
+          f"|dsubcld closed form| {worst_dsc:.2e}, |hmn| {worst_hmn:.2e}, "
+          f"|hsat| {worst_hsat:.2e}")
     print(f"verification: worst |tpv| {worst_tpv:.2e}, |buoy| {worst_buoy:.2e}, "
           f"|cape| {worst_cape:.2e}, |pl| {worst_pl:.2e} mb, "
           f"|tmix-launch root| {worst_tlaunch:.2e} K")
-    if max(worst_mb, worst_ds, worst_hmn, worst_hsat) > 1e-12:
+    limit = 1e-12
+    if max(worst_mb, worst_ds, worst_dsc, worst_hmn, worst_hsat) > limit:
         print("FAIL: verification mismatch above 1e-12")
         sys.exit(1)
     if max(worst_tpv, worst_buoy) > 1e-9 or worst_cape > 1e-6 \
@@ -382,7 +395,8 @@ def main():
         mb_dump = float(sr[si["mb"]])
         flux_vars = ("mu", "md", "mc", "du")
         prof_vars = ("qg", "tg", "pg", "sg", "tpg", "qstpg", "qu", "su",
-                     "qd", "sd", "qhat", "shat", "ql", "pdel", "zf_lo", "zf_hi")
+                     "qd", "sd", "qhat", "shat", "ql", "pdel", "pf_lo",
+                     "pf_hi", "zf_lo", "zf_hi")
         norm = {}
         for v in prof_vars:
             norm[v] = [0.0] * 13 + [float(pr[k][pi[v]]) for k in range(14, pver + 1)]
