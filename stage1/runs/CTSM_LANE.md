@@ -177,6 +177,44 @@ Reports: `/scratch.local/ctessum/{clm_source_map,land_reuse_audit,ctsm_harness_r
     balance warnings are baseline behavior, identical in both runs).
 - **W4 — PRs** into EarthSciModels (new `clm_*`; CLMU as test/fix PRs onto the
   existing files, plus fixing the 2 invalid files).
+  - W4 runoff (2026-11-10, M9 part A; fork clm `ada2cb03b` + fixes
+    `dccc7bbb9` / superproject `2f69981` + `1664928`, branch
+    `instrument/clm-dumps`; worktree lane `wt/clm-runoff-instrument`):
+    new namelist `dump_rofliq` (default .false.) + `dump_rofliq_steps`,
+    mpi_bcast'd in control_spmd. Two new CSVs, written by PET 0 after an
+    all-PE MPI_Gatherv so **all** 5666 f19 land gridcells / 28,494
+    columns are dumped: `clm_rofliq_exports.csv` at the
+    `lnd_import_export` export call ("output to river" block 890-935:
+    Flrl_rofsur/rofsub/rofgwl/irrig/rofi + total + dynbal terms, every
+    land export step — LND_NCPL=48, runoff fields not
+    accumulator-averaged) and `clm_rofliq_cols.csv` at the end of the
+    lnd2atm runoff section (lnd2atmMod.F90 381-470: the exact column
+    production fluxes the c2g calls saw + wtgcell/ctype/canyon_hwr/
+    active, so the urbanf/unity c2g is pinnable exactly). Bring-up
+    fixes (dccc7bbb9): dump_finalize (nlend) closed the NEWUNIT handles
+    before the final step's export crashed the first run ("Unit number
+    is negative"; dump_ensure_open reopens append-mode with a fresh
+    NEWUNIT) and the cols dump's gridcell-vs-column gindex mixup
+    ("********" in the first data row; col_gidx_grc temp). Final rerun
+    in-node (`--no-batch`) in allocation 12285825, LID 261110-045347
+    (first attempt 261110-040834 crashed; log
+    /scratch.local/ctessum/clmrofliq/run_rofliq2.log). Verified:
+    validator `stage1/analysis/verify_clm_rofliq_dumps.py` — ALL CHECKS
+    PASSED: the 7 c2g identities at round-off (max rel 4e-16; urbanf
+    law 3·canyon_hwr sun/shadewall, 3 roads, 1 roof/non-urban;
+    sum(wtgcell)==1 per gridcell; drain/qgwl may be negative — bottom
+    drainage / glacier accumulation), the first MOSART coupling-step
+    imports reproduced (mediator accumulates 6 lnd exports over the 3 h
+    window and averages; import = A_dest·avg6·W·1e-3 with
+    avg6=(qsur_s1+qsur_s2)/6=2.5907e-11 mm/s of gridcell 1981, W=1.0/
+    0.5; worst rel 1.35e-6 = the ESMF-internal online mapconsf weights,
+    never persisted — documented limitation), `--existing` 15 old CSVs
+    bit-identical, `--restart` neutrality 292/292 vars, 0 differ.
+    Open questions: mosart_run_imports.csv steps 2..8 imports are
+    exactly 0 despite all-day nonzero lnd exports (mosart lane), and
+    its dump window is partial (first 16 local cells). bugs.md: benign
+    CLM quirk logged (canyon_hwr never initialized for non-urban
+    landunits).
 
 ## Risks
 
