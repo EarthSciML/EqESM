@@ -1,0 +1,4514 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "cice_shortwave",
+  "description": "CICE delta-Eddington shortwave radiation (stage 2 of the EqESM project): compute_dEdd_3bd (icepack_shortwave.F90:1703-3013) and its per-layer solver solution_dEdd (F90:3022-3488), the 3-band radiation scheme of the CICE sea-ice column. The model is a transcription of the Fortran law: the dzk/frsnw layer geometry (F90:2132-2156, 2122-2125); the snow IOP interpolation against the SNICAR grain-radius tables (F90:2396-2424, icepack_shortwave_data.F90:116-232) and the snow mass extinction ks (F90:2422-2425); the per-layer tau/w0/g assembly over the snow-cover, bare-ice and pond branches including the bulk aerosol mixing (F90:2425-2547, 2562-2717, 2549-2557); the per-band ocean albedo (F90:2772-2775); the delta-Eddington layer solution with the 8-point Gauss-Legendre angular integration of the diffuse reflectivity/transmissivity and the fresnel (refraction) layer at the base of the surface scattering layer (solution_dEdd F90:3296-3406); the downward and upward layer-combination recurrences with the trmin activity cutoff (F90:3287, 3408-3466); the interface flux fractions dfdir/dfdif (F90:2804-2832); and the band-weighted accumulations avdr/avdf/aidr/aidf, fsfc/fint/fthru, the visible/NIR transmitted fluxes and the Sabs/Iabs/fthrul layer absorptions (F90:2834-2960). The surface type srftyp (0 = air/bare ice, 1 = snow, 2 = pond) is a scalar parameter; the pond branch is transcribed but untested (the instrumented run contains no pond rows - see README-cice-shortwave.md). The 8-point Gauss diffuse reflectivity is written as an explicit sum over the 8 abscissas rather than an esm integral: no ESD quadrature rule exists for a bare mu axis (integral reaches evaluation only when an EarthSciDiscretizations rewrite rule lowers it; probed on this branch). The Fortran's trmin guard skips the layer solution below the cutoff; here the full solution is computed and the outputs are masked with the same condition, which reproduces the Fortran bit-for-bit (the guard condition is a property of the full solution). All laws are imported by reference from ./cice_templates.esm; the numeric tuples are extracted from the stage-1 instrumentation dump stage1/dumps/cice/cice_dedd.csv by stage1/analysis/gen_cice_dedd_tests.py.",
+  "license": "MIT"
+ },
+ "function_tables": {
+  "snow_iop": {
+   "description": "SNICAR snow inherent optical properties (Qs_tab extinction efficiency, ws_tab single-scattering albedo, gs_tab asymmetry parameter) vs grain radius rsnw_tab and spectral band (icepack_shortwave_data.F90:107-232; the Fortran arrays are (nspint_3bd, nmbrad_snw) with column-major reshape, so the per-row triplets are bands 1, 2, 3). Interpolated with clamped linear interpolation in r exactly as shortwave_search + the delr lerp of compute_dEdd_3bd F90:2400-2424; the band axis is integral so bilinear lookup at an integer band is exact.",
+   "axes": [
+    {
+     "name": "r",
+     "values": [5.0, 7.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, 65.0, 80.0, 100.0, 120.0, 140.0, 170.0, 200.0, 240.0, 290.0, 350.0, 420.0, 500.0, 570.0, 660.0, 760.0, 870.0, 1000.0, 1100.0, 1250.0, 1400.0, 1600.0, 1800.0, 2000.0, 2500.0],
+     "units": "um"
+    },
+    {
+     "name": "band",
+     "values": [1, 2, 3]
+    }
+   ],
+   "interpolation": "bilinear",
+   "out_of_bounds": "clamp",
+   "outputs": ["Qs", "ws", "gs"],
+   "data": [
+    [
+     [2.131798, 2.187756, 2.267358], [2.104499, 2.148345, 2.236078],
+     [2.081580, 2.116885, 2.175067], [2.062595, 2.088937, 2.130242],
+     [2.051403, 2.072422, 2.106610], [2.039223, 2.055389, 2.080586],
+     [2.032383, 2.045751, 2.066394], [2.027920, 2.039388, 2.057224],
+     [2.023444, 2.033137, 2.048055], [2.020412, 2.028840, 2.041874],
+     [2.017608, 2.024863, 2.036046], [2.015592, 2.022021, 2.031954],
+     [2.014083, 2.019887, 2.028853], [2.012368, 2.017471, 2.025353],
+     [2.011092, 2.015675, 2.022759], [2.009837, 2.013897, 2.020168],
+     [2.008668, 2.012252, 2.017781], [2.007627, 2.010813, 2.015678],
+     [2.006764, 2.009577, 2.013880], [2.006037, 2.008520, 2.012382],
+     [2.005528, 2.007807, 2.011307], [2.005025, 2.007079, 2.010280],
+     [2.004562, 2.006440, 2.009333], [2.004155, 2.005898, 2.008523],
+     [2.003794, 2.005379, 2.007795], [2.003555, 2.005041, 2.007329],
+     [2.003264, 2.004624, 2.006729], [2.003037, 2.004291, 2.006230],
+     [2.002776, 2.003929, 2.005700], [2.002590, 2.003627, 2.005276],
+     [2.002395, 2.003391, 2.004904], [2.002071, 2.002922, 2.004241]
+    ],
+    [
+     [0.9999994, 0.9999673, 0.9954589], [0.9999992, 0.9999547, 0.9938576],
+     [0.9999990, 0.9999382, 0.9917989], [0.9999985, 0.9999123, 0.9889724],
+     [0.9999979, 0.9998844, 0.9866190], [0.9999970, 0.9998317, 0.9823021],
+     [0.9999960, 0.9997800, 0.9785269], [0.9999951, 0.9997288, 0.9751601],
+     [0.9999936, 0.9996531, 0.9706974], [0.9999922, 0.9995783, 0.9667577],
+     [0.9999903, 0.9994798, 0.9621007], [0.9999885, 0.9993825, 0.9579541],
+     [0.9999866, 0.9992862, 0.9541924], [0.9999838, 0.9991434, 0.9490959],
+     [0.9999810, 0.9990025, 0.9444940], [0.9999772, 0.9988171, 0.9389141],
+     [0.9999726, 0.9985890, 0.9325819], [0.9999670, 0.9983199, 0.9256405],
+     [0.9999605, 0.9980117, 0.9181533], [0.9999530, 0.9976663, 0.9101540],
+     [0.9999465, 0.9973693, 0.9035031], [0.9999382, 0.9969939, 0.8953134],
+     [0.9999289, 0.9965848, 0.8865789], [0.9999188, 0.9961434, 0.8773350],
+     [0.9999068, 0.9956323, 0.8668233], [0.9998975, 0.9952464, 0.8589990],
+     [0.9998837, 0.9946782, 0.8476493], [0.9998699, 0.9941218, 0.8367318],
+     [0.9998515, 0.9933966, 0.8227881], [0.9998332, 0.9926888, 0.8095131],
+     [0.9998148, 0.9919968, 0.7968620], [0.9997691, 0.9903277, 0.7677887]
+    ],
+    [
+     [0.859913, 0.848003, 0.824415], [0.867130, 0.858150, 0.848445],
+     [0.873381, 0.867221, 0.861714], [0.878368, 0.874879, 0.874036],
+     [0.881462, 0.879661, 0.881299], [0.884361, 0.883903, 0.890184],
+     [0.885937, 0.886256, 0.895393], [0.886931, 0.887769, 0.899072],
+     [0.887894, 0.889255, 0.903285], [0.888515, 0.890236, 0.906588],
+     [0.889073, 0.891127, 0.910152], [0.889452, 0.891750, 0.913100],
+     [0.889730, 0.892213, 0.915621], [0.890026, 0.892723, 0.918831],
+     [0.890238, 0.893099, 0.921540], [0.890441, 0.893474, 0.924581],
+     [0.890618, 0.893816, 0.927701], [0.890762, 0.894123, 0.930737],
+     [0.890881, 0.894397, 0.933568], [0.890975, 0.894645, 0.936148],
+     [0.891035, 0.894822, 0.937989], [0.891097, 0.895020, 0.939949],
+     [0.891147, 0.895212, 0.941727], [0.891189, 0.895399, 0.943339],
+     [0.891225, 0.895601, 0.944915], [0.891248, 0.895745, 0.945950],
+     [0.891277, 0.895951, 0.947288], [0.891299, 0.896142, 0.948438],
+     [0.891323, 0.896388, 0.949762], [0.891340, 0.896623, 0.950916],
+     [0.891356, 0.896851, 0.951945], [0.891386, 0.897399, 0.954156]
+    ]
+   ]
+  },
+  "aerosol_3bd": {
+   "description": "Bulk-aerosol IOPs for the three aerosol species of this run: kaer_3bd mass extinction cross-section (m2/kg), waer_3bd single-scatter albedo, gaer_3bd asymmetry parameter, per spectral band (icepack_shortwave_data.F90:331-353, arrays (nspint_3bd, max_aero) column-major, species 1-3 of 6; only species 1..n_aero = 3 are referenced by the aerosol loop of compute_dEdd_3bd F90:2451-2547, 2605-2717).",
+   "axes": [
+    {
+     "name": "band",
+     "values": [1, 2, 3]
+    },
+    {
+     "name": "aero",
+     "values": [1, 2, 3]
+    }
+   ],
+   "interpolation": "bilinear",
+   "out_of_bounds": "clamp",
+   "outputs": ["kaer", "waer", "gaer"],
+   "data": [
+    [
+     [11580.61872, 25798.96479, 196.49772],
+     [5535.41835, 11536.03871, 204.14078],
+     [2793.79690, 4688.24207, 214.42287]
+    ],
+    [
+     [0.29003, 0.51731, 0.84467],
+     [0.17349, 0.41609, 0.94216],
+     [0.06613, 0.21324, 0.95666]
+    ],
+    [
+     [0.35445, 0.52581, 0.83162],
+     [0.19838, 0.32384, 0.78306],
+     [0.08857, 0.14970, 0.74375]
+    ]
+   ]
+  }
+ },
+ "index_sets": {
+  "layer": { "kind": "interval", "size": { "op": "+", "args": ["N_SLYR", "N_ILYR", 2] } },
+  "iface": { "kind": "interval", "size": { "op": "+", "args": ["N_SLYR", "N_ILYR", 3] } },
+  "band": { "kind": "interval", "size": 3 },
+  "snow_layer": { "kind": "interval", "size": "N_SLYR" },
+  "ice_layer": { "kind": "interval", "size": "N_ILYR" },
+  "pen_level": { "kind": "interval", "size": { "op": "+", "args": ["N_ILYR", 1] } },
+  "aero": { "kind": "interval", "size": 3 },
+  "aero_slot": { "kind": "interval", "size": 4 },
+  "gauss": { "kind": "interval", "size": 8 }
+ },
+ "metaparameters": {
+  "N_SLYR": { "type": "integer", "default": 3, "description": "number of snow radiation layers (icepack_shortwave.F90:2006-2010)." },
+  "N_ILYR": { "type": "integer", "default": 8, "description": "number of sea-ice radiation layers nilyr (icepack_shortwave.F90:2006-2010)." }
+ },
+ "models": {
+  "Shortwave": {
+   "expression_template_imports": [
+    {
+     "ref": "./cice_templates.esm"
+    }
+   ],
+   "variables": {
+    "srftyp": { "type": "parameter", "units": "1", "default": 1, "description": "surface type over ice: 0 = air/bare ice, 1 = snow, 2 = pond (solution_dEdd, icepack_shortwave.F90:3028-3030)." },
+    "hs": { "type": "parameter", "units": "m", "default": 0.0, "description": "snow depth (compute_dEdd_3bd input)." },
+    "hi": { "type": "parameter", "units": "m", "default": 0.0, "description": "sea-ice thickness (compute_dEdd_3bd input)." },
+    "hp": { "type": "parameter", "units": "m", "default": 0.0, "description": "melt-pond depth (compute_dEdd_3bd input)." },
+    "fnidr": { "type": "parameter", "units": "1", "default": 0.0, "description": "ratio of direct to total incident solar radiation (compute_dEdd_3bd input)." },
+    "coszen": { "type": "parameter", "units": "1", "default": 0.0, "description": "cosine of the solar zenith angle (compute_dEdd_3bd input)." },
+    "swvdr": { "type": "parameter", "units": "W/m^2", "default": 0.0, "description": "visible direct incident shortwave flux (compute_dEdd_3bd input)." },
+    "swvdf": { "type": "parameter", "units": "W/m^2", "default": 0.0, "description": "visible diffuse incident shortwave flux." },
+    "swidr": { "type": "parameter", "units": "W/m^2", "default": 0.0, "description": "near-IR direct incident shortwave flux." },
+    "swidf": { "type": "parameter", "units": "W/m^2", "default": 0.0, "description": "near-IR diffuse incident shortwave flux." },
+    "kalg": { "type": "parameter", "units": "1/m", "default": 0.0, "description": "algae absorption coefficient (compute_dEdd_3bd input)." },
+    "rsnw": { "type": "parameter", "shape": ["snow_layer"], "units": "um", "default": [0.0, 0.0, 0.0], "description": "snow grain radius per snow layer (compute_dEdd_3bd input)." },
+    "rhosnw": { "type": "parameter", "shape": ["snow_layer"], "units": "kg/m^3", "default": [0.0, 0.0, 0.0], "description": "snow density per snow layer (compute_dEdd_3bd input)." },
+    "aero_mp": { "type": "parameter", "shape": ["aero", "aero_slot"], "units": "kg/m^2", "default": [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]], "description": "aerosol mass path per species (aero) and per slot (snow SSL, snow interior, ice SSL, ice interior), the aero_mp(1:12) of compute_dEdd_3bd F90:2451-2547, 2605-2717." },
+    "ki_ssl": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [1000.1, 1003.7, 7042.0], "description": "effective sea-ice SSL extinction coefficient per band (the ki_ssl(ns) of compute_dEdd_3bd after the R_ice/fp_ice tuning F90:2169-2189; defaults are the ki_ssl_mn_3bd data of icepack_shortwave_data.F90:235 at R_ice = 0)." },
+    "wi_ssl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.9999, 0.9963, 0.9088], "description": "effective sea-ice SSL single-scattering albedo per band (icepack_shortwave_data.F90:236)." },
+    "gi_ssl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.94, 0.94, 0.94], "description": "sea-ice SSL asymmetry parameter per band (icepack_shortwave_data.F90:237)." },
+    "ki_dl": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [100.2, 107.7, 1309.0], "description": "effective sea-ice delta-layer extinction coefficient per band (icepack_shortwave_data.F90:240)." },
+    "wi_dl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.998, 0.9287, 0.0305], "description": "effective sea-ice delta-layer single-scattering albedo per band (icepack_shortwave_data.F90:241)." },
+    "gi_dl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.94, 0.94, 0.94], "description": "sea-ice delta-layer asymmetry parameter per band (icepack_shortwave_data.F90:242)." },
+    "ki_int": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [20.2, 27.7, 1445.0], "description": "effective sea-ice interior extinction coefficient per band (icepack_shortwave_data.F90:245)." },
+    "wi_int": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.9901, 0.7223, 0.0277], "description": "effective sea-ice interior single-scattering albedo per band (icepack_shortwave_data.F90:246)." },
+    "gi_int": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.94, 0.94, 0.94], "description": "sea-ice interior asymmetry parameter per band (icepack_shortwave_data.F90:247)." },
+    "ki_p_ssl": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [70.2, 77.7, 1309.0], "description": "effective ponded-ice SSL extinction coefficient per band (untested branch; icepack_shortwave_data.F90:250)." },
+    "wi_p_ssl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.9972, 0.9009, 0.0305], "description": "effective ponded-ice SSL single-scattering albedo per band (icepack_shortwave_data.F90:251)." },
+    "gi_p_ssl": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.94, 0.94, 0.94], "description": "ponded-ice SSL asymmetry parameter per band (icepack_shortwave_data.F90:252)." },
+    "ki_p_int": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [20.2, 27.7, 1445.0], "description": "effective ponded-ice interior extinction coefficient per band (icepack_shortwave_data.F90:255)." },
+    "wi_p_int": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.9901, 0.7223, 0.0277], "description": "effective ponded-ice interior single-scattering albedo per band (icepack_shortwave_data.F90:256)." },
+    "gi_p_int": { "type": "parameter", "shape": ["band"], "units": "1", "default": [0.94, 0.94, 0.94], "description": "ponded-ice interior asymmetry parameter per band (icepack_shortwave_data.F90:257)." },
+    "trmin": { "type": "parameter", "units": "1", "default": 0.001, "description": "minimum total transmission for the layer solution (solution_dEdd, icepack_shortwave.F90:3143)." },
+    "hs_ssl": { "type": "parameter", "units": "m", "default": 0.04, "description": "snow surface scattering layer thickness (icepack_parameters.F90:195)." },
+    "hi_ssl": { "type": "parameter", "units": "m", "default": 0.05, "description": "sea-ice surface scattering layer thickness (icepack_parameters.F90:194)." },
+    "cp01": { "type": "parameter", "units": "1", "default": 0.01, "description": "ocean albedo factor cp01 (compute_dEdd_3bd F90:1925, 2772-2775)." },
+    "cp50": { "type": "parameter", "units": "1", "default": 0.5, "description": "half-depth factor of the chlorophyll absorption kabs_chl = kalg*0.50/dzk(klev) (compute_dEdd_3bd F90:2244-2251)." },
+    "p25": { "type": "parameter", "units": "1", "default": 0.25, "description": "delta-layer depth factor p25 of fs = p25*nilyr (compute_dEdd_3bd F90:2571)." },
+    "kw": { "type": "parameter", "shape": ["band"], "units": "1/m", "default": [0.2, 12.0, 729.0], "description": "pond water extinction coefficient per band (icepack_shortwave_data.F90:263)." },
+    "gauspt": { "type": "parameter", "shape": ["gauss"], "units": "1", "default": [0.9894009, 0.9445750, 0.8656312, 0.7554044, 0.6178762, 0.4580168, 0.2816036, 0.0950125], "description": "Gauss-Legendre abscissas for the diffuse angular integration (solution_dEdd, icepack_shortwave.F90:3203-3207)." },
+    "gauswt": { "type": "parameter", "shape": ["gauss"], "units": "1", "default": [0.0271525, 0.0622535, 0.0951585, 0.1246290, 0.1495960, 0.1691565, 0.1826034, 0.1894506], "description": "Gauss-Legendre weights (solution_dEdd, icepack_shortwave.F90:3208-3215)." },
+    "rnslyr": { "type": "unknown", "units": "1", "default": 0.0, "description": "inverse snow layer count 1/nslyr (compute_dEdd_3bd F90:2132)." },
+    "rnilyr": { "type": "unknown", "units": "1", "default": 0.0, "description": "inverse ice layer count 1/nilyr (compute_dEdd_3bd F90:2144)." },
+    "dz_s": { "type": "unknown", "units": "m", "default": 0.0, "description": "snow layer thickness dz = hs*rnslyr (F90:2132)." },
+    "dz_i": { "type": "unknown", "units": "m", "default": 0.0, "description": "ice layer thickness dz = hi*rnilyr (F90:2144)." },
+    "dz_ssl_s": { "type": "unknown", "units": "m", "default": 0.0, "description": "snow surface scattering layer thickness dzk(0) = min(hs_ssl, dz/2) (F90:2134)." },
+    "dz_ssl_i": { "type": "unknown", "units": "m", "default": 0.0, "description": "sea-ice surface scattering layer thickness min(hi_ssl, hi/30, dz/2) (F90:2146-2151)." },
+    "dzk": { "type": "unknown", "shape": ["layer"], "units": "m", "default": 0.0, "description": "radiation layer thicknesses dzk(0:12) (F90:2132-2156)." },
+    "frsnw": { "type": "unknown", "shape": ["snow_layer"], "units": "um", "default": 0.0, "description": "adjusted snow grain radius frsnw (F90:2122-2125)." },
+    "Qs": { "type": "unknown", "shape": ["band", "snow_layer"], "units": "1", "default": 0.0, "description": "snow extinction efficiency from the SNICAR table (F90:2396-2424)." },
+    "ws_snw": { "type": "unknown", "shape": ["band", "snow_layer"], "units": "1", "default": 0.0, "description": "snow single-scattering albedo from the SNICAR table." },
+    "gs_snw": { "type": "unknown", "shape": ["band", "snow_layer"], "units": "1", "default": 0.0, "description": "snow asymmetry parameter from the SNICAR table." },
+    "ks_snw": { "type": "unknown", "shape": ["band", "snow_layer"], "units": "1/m", "default": 0.0, "description": "snow mass extinction coefficient ks (F90:2422-2425)." },
+    "ks_l": { "type": "unknown", "shape": ["band", "layer"], "units": "1/m", "default": 0.0, "description": "snow extinction coefficient per radiation layer, ksnow = max(k,1) (F90:2400)." },
+    "ws_l": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "snow single-scattering albedo per radiation layer." },
+    "gs_l": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "snow asymmetry parameter per radiation layer." },
+    "kabs_chl": { "type": "unknown", "shape": ["band", "layer"], "units": "1/m", "default": 0.0, "description": "chlorophyll absorption coefficient kabs_chl(1,klev) = kalg*0.50/dzk(klev), zero outside the visible band and the lowest layer (F90:2244-2251)." },
+    "dz_pond": { "type": "unknown", "units": "m", "default": 0.0, "description": "pond water layer thickness hp/(nslyr+1) (F90:2550)." },
+    "fs_dl": { "type": "unknown", "units": "1", "default": 0.0, "description": "delta-layer depth factor fs = p25*nilyr (F90:2571)." },
+    "kabs_i": { "type": "unknown", "shape": ["band", "layer"], "units": "1/m", "default": 0.0, "description": "absorption coefficient of the lowest ice layer kabs = ki_int*(1-wi_int) (+ kabs_chl for the visible band) (F90:2586-2591)." },
+    "sig_i": { "type": "unknown", "shape": ["band", "layer"], "units": "1/m", "default": 0.0, "description": "scattering coefficient of the lowest ice layer sig = ki_int*wi_int (F90:2592)." },
+    "mix_region": { "type": "unknown", "shape": ["layer"], "units": "1", "default": 0.0, "description": "layer lies in an aerosol-mixing region: snow layers for srftyp = 1 and ice layers for srftyp < 2 (F90:2451-2547, 2605-2717)." },
+    "aero_slot_idx": { "type": "unknown", "shape": ["layer"], "units": "1", "default": 0.0, "description": "aerosol mass-path slot of the layer: 1 = snow SSL, 2 = snow interior, 3 = ice SSL, 4 = ice interior (F90:2454-2456, 2606-2608)." },
+    "aero_scale": { "type": "unknown", "shape": ["layer"], "units": "1", "default": 0.0, "description": "aerosol mass-path scale: 1 for the SSL slots, rnslyr for snow interior, rnilyr for ice interior (F90:2454-2460, 2606-2612)." },
+    "aero_am": { "type": "unknown", "shape": ["layer", "aero"], "units": "kg/m^2", "default": 0.0, "description": "effective aerosol mass path of each species in the layer (aero_mp times the slot scale, zero outside the mixing regions)." },
+    "taer": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "aerosol extinction optical depth contribution (F90:2451-2547)." },
+    "waer": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "aerosol scattering optical depth contribution." },
+    "gaer": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "aerosol asymmetric scattering optical depth contribution." },
+    "tau_base": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer extinction optical depth before aerosol mixing (F90:2425-2427, 2562-2596)." },
+    "w0_base": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer single-scattering albedo before aerosol mixing." },
+    "g_base": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer asymmetry parameter before aerosol mixing." },
+    "tau": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer extinction optical depth after aerosol mixing (F90:2486-2487, 2714-2716)." },
+    "w0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer single-scattering albedo after aerosol mixing." },
+    "g": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer asymmetry parameter after aerosol mixing." },
+    "albodr": { "type": "unknown", "shape": ["band"], "units": "1", "default": 0.0, "description": "ocean albedo to direct and diffuse radiation albodr = cp01*(1 - min(ns-1,1)) (F90:2772-2775)." },
+    "mu0": { "type": "unknown", "units": "1", "default": 0.0, "description": "cosine solar zenith angle above the fresnel level, clamped (F90:3251-3253)." },
+    "mu0nij": { "type": "unknown", "units": "1", "default": 0.0, "description": "cosine solar zenith angle below the fresnel level (F90:3257-3258)." },
+    "kfrsnl": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel layer index: top pond layer (srftyp = 2) or the layer below the sea-ice SSL (F90:3260-3266)." },
+    "mu0n": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "cosine solar zenith angle used in the layer solution (F90:3302-3305)." },
+    "ts": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "scaled extinction optical depth (F90:3294-3296)." },
+    "ws": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "scaled single-scattering albedo (F90:3297)." },
+    "gs": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "scaled asymmetry parameter (F90:3298)." },
+    "lm": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "delta-Eddington coupling coefficient (F90:3299)." },
+    "ue": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "delta-Eddington diffusivity (F90:3300)." },
+    "extins": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "clamped layer extinction (F90:3307-3308)." },
+    "ne": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "delta-Eddington denominator (F90:3309-3310)." },
+    "rdif_a0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "first diffuse reflectivity from above (F90:3313)." },
+    "tdif_a0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "first diffuse transmission from above (F90:3314)." },
+    "trnlay0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "direct-beam layer transmission (F90:3318)." },
+    "alp0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "direct-beam alpha coefficient at mu0n (F90:3319)." },
+    "gam0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "direct-beam gamma coefficient at mu0n (F90:3320)." },
+    "apg0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "alp0 + gam0." },
+    "amg0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "alp0 - gam0." },
+    "rdir0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer reflectivity to the direct beam (F90:3323)." },
+    "tdir0": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "layer transmission to the direct beam (F90:3324)." },
+    "alp_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "alpha coefficient at the gaussian abscissas (F90:3341)." },
+    "gam_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "gamma coefficient at the gaussian abscissas (F90:3342)." },
+    "apg_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "alp_g + gam_g." },
+    "amg_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "alp_g - gam_g." },
+    "trn_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "clamped layer transmission at the gaussian abscissas (F90:3339-3340)." },
+    "rdr_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "direct reflectivity integrand (F90:3345)." },
+    "tdr_g": { "type": "unknown", "shape": ["band", "layer", "gauss"], "units": "1", "default": 0.0, "description": "direct transmissivity integrand (F90:3346)." },
+    "swt": { "type": "unknown", "units": "1", "default": 0.0, "description": "sum of gaussian weights sum mu*gwt (F90:3338)." },
+    "smr": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "gaussian sum of mu*rdr*gwt (F90:3347)." },
+    "smt": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "gaussian sum of mu*tdr*gwt (F90:3348)." },
+    "rdif_g": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "gauss-integrated diffuse reflectivity from above (F90:3350)." },
+    "tdif_g": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "gauss-integrated diffuse transmission from above (F90:3351)." },
+    "R1": { "type": "unknown", "units": "1", "default": 0.0, "description": "perpendicular fresnel reflection amplitude (F90:3365-3366)." },
+    "R2": { "type": "unknown", "units": "1", "default": 0.0, "description": "parallel fresnel reflection amplitude (F90:3367-3368)." },
+    "T1": { "type": "unknown", "units": "1", "default": 0.0, "description": "perpendicular fresnel transmission amplitude (F90:3369-3370)." },
+    "T2": { "type": "unknown", "units": "1", "default": 0.0, "description": "parallel fresnel transmission amplitude (F90:3371-3372)." },
+    "Rf_dir_a": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel reflectivity to direct radiation (F90:3374-3375)." },
+    "Tf_dir_a": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel transmission to direct radiation (F90:3376-3377)." },
+    "Rf_dif_a": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel reflectivity to diffuse radiation from above = 0.063 (F90:3378)." },
+    "Rf_dif_b": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel reflectivity to diffuse radiation from below = 0.455 (F90:3380)." },
+    "Tf_dif_a": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel transmission to diffuse radiation from above = 1 - Rf_dif_a (F90:3379)." },
+    "Tf_dif_b": { "type": "unknown", "units": "1", "default": 0.0, "description": "fresnel transmission to diffuse radiation from below = 1 - Rf_dif_b (F90:3381)." },
+    "rintfc": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-layer multiple-scattering term (F90:3395)." },
+    "rdir": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer reflectivity to the direct beam (F90:3398-3399)." },
+    "tdir": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer transmission to the direct beam (F90:3396-3397)." },
+    "rdif_a": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer diffuse reflectivity from above (F90:3400-3401)." },
+    "rdif_b": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer diffuse reflectivity from below (F90:3402-3403)." },
+    "tdif_a": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer diffuse transmission from above (F90:3404)." },
+    "tdif_b": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined layer diffuse transmission from below (F90:3405)." },
+    "trnlay": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "fresnel-combined direct-beam layer transmission (F90:3406)." },
+    "trndir_f": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "unguarded downward solar-beam transmission from the top (F90:3408-3443)." },
+    "trntdr_f": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "unguarded downward total transmission to the direct beam." },
+    "rdndif_f": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "unguarded downward diffuse reflectivity for layers above." },
+    "trndif_f": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "unguarded downward diffuse transmission." },
+    "active": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "interface mask: 1 where the total transmission to the interface exceeds trmin, the Fortran guard of the layer solution (F90:3285-3287)." },
+    "trndir": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "guarded downward solar-beam transmission (zero below the trmin cutoff)." },
+    "trntdr": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "guarded downward total transmission." },
+    "rdndif": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "guarded downward diffuse reflectivity." },
+    "trndif": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "guarded downward diffuse transmission." },
+    "m_rdir": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer reflectivity to the direct beam feeding the upward recurrence." },
+    "m_tdir": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer transmission to the direct beam." },
+    "m_rdif_a": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer diffuse reflectivity from above." },
+    "m_rdif_b": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer diffuse reflectivity from below." },
+    "m_tdif_a": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer diffuse transmission from above." },
+    "m_tdif_b": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed layer diffuse transmission from below." },
+    "m_trnlay": { "type": "unknown", "shape": ["band", "layer"], "units": "1", "default": 0.0, "description": "guard-zeroed direct-beam layer transmission." },
+    "rupdir": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "reflectivity to direct radiation of the layers below (F90:3445-3466); model iface k = Fortran iface 14-k, base k = 1 at the ocean." },
+    "rupdif": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "reflectivity to diffuse radiation of the layers below." },
+    "dfdir": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "down-up direct-beam flux fraction at an interface (F90:2824-2827)." },
+    "dfdif": { "type": "unknown", "shape": ["band", "iface"], "units": "1", "default": 0.0, "description": "down-up diffuse flux fraction at an interface (F90:2829-2832)." },
+    "w2": { "type": "unknown", "units": "1", "default": 0.0, "description": "near-IR band-2 spectral weight wghtns(2) (F90:2116-2118)." },
+    "wght": { "type": "unknown", "shape": ["band"], "units": "1", "default": 0.0, "description": "spectral band weights wghtns(ns): 1, w2, 1-w2 (F90:2116-2119)." },
+    "swdr": { "type": "unknown", "shape": ["band"], "units": "W/m^2", "default": 0.0, "description": "band direct incident flux: visible for band 1, near-IR otherwise (F90:2837-2838, 2892-2893)." },
+    "swdf": { "type": "unknown", "shape": ["band"], "units": "W/m^2", "default": 0.0, "description": "band diffuse incident flux." },
+    "flux": { "type": "unknown", "shape": ["band", "iface"], "units": "W/m^2", "default": 0.0, "description": "downward flux at an interface dfdir*swdr + dfdif*swdf (F90:2842-2843)." },
+    "ksrf": { "type": "unknown", "units": "1", "default": 0.0, "description": "surface radiation layer index: the snow SSL for snow, the sea-ice SSL otherwise (F90:2236-2240)." },
+    "klevp": { "type": "unknown", "units": "1", "default": 0.0, "description": "bottom interface index klevp (F90:2018-2021)." },
+    "avdr": { "type": "unknown", "units": "1", "default": 0.0, "description": "visible direct albedo rupdir(0) (F90:2839)." },
+    "avdf": { "type": "unknown", "units": "1", "default": 0.0, "description": "visible diffuse albedo rupdif(0) (F90:2840)." },
+    "aidr": { "type": "unknown", "units": "1", "default": 0.0, "description": "near-IR direct albedo sum of the weighted band-2/3 albedos (F90:2907)." },
+    "aidf": { "type": "unknown", "units": "1", "default": 0.0, "description": "near-IR diffuse albedo (F90:2908)." },
+    "fsfc": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "surface absorbed flux (above ksrf) (F90:2850, 2918)." },
+    "fint": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "interior absorbed flux (F90:2851, 2919)." },
+    "fthru": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "flux transmitted to the ocean (F90:2852, 2920)." },
+    "fthruvdr": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "visible direct flux transmitted to the ocean (F90:2853)." },
+    "fthruvdf": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "visible diffuse flux transmitted to the ocean (F90:2854)." },
+    "fthruidr": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "near-IR direct flux transmitted to the ocean (F90:2921)." },
+    "fthruidf": { "type": "unknown", "units": "W/m^2", "default": 0.0, "description": "near-IR diffuse flux transmitted to the ocean (F90:2922)." },
+    "Sabs": { "type": "unknown", "shape": ["snow_layer"], "units": "W/m^2", "default": 0.0, "description": "snow layer absorptions, zero unless srftyp = 1 (F90:2860-2872, 2924-2933)." },
+    "Iabs": { "type": "unknown", "shape": ["ice_layer"], "units": "W/m^2", "default": 0.0, "description": "sea-ice layer absorptions with the DL-layer index adjustment for snow cover (F90:2875-2886, 2937-2948)." },
+    "fthrul": { "type": "unknown", "shape": ["pen_level"], "units": "W/m^2", "default": 0.0, "description": "visible flux to the ice layers below the SSL (F90:2846-2848)." }
+   },
+   "equations": [
+    {
+     "lhs": "rnslyr",
+     "rhs": { "op": "/", "args": [1.0, "N_SLYR"] }
+    },
+    {
+     "lhs": "rnilyr",
+     "rhs": { "op": "/", "args": [1.0, "N_ILYR"] }
+    },
+    {
+     "lhs": "dz_s",
+     "rhs": { "op": "*", "args": ["hs", "rnslyr"] }
+    },
+    {
+     "lhs": "dz_i",
+     "rhs": { "op": "*", "args": ["hi", "rnilyr"] }
+    },
+    {
+     "lhs": "dz_ssl_s",
+     "rhs": { "op": "min", "args": ["hs_ssl", { "op": "/", "args": ["dz_s", 2.0] }] }
+    },
+    {
+     "lhs": "dz_ssl_i",
+     "rhs": { "op": "min", "args": ["hi_ssl", { "op": "/", "args": ["hi", 30.0] }, { "op": "/", "args": ["dz_i", 2.0] }] }
+    },
+    {
+     "lhs": "dzk",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["k"],
+      "ranges": { "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", 1] },
+        "dz_ssl_s",
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["k", 2] },
+         { "op": "-", "args": ["dz_s", "dz_ssl_s"] },
+         { "op": "ifelse", "args": [
+          { "op": "and", "args": [
+           { "op": ">=", "args": ["k", 3] },
+           { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] }
+          ] },
+          "dz_s",
+          { "op": "ifelse", "args": [
+           { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+           "dz_ssl_i",
+           { "op": "ifelse", "args": [
+            { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 3] }] },
+            { "op": "-", "args": ["dz_i", "dz_ssl_i"] },
+            "dz_i"
+           ] }
+          ] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["dz_ssl_s", "dz_s", "dz_ssl_i", "dz_i"]
+     }
+    },
+    {
+     "lhs": "frsnw",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["sl"],
+      "ranges": { "sl": { "from": "snow_layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_grain_adjust",
+       "bindings": {
+        "fnidr": "fnidr",
+        "rsnw": { "op": "index", "args": ["rsnw", "sl"] }
+       }
+      },
+      "args": ["fnidr", "rsnw"]
+     }
+    },
+    {
+     "lhs": "Qs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "sl"],
+      "ranges": { "b": { "from": "band" }, "sl": { "from": "snow_layer" } },
+      "expr": {
+       "op": "table_lookup",
+       "table": "snow_iop",
+       "axes": {
+        "r": { "op": "index", "args": ["frsnw", "sl"] },
+        "band": "b"
+       },
+       "output": "Qs",
+       "args": []
+      },
+      "args": ["frsnw"]
+     }
+    },
+    {
+     "lhs": "ws_snw",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "sl"],
+      "ranges": { "b": { "from": "band" }, "sl": { "from": "snow_layer" } },
+      "expr": {
+       "op": "table_lookup",
+       "table": "snow_iop",
+       "axes": {
+        "r": { "op": "index", "args": ["frsnw", "sl"] },
+        "band": "b"
+       },
+       "output": "ws",
+       "args": []
+      },
+      "args": ["frsnw"]
+     }
+    },
+    {
+     "lhs": "gs_snw",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "sl"],
+      "ranges": { "b": { "from": "band" }, "sl": { "from": "snow_layer" } },
+      "expr": {
+       "op": "table_lookup",
+       "table": "snow_iop",
+       "axes": {
+        "r": { "op": "index", "args": ["frsnw", "sl"] },
+        "band": "b"
+       },
+       "output": "gs",
+       "args": []
+      },
+      "args": ["frsnw"]
+     }
+    },
+    {
+     "lhs": "ks_snw",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "sl"],
+      "ranges": { "b": { "from": "band" }, "sl": { "from": "snow_layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_ks",
+       "bindings": {
+        "Qs": { "op": "index", "args": ["Qs", "b", "sl"] },
+        "rhosnw": { "op": "index", "args": ["rhosnw", "sl"] },
+        "frsnw": { "op": "index", "args": ["frsnw", "sl"] }
+       }
+      },
+      "args": ["Qs", "rhosnw", "frsnw"]
+     }
+    },
+    {
+     "lhs": "ks_l",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "ks_snw" }
+      },
+      "args": ["ks_snw"]
+     }
+    },
+    {
+     "lhs": "ws_l",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "ws_snw" }
+      },
+      "args": ["ws_snw"]
+     }
+    },
+    {
+     "lhs": "gs_l",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_snow_prop_gather",
+       "bindings": { "x": "gs_snw" }
+      },
+      "args": ["gs_snw"]
+     }
+    },
+    {
+     "lhs": "kabs_chl",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "and", "args": [
+         { "op": "==", "args": ["b", 1] },
+         { "op": "==", "args": ["k", { "op": "+", "args": ["N_ILYR", "N_SLYR", 2] }] }
+        ] },
+        { "op": "*", "args": ["kalg", "cp50", { "op": "/", "args": [1.0, { "op": "index", "args": ["dzk", "k"] }] }] },
+        0.0
+       ]
+      },
+      "args": ["dzk", "kalg"]
+     }
+    },
+    {
+     "lhs": "dz_pond",
+     "rhs": { "op": "/", "args": ["hp", { "op": "+", "args": ["N_SLYR", 1] }] }
+    },
+    {
+     "lhs": "fs_dl",
+     "rhs": { "op": "*", "args": ["p25", "N_ILYR"] }
+    },
+    {
+     "lhs": "kabs_i",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "*", "args": [
+         { "op": "index", "args": ["ki_int", "b"] },
+         { "op": "-", "args": [1.0, { "op": "index", "args": ["wi_int", "b"] }] }
+        ] },
+        { "op": "index", "args": ["kabs_chl", "b", "k"] }
+       ]
+      },
+      "args": ["ki_int", "wi_int", "kabs_chl"]
+     }
+    },
+    {
+     "lhs": "sig_i",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": { "op": "*", "args": [
+       { "op": "index", "args": ["ki_int", "b"] },
+       { "op": "index", "args": ["wi_int", "b"] }
+      ] },
+      "args": ["ki_int", "wi_int"]
+     }
+    },
+    {
+     "lhs": "mix_region",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["k"],
+      "ranges": { "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "and", "args": [
+         { "op": "==", "args": ["srftyp", 1] },
+         { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] }
+        ] },
+        1.0,
+        { "op": "ifelse", "args": [
+         { "op": "and", "args": [
+          { "op": "<=", "args": ["srftyp", 1] },
+          { "op": ">=", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] }
+         ] },
+         1.0,
+         0.0
+        ] }
+       ]
+      },
+      "args": ["srftyp"]
+     }
+    },
+    {
+     "lhs": "aero_slot_idx",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["k"],
+      "ranges": { "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] },
+        { "op": "ifelse", "args": [{ "op": "==", "args": ["k", 1] }, 1, 2] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+         3,
+         4
+        ] }
+       ]
+      },
+      "args": []
+     }
+    },
+    {
+     "lhs": "aero_scale",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["k"],
+      "ranges": { "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": [{ "op": "index", "args": ["aero_slot_idx", "k"] }, 1] },
+        1.0,
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": [{ "op": "index", "args": ["aero_slot_idx", "k"] }, 3] },
+         1.0,
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": [{ "op": "index", "args": ["aero_slot_idx", "k"] }, 2] },
+          "rnslyr",
+          "rnilyr"
+         ] }
+        ] }
+       ]
+      },
+      "args": ["aero_slot_idx", "rnslyr", "rnilyr"]
+     }
+    },
+    {
+     "lhs": "aero_am",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["k", "sp"],
+      "ranges": { "k": { "from": "layer" }, "sp": { "from": "aero" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": [{ "op": "index", "args": ["mix_region", "k"] }, 1.0] },
+        { "op": "*", "args": [
+         { "op": "index", "args": ["aero_mp", "sp", { "op": "index", "args": ["aero_slot_idx", "k"] }] },
+         { "op": "index", "args": ["aero_scale", "k"] }
+        ] },
+        0.0
+       ]
+      },
+      "args": ["mix_region", "aero_mp", "aero_slot_idx", "aero_scale"]
+     }
+    },
+    {
+     "lhs": "taer",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "sp": { "from": "aero" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["aero_am", "k", "sp"] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "kaer", "args": [] }
+       ]
+      },
+      "args": ["aero_am"]
+     }
+    },
+    {
+     "lhs": "waer",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "sp": { "from": "aero" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["aero_am", "k", "sp"] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "kaer", "args": [] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "waer", "args": [] }
+       ]
+      },
+      "args": ["aero_am"]
+     }
+    },
+    {
+     "lhs": "gaer",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "sp": { "from": "aero" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["aero_am", "k", "sp"] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "kaer", "args": [] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "waer", "args": [] },
+        { "op": "table_lookup", "table": "aerosol_3bd", "axes": { "band": "b", "aero": "sp" }, "output": "gaer", "args": [] }
+       ]
+      },
+      "args": ["aero_am"]
+     }
+    },
+    {
+     "lhs": "tau_base",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 1] },
+         { "op": "*", "args": [
+          { "op": "+", "args": [
+           { "op": "index", "args": ["ks_l", "b", "k"] },
+           { "op": "index", "args": ["kabs_chl", "b", "k"] }
+          ] },
+          { "op": "index", "args": ["dzk", "k"] }
+         ] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["srftyp", 2] },
+          { "op": "*", "args": [{ "op": "index", "args": ["kw", "b"] }, "dz_pond"] },
+          0.0
+         ] }
+        ] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 2] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "*", "args": [
+           { "op": "index", "args": ["ki_p_ssl", "b"] },
+           { "op": "index", "args": ["dzk", "k"] }
+          ] },
+          { "op": "*", "args": [
+           { "op": "index", "args": ["ki_p_int", "b"] },
+           { "op": "index", "args": ["dzk", "k"] }
+          ] }
+         ] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "*", "args": [
+           { "op": "+", "args": [
+            { "op": "index", "args": ["ki_ssl", "b"] },
+            { "op": "index", "args": ["kabs_chl", "b", "k"] }
+           ] },
+           { "op": "index", "args": ["dzk", "k"] }
+          ] },
+          { "op": "ifelse", "args": [
+           { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 3] }] },
+           { "op": "*", "args": [
+            { "op": "+", "args": [
+             { "op": "index", "args": ["ki_dl", "b"] },
+             { "op": "index", "args": ["kabs_chl", "b", "k"] }
+            ] },
+            { "op": "index", "args": ["dzk", "k"] },
+            "fs_dl"
+           ] },
+           { "op": "ifelse", "args": [
+            { "op": "==", "args": ["k", { "op": "+", "args": ["N_ILYR", "N_SLYR", 2] }] },
+            { "op": "*", "args": [
+             { "op": "+", "args": [
+              { "op": "index", "args": ["kabs_i", "b", "k"] },
+              { "op": "index", "args": ["sig_i", "b", "k"] }
+             ] },
+             { "op": "index", "args": ["dzk", "k"] }
+            ] },
+            { "op": "*", "args": [
+             { "op": "+", "args": [
+              { "op": "index", "args": ["ki_int", "b"] },
+              { "op": "index", "args": ["kabs_chl", "b", "k"] }
+             ] },
+             { "op": "index", "args": ["dzk", "k"] }
+            ] }
+           ] }
+          ] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["ks_l", "kabs_chl", "dzk", "kw", "dz_pond", "ki_p_ssl", "ki_p_int", "ki_ssl", "ki_dl", "fs_dl", "kabs_i", "sig_i", "ki_int"]
+     }
+    },
+    {
+     "lhs": "w0_base",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 1] },
+         { "op": "*", "args": [
+          { "op": "/", "args": [
+           { "op": "index", "args": ["ks_l", "b", "k"] },
+           { "op": "+", "args": [
+            { "op": "index", "args": ["ks_l", "b", "k"] },
+            { "op": "index", "args": ["kabs_chl", "b", "k"] }
+           ] }
+          ] },
+          { "op": "index", "args": ["ws_l", "b", "k"] }
+         ] },
+         0.0
+        ] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 2] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "index", "args": ["wi_p_ssl", "b"] },
+          { "op": "index", "args": ["wi_p_int", "b"] }
+         ] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "*", "args": [
+           { "op": "/", "args": [
+            { "op": "index", "args": ["ki_ssl", "b"] },
+            { "op": "+", "args": [
+             { "op": "index", "args": ["ki_ssl", "b"] },
+             { "op": "index", "args": ["kabs_chl", "b", "k"] }
+            ] }
+           ] },
+           { "op": "index", "args": ["wi_ssl", "b"] }
+          ] },
+          { "op": "ifelse", "args": [
+           { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 3] }] },
+           { "op": "*", "args": [
+            { "op": "/", "args": [
+             { "op": "index", "args": ["ki_dl", "b"] },
+             { "op": "+", "args": [
+              { "op": "index", "args": ["ki_dl", "b"] },
+              { "op": "index", "args": ["kabs_chl", "b", "k"] }
+             ] }
+            ] },
+            { "op": "index", "args": ["wi_dl", "b"] }
+           ] },
+           { "op": "ifelse", "args": [
+            { "op": "==", "args": ["k", { "op": "+", "args": ["N_ILYR", "N_SLYR", 2] }] },
+            { "op": "/", "args": [
+             { "op": "index", "args": ["sig_i", "b", "k"] },
+             { "op": "+", "args": [
+              { "op": "index", "args": ["sig_i", "b", "k"] },
+              { "op": "index", "args": ["kabs_i", "b", "k"] }
+             ] }
+            ] },
+            { "op": "*", "args": [
+             { "op": "/", "args": [
+              { "op": "index", "args": ["ki_int", "b"] },
+              { "op": "+", "args": [
+               { "op": "index", "args": ["ki_int", "b"] },
+               { "op": "index", "args": ["kabs_chl", "b", "k"] }
+              ] }
+             ] },
+             { "op": "index", "args": ["wi_int", "b"] }
+            ] }
+           ] }
+          ] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["ks_l", "kabs_chl", "ws_l", "wi_p_ssl", "wi_p_int", "ki_ssl", "wi_ssl", "ki_dl", "wi_dl", "sig_i", "kabs_i", "ki_int", "wi_int"]
+     }
+    },
+    {
+     "lhs": "g_base",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", { "op": "+", "args": ["N_SLYR", 1] }] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 1] },
+         { "op": "index", "args": ["gs_l", "b", "k"] },
+         0.0
+        ] },
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 2] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "index", "args": ["gi_p_ssl", "b"] },
+          { "op": "index", "args": ["gi_p_int", "b"] }
+         ] },
+         { "op": "ifelse", "args": [
+          { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 2] }] },
+          { "op": "index", "args": ["gi_ssl", "b"] },
+          { "op": "ifelse", "args": [
+           { "op": "==", "args": ["k", { "op": "+", "args": ["N_SLYR", 3] }] },
+           { "op": "index", "args": ["gi_dl", "b"] },
+           { "op": "index", "args": ["gi_int", "b"] }
+          ] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["gs_l", "gi_p_ssl", "gi_p_int", "gi_ssl", "gi_dl", "gi_int"]
+     }
+    },
+    {
+     "lhs": "tau",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": [{ "op": "index", "args": ["mix_region", "k"] }, 1.0] },
+        { "op": "+", "args": [
+         { "op": "index", "args": ["tau_base", "b", "k"] },
+         { "op": "index", "args": ["taer", "b", "k"] }
+        ] },
+        { "op": "index", "args": ["tau_base", "b", "k"] }
+       ]
+      },
+      "args": ["mix_region", "tau_base", "taer"]
+     }
+    },
+    {
+     "lhs": "w0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": [{ "op": "index", "args": ["mix_region", "k"] }, 1.0] },
+        { "op": "/", "args": [
+         { "op": "+", "args": [
+          { "op": "*", "args": [
+           { "op": "index", "args": ["w0_base", "b", "k"] },
+           { "op": "index", "args": ["tau_base", "b", "k"] }
+          ] },
+          { "op": "index", "args": ["waer", "b", "k"] }
+         ] },
+         { "op": "+", "args": [
+          { "op": "index", "args": ["tau_base", "b", "k"] },
+          { "op": "index", "args": ["taer", "b", "k"] }
+         ] }
+        ] },
+        { "op": "index", "args": ["w0_base", "b", "k"] }
+       ]
+      },
+      "args": ["mix_region", "w0_base", "tau_base", "waer", "taer"]
+     }
+    },
+    {
+     "lhs": "g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": [{ "op": "index", "args": ["mix_region", "k"] }, 1.0] },
+        { "op": "/", "args": [
+         { "op": "+", "args": [
+          { "op": "*", "args": [
+           { "op": "index", "args": ["g_base", "b", "k"] },
+           { "op": "index", "args": ["w0_base", "b", "k"] },
+           { "op": "index", "args": ["tau_base", "b", "k"] }
+          ] },
+          { "op": "index", "args": ["gaer", "b", "k"] }
+         ] },
+         { "op": "+", "args": [
+          { "op": "*", "args": [
+           { "op": "index", "args": ["w0_base", "b", "k"] },
+           { "op": "index", "args": ["tau_base", "b", "k"] }
+          ] },
+          { "op": "index", "args": ["waer", "b", "k"] }
+         ] }
+        ] },
+        { "op": "index", "args": ["g_base", "b", "k"] }
+       ]
+      },
+      "args": ["mix_region", "g_base", "w0_base", "tau_base", "gaer", "waer"]
+     }
+    },
+    {
+     "lhs": "albodr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b"],
+      "ranges": { "b": { "from": "band" } },
+      "expr": {
+       "op": "*",
+       "args": [
+        "cp01",
+        { "op": "-", "args": [1.0, { "op": "min", "args": [{ "op": "-", "args": ["b", 1] }, 1] }] }
+       ]
+      },
+      "args": []
+     }
+    },
+    {
+     "lhs": "mu0",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_coszen_clamp",
+      "bindings": { "coszen": "coszen" }
+     }
+    },
+    {
+     "lhs": "mu0nij",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_mu0n",
+      "bindings": { "mu0": "mu0" }
+     }
+    },
+    {
+     "lhs": "kfrsnl",
+     "rhs": { "op": "ifelse", "args": [{ "op": "==", "args": ["srftyp", 2] }, 1, { "op": "+", "args": ["N_SLYR", 3] }] }
+    },
+    {
+     "lhs": "mu0n",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "and", "args": [
+         { "op": "<", "args": ["srftyp", 2] },
+         { "op": "<", "args": ["k", "kfrsnl"] }
+        ] },
+        "mu0",
+        "mu0nij"
+       ]
+      },
+      "args": ["kfrsnl"]
+     }
+    },
+    {
+     "lhs": "ts",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_scaled_tau",
+       "bindings": {
+        "w": { "op": "index", "args": ["w0", "b", "k"] },
+        "f": { "op": "^", "args": [{ "op": "index", "args": ["g", "b", "k"] }, 2] },
+        "t": { "op": "index", "args": ["tau", "b", "k"] }
+       }
+      },
+      "args": ["w0", "g", "tau"]
+     }
+    },
+    {
+     "lhs": "ws",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_scaled_w0",
+       "bindings": {
+        "w": { "op": "index", "args": ["w0", "b", "k"] },
+        "f": { "op": "^", "args": [{ "op": "index", "args": ["g", "b", "k"] }, 2] }
+       }
+      },
+      "args": ["w0", "g"]
+     }
+    },
+    {
+     "lhs": "gs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_scaled_g",
+       "bindings": {
+        "g": { "op": "index", "args": ["g", "b", "k"] },
+        "f": { "op": "^", "args": [{ "op": "index", "args": ["g", "b", "k"] }, 2] }
+       }
+      },
+      "args": ["g"]
+     }
+    },
+    {
+     "lhs": "lm",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_el",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] }
+       }
+      },
+      "args": ["ws", "gs"]
+     }
+    },
+    {
+     "lhs": "ue",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_u",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] },
+        "e": { "op": "index", "args": ["lm", "b", "k"] }
+       }
+      },
+      "args": ["ws", "gs", "lm"]
+     }
+    },
+    {
+     "lhs": "extins",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_exp_clamp",
+       "bindings": {
+        "x": { "op": "*", "args": [
+         { "op": "index", "args": ["lm", "b", "k"] },
+         { "op": "index", "args": ["ts", "b", "k"] }
+        ] }
+       }
+      },
+      "args": ["lm", "ts"]
+     }
+    },
+    {
+     "lhs": "ne",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_n",
+       "bindings": {
+        "u": { "op": "index", "args": ["ue", "b", "k"] },
+        "et": { "op": "index", "args": ["extins", "b", "k"] }
+       }
+      },
+      "args": ["ue", "extins"]
+     }
+    },
+    {
+     "lhs": "rdif_a0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "-", "args": [
+         { "op": "^", "args": [{ "op": "index", "args": ["ue", "b", "k"] }, 2] },
+         1.0
+        ] },
+        { "op": "/", "args": [
+         { "op": "-", "args": [
+          { "op": "/", "args": [1.0, { "op": "index", "args": ["extins", "b", "k"] }] },
+          { "op": "index", "args": ["extins", "b", "k"] }
+         ] },
+         { "op": "index", "args": ["ne", "b", "k"] }
+        ] }
+       ]
+      },
+      "args": ["ue", "extins", "ne"]
+     }
+    },
+    {
+     "lhs": "tdif_a0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "*",
+       "args": [
+        4.0,
+        { "op": "/", "args": [
+         { "op": "index", "args": ["ue", "b", "k"] },
+         { "op": "index", "args": ["ne", "b", "k"] }
+        ] }
+       ]
+      },
+      "args": ["ue", "ne"]
+     }
+    },
+    {
+     "lhs": "trnlay0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_exp_clamp",
+       "bindings": {
+        "x": { "op": "/", "args": [
+         { "op": "index", "args": ["ts", "b", "k"] },
+         { "op": "index", "args": ["mu0n", "b", "k"] }
+        ] }
+       }
+      },
+      "args": ["ts", "mu0n"]
+     }
+    },
+    {
+     "lhs": "alp0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_alpha",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "mu": { "op": "index", "args": ["mu0n", "b", "k"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] },
+        "e": { "op": "index", "args": ["lm", "b", "k"] }
+       }
+      },
+      "args": ["ws", "mu0n", "gs", "lm"]
+     }
+    },
+    {
+     "lhs": "gam0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_agamm",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "mu": { "op": "index", "args": ["mu0n", "b", "k"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] },
+        "e": { "op": "index", "args": ["lm", "b", "k"] }
+       }
+      },
+      "args": ["ws", "mu0n", "gs", "lm"]
+     }
+    },
+    {
+     "lhs": "apg0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "index", "args": ["alp0", "b", "k"] },
+        { "op": "index", "args": ["gam0", "b", "k"] }
+       ]
+      },
+      "args": ["alp0", "gam0"]
+     }
+    },
+    {
+     "lhs": "amg0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "-",
+       "args": [
+        { "op": "index", "args": ["alp0", "b", "k"] },
+        { "op": "index", "args": ["gam0", "b", "k"] }
+       ]
+      },
+      "args": ["alp0", "gam0"]
+     }
+    },
+    {
+     "lhs": "rdir0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_direct_reflectivity",
+       "bindings": {
+        "alp": { "op": "index", "args": ["alp0", "b", "k"] },
+        "gam": { "op": "index", "args": ["gam0", "b", "k"] },
+        "rdif_a": { "op": "index", "args": ["rdif_a0", "b", "k"] },
+        "tdif_a": { "op": "index", "args": ["tdif_a0", "b", "k"] },
+        "trnlay": { "op": "index", "args": ["trnlay0", "b", "k"] }
+       }
+      },
+      "args": ["alp0", "gam0", "rdif_a0", "tdif_a0", "trnlay0"]
+     }
+    },
+    {
+     "lhs": "tdir0",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_direct_transmissivity",
+       "bindings": {
+        "alp": { "op": "index", "args": ["alp0", "b", "k"] },
+        "gam": { "op": "index", "args": ["gam0", "b", "k"] },
+        "rdif_a": { "op": "index", "args": ["rdif_a0", "b", "k"] },
+        "tdif_a": { "op": "index", "args": ["tdif_a0", "b", "k"] },
+        "trnlay": { "op": "index", "args": ["trnlay0", "b", "k"] }
+       }
+      },
+      "args": ["alp0", "gam0", "rdif_a0", "tdif_a0", "trnlay0"]
+     }
+    },
+    {
+     "lhs": "alp_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_alpha",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "mu": { "op": "index", "args": ["gauspt", "ng"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] },
+        "e": { "op": "index", "args": ["lm", "b", "k"] }
+       }
+      },
+      "args": ["ws", "gs", "lm"]
+     }
+    },
+    {
+     "lhs": "gam_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_agamm",
+       "bindings": {
+        "w": { "op": "index", "args": ["ws", "b", "k"] },
+        "mu": { "op": "index", "args": ["gauspt", "ng"] },
+        "g": { "op": "index", "args": ["gs", "b", "k"] },
+        "e": { "op": "index", "args": ["lm", "b", "k"] }
+       }
+      },
+      "args": ["ws", "gs", "lm"]
+     }
+    },
+    {
+     "lhs": "apg_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "index", "args": ["alp_g", "b", "k", "ng"] },
+        { "op": "index", "args": ["gam_g", "b", "k", "ng"] }
+       ]
+      },
+      "args": ["alp_g", "gam_g"]
+     }
+    },
+    {
+     "lhs": "amg_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "-",
+       "args": [
+        { "op": "index", "args": ["alp_g", "b", "k", "ng"] },
+        { "op": "index", "args": ["gam_g", "b", "k", "ng"] }
+       ]
+      },
+      "args": ["alp_g", "gam_g"]
+     }
+    },
+    {
+     "lhs": "trn_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_exp_clamp",
+       "bindings": {
+        "x": { "op": "/", "args": [
+         { "op": "index", "args": ["ts", "b", "k"] },
+         { "op": "index", "args": ["gauspt", "ng"] }
+        ] }
+       }
+      },
+      "args": ["ts"]
+     }
+    },
+    {
+     "lhs": "rdr_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "-",
+       "args": [
+        { "op": "+", "args": [
+         { "op": "*", "args": [
+          { "op": "index", "args": ["apg_g", "b", "k", "ng"] },
+          { "op": "index", "args": ["rdif_a0", "b", "k"] }
+         ] },
+         { "op": "*", "args": [
+          { "op": "index", "args": ["amg_g", "b", "k", "ng"] },
+          { "op": "index", "args": ["tdif_a0", "b", "k"] },
+          { "op": "index", "args": ["trn_g", "b", "k", "ng"] }
+         ] }
+        ] },
+        { "op": "index", "args": ["amg_g", "b", "k", "ng"] }
+       ]
+      },
+      "args": ["apg_g", "amg_g", "rdif_a0", "tdif_a0", "trn_g"]
+     }
+    },
+    {
+     "lhs": "tdr_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k", "ng"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "+", "args": [
+         { "op": "*", "args": [
+          { "op": "index", "args": ["apg_g", "b", "k", "ng"] },
+          { "op": "index", "args": ["tdif_a0", "b", "k"] }
+         ] },
+         { "op": "*", "args": [
+          { "op": "index", "args": ["amg_g", "b", "k", "ng"] },
+          { "op": "index", "args": ["rdif_a0", "b", "k"] },
+          { "op": "index", "args": ["trn_g", "b", "k", "ng"] }
+         ] }
+        ] },
+        { "op": "-", "args": [
+         { "op": "index", "args": ["trn_g", "b", "k", "ng"] },
+         { "op": "*", "args": [
+          { "op": "index", "args": ["apg_g", "b", "k", "ng"] },
+          { "op": "index", "args": ["trn_g", "b", "k", "ng"] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["apg_g", "amg_g", "tdif_a0", "rdif_a0", "trn_g"]
+     }
+    },
+    {
+     "lhs": "swt",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "ng": { "from": "gauss" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["gauspt", "ng"] },
+        { "op": "index", "args": ["gauswt", "ng"] }
+       ]
+      },
+      "args": []
+     }
+    },
+    {
+     "lhs": "smr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["gauspt", "ng"] },
+        { "op": "*", "args": [
+         { "op": "index", "args": ["rdr_g", "b", "k", "ng"] },
+         { "op": "index", "args": ["gauswt", "ng"] }
+        ] }
+       ]
+      },
+      "args": ["rdr_g"]
+     }
+    },
+    {
+     "lhs": "smt",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" }, "ng": { "from": "gauss" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["gauspt", "ng"] },
+        { "op": "*", "args": [
+         { "op": "index", "args": ["tdr_g", "b", "k", "ng"] },
+         { "op": "index", "args": ["gauswt", "ng"] }
+        ] }
+       ]
+      },
+      "args": ["tdr_g"]
+     }
+    },
+    {
+     "lhs": "rdif_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "/",
+       "args": [
+        { "op": "index", "args": ["smr", "b", "k"] },
+        "swt"
+       ]
+      },
+      "args": ["smr", "swt"]
+     }
+    },
+    {
+     "lhs": "tdif_g",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "/",
+       "args": [
+        { "op": "index", "args": ["smt", "b", "k"] },
+        "swt"
+       ]
+      },
+      "args": ["smt", "swt"]
+     }
+    },
+    {
+     "lhs": "R1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_R1",
+      "bindings": { "mu0": "mu0", "mu0n": "mu0nij" }
+     }
+    },
+    {
+     "lhs": "R2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_R2",
+      "bindings": { "mu0": "mu0", "mu0n": "mu0nij" }
+     }
+    },
+    {
+     "lhs": "T1",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_T1",
+      "bindings": { "mu0": "mu0", "mu0n": "mu0nij" }
+     }
+    },
+    {
+     "lhs": "T2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_T2",
+      "bindings": { "mu0": "mu0", "mu0n": "mu0nij" }
+     }
+    },
+    {
+     "lhs": "Rf_dir_a",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Rf_dir_a",
+      "bindings": { "R1": "R1", "R2": "R2" }
+     }
+    },
+    {
+     "lhs": "Tf_dir_a",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Tf_dir_a",
+      "bindings": { "T1": "T1", "T2": "T2", "mu0": "mu0", "mu0n": "mu0nij" }
+     }
+    },
+    {
+     "lhs": "Rf_dif_a",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Rf_dif_a",
+      "bindings": {}
+     }
+    },
+    {
+     "lhs": "Rf_dif_b",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Rf_dif_b",
+      "bindings": {}
+     }
+    },
+    {
+     "lhs": "Tf_dif_a",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Tf_dif",
+      "bindings": { "Rf_dif": "Rf_dif_a" }
+     }
+    },
+    {
+     "lhs": "Tf_dif_b",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_fresnel_Tf_dif",
+      "bindings": { "Rf_dif": "Rf_dif_b" }
+     }
+    },
+    {
+     "lhs": "rintfc",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_interface_refk",
+       "bindings": {
+        "rdndif": "Rf_dif_b",
+        "rupdif": { "op": "index", "args": ["rdif_g", "b", "k"] }
+       }
+      },
+      "args": ["Rf_dif_b", "rdif_g"]
+     }
+    },
+    {
+     "lhs": "rdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_rdir", "bindings": {
+         "Rf_dir_a": "Rf_dir_a",
+         "Tf_dir_a": "Tf_dir_a",
+         "rdir": { "op": "index", "args": ["rdir0", "b", "k"] },
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "Tf_dif_b": "Tf_dif_b"
+        } },
+        { "op": "index", "args": ["rdir0", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "rdir0", "rintfc"]
+     }
+    },
+    {
+     "lhs": "tdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdir", "bindings": {
+         "Tf_dir_a": "Tf_dir_a",
+         "tdir": { "op": "index", "args": ["tdir0", "b", "k"] },
+         "rdir": { "op": "index", "args": ["rdir0", "b", "k"] },
+         "Rf_dif_b": "Rf_dif_b",
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "tdif_a": { "op": "index", "args": ["tdif_g", "b", "k"] }
+        } },
+        { "op": "index", "args": ["tdir0", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "tdir0", "rdir0", "rintfc", "tdif_g"]
+     }
+    },
+    {
+     "lhs": "rdif_a",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_rdif_a", "bindings": {
+         "Rf_dif_a": "Rf_dif_a",
+         "Tf_dif_a": "Tf_dif_a",
+         "rdif_a": { "op": "index", "args": ["rdif_g", "b", "k"] },
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "Tf_dif_b": "Tf_dif_b"
+        } },
+        { "op": "index", "args": ["rdif_g", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "rdif_g", "rintfc"]
+     }
+    },
+    {
+     "lhs": "rdif_b",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_rdif_b", "bindings": {
+         "rdif_b": { "op": "index", "args": ["rdif_g", "b", "k"] },
+         "tdif_b": { "op": "index", "args": ["tdif_g", "b", "k"] },
+         "Rf_dif_b": "Rf_dif_b",
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "tdif_a": { "op": "index", "args": ["tdif_g", "b", "k"] }
+        } },
+        { "op": "index", "args": ["rdif_g", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "rdif_g", "tdif_g", "rintfc"]
+     }
+    },
+    {
+     "lhs": "tdif_a",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif", "bindings": {
+         "tdif": { "op": "index", "args": ["tdif_g", "b", "k"] },
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "Tf_dif": "Tf_dif_a"
+        } },
+        { "op": "index", "args": ["tdif_g", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "tdif_g", "rintfc"]
+     }
+    },
+    {
+     "lhs": "tdif_b",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_fresnel_tdif", "bindings": {
+         "tdif": { "op": "index", "args": ["tdif_g", "b", "k"] },
+         "rintfc": { "op": "index", "args": ["rintfc", "b", "k"] },
+         "Tf_dif": "Tf_dif_b"
+        } },
+        { "op": "index", "args": ["tdif_g", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "tdif_g", "rintfc"]
+     }
+    },
+    {
+     "lhs": "trnlay",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["k", "kfrsnl"] },
+        { "op": "*", "args": [
+         "Tf_dir_a",
+         { "op": "index", "args": ["trnlay0", "b", "k"] }
+        ] },
+        { "op": "index", "args": ["trnlay0", "b", "k"] }
+       ]
+      },
+      "args": ["kfrsnl", "trnlay0"]
+     }
+    },
+    {
+     "lhs": "trndir_f",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        1.0,
+        { "op": "*", "args": [
+         { "op": "index", "args": ["trndir_f", "b", { "op": "-", "args": ["k", 1] }] },
+         { "op": "index", "args": ["trnlay", "b", { "op": "-", "args": ["k", 1] }] }
+        ] }
+       ]
+      },
+      "args": ["trnlay"]
+     }
+    },
+    {
+     "lhs": "rdndif_f",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        0.0,
+        { "op": "+", "args": [
+         { "op": "index", "args": ["rdif_b", "b", { "op": "-", "args": ["k", 1] }] },
+         { "op": "*", "args": [
+          { "op": "*", "args": [
+           { "op": "index", "args": ["tdif_b", "b", { "op": "-", "args": ["k", 1] }] },
+           { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] }
+          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+           "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
+          { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["rdif_b", "tdif_b", "tdif_a", "rdif_a"]
+     }
+    },
+    {
+     "lhs": "trndif_f",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        1.0,
+        { "op": "*", "args": [
+         { "op": "index", "args": ["trndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+         { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+          "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+          "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+         } },
+         { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+        ] }
+       ]
+      },
+      "args": ["rdndif_f", "rdif_a", "tdif_a"]
+     }
+    },
+    {
+     "lhs": "trntdr_f",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        1.0,
+        { "op": "+", "args": [
+         { "op": "*", "args": [
+          { "op": "index", "args": ["trndir_f", "b", { "op": "-", "args": ["k", 1] }] },
+          { "op": "index", "args": ["tdir", "b", { "op": "-", "args": ["k", 1] }] }
+         ] },
+         { "op": "*", "args": [
+          { "op": "+", "args": [
+           { "op": "-", "args": [
+            { "op": "index", "args": ["trntdr_f", "b", { "op": "-", "args": ["k", 1] }] },
+            { "op": "index", "args": ["trndir_f", "b", { "op": "-", "args": ["k", 1] }] }
+           ] },
+           { "op": "*", "args": [
+            { "op": "*", "args": [
+             { "op": "index", "args": ["trndir_f", "b", { "op": "-", "args": ["k", 1] }] },
+             { "op": "index", "args": ["rdir", "b", { "op": "-", "args": ["k", 1] }] }
+            ] },
+            { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] }
+           ] }
+          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["rdndif_f", "b", { "op": "-", "args": ["k", 1] }] },
+           "rupdif": { "op": "index", "args": ["rdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
+          { "op": "index", "args": ["tdif_a", "b", { "op": "-", "args": ["k", 1] }] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["trndir_f", "tdir", "rdir", "rdndif_f", "rdif_a", "tdif_a"]
+     }
+    },
+    {
+     "lhs": "active",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": ">", "args": [{ "op": "index", "args": ["trntdr_f", "b", "k"] }, "trmin"] },
+        1.0,
+        0.0
+       ]
+      },
+      "args": ["trntdr_f", "trmin"]
+     }
+    },
+    {
+     "lhs": "trndir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["trndir_f", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trndir_f", "b", "k"] }
+        } }
+       ]
+      },
+      "args": ["trndir_f", "active"]
+     }
+    },
+    {
+     "lhs": "trntdr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["trntdr_f", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trntdr_f", "b", "k"] }
+        } }
+       ]
+      },
+      "args": ["trntdr_f", "active"]
+     }
+    },
+    {
+     "lhs": "rdndif",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["rdndif_f", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["rdndif_f", "b", "k"] }
+        } }
+       ]
+      },
+      "args": ["rdndif_f", "active"]
+     }
+    },
+    {
+     "lhs": "trndif",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["trndif_f", "b", "k"] },
+        { "op": "apply_expression_template", "args": [], "name": "dEdd_active_mask", "bindings": {
+         "active": { "op": "index", "args": ["active", "b", { "op": "-", "args": ["k", 1] }] },
+         "x": { "op": "index", "args": ["trndif_f", "b", "k"] }
+        } }
+       ]
+      },
+      "args": ["trndif_f", "active"]
+     }
+    },
+    {
+     "lhs": "m_rdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdir", "b", "k"] }
+       }
+      },
+      "args": ["active", "rdir"]
+     }
+    },
+    {
+     "lhs": "m_tdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdir", "b", "k"] }
+       }
+      },
+      "args": ["active", "tdir"]
+     }
+    },
+    {
+     "lhs": "m_rdif_a",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdif_a", "b", "k"] }
+       }
+      },
+      "args": ["active", "rdif_a"]
+     }
+    },
+    {
+     "lhs": "m_rdif_b",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["rdif_b", "b", "k"] }
+       }
+      },
+      "args": ["active", "rdif_b"]
+     }
+    },
+    {
+     "lhs": "m_tdif_a",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdif_a", "b", "k"] }
+       }
+      },
+      "args": ["active", "tdif_a"]
+     }
+    },
+    {
+     "lhs": "m_tdif_b",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["tdif_b", "b", "k"] }
+       }
+      },
+      "args": ["active", "tdif_b"]
+     }
+    },
+    {
+     "lhs": "m_trnlay",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "layer" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_active_mask",
+       "bindings": {
+        "active": { "op": "index", "args": ["active", "b", "k"] },
+        "x": { "op": "index", "args": ["trnlay", "b", "k"] }
+       }
+      },
+      "args": ["active", "trnlay"]
+     }
+    },
+    {
+     "lhs": "rupdif",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["albodr", "b"] },
+        { "op": "+", "args": [
+         { "op": "index", "args": ["m_rdif_a", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+         { "op": "*", "args": [
+          { "op": "*", "args": [
+           { "op": "index", "args": ["m_tdif_a", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+           { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+           "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
+          { "op": "index", "args": ["m_tdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["albodr", "m_rdif_a", "m_tdif_a", "m_rdif_b", "m_tdif_b"]
+     }
+    },
+    {
+     "lhs": "rupdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "<=", "args": ["k", 1] },
+        { "op": "index", "args": ["albodr", "b"] },
+        { "op": "+", "args": [
+         { "op": "index", "args": ["m_rdir", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+         { "op": "*", "args": [
+          { "op": "+", "args": [
+           { "op": "*", "args": [
+            { "op": "index", "args": ["m_trnlay", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+            { "op": "index", "args": ["rupdir", "b", { "op": "-", "args": ["k", 1] }] }
+           ] },
+           { "op": "*", "args": [
+            { "op": "-", "args": [
+             { "op": "index", "args": ["m_tdir", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+             { "op": "index", "args": ["m_trnlay", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] }
+            ] },
+            { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+           ] }
+          ] },
+          { "op": "apply_expression_template", "args": [], "name": "dEdd_interface_refk", "bindings": {
+           "rdndif": { "op": "index", "args": ["m_rdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+           "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": ["k", 1] }] }
+          } },
+          { "op": "index", "args": ["m_tdif_b", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] }
+         ] }
+        ] }
+       ]
+      },
+      "args": ["albodr", "m_rdir", "m_trnlay", "m_tdir", "rupdif", "m_rdif_b", "m_tdif_b"]
+     }
+    },
+    {
+     "lhs": "dfdir",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_dfdir",
+       "bindings": {
+        "trndir": { "op": "index", "args": ["trndir", "b", "k"] },
+        "trntdr": { "op": "index", "args": ["trntdr", "b", "k"] },
+        "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+        "rupdir": { "op": "index", "args": ["rupdir", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+        "rdndif": { "op": "index", "args": ["rdndif", "b", "k"] }
+       }
+      },
+      "args": ["trndir", "trntdr", "rupdif", "rupdir", "rdndif", "klevp"]
+     }
+    },
+    {
+     "lhs": "dfdif",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "apply_expression_template",
+       "args": [],
+       "name": "dEdd_dfdif",
+       "bindings": {
+        "trndif": { "op": "index", "args": ["trndif", "b", "k"] },
+        "rupdif": { "op": "index", "args": ["rupdif", "b", { "op": "-", "args": [{ "op": "+", "args": ["klevp", 1] }, "k"] }] },
+        "rdndif": { "op": "index", "args": ["rdndif", "b", "k"] }
+       }
+      },
+      "args": ["trndif", "rupdif", "rdndif", "klevp"]
+     }
+    },
+    {
+     "lhs": "w2",
+     "rhs": {
+      "op": "apply_expression_template",
+      "args": [],
+      "name": "dEdd_nir_band_weight_2",
+      "bindings": { "fnidr": "fnidr" }
+     }
+    },
+    {
+     "lhs": "wght",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b"],
+      "ranges": { "b": { "from": "band" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["b", 1] },
+        1.0,
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["b", 2] },
+         "w2",
+         { "op": "-", "args": [1.0, "w2"] }
+        ] }
+       ]
+      },
+      "args": ["w2"]
+     }
+    },
+    {
+     "lhs": "swdr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b"],
+      "ranges": { "b": { "from": "band" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["b", 1] },
+        "swvdr",
+        "swidr"
+       ]
+      },
+      "args": ["swvdr", "swidr"]
+     }
+    },
+    {
+     "lhs": "swdf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b"],
+      "ranges": { "b": { "from": "band" } },
+      "expr": {
+       "op": "ifelse",
+       "args": [
+        { "op": "==", "args": ["b", 1] },
+        "swvdf",
+        "swidf"
+       ]
+      },
+      "args": ["swvdf", "swidf"]
+     }
+    },
+    {
+     "lhs": "flux",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["b", "k"],
+      "ranges": { "b": { "from": "band" }, "k": { "from": "iface" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "*", "args": [
+         { "op": "index", "args": ["dfdir", "b", "k"] },
+         { "op": "index", "args": ["swdr", "b"] }
+        ] },
+        { "op": "*", "args": [
+         { "op": "index", "args": ["dfdif", "b", "k"] },
+         { "op": "index", "args": ["swdf", "b"] }
+        ] }
+       ]
+      },
+      "args": ["dfdir", "swdr", "dfdif", "swdf"]
+     }
+    },
+    {
+     "lhs": "ksrf",
+     "rhs": { "op": "ifelse", "args": [{ "op": "==", "args": ["srftyp", 1] }, 2, { "op": "+", "args": ["N_SLYR", 3] }] }
+    },
+    {
+     "lhs": "klevp",
+     "rhs": { "op": "+", "args": ["N_SLYR", "N_ILYR", 3] }
+    },
+    {
+     "lhs": "avdr",
+     "rhs": { "op": "index", "args": ["rupdir", 1, "klevp"] }
+    },
+    {
+     "lhs": "avdf",
+     "rhs": { "op": "index", "args": ["rupdif", 1, "klevp"] }
+    },
+    {
+     "lhs": "aidr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "filter": { "op": ">=", "args": ["b", 2] },
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["rupdir", "b", "klevp"] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["rupdir", "wght", "klevp"]
+     }
+    },
+    {
+     "lhs": "aidf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "filter": { "op": ">=", "args": ["b", 2] },
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["rupdif", "b", "klevp"] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["rupdif", "wght", "klevp"]
+     }
+    },
+    {
+     "lhs": "fthruvdr",
+     "rhs": { "op": "*", "args": [{ "op": "index", "args": ["dfdir", 1, "klevp"] }, "swvdr"] }
+    },
+    {
+     "lhs": "fthruvdf",
+     "rhs": { "op": "*", "args": [{ "op": "index", "args": ["dfdif", 1, "klevp"] }, "swvdf"] }
+    },
+    {
+     "lhs": "fthruidr",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "filter": { "op": ">=", "args": ["b", 2] },
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["dfdir", "b", "klevp"] },
+        "swidr",
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["dfdir", "swidr", "wght"]
+     }
+    },
+    {
+     "lhs": "fthruidf",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "filter": { "op": ">=", "args": ["b", 2] },
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["dfdif", "b", "klevp"] },
+        "swidf",
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["dfdif", "swidf", "wght"]
+     }
+    },
+    {
+     "lhs": "fsfc",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "-", "args": [
+         { "op": "index", "args": ["flux", "b", 1] },
+         { "op": "index", "args": ["flux", "b", "ksrf"] }
+        ] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["flux", "ksrf", "wght"]
+     }
+    },
+    {
+     "lhs": "fint",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "-", "args": [
+         { "op": "index", "args": ["flux", "b", "ksrf"] },
+         { "op": "index", "args": ["flux", "b", "klevp"] }
+        ] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["flux", "ksrf", "klevp", "wght"]
+     }
+    },
+    {
+     "lhs": "fthru",
+     "rhs": {
+      "op": "faq",
+      "output_idx": [],
+      "ranges": { "b": { "from": "band" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "index", "args": ["flux", "b", "klevp"] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["flux", "klevp", "wght"]
+     }
+    },
+    {
+     "lhs": "Sabs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["sl"],
+      "ranges": { "sl": { "from": "snow_layer" }, "b": { "from": "band" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "ifelse", "args": [
+         { "op": "==", "args": ["srftyp", 1] },
+         { "op": "-", "args": [
+          { "op": "index", "args": ["flux", "b", { "op": "+", "args": ["sl", 1] }] },
+          { "op": "index", "args": ["flux", "b", { "op": "+", "args": ["sl", 2] }] }
+         ] },
+         0.0
+        ] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["flux", "wght"]
+     }
+    },
+    {
+     "lhs": "Iabs",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["il"],
+      "ranges": { "il": { "from": "ice_layer" }, "b": { "from": "band" } },
+      "reduce": "+",
+      "expr": {
+       "op": "*",
+       "args": [
+        { "op": "-", "args": [
+         { "op": "index", "args": ["flux", "b", { "op": "ifelse", "args": [
+          { "op": "and", "args": [
+           { "op": "==", "args": ["srftyp", 1] },
+           { "op": "==", "args": ["il", 1] }
+          ] },
+          { "op": "+", "args": ["N_SLYR", 2] },
+          { "op": "+", "args": ["N_SLYR", 2, "il"] }
+         ] }] },
+         { "op": "index", "args": ["flux", "b", { "op": "ifelse", "args": [
+          { "op": "and", "args": [
+           { "op": "==", "args": ["srftyp", 1] },
+           { "op": "==", "args": ["il", 1] }
+          ] },
+          { "op": "+", "args": ["N_SLYR", 4] },
+          { "op": "+", "args": ["N_SLYR", 3, "il"] }
+         ] }] }
+        ] },
+        { "op": "index", "args": ["wght", "b"] }
+       ]
+      },
+      "args": ["flux", "wght"]
+     }
+    },
+    {
+     "lhs": "fthrul",
+     "rhs": {
+      "op": "faq",
+      "output_idx": ["pl"],
+      "ranges": { "pl": { "from": "pen_level" } },
+      "expr": {
+       "op": "+",
+       "args": [
+        { "op": "*", "args": [
+         { "op": "index", "args": ["dfdir", 1, { "op": "+", "args": ["N_SLYR", 2, "pl"] }] },
+         "swvdr"
+        ] },
+        { "op": "*", "args": [
+         { "op": "index", "args": ["dfdif", 1, { "op": "+", "args": ["N_SLYR", 2, "pl"] }] },
+         "swvdf"
+        ] }
+       ]
+      },
+      "args": ["dfdir", "dfdif", "swvdr", "swvdf"]
+     }
+    }
+   ],
+   "tests": [
+     {
+      "id": "cice_shortwave_snow",
+      "description": "Snow-covered category (step 1, i=2, j=4, ncat 2, srftyp 1): hs = 0.15364 m, hi = 1.2089 m, frsnw = 290.36 um and aerosols in all four slots, so every band runs the full snow/ice column with the SNICAR snow IOPs, the chlorophyll absorption and the bulk aerosol mixing; band 3 truncates at the interface below the snow SSL (trntdr < trmin = 1e-3 there), so the layer props of layers 2..13 are guard-zeroed and feed the upward recurrence as zeros. The pins cover the layer geometry dzk and the grain-radius adjustment frsnw, the snow-table IOPs at the SSL and the bottom snow layer, the mixed tau/w0/g at the sea-ice delta layer (the kfrsnl fresnel layer), the delta-Eddington layer props at one active layer per band (including the band-3 truncated-column top layer), the downward interface chain at the top and bottom of band 1 plus the first guarded interface of bands 2 and 3 (expected 0, exercising the trmin guard), the upward chain at the top of the column (the ocean-interface values equal the band albodr constant and are not pinned), the dfdir/dfdif flux fractions, the band-weighted scalar accumulations and the Sabs/Iabs/fthrul layer absorptions. Tolerances: rel 1e-9 on the interface quantities (round-off amplification of the near-pole band-3 algebra, see README-cice-shortwave.md), rel 1e-12 elsewhere.",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 0.0
+      },
+      "parameter_overrides": {
+       "srftyp": 1,
+       "hs": 0.15364394515989943,
+       "hi": 1.2089036113250575,
+       "hp": 0.0,
+       "fnidr": 0.6458333333333334,
+       "coszen": 0.21183728555860143,
+       "swvdr": 59.995381741975784,
+       "swvdf": 51.42461292169353,
+       "swidr": 66.42345835718749,
+       "swidf": 36.42576748619958,
+       "kalg": 0.0,
+       "ki_ssl": [
+        1000.1,
+        1003.7,
+        7042.0
+       ],
+       "wi_ssl": [
+        0.9999,
+        0.9963,
+        0.9088
+       ],
+       "gi_ssl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_dl": [
+        100.2,
+        107.7,
+        1309.0000000000002
+       ],
+       "wi_dl": [
+        0.998,
+        0.9287,
+        0.030499999999999996
+       ],
+       "gi_dl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_int": [
+        20.2,
+        27.699999999999996,
+        1445.0
+       ],
+       "wi_int": [
+        0.9901,
+        0.7223,
+        0.0277
+       ],
+       "gi_int": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_p_ssl": [
+        70.2,
+        77.7,
+        1309.0000000000002
+       ],
+       "wi_p_ssl": [
+        0.9972,
+        0.9009,
+        0.030499999999999996
+       ],
+       "gi_p_ssl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_p_int": [
+        20.2,
+        27.699999999999996,
+        1445.0
+       ],
+       "wi_p_int": [
+        0.9901,
+        0.7223,
+        0.0277
+       ],
+       "gi_p_int": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "rsnw": [
+        312.5,
+        312.5,
+        312.5
+       ],
+       "rhosnw": [
+        330.0,
+        330.0,
+        330.0
+       ],
+       "aero_mp": [
+        [
+         3.796529905311909e-15,
+         4.125266758083153e-19,
+         1.0307523901660707e-20,
+         0.0
+        ],
+        [
+         5.261452445869495e-14,
+         5.7170478070259874e-18,
+         1.4284754741344797e-19,
+         0.0
+        ],
+        [
+         1.443464734180369e-12,
+         1.5684532264374629e-16,
+         3.9189824790498456e-18,
+         0.0
+        ]
+       ]
+      },
+      "assertions": [
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.025607324193316572,
+        "coords": {
+         "layer": 1
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.025607324193316572,
+        "coords": {
+         "layer": 2
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.040296787044168586,
+        "coords": {
+         "layer": 5
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.1108161643714636,
+        "coords": {
+         "layer": 6
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.1511129514156322,
+        "coords": {
+         "layer": 13
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 2
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.0086616744791668,
+        "coords": {
+         "band": 1,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9999725659722222,
+        "coords": {
+         "band": 1,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.8906188749999999,
+        "coords": {
+         "band": 1,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1867.1061860179668,
+        "coords": {
+         "band": 1,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.012243256076389,
+        "coords": {
+         "band": 2,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9985873648437499,
+        "coords": {
+         "band": 2,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.8938178654513889,
+        "coords": {
+         "band": 2,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1870.4353644659184,
+        "coords": {
+         "band": 2,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.0177682213541663,
+        "coords": {
+         "band": 3,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9325397213541666,
+        "coords": {
+         "band": 3,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.9277194479166666,
+        "coords": {
+         "band": 3,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1875.5709714119446,
+        "coords": {
+         "band": 3,
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.0086616744791668,
+        "coords": {
+         "band": 1,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9999725659722222,
+        "coords": {
+         "band": 1,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.8906188749999999,
+        "coords": {
+         "band": 1,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1867.1061860179668,
+        "coords": {
+         "band": 1,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.012243256076389,
+        "coords": {
+         "band": 2,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9985873648437499,
+        "coords": {
+         "band": 2,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.8938178654513889,
+        "coords": {
+         "band": 2,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1870.4353644659184,
+        "coords": {
+         "band": 2,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "Qs",
+        "time": 0.0,
+        "expected": 2.0177682213541663,
+        "coords": {
+         "band": 3,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ws_snw",
+        "time": 0.0,
+        "expected": 0.9325397213541666,
+        "coords": {
+         "band": 3,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "gs_snw",
+        "time": 0.0,
+        "expected": 0.9277194479166666,
+        "coords": {
+         "band": 3,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "ks_snw",
+        "time": 0.0,
+        "expected": 1875.5709714119446,
+        "coords": {
+         "band": 3,
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 22.207559340041307,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 23.86980180561326,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 290.1167183244918,
+        "coords": {
+         "band": 3,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.5056137464976036,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 0.42198000728159374,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.3672444408564794,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.5882552340911704,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 0.5414622523681594,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 0.31493802298895074,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 0.014179663814830596,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.8116408751089543,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 0.10541422427712903,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.7248300698437167,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.7248300698437167,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 0.16112514848528886,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 0.16112514848528886,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 4.5399929762484854e-05,
+        "coords": {
+         "band": 2,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.2693373471687757,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 0.00019058297123971405,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.14892190617986417,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.14892190617986417,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 0.0004947356611312934,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 0.0004947356611312934,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 4.5399929762484854e-05,
+        "coords": {
+         "band": 3,
+         "layer": 1
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 4.931183260344291e-26,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.007970033146363954,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.5214668016987473,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.012080060132615261,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 4.24835425529159e-18,
+        "coords": {
+         "band": 2,
+         "iface": 5
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.0006106449133594457,
+        "coords": {
+         "band": 2,
+         "iface": 5
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.769346233063045,
+        "coords": {
+         "band": 2,
+         "iface": 5
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.000933408572737731,
+        "coords": {
+         "band": 2,
+         "iface": 5
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 2,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 2,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 2,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 2,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 4.5399929762484854e-05,
+        "coords": {
+         "band": 3,
+         "iface": 2
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.00019058297123971405,
+        "coords": {
+         "band": 3,
+         "iface": 2
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.14892190617986417,
+        "coords": {
+         "band": 3,
+         "iface": 2
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.0004947356611312934,
+        "coords": {
+         "band": 3,
+         "iface": 2
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 3
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 3
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 3
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 3
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdir",
+        "time": 0.0,
+        "expected": 0.9686546575454275,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdif",
+        "time": 0.0,
+        "expected": 0.952730045908936,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdir",
+        "time": 0.0,
+        "expected": 0.2693373471687757,
+        "coords": {
+         "band": 3,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdif",
+        "time": 0.0,
+        "expected": 0.14892190617986417,
+        "coords": {
+         "band": 3,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdir",
+        "time": 0.0,
+        "expected": 0.031345342454572545,
+        "coords": {
+         "band": 1,
+         "iface": 1
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdif",
+        "time": 0.0,
+        "expected": 0.04726995409106405,
+        "coords": {
+         "band": 1,
+         "iface": 1
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdir",
+        "time": 0.0,
+        "expected": 0.007931693965744011,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdif",
+        "time": 0.0,
+        "expected": 0.012021950009505497,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "avdr",
+        "time": 0.0,
+        "expected": 0.9686546575454275
+       },
+       {
+        "variable": "avdf",
+        "time": 0.0,
+        "expected": 0.952730045908936
+       },
+       {
+        "variable": "aidr",
+        "time": 0.0,
+        "expected": 0.6747899970058824
+       },
+       {
+        "variable": "aidf",
+        "time": 0.0,
+        "expected": 0.5892864776102631
+       },
+       {
+        "variable": "fsfc",
+        "time": 0.0,
+        "expected": 32.22482212643875
+       },
+       {
+        "variable": "fint",
+        "time": 0.0,
+        "expected": 7.554631980004542
+       },
+       {
+        "variable": "fthru",
+        "time": 0.0,
+        "expected": 1.0940891331381077
+       },
+       {
+        "variable": "fthruvdr",
+        "time": 0.0,
+        "expected": 0.4758650073353377
+       },
+       {
+        "variable": "fthruvdf",
+        "time": 0.0,
+        "expected": 0.6182241258027701
+       },
+       {
+        "variable": "fthruidr",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "fthruidf",
+        "time": 0.0,
+        "expected": 0.0
+       },
+       {
+        "variable": "Sabs",
+        "time": 0.0,
+        "expected": 3.357420475871746,
+        "coords": {
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "Sabs",
+        "time": 0.0,
+        "expected": 1.9689318598322167,
+        "coords": {
+         "snow_layer": 2
+        }
+       },
+       {
+        "variable": "Sabs",
+        "time": 0.0,
+        "expected": 0.38907592109964517,
+        "coords": {
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 0.7641611124469921,
+        "coords": {
+         "ice_layer": 1
+        }
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 0.25207175928668857,
+        "coords": {
+         "ice_layer": 2
+        }
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 0.07031225410741837,
+        "coords": {
+         "ice_layer": 8
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 2.784125595831942,
+        "coords": {
+         "pen_level": 1
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 1.525421705929383,
+        "coords": {
+         "pen_level": 5
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 1.0940891331381077,
+        "coords": {
+         "pen_level": 9
+        }
+       }
+      ]
+     },
+     {
+      "id": "cice_shortwave_bare",
+      "description": "Bare-ice category (same cell, ncat 1, srftyp 0): hs = 0 so the snow branch is inactive and the column is the sea-ice SSL/delta-layer/interior stack with the unconditional ice aerosol mixing and the ocean albedo; band 3 truncates at the interface below the sea-ice SSL. The pins cover the layer geometry (the snow-layer dzk values are identically zero and not pinned), frsnw, the mixed tau/w0/g at the delta layer (the SSL values are identically zero and not pinned), the delta-Eddington layer props at one active layer per band (band 3 at the last layer above the cutoff), the downward chain at the top and bottom of band 1 plus the first guarded interface of band 3 (expected 0), the upward chain at the top of the column, the dfdir/dfdif fractions, the scalar accumulations and the Iabs/fthrul layer absorptions. The snow IOPs Qs/ws_snw/gs_snw/ks_snw and Sabs are not pinned: the dump records zeros for srftyp = 0 rows and Sabs is identically zero for bare ice. Tolerances: rel 1e-9 on the interface quantities, rel 1e-12 elsewhere.",
+      "time_span": {
+       "start": 0.0,
+       "end": 0.0
+      },
+      "tolerance": {
+       "rel": 1e-12,
+       "abs": 0.0
+      },
+      "parameter_overrides": {
+       "srftyp": 0,
+       "hs": 0.0,
+       "hi": 0.34180766015163383,
+       "hp": 0.0,
+       "fnidr": 0.6458333333333334,
+       "coszen": 0.21183728555860143,
+       "swvdr": 59.995381741975784,
+       "swvdf": 51.42461292169353,
+       "swidr": 66.42345835718749,
+       "swidf": 36.42576748619958,
+       "kalg": 0.0,
+       "ki_ssl": [
+        1000.1,
+        1003.7,
+        7042.0
+       ],
+       "wi_ssl": [
+        0.9999,
+        0.9963,
+        0.9088
+       ],
+       "gi_ssl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_dl": [
+        100.2,
+        107.7,
+        1309.0000000000002
+       ],
+       "wi_dl": [
+        0.998,
+        0.9287,
+        0.030499999999999996
+       ],
+       "gi_dl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_int": [
+        20.2,
+        27.699999999999996,
+        1445.0
+       ],
+       "wi_int": [
+        0.9901,
+        0.7223,
+        0.0277
+       ],
+       "gi_int": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_p_ssl": [
+        70.2,
+        77.7,
+        1309.0000000000002
+       ],
+       "wi_p_ssl": [
+        0.9972,
+        0.9009,
+        0.030499999999999996
+       ],
+       "gi_p_ssl": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "ki_p_int": [
+        20.2,
+        27.699999999999996,
+        1445.0
+       ],
+       "wi_p_int": [
+        0.9901,
+        0.7223,
+        0.0277
+       ],
+       "gi_p_int": [
+        0.94,
+        0.94,
+        0.94
+       ],
+       "rsnw": [
+        312.5,
+        312.5,
+        312.5
+       ],
+       "rhosnw": [
+        330.0,
+        330.0,
+        330.0
+       ],
+       "aero_mp": [
+        [
+         0.0,
+         0.0,
+         2.911184662996532e-15,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         4.034485810017852e-14,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.1068498891109904e-12,
+         0.0
+        ]
+       ]
+      },
+      "assertions": [
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.011393588671721128,
+        "coords": {
+         "layer": 5
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.0313323688472331,
+        "coords": {
+         "layer": 6
+        }
+       },
+       {
+        "variable": "dzk",
+        "time": 0.0,
+        "expected": 0.04272595751895423,
+        "coords": {
+         "layer": 13
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 1
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 2
+        }
+       },
+       {
+        "variable": "frsnw",
+        "time": 0.0,
+        "expected": 290.3645833333333,
+        "coords": {
+         "snow_layer": 3
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 6.2790067169855135,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 6.748992249694011,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "tau",
+        "time": 0.0,
+        "expected": 82.02814164205628,
+        "coords": {
+         "band": 3,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.366135202624566,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 0.6167844056151996,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.19671003593536054,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.5162336797294859,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 0.7807441421255547,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 0.45411478917654985,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 0.2394575705975768,
+        "coords": {
+         "band": 1,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.3146531930604742,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 0.27302967826538016,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.12452856020897078,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.17366493673441388,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 0.34782607501172536,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 0.20231079069518706,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 0.11843601169526058,
+        "coords": {
+         "band": 2,
+         "layer": 6
+        }
+       },
+       {
+        "variable": "m_rdir",
+        "time": 0.0,
+        "expected": 0.19854572009080262,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_tdir",
+        "time": 0.0,
+        "expected": 4.4992315131863535e-05,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_rdif_a",
+        "time": 0.0,
+        "expected": 0.10033162947472897,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_rdif_b",
+        "time": 0.0,
+        "expected": 0.10033162947472897,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_tdif_a",
+        "time": 0.0,
+        "expected": 4.5193948792110415e-05,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_tdif_b",
+        "time": 0.0,
+        "expected": 4.5193948792110415e-05,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "m_trnlay",
+        "time": 0.0,
+        "expected": 4.5399929762484854e-05,
+        "coords": {
+         "band": 3,
+         "layer": 5
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 0.00014617719777599618,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.2797088817780864,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.5732801600741044,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.4179097570304601,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 4.5399929762484854e-05,
+        "coords": {
+         "band": 3,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 4.4992315131863535e-05,
+        "coords": {
+         "band": 3,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.10033162947472897,
+        "coords": {
+         "band": 3,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 4.5193948792110415e-05,
+        "coords": {
+         "band": 3,
+         "iface": 6
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndir",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 7
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trntdr",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 7
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rdndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 7
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "trndif",
+        "time": 0.0,
+        "expected": 0.0,
+        "coords": {
+         "band": 3,
+         "iface": 7
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdir",
+        "time": 0.0,
+        "expected": 0.6585071169203559,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdif",
+        "time": 0.0,
+        "expected": 0.49110461991265264,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdir",
+        "time": 0.0,
+        "expected": 0.19854572009080262,
+        "coords": {
+         "band": 3,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "rupdif",
+        "time": 0.0,
+        "expected": 0.10033162947472897,
+        "coords": {
+         "band": 3,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdir",
+        "time": 0.0,
+        "expected": 0.3414928830796441,
+        "coords": {
+         "band": 1,
+         "iface": 1
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdif",
+        "time": 0.0,
+        "expected": 0.5088953800873474,
+        "coords": {
+         "band": 1,
+         "iface": 1
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdir",
+        "time": 0.0,
+        "expected": 0.2785084265136428,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "dfdif",
+        "time": 0.0,
+        "expected": 0.4161161709108475,
+        "coords": {
+         "band": 1,
+         "iface": 14
+        },
+        "tolerance": {
+         "rel": 1e-09,
+         "abs": 0.0
+        }
+       },
+       {
+        "variable": "avdr",
+        "time": 0.0,
+        "expected": 0.6585071169203559
+       },
+       {
+        "variable": "avdf",
+        "time": 0.0,
+        "expected": 0.49110461991265264
+       },
+       {
+        "variable": "aidr",
+        "time": 0.0,
+        "expected": 0.45545884429424455
+       },
+       {
+        "variable": "aidf",
+        "time": 0.0,
+        "expected": 0.2941773083907934
+       },
+       {
+        "variable": "fsfc",
+        "time": 0.0,
+        "expected": 31.16303620943492
+       },
+       {
+        "variable": "fint",
+        "time": 0.0,
+        "expected": 39.07304740821255
+       },
+       {
+        "variable": "fthru",
+        "time": 0.0,
+        "expected": 38.30210023435013
+       },
+       {
+        "variable": "fthruvdr",
+        "time": 0.0,
+        "expected": 16.709219367043012
+       },
+       {
+        "variable": "fthruvdf",
+        "time": 0.0,
+        "expected": 21.398613019547604
+       },
+       {
+        "variable": "fthruidr",
+        "time": 0.0,
+        "expected": 0.10533566265632514
+       },
+       {
+        "variable": "fthruidf",
+        "time": 0.0,
+        "expected": 0.08893218510318429
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 20.975769860216822,
+        "coords": {
+         "ice_layer": 1
+        }
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 6.517584132894032,
+        "coords": {
+         "ice_layer": 2
+        }
+       },
+       {
+        "variable": "Iabs",
+        "time": 0.0,
+        "expected": 0.8076044302150476,
+        "coords": {
+         "ice_layer": 8
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 46.38023310542768,
+        "coords": {
+         "pen_level": 1
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 41.21969616306427,
+        "coords": {
+         "pen_level": 5
+        }
+       },
+       {
+        "variable": "fthrul",
+        "time": 0.0,
+        "expected": 38.107832386590616,
+        "coords": {
+         "pen_level": 9
+        }
+       }
+      ]
+     }
+   ]
+  }
+ }
+}
