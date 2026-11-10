@@ -1,0 +1,81 @@
+{
+ "esm": "1.3.0",
+ "metadata": {
+  "name": "mom6_kpp_discretization",
+  "description": "Local EarthSciDiscretizations-format discretization rules for the MOM6 KPP column prefix integrals (stage 2 of the EqESM project): the layer/interface grid of the MOM6 KPP boundary-layer parameterization (the layer index set layer, N_LAYER = 75 layers of the reference run C_JRA_t62_mom6_inst, and the interface index set iface, N_IFACE = 76) and the EarthSciDiscretizations column_nonuniform_1d cumulative integral rules integral_lev_nodes_cumulative_from_bottom (the surface-to-interface exclusive prefix, the depth of interface i: depth[i] = sum_{j<i} f[j] dz[j] with depth[1] = 0 and the column total at iface N_IFACE) and integral_lev_cumulative_from_bottom (the surface-to-layer-centre midpoint-rule integral, depth[centre k] = sum_{j<k} f[j] dz[j] + f[k] dz[k]/2), imported at the esm-spec 9.7.7 renaming edge (lev -> layer, lev_nodes -> iface) with the rule metaparameter NLEV bound to N_LAYER, so the consuming component spells its integrals over the MOM6 axis names. Free-name contract (resolved in the consuming model, as in ./cism_velo_discretization.esm): the rule measure dz — here the MOM6 layer heights dz (thickness_to_dz, equal to the layer thicknesses h in the instrumented run: min_thickness = 0, no thickness inflation) — and the two domain-face bounds z_sfc (the surface coordinate ze[1] = 0) and z_top (the bottom-interface coordinate ze[N_IFACE], the column depth); the bounds carry no numeric weight in the lowering (esm-spec 4.2, the measures are free names). The unit integrand of the depth integrals (the layer field identically 1) is declared by the consuming component, because the rules' where clauses require a layer-shaped integrand name and the depth IS the integral of the measure: depth = integral(1, dz). The consuming ./mom6_kpp.esm uses the rules for the interface heights z_inter = -depth, the cell heights z_cell = -integral(1, dz) to the layer centre, and the hydrostatic reference pressure pRef = p_surf + PRESS_STEP*depth (the MOM_CVMix_KPP.F90:1237-1243 iFaceHeight/cellHeight loops and the F90:1452-1456 pRef accumulation); the same two rules are the intended home of the identical hydrostatic prefix of mom6_frazil.esm (p_top = p_surf + prefix(dP), MOM_Frazil.F90:176-179) once that component merges (see README-mom6-kpp-integrals.md). The lowered stencils are the exact Fortran loops: the exclusive prefix scan (integral_lev_prefix_exclusive) accumulates f[j]*dz[j] from j = 1 upward, bit-identical to the Fortran's forward running sums once the measure is the same array.",
+  "license": "MIT",
+  "tags": [
+   "esd:rule",
+   "family:finite_volume",
+   "grid:column_nonuniform_1d",
+   "op:integral",
+   "axes:layer_iface",
+   "order:2",
+   "stencil_width:1",
+   "bc:none",
+   "spec:9.6.8"
+  ],
+  "references": [
+   {
+    "citation": "MOM6 (dev/ncar_260909 @301879336), src/parameterizations/vertical/MOM_CVMix_KPP.F90 KPP_compute_BLD: the iFaceHeight/cellHeight loops (F90:1237-1243) and the pRef hydrostatic accumulation (F90:1282-1283 init, F90:1452-1456 update)."
+   },
+   {
+    "citation": "LeVeque, R. J. (2007). Finite Difference Methods for Ordinary and Partial Differential Equations. SIAM. Section 2.13 (nonuniform grids)."
+   },
+   {
+    "citation": "Davis, P. J. and Rabinowitz, P. (1984). Methods of Numerical Integration, 2nd ed. Academic Press. Section 2.1 (the midpoint rule and its error)."
+   }
+  ]
+ },
+ "metaparameters": {
+  "N_LAYER": {
+   "type": "integer",
+   "default": 75,
+   "description": "Number of MOM6 layers (GV%ke = 75 for the reference run); bound into the imported column_nonuniform_1d rules as NLEV at the import edge."
+  },
+  "N_IFACE": {
+   "type": "integer",
+   "default": 76,
+   "description": "Number of interfaces, N_LAYER + 1."
+  }
+ },
+ "index_sets": {
+  "layer": {
+   "kind": "interval",
+   "size": "N_LAYER"
+  },
+  "iface": {
+   "kind": "interval",
+   "size": {
+    "op": "+",
+    "args": [
+     "N_LAYER",
+     1
+    ]
+   }
+  }
+ },
+ "expression_template_imports": [
+  {
+   "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_nodes_cumulative_from_bottom.esm",
+   "bindings": {
+    "NLEV": "N_LAYER"
+   },
+   "rename": {
+    "lev": "layer",
+    "lev_nodes": "iface"
+   }
+  },
+  {
+   "ref": "${ESD_ROOT}/grids/column_nonuniform_1d/rules/integral_lev_cumulative_from_bottom.esm",
+   "bindings": {
+    "NLEV": "N_LAYER"
+   },
+   "rename": {
+    "lev": "layer",
+    "lev_nodes": "iface"
+   }
+  }
+ ],
+ "expression_templates": {}
+}
